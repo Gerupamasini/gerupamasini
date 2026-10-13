@@ -1,4 +1,4 @@
-import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
+import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
 import type { GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { createProfileTexture } from './hero/BodyMaterial.js';
 
@@ -16,6 +16,8 @@ import { createProfileTexture } from './hero/BodyMaterial.js';
  *    thin tail and fin bases clear, head and belly milky, the melanophores and the organs dark against the light)
  *  - the sun (and in the tank its two lamps) behind the fish diffuses through the tissue on the light's path, so a
  *    fish against the light glows amber at its thin parts and shows its spine and viscera as shadows
+ *  - the surroundings' light (the water's glow, the sky's window, the sand's bounce) arrives from every side, so it
+ *    diffuses through from the far side too: seen from the sun's side the body is still faintly see-through
  *  - organs just under the skin darken its colour (the peritoneum through the belly wall), and the vertebral column
  *    scatters a little light back toward the eye
  * The near tiers march 12 + 6 steps per ray, the far tier (lod2) 6 + 3 and only the large organs. The body still writes
@@ -170,6 +172,7 @@ uniform vec3 uGbOrgR[${N_ORGANS}];
 uniform vec3 uGbOrgK[${N_ORGANS}];
 uniform float uGbInterior;    // how much the organs and the column show
 uniform float uGbBack;        // strength of the light diffused through from behind
+uniform float uGbAmbient;     // strength of the surroundings' light diffused through from the far side
 `;
 
 const FUNCTIONS = /* glsl */ `
@@ -369,6 +372,24 @@ float gbAlpha = 1.0;
 #if NUM_DIR_LIGHTS > 1 && !defined(GB_LOW)
   gbAdd += gbThrough(normalize(inverseTransformDirection(directionalLights[1].direction, viewMatrix)), directionalLights[1].color, w2o, pIn, NgF, VW, skinIn, maxLen, dense);
 #endif
+  // the light of everything round the far side (the water's glow, the sky through the surface, the sand's bounce)
+  // reaches the body from every direction and diffuses through it: whichever side the sun is on, the thin parts are
+  // lit faintly from behind and the column and the viscera show in them as shadows
+  vec3 gbFar = ambientLightColor;
+#if NUM_HEMI_LIGHTS > 0
+  gbFar += mix(hemisphereLights[0].groundColor, hemisphereLights[0].skyColor, 0.5 + 0.5 * VW.y);
+#endif
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+  gbFar += getIBLIrradiance(normalize(-vViewPosition));
+#endif
+#if NUM_DIR_LIGHTS > 0
+  // the sunlit bed below (albedo ~0.25) throws its light up into a body seen from above
+  vec3 gbSunW = normalize(inverseTransformDirection(directionalLights[0].direction, viewMatrix));
+  gbFar += directionalLights[0].color * max(gbSunW.y, 0.0) * 0.25 * smoothstep(0.1, -0.5, VW.y);
+#endif
+  // (diffuse light crosses the tissue on longer, slanted paths than the straight view ray)
+  vec3 tauFar = uGbSigL * tExit * (1.0 + dense) * 1.6 + tauOrg + scat * 0.3;
+  gbAdd += gbFar * RECIPROCAL_PI * exp(-tauFar) * skinIn * skinOut * uGbAmbient;
   gbAdd *= 1.0 - 0.85 * outside;
   // the vertebral column scatters a little of the light it is bathed in back toward the eye (pale against the dark)
   vec3 gbE = ambientLightColor;
@@ -406,6 +427,18 @@ const COMPOSITE = /* glsl */ `
   gl_FragColor = vec4((base * gbAlpha + add) / a1, a1);
 }
 `;
+
+/** How strongly the light passes through every goby body (one set for all: the look of the species, not of a fish). */
+export const GOBY_LIGHT = {
+  /** how much the organs and the column show */
+  uGbInterior: { value: 0.45 } as IUniform<number>,
+  /** the light diffused through from behind (sun, lamps) */
+  uGbBack: { value: 0.3 } as IUniform<number>,
+  /** the surroundings' light diffused through from the far side. Under water the light comes from every side (the
+   * water scatters the daylight into a glow all round), more than the flat's sky and ground lights give: ×5 makes a
+   * fish seen from the sun's side faintly see-through (thin parts lit from behind, the column and viscera as shadows) */
+  uGbAmbient: { value: 5.0 } as IUniform<number>,
+};
 
 let blackTex: DataTexture | null = null;
 /** no pigment (until the GLB's pigment map is decoded) */
@@ -461,8 +494,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbOrgC: { value: organs.map((o) => new Vector4(o.c.x, o.c.y, o.c.z, o.s)) },
     uGbOrgR: { value: organs.map((o) => o.r) },
     uGbOrgK: { value: organs.map((o) => o.k) },
-    uGbInterior: { value: 0.45 },
-    uGbBack: { value: 0.3 },
+    ...GOBY_LIGHT,
   };
   if (x.pigmentTexture !== undefined && parser) {
     void (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {
@@ -493,6 +525,6 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v2' : 'goby-body-translucent-v2');
+  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v3' : 'goby-body-translucent-v3');
   m.needsUpdate = true;
 }
