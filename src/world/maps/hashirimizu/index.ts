@@ -102,7 +102,7 @@ const MANKO: ShoreLayout = {
   swell: 0.03,
   // subtropical air: a deep blue sky that the high sun does not bleach, bright cumulus, a strong warm sun
   atmosphere: {
-    rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55,
+    rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55, skySaturation: 1,
     cloudCoverage: 0.42, cloudDensity: 0.9, cloudScale: 0.0003, cloudGain: 2.6, cloudShadeMin: 0.26, cloudNeutral: 0.7,
     sunColor: [1, 0.95, 0.86], sunGain: 1.08, hemiSky: [0.5, 0.66, 0.88], hemiGround: [0.26, 0.26, 0.18], fogDay: [0.55, 0.74, 0.98],
   },

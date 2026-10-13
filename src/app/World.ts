@@ -1,4 +1,4 @@
-import { FogExp2, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { FogExp2, MathUtils, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid, RIPPLE_SHEET_RADIUS, type TerrainGrid } from '../world/Terrain';
@@ -10,7 +10,7 @@ import { SurfZone } from '../world/SurfZone';
 import { SurfMemory } from '../world/SurfMemory';
 import { breakerBand, SurfLip } from '../world/SurfLip';
 import { SurfSpray } from '../world/SurfSpray';
-import { runup2, seaStateFor, type SeaState } from '../world/surfPhysics';
+import { seaStateFor, type SeaState } from '../world/surfPhysics';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -34,6 +34,8 @@ import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
+import { FarShadow } from '../world/FarShadow';
+import { TerrainShadow } from '../world/TerrainShadow';
 import { WaterMotion } from '../creatures/physics/water';
 import { MOTION } from '../world/amamo/params';
 
@@ -41,6 +43,11 @@ import { MOTION } from '../world/amamo/params';
 const WIND_DIR = 0.7;
 /** the swell on the sheltered 葛西 flat (m/s at the surface): a light chop from the bay */
 const KASAI_SWELL = 0.05;
+
+/** The far shadow map's size for a tier: off without shadows, otherwise 2048 at the top tier and 1024 below it. */
+export function farShadowSize(preset: QualityPreset): number {
+  return preset.shadows ? (preset.shadowMapSize >= 2048 ? 2048 : 1024) : 0;
+}
 
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
@@ -92,7 +99,19 @@ export class World {
   overcast = 0;
   /** tone-mapping exposure suggested for the current light */
   exposure = 0.5;
+  /**
+   * The picture's grade by the sun (fitted to photographs, tools/grade/calibrate.mjs): the colour cast at sunset and
+   * sunrise, as a camera set to daylight sees the reddened light.
+   */
+  readonly grade = { duskTint: new Vector3(1.05, 0.95, 0.85) };
+  private readonly gradeTmp = new Vector3();
   private readonly sunColTmp = new Vector3();
+  private readonly viewTmp = new Vector3();
+  /** the sun's shadow over the whole flat, beyond the near map (size 0 when the tier has no shadows) */
+  readonly farShadow!: FarShadow;
+  /** the relief's own shadow across the flat (off when the tier has no shadows) */
+  readonly terrainShadow!: TerrainShadow;
+  private renderer: WebGLRenderer | null = null;
   private lastHabitatMs = 0;
   private timeAcc = 0;
 
@@ -258,12 +277,23 @@ export class World {
     water.setSurfSteps(preset.surfSteps);
     water.setLite(preset.water === 'lite');
     water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
+    // the far shadow: the flat's casters (the trees up to ~15 m) seen from the sun; the ground itself does not cast
+    const far = new FarShadow(terrain.half, terrain.wetDry.range.x - 1, terrain.wetDry.range.y + 15, [terrain.mesh]);
+    far.setSize(farShadowSize(preset));
+    const relief = new TerrainShadow(terrain.heightTexture, terrain.half);
+    relief.setEnabled(preset.shadows);
+    terrain.setShadows(far.uniforms, sky.sunLight.shadow.matrix, relief.uniforms);
+    (w as { farShadow: FarShadow }).farShadow = far;
+    (w as { terrainShadow: TerrainShadow }).terrainShadow = relief;
+    w.renderer = renderer;
     mark('sky');
     return w;
   }
 
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
+    this.farShadow?.dispose();
+    this.terrainShadow?.dispose();
     this.surfZone?.dispose();
     this.surfZone = null;
     this.surfMemory?.dispose();
@@ -368,7 +398,12 @@ export class World {
     this.season = seasonOf(gameMs);
     this.reeds?.update(dt, this.season);
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
-    this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
+    this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast, camera.getWorldDirection(this.viewTmp));
+    // the shadow over the whole flat, beyond the near map (re-drawn when the sun has moved)
+    if (this.renderer) {
+      this.farShadow.update(this.renderer, this.scene, this.sunDir, dt, anchor);
+      this.terrainShadow.update(this.renderer, this.sunDir);
+    }
     this.fog.color.copy(this.sky.fogColor);
     this.mangroves?.setLight(this.sky.sunColorHdr(this.sunColTmp), this.sky.hemi.color, this.sky.hemi.intensity, this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
@@ -378,10 +413,12 @@ export class World {
       fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube, day,
     });
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
-    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    this.terrain.setWater(this.tideLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    // how long each height has been out of the water (it refreshes itself once the time or the water has moved)
+    this.terrain.wetDry.update((ms) => this.tide.level(ms), gameMs, this.tideLevel, this.map.origin.lat, this.map.origin.lon);
     // the sand's memory of the swash, on the same clock
     if (this.surfMemory && this.gl) this.surfMemory.update(this.gl, camera, this.tideLevel, this.water.uniforms.uTime.value, dt);
-    if (this.sea) this.terrain.setSurfMemory(this.surfMemory?.uniforms ?? null, runup2(this.sea.height, this.sea.period, 0.08));
+    if (this.sea) this.terrain.setSurfMemory(this.surfMemory?.uniforms ?? null);
     // the lips and the spray look for breaking crests in the breaker zone at the viewer's place
     if (this.sea && this.surfZone && this.layout?.surf && (this.surfLip || this.surfSpray)) {
       breakerBand(this.surfZone, this.layout.surf.seaward, camera, this.tideLevel, this.sea, this.band);
@@ -392,6 +429,9 @@ export class World {
     this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
     // and the small fish go to and fro with it, and with the surf
     this.motion.update(this.water.uniforms.uTime.value, this.tideLevel, this.water.uniforms.uWaveGain.value, dt);
+    // the grade: the sunset's cast from a little below the horizon to about 14° up
+    const glow = MathUtils.smoothstep(sp.elevation, -5, 0) * (1 - MathUtils.smoothstep(sp.elevation, 2, 14));
+    this.water.uniforms.uGradeTint.value.copy(this.gradeTmp.set(1, 1, 1).lerp(this.grade.duskTint, glow));
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;

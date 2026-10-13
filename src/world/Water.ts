@@ -4,11 +4,12 @@ import {
   type Texture, type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { TONE_MAP_GLSL } from '../render/ToneMapGlsl';
 import { MirrorView } from '../render/Mirror';
 import type { Terrain } from './Terrain';
 import { WAVES_GLSL, type WaveSet } from './Waves';
 import { makeFoamTexture, SURF_GLSL, type SurfUniforms } from './Surf';
-import type { SurfMemoryUniforms } from './SurfMemory';
+import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
 import type { SurfSpray } from './SurfSpray';
 
 /** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
@@ -188,6 +189,12 @@ export class WaterPass {
       uReflMax: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.6 },
+      // 1: drawn into the upscaler, which wants the finished picture (tone mapped and sRGB-encoded, as on the
+      // screen); three does both only for the screen, so the shader does them itself, with three's exposure
+      uLdrOut: { value: 0 },
+      uExposure: { value: 1 },
+      // the picture's last grade (World sets it with the sun: the warm cast of a sunset as a camera sees it)
+      uGradeTint: { value: new Vector3(1, 1, 1) },
       // a milky body (漫湖's jade lake): the share of sun and sky light the suspended fines send back up (linear;
       // 0: none, 葛西 and 走水), the reflection's share of Fresnel (1: unchanged) and how broken it is (0: unchanged)
       uScatter: { value: new Vector3() },
@@ -229,9 +236,12 @@ export class WaterPass {
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough, uAniso, uCalmGain, uStill;
         uniform vec2 uReflNear;
         uniform vec2 uRes;
+        uniform float uLdrOut, uExposure;
+        uniform vec3 uGradeTint;
         uniform vec4 uMemBox;
         varying vec2 vUv;
         varying float vCamLevel;
+        ${TONE_MAP_GLSL}
         ${NOISE_GLSL}
         ${WAVES_GLSL}
         ${SURF_GLSL}
@@ -304,6 +314,7 @@ export class WaterPass {
         }
 
         ${SURF_ETA_GLSL}
+        ${SURF_MEM_GLSL}
 
         // ---- sun glitter. The small waves' facets, each tilted at random about the surface's own slope (the
         // unresolved slopes' spread, Cox & Munk's σ), flash wherever one turns the sun into the eye. The facets are
@@ -642,7 +653,8 @@ export class WaterPass {
                   float mem = 0.0;
                   if (uMemBox.w > 0.0) {
                     vec2 muv = (S.xz - uMemBox.xy) / uMemBox.z + 0.5;
-                    if (all(greaterThan(muv, vec2(0.0))) && all(lessThan(muv, vec2(1.0)))) mem = texture2D(tSurfMem, muv).b;
+                    float mw = surfMemWeight(muv);
+                    if (mw > 0.0) mem = texture2D(tSurfMem, muv).b * mw;
                   }
                   // the backwash's streaks: what the sheet still carries, drawn out down the slope
                   float carried = (1.0 - sf.swUp) * exp(-sf.swAge / 3.0) * 0.55 * smoothstep(0.0005, 0.004, sf.film);
@@ -695,6 +707,7 @@ export class WaterPass {
           if (uSurfDebug > 4.5 && !sky) { float Dd = level - surfZoneAt(P.xz).x; col = Dd > 0.0 ? vec3(0.0, 0.2, 1.0) * (0.3 + fract(Dd * 5.0)) : vec3(1.0, 0.1, 0.0) * (0.3 + fract(-Dd * 5.0)); col = mix(col, vec3(4.0), 1.0 - smoothstep(0.0, 0.01, abs(Dd))); }
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = higataToneMap(gl_FragColor.rgb, uExposure);
           {
             // a light grade (warm highlights, cool shadows) and a soft vignette, as in the viewer
             vec3 c = gl_FragColor.rgb;
@@ -702,9 +715,11 @@ export class WaterPass {
             c = mix(c * vec3(0.97, 1.0, 1.03), c * vec3(1.03, 1.0, 0.95), smoothstep(0.2, 0.8, l));
             vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
             c *= mix(0.84, 1.0, smoothstep(1.15, 0.3, length(q)));
+            c *= uGradeTint;
             gl_FragColor.rgb = c;
           }
           #include <colorspace_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = srgbEncode(gl_FragColor.rgb);
         }`,
     });
     this.quad = new FullScreenQuad(this.material);
@@ -863,9 +878,14 @@ export class WaterPass {
     u.uWaterFog.value.copy(this.tint).multiplyScalar(0.06 + 0.94 * light.day);
   }
 
-  /** Composite the water over a rendered frame (colour + depth) into `output` (null = the screen). */
-  render(gl: WebGLRenderer, input: WebGLRenderTarget, output: WebGLRenderTarget | null, camera: PerspectiveCamera): void {
+  /**
+   * Composite the water over a rendered frame (colour + depth) into `output` (null = the screen). `ldr`: the output is
+   * the upscaler's, which takes the finished picture (tone mapped and sRGB-encoded as the screen would get it).
+   */
+  render(gl: WebGLRenderer, input: WebGLRenderTarget, output: WebGLRenderTarget | null, camera: PerspectiveCamera, ldr = false): void {
     const u = this.uniforms;
+    u.uLdrOut.value = ldr && output ? 1 : 0;
+    u.uExposure.value = gl.toneMappingExposure;
     if (this.memory) { u.tSurfMem.value = this.memory.tSurfMem.value; u.uMemBox.value.copy(this.memory.uMemBox.value); }
     u.tColor.value = input.texture;
     u.tDepth.value = input.depthTexture;
@@ -875,7 +895,7 @@ export class WaterPass {
     u.uRes.value.set(input.width, input.height);
     gl.setRenderTarget(output);
     this.quad.render(gl);
-    this.spray?.render(gl, camera, input.depthTexture, input.width, input.height);
+    this.spray?.render(gl, camera, input.depthTexture, input.width, input.height, u.uLdrOut.value > 0.5);
   }
 
   dispose(): void {

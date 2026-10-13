@@ -273,6 +273,8 @@ export class OysterReef {
         mesh.count = 0;
         mesh.frustumCulled = false;
         mesh.castShadow = l < 2;
+        // (the far clumps cast only into the far shadow map, FarShadow)
+        mesh.userData.farShadow = l >= 2;
         mesh.receiveShadow = true;
         mesh.customDepthMaterial = depthOf(this.materials[l]);
         mesh.name = `oyster-p${pi}-lod${l}`;
