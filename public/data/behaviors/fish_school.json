@@ -21,6 +21,11 @@
         { "type": "action", "name": "wander", "args": { "distance_m": [0.4, 1.0], "stayNearHome_m": 6 } }
       ]}
     ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "length_above", "args": { "mm": "$grazerFrom_mm" } },
+      { "type": "condition", "name": "random_chance", "args": { "p": "$grazeChance" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [12, 24] } }
+    ]},
     { "type": "random", "weights": [0.38, 0.24, 0.18, 0.2], "children": [
       { "type": "action", "name": "wander", "args": { "distance_m": "$cruiseDistance_m", "stayNearHome_m": 8 } },
       { "type": "action", "name": "forage", "args": { "seconds": [7, 14] } },

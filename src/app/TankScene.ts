@@ -123,8 +123,6 @@ export class TankScene {
   private occupantGeneration = 0;
   private occupantRecords: IndividualRecord[] = [];
   private speciesLookup: ((id: string) => SpeciesDef | undefined) | null = null;
-  waves_ = 0.8;
-  turb = 0.5;
   dimensions: TankDimensions = { ...STANDARD_TANK };
   equipment = new AquariumEquipment(this.dimensions);
   private readonly lampLight: SpotLight;
@@ -862,11 +860,8 @@ export class TankScene {
     else this.controls?.update();
     this.equipment.update(dt, this.camera, this.gl.domElement.height);
     this.updateEquipmentLighting();
-    let flow = 0;
-    for (const f of this.equipment.flows) flow += f.flowRate;
-    this.turb = Math.min(1, 0.15 + flow / 1800);
-    this.water.turb = this.turb; this.water.swell = this.waves_;
-    this.water.step(dt, this.equipment.flows);
+    // the water is still but for what stirs it: the outlets near its surface, the bubbles bursting
+    this.water.step(dt, this.equipment.flows, this.aquariumRoot.position);
     this.updateProbe(dt);
     this.sortOverlay(dt);
     this.stepShadows();

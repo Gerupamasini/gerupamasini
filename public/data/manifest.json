@@ -18,6 +18,7 @@
     "platichthys_bicoloratus",
     "hemitrygon_akajei",
     "euprymna_morsei",
+    "scopimera_globosa",
     "portunus_trituberculatus"
   ],
   "behaviors": [
@@ -34,6 +35,7 @@
     "flatfish_sand",
     "ray_benthic",
     "squid_sand",
+    "crab_burrow",
     "swimming_crab"
   ],
   "maps": [

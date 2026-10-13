@@ -7,6 +7,7 @@ import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
+import { ScopimeraDriver } from '../kometsukigani/ScopimeraGlobosa.js';
 import { AkaeiDriver } from '../species/akaei/AkaeiDriver';
 import { FORMS } from '../asari/AsariModel.js';
 import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
@@ -81,4 +82,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // contact body is the carapace with the legs spread (CW is its length)
   gazami: { create: () => new GazamiDriver(), placeholder: () => GazamiDriver.makeModel(), preview: (seed) => GazamiDriver.makePreview(seed), nearDistance: 4, keep: (parent) => GazamiDriver.keep(parent), body: { width: 1.2, height: 0.3, core: 0.9 } },
   akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent), body: { width: 0.41, height: 0.07, core: 0.38 } },
+  // コメツキガニ: the procedural crab of the Kasai flat, placed and driven by its colony (ScopimeraColony)
+  kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview(), body: { width: 1.3, height: 0.5, core: 0.9 } },
 };

@@ -149,7 +149,8 @@
       "ja": "スコップ",
       "type": "dig",
       "targets": [
-        "mollusc"
+        "mollusc",
+        "crustacean"
       ],
       "minigame": "none",
       "price_cr": 0,
@@ -161,7 +162,7 @@
         "length_m": 0.436,
         "tip_m": 0.316
       },
-      "description": "刃 10 × 18 cm の移植ごて。砂を掘ってアサリなどの貝をとる、万能の一本。砂の上に並んだ水管の穴を狙って掘る。",
+      "description": "刃 10 × 18 cm の移植ごて。砂を掘ってアサリなどの貝をとる、万能の一本。砂の上に並んだ水管の穴を狙って掘る。コメツキガニの巣穴を掘れば、中にいるカニも出てくる。",
       "model": "digging/dig_trowel"
     },
     {

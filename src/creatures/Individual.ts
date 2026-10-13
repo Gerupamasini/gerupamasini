@@ -66,6 +66,10 @@ export interface Individual {
   pitId?: number;
   /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
   strandedSince: number;
+  /** placed and removed by a world system (e.g. 'colony'), not by the spawner */
+  managed?: string;
+  /** the world system's own index for this animal */
+  colonyRef?: number;
 }
 
 /** The least water an aquatic animal is placed in or will stay in: about 15 % of its length (or the species' own share), never under 1.5 cm. */
@@ -99,6 +103,15 @@ function evalTraitCondition(expr: string, vars: Record<string, number>): boolean
 /** The big old ones are wary, the small ones not so much: 0.7 at the bottom of the size range to 1.3 at the top. */
 export function warinessFor(lengthPct: number): number {
   return 0.7 + 0.6 * Math.max(0, Math.min(100, lengthPct)) / 100;
+}
+
+/**
+ * How much further off a bigger animal of its species takes fright (flight distances grow with body size): its length
+ * over the species' `fleeLengthRef_mm`, to the power `fleeLengthExp` (brain params; 1 for a species that gives none).
+ */
+export function fleeScale(ind: Pick<Individual, 'species' | 'length_mm'>): number {
+  const p = ind.species.brain.params, ref = Number(p.fleeLengthRef_mm ?? 0);
+  return ref > 0 ? Math.pow(ind.length_mm / ref, Number(p.fleeLengthExp ?? 0.5)) : 1;
 }
 
 /** Deterministically generate an individual from a species definition and a seed. */

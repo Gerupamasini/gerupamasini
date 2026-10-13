@@ -2,4 +2,4 @@ export { AmamoKit, LEAF_TIERS, SHEATH_TIERS, type Lod, type AmamoUniforms } from
 export { AmamoMeadow, MEADOW_QUALITY, type MeadowQuality, type MeadowEnv, type PatchSpec } from './AmamoMeadow';
 export { AmamoPatch, ShootGrid, patchOutline, type GroundSampler, type PatchKind, type PatchOptions, type ShootSpec } from './AmamoPatch';
 export { LEAF, SHOOT, RHIZOME, ZONE, MOTION, SWAY_WAVES, LEAF_SLOTS, postureState } from './params';
-export { shootRef, shootState, shootFlow, shootTangent, shootLine, waveOrbital, type ShootRef, type ShootState } from './flow';
+export { shootRef, shootState, shootFlow, shootTangent, shootLine, waveOrbital, type LeafRef, type ShootRef, type ShootState } from './flow';

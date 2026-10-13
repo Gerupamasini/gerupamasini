@@ -264,5 +264,7 @@
   "toast.sunglassesOff": "偏光サングラスを外した",
   "shop.pickHint": "棚の道具をクリックで説明と購入",
   "shop.selectHint": "棚の道具をクリックしてください",
-  "shop.closeCard": "閉じる"
+  "shop.closeCard": "閉じる",
+  "crab.burrow": "コメツキガニの巣穴",
+  "crab.burrowOccupied": "コメツキガニの巣穴（中にいる）"
 }

@@ -30,7 +30,8 @@ function makeWaves(): Wave[] {
   return out;
 }
 
-export interface WaterFlowLike { position: { x: number; z: number }; direction: { x: number; z: number }; flowRate: number; radius: number }
+/** An outlet: where it is and where it points (in the room), its rate (L/h), and how much of it reaches the surface (0–1) */
+export interface WaterFlowLike { position: { x: number; z: number }; direction: { x: number; z: number }; flowRate: number; radius: number; surface: number }
 
 /**
  * The tank's surface, after CAUSTIC//LITE (scottiefox/caustic-volume, MIT): a random sea of small waves plus a GPU
@@ -51,6 +52,7 @@ export class TankWaterSim {
   private readonly ampU = new Float32Array(NW);
   private readonly jetU = new Float32Array(16);
   private readonly jetValues = new Float32Array(8);
+  private readonly jetAcc = new Float32Array(4);
   private readonly dropU = new Float32Array(32);
   private readonly drops: [number, number, number, number][] = [];
   private readonly flat: DataTexture;
@@ -65,9 +67,11 @@ export class TankWaterSim {
   hz = 60;
   /** 超軽量: the ripples step at most twice a frame and the caustics are redrawn every other frame */
   lite = false;
-  /** how lively the surface is: the swell's size, and the turbulence (the flows) */
-  swell = 0.8;
-  turb = 0.5;
+  /**
+   * How stirred the surface is: 0 is still water (the faintest swell, the bubbles' rings), 1 strong flows at the
+   * surface. It follows the outlets over a second or so, so the water settles after a pump is switched off.
+   */
+  stir = 0;
 
   /** `U` is the tank's shared uniform block: the simulation writes the surface and caustics textures into it. */
   constructor(private readonly gl: WebGLRenderer, private readonly U: Record<string, IUniform>) {
@@ -75,7 +79,7 @@ export class TankWaterSim {
     zero.needsUpdate = true;
     this.flat = zero;
     Object.assign(U, {
-      uW: { value: this.waveU }, uA: { value: this.ampU }, uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
+      uW: { value: this.waveU }, uA: { value: this.ampU }, uJets: { value: this.jetU }, uJetValues: { value: this.jetValues }, uStir: { value: 0 },
       uSim: { value: zero }, uSurf: { value: zero }, uCaus: { value: zero }, uCausScale: { value: 1 },
     });
     this.waves.forEach((W, i) => this.waveU.set([W.kx, W.kz, W.w, W.ph], i * 4));
@@ -124,14 +128,25 @@ export class TankWaterSim {
             float ph = dot(kd, p) - uW[i].z * uTime + uW[i].w + 1.6 * sin(pb);
             w += uA[i] * vec3(sin(ph), cos(ph) * (kd + 1.6 * kb * cos(pb) * side));
           }
-          // equipment outlets send a small directional disturbance into the height field
+          // the outlets: a jet near the surface drags short waves downstream in a plume that wanders from side to side;
+          // a shower falling onto the surface sends rings out from where it lands
           for (int i = 0; i < 4; i++) {
-            if (uJetValues[i].x <= 0.0) continue;
+            float s = uJetValues[i].x;
+            if (s <= 0.0) continue;
             vec2 q = p - uJets[i].xy, dir = uJets[i].zw;
-            float radius = max(uJetValues[i].y, 0.03), envelope = exp(-dot(q, q) / (radius * radius));
-            float phase = dot(q, dir) * 75.0 - uTime * 7.0;
-            float a = uJetValues[i].x * 0.00025;
-            w += a * envelope * vec3(sin(phase), cos(phase) * 75.0 * dir - sin(phase) * 2.0 * q / (radius * radius));
+            float len = length(dir), r = max(uJetValues[i].y, 0.03), pour = 1.0 - clamp(len * 1.5, 0.0, 1.0);
+            dir = len > 1e-3 ? dir / len : vec2(1.0, 0.0);
+            vec2 side = vec2(-dir.y, dir.x), radial = q / (length(q) + 1e-3);
+            float u = dot(q, dir), v = dot(q, side);
+            float lu = mix(u > 0.0 ? 2.5 * r : 0.5 * r, r, pour), lv = mix(0.7 * r, r, pour);
+            float env = exp(-u * u / (lu * lu) - v * v / (lv * lv));
+            vec2 dEnv = -2.0 * env * (u / (lu * lu) * dir + v / (lv * lv) * side);
+            float x = mix(u, length(q), pour), wob = (1.0 - pour) * 1.2 * sin(v * 35.0 + uTime * 1.3);
+            vec2 dX = mix(dir, radial, pour), dWob = (1.0 - pour) * 42.0 * cos(v * 35.0 + uTime * 1.3) * side;
+            float ph1 = x * 75.0 - uTime * 8.0 + wob, ph2 = x * 128.0 - uTime * 12.5 - 1.7 * wob;
+            float a1 = s * mix(0.0012, 0.0018, pour), a2 = s * mix(0.0006, 0.0009, pour);
+            w += a1 * vec3(env * sin(ph1), dEnv * sin(ph1) + env * cos(ph1) * (75.0 * dX + dWob));
+            w += a2 * vec3(env * sin(ph2), dEnv * sin(ph2) + env * cos(ph2) * (128.0 * dX - 1.7 * dWob));
           }
           float h = texture2D(uSim, uv).r;   // + the ripples (mm)
           float hx = texture2D(uSim, uv + vec2(e.x, 0.0)).r - texture2D(uSim, uv - vec2(e.x, 0.0)).r;
@@ -200,7 +215,8 @@ export class TankWaterSim {
     this.drops.push([x, z, radius, heightMm]);
   }
 
-  step(dt: number, flows: readonly WaterFlowLike[]): void {
+  /** One frame. `flows` are the running outlets, placed in the room; `origin` is the tank's floor centre there. */
+  step(dt: number, flows: readonly WaterFlowLike[], origin: { x: number; z: number }): void {
     if (!this.hz) { this.drops.length = 0; return; }
     this.acc += dt;
     if (this.acc < 1 / this.hz) return;
@@ -208,20 +224,38 @@ export class TankWaterSim {
     this.time += dt;
     this.U.uTime.value = this.time;
     this.jetU.fill(0); this.jetValues.fill(0);
-    for (let i = 0; i < flows.length && i < 4; i++) {
-      const flow = flows[i];
-      this.jetU[i * 4] = flow.position.x; this.jetU[i * 4 + 1] = flow.position.z; this.jetU[i * 4 + 2] = flow.direction.x; this.jetU[i * 4 + 3] = flow.direction.z;
-      this.jetValues[i * 2] = Math.min(1, flow.flowRate / 600); this.jetValues[i * 2 + 1] = flow.radius;
+    let stir = 0;
+    for (let i = 0; i < flows.length; i++) {
+      const f = flows[i], s = Math.min(1.5, f.flowRate / 600) * f.surface;
+      stir += s;
+      if (i >= 4) continue;
+      const x = f.position.x - origin.x, z = f.position.z - origin.z, dx = f.direction.x, dz = f.direction.z;
+      this.jetU[i * 4] = x; this.jetU[i * 4 + 1] = z; this.jetU[i * 4 + 2] = dx; this.jetU[i * 4 + 3] = dz;
+      this.jetValues[i * 2] = s; this.jetValues[i * 2 + 1] = f.radius;
+      // the outlet churns the surface: a shower splashes where it lands, a jet breaks into ripples downstream
+      const len = Math.hypot(dx, dz), pour = len < 0.5;
+      for (this.jetAcc[i] += dt * (pour ? 24 : 10) * s; this.jetAcc[i] >= 1; this.jetAcc[i] -= 1) {
+        if (pour) {
+          const a = Math.random() * 6.283, r = 0.025 * Math.sqrt(Math.random());
+          this.addRipple(x + Math.cos(a) * r, z + Math.sin(a) * r, -(0.4 + 0.5 * Math.random()) * s, 0.006 + 0.006 * Math.random());
+        } else {
+          const u = 0.02 + Math.random() * f.radius * 1.5, v = (Math.random() - 0.5) * f.radius * 0.6;
+          this.addRipple(x + (dx * u - dz * v) / len, z + (dz * u + dx * v) / len, (Math.random() < 0.5 ? -1 : 1) * (0.25 + 0.3 * Math.random()) * s, 0.01 + 0.01 * Math.random());
+        }
+      }
     }
-    // each wave's height now: its own slow cycle, scaled by how lively the tank is
-    const swing = 0.35 + 0.55 * this.turb;
+    this.stir += (Math.min(1, stir) - this.stir) * Math.min(1, dt * 1.5);
+    this.U.uStir.value = this.stir;
+    // each wave's height now: its own slow cycle. Still water keeps only a faint swell; the flows raise it, the short
+    // chop most (the outlets' own plumes above are stronger still: the movement comes from them)
+    const swell = 0.12 + 0.35 * this.stir, swing = 0.3 + 0.6 * this.stir, chop = 0.3 + 0.8 * this.stir;
     for (let i = 0; i < NW; i++) {
       const W = this.waves[i];
       this.ampU[i] = W.a * Math.max(0.1, 1 + swing * (0.6 * Math.sin(W.f1 * this.time + W.p1) + 0.4 * Math.sin(W.f2 * this.time + W.p2)))
-        * this.swell * (W.short ? 0.3 + 1.4 * this.turb : 1);
+        * swell * (W.short ? chop : 1);
     }
-    // now and then a tiny gust somewhere
-    for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
+    // a stirred tank: now and then a tiny gust somewhere
+    for (this.gustAcc += dt * 0.6 * this.stir; this.gustAcc >= 1; this.gustAcc -= 1)
       this.addRipple((Math.random() * 2 - 1) * this.half.x * 0.9, (Math.random() * 2 - 1) * this.half.z * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
     if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
     // a fixed 60 Hz step, with the catch-up capped
