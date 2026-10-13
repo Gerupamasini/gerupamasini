@@ -3,12 +3,12 @@ import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
-import { createSquidBehavior, type SquidApi } from './behavior';
-import { applyPose } from './rig';
+import { createSquidBehavior, type FxEvent, type SquidApi } from './behavior';
+import { applyPose, armExtOf, armThin } from './rig';
 import { MimiikaLook, SUBSTRATE_TINT, type MmLookSpec } from './materials';
 import { buildModel, disposeModel, syncLevel, LOD1_AT, LOD2_AT, MODEL_ML, type MimiikaModel } from './model';
 import { makeMysidModel, poseMysid } from './prey';
-import { SandFX } from '../akaei/SandFX';
+import { SandFX, type SandFXOptions } from '../akaei/SandFX';
 import { CONTACT_SHADOWS, shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../amimehagi/materials';
 
@@ -26,6 +26,14 @@ export function lookSpecFor(id: string): MmLookSpec {
 
 const INK = new Vector3(0.012, 0.01, 0.011);
 const _v = new Vector3();
+
+/**
+ * Sand events the behaviour may give beyond FxEvent's: single grains that swell little (`grow` × their start size) and
+ * are gone where they reach the sand (`kill`), and the pit it blows (kind 'pit': centre, heading, half-sizes in m,
+ * how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one).
+ */
+type SandEvent = FxEvent & { grow?: number; kill?: boolean };
+interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number }
 
 /**
  * ミミイカ (Euprymna morsei): the small bobtail squid of the sandy shallows. By day it lies buried with only its eyes
@@ -83,7 +91,15 @@ export class MimiikaDriver implements Driver {
     return m.root;
   }
 
-  /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand and ink: DriverEntry.keep. */
+  /**
+   * The sand clouds of an animal K × the model: they settle onto the sand just under it (a fixed 4 mm floor would hold
+   * them over a small squid's buried head), tested every frame (the poured grains are small and fall fast).
+   */
+  static sandFxOptions(K: number): SandFXOptions {
+    return { floor: Math.max(0.0003, 0.0008 * K), everyFrame: true };
+  }
+
+  /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand, the pit and ink: DriverEntry.keep. */
   static keep(parent: Object3D): { dispose(): void } {
     const m = buildModel(new MimiikaLook(lookSpecFor('keep')));
     for (const t of m.tentacles) if (t) t.visible = true;
@@ -93,7 +109,9 @@ export class MimiikaDriver implements Driver {
     parent.add(far.root);
     const prey = makeMysidModel();
     parent.add(prey);
-    const fx = new SandFX(parent);
+    const fx = new SandFX(parent, MimiikaDriver.sandFxOptions(1));
+    // (the pit it blows as it buries)
+    fx.imprint(0, 0, 0, 0.01, 0.015, () => 0, 0.5, 150, 0.0007);
     return {
       dispose: () => {
         m.root.removeFromParent(); disposeModel(m);
@@ -116,6 +134,7 @@ export class MimiikaDriver implements Driver {
     u.uPale.value = P.chroma.pale;
     u.uSandCoat.value = P.sandCoat;
     u.uHeadCover.value = P.headCover;
+    for (let i = 0; i < u.uArmThin.value.length; i++) u.uArmThin.value[i] = armThin(armExtOf(P, i));
     u.uPupil.value = P.pupil;
     u.uLid.value = P.lid;
     // the head's funnel groove fills as the funnel swings out of it
@@ -130,6 +149,8 @@ export class MimiikaDriver implements Driver {
     this.ind = individual;
     const scale = individual.length_mm / 1000 / MODEL_ML;
     this.model = buildModel(new MimiikaLook(lookSpecFor(individual.id)));
+    // (the sand coat's fade into the bed and its grains follow the size)
+    this.model.look.setScale(scale);
     root.add(this.model.root);
     root.scale.setScalar(scale);   // (once: the size does not change in the field)
     const lv = this.model.lod.levels;
@@ -146,7 +167,7 @@ export class MimiikaDriver implements Driver {
       });
     }
     const parent = root.parent ?? root;
-    this.sandFx = new SandFX(parent);
+    this.sandFx = new SandFX(parent, MimiikaDriver.sandFxOptions(scale));
     this.sandFx.shadow.visible = false;
     this.inkFx = new SandFX(parent);
     this.inkFx.shadow.visible = false;
@@ -290,10 +311,17 @@ export class MimiikaDriver implements Driver {
     const s = this.squid!;
     const ground = (x: number, z: number) => ctx.floor.heightAt(x, z);
     const near = level <= 1 || this.locked;
-    for (const e of s.fx) {
+    for (const ev of s.fx as (SandEvent | PitEvent)[]) {
       if (!near) continue;
-      const fx = e.kind === 'ink' ? this.inkFx : this.sandFx;
-      fx?.emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
+      if (ev.kind === 'pit') {
+        // (laid just over the bed: under a small squid's buried eyes)
+        const K = this.root?.scale.x ?? 1;
+        if (ev.deepen) this.sandFx?.growImprint(ev.strength);
+        else this.sandFx?.imprint(ev.pos.x, ev.pos.z, ev.heading, ev.halfW, ev.halfL, ground, ev.strength, ev.life ?? 150, Math.min(0.0015, 0.0003 + 0.0004 * K));
+        continue;
+      }
+      const fx = ev.kind === 'ink' ? this.inkFx : this.sandFx;
+      fx?.emit(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha, undefined, ev.grow, ev.kill);
     }
     s.fx.length = 0;
     this.sandFx?.update(dt, ground);
@@ -325,7 +353,8 @@ export class MimiikaDriver implements Driver {
     const k = h / Math.max(L.y, 0.2);
     const cx = st.pos.x + Math.sin(st.heading) * 0.002 * K, cz = st.pos.z + Math.cos(st.heading) * 0.002 * K;
     const x = cx - L.x * k, z = cz - L.z * k;
-    const gy = this.ctx.floor.heightAt(x, z) + 0.002;
+    // (lifted clear of the sand, but under the arms and belly of a small squid lying on it)
+    const gy = this.ctx.floor.heightAt(x, z) + Math.min(0.002, 0.0006 + 0.0012 * K);
     const blur = 0.002 * K + 0.25 * P.lift;
     const len = MODEL_ML * K * 1.25 + 2 * blur, wid = MODEL_ML * K * 0.78 + 2 * blur;
     const opacity = strength * (0.5 - 0.3 * Math.min(1, P.lift / (MODEL_ML * K * 3)));

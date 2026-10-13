@@ -1,6 +1,7 @@
 import { Color, DoubleSide, FrontSide, Matrix3, MeshPhysicalMaterial, Vector2, Vector4, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
 import { AMH_UNIFORMS, ENV_INJECT, HELPERS, SUN_INJECT } from '../amimehagi/materials';
 import { EYE, FIN, Z_ROOT, lidFrame } from './anatomy';
+import { ARM_THIN_T } from './rig';
 
 /**
  * Materials of the ミミイカ: standard PBR (MeshPhysicalMaterial: wet clearcoat, iridescence for the iridophores) with
@@ -26,8 +27,8 @@ import { EYE, FIN, Z_ROOT, lidFrame } from './anatomy';
  *  - sand            grains stuck in the mucus of the back (uSandCoat) and thrown over the head when it buries
  *                    (uHeadCover), sparing the eyes
  * The far tier (MM_LOW) keeps the colours and drops the organs and the iridescence. The mantle's ventilation and jet
- * (uMantle), the fins' waves (uFinAmp, uFinPh, uFinK) and the filling of the head's funnel groove (uGrooveFill) are
- * vertex deformations.
+ * (uMantle), the fins' waves (uFinAmp, uFinPh, uFinK), the filling of the head's funnel groove (uGrooveFill) and the
+ * thinning of a stretched arm (uArmThin, about its rest axis aArm) are vertex deformations.
  */
 
 const f = (x: number): string => x.toFixed(5);
@@ -59,6 +60,12 @@ export interface MmUniforms {
   uRelief: IUniform<number>;
   /** the sand's height under the animal (world y): a buried animal's sand coat fades into it */
   uGroundY: IUniform<number>;
+  /** over what height (world m) the coat fades into the bed: 2.2 mm on the model, scaled with the animal (setScale) */
+  uSandFade: IUniform<number>;
+  /** the sand grains' size (model mm): ≈ 0.2 mm in the real animal whatever its size (setScale) */
+  uGrain: IUniform<number>;
+  /** per arm (ARMS order): its radius factor as it is stretched (rig.ts armThin; 1 at rest length) */
+  uArmThin: IUniform<Float32Array>;
 }
 
 // ------------------------------------------------------------------ shared GLSL
@@ -188,8 +195,10 @@ float mmLidSdf(vec3 n, float op) {
 const SKIN_VERT_PARS = /* glsl */ `
 attribute vec4 aSkin;   // part, t along, oral-ness, section centre y (mm)
 attribute float aGroove; // the head's funnel groove: how far down to its unimprinted surface (m)
+attribute vec4 aArm;    // an arm's rest axis under the vertex (m), arm index + 1 (0 off the arms)
 uniform float uMantle;
 uniform float uGrooveFill;
+uniform float uArmThin[8];
 varying vec4 vSkin;
 varying vec3 vRest;
 varying vec3 vRestN;
@@ -218,6 +227,11 @@ transformed.y += aGroove * uGrooveFill * step(0.5, aSkin.x) * step(aSkin.x, 1.5)
   // (a contracted mantle is a little longer: the muscle keeps its volume)
   transformed.z -= (mmS - 1.0) * mmW * 0.25 * (transformed.z + 0.003);
 }
+// a stretched arm thins about its own axis (before the skinning), from just beyond its base on the crown outwards
+if (aArm.w > 0.5) {
+  float th = mix(1.0, uArmThin[int(aArm.w - 0.5)], smoothstep(${f(ARM_THIN_T[0])}, ${f(ARM_THIN_T[1])}, aSkin.y));
+  transformed = aArm.xyz + (transformed - aArm.xyz) * th;
+}
 `;
 
 const SKIN_FRAG_PARS = /* glsl */ `
@@ -234,6 +248,8 @@ uniform float uHeadCover;
 uniform vec3 uCover;
 uniform float uRelief;
 uniform float uGroundY;
+uniform float uSandFade;
+uniform float uGrain;
 uniform float uLid;
 uniform float uPupil;
 const vec3 mmEye = vec3(${f(EYE.x)}, ${f(EYE.y)}, ${f(EYE.z - Z_ROOT)});
@@ -524,7 +540,7 @@ float mmFun = 0.0, mmBore = 0.0, mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT
   // ---- sand: grains in the mucus of the back, and thrown over the head (not over the eyes)
   {
     // grains: jittered points at two sizes over a fine noise (no lattice), a few pale quartz and dark grains
-    vec3 q = p / 0.3 + 51.0;
+    vec3 q = p / uGrain + 51.0;
     vec3 id = floor(q), h = mmH3(id);
     float gd = length(q - id - 0.5 - (h - 0.5) * 0.7);
     float grain = 1.0 - smoothstep(0.22, 0.42, gd * (0.8 + 0.5 * h.z));
@@ -564,7 +580,7 @@ float mmFun = 0.0, mmBore = 0.0, mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT
   clear = mix(clear * (1.0 - bulge), min(clear, mix(0.25, 0.5, smoothstep(0.2, 0.4, uPale))) * (1.0 - 0.8 * cY), dome);
   diffuseColor.a = 1.0 - clamp(clear, 0.0, 0.85);
   // buried: the sand on it runs out into the bed's sand (no hard line where the mound meets it)
-  diffuseColor.a *= 1.0 - mmSand * (1.0 - smoothstep(0.0, ${f(0.0022)}, vWPos.y - uGroundY));
+  diffuseColor.a *= 1.0 - mmSand * (1.0 - smoothstep(0.0, uSandFade, vWPos.y - uGroundY));
 }
 `;
 
@@ -686,7 +702,7 @@ function skinMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
       .replace('#include <emissivemap_fragment>', SKIN_THIN)
       .replace('#include <opaque_fragment>', SKIN_ALPHA);
   };
-  m.customProgramCacheKey = () => (low ? 'mimiika-skin-low-v3' : 'mimiika-skin-v3');
+  m.customProgramCacheKey = () => (low ? 'mimiika-skin-low-v4' : 'mimiika-skin-v4');
   return m;
 }
 
@@ -766,7 +782,7 @@ float mfThin = 1.0;
   alpha += 0.06 * pow(clamp(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 0.0, 1.0), 4.0);
   // sand on the fins of a buried animal
   // (grains, jittered like the skin's, not squares)
-  vec3 sq = p / 0.3 + 51.0, sid = floor(sq), sh3 = mmH3(sid);
+  vec3 sq = p / uGrain + 51.0, sid = floor(sq), sh3 = mmH3(sid);
   float grain = 1.0 - smoothstep(0.22, 0.42, length(sq - sid - 0.5 - (sh3 - 0.5) * 0.7) * (0.8 + 0.5 * sh3.z));
   float sand = smoothstep(0.3, 0.6, uSandCoat) * grain * step(0.35, sh3.x) * 0.8;
   col = mix(col, uCover, sand);
@@ -792,7 +808,7 @@ function finMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
       .replace('#include <begin_vertex>', FIN_POS)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vFin;\nvarying vec3 vRest;\nuniform vec3 uTint;\nuniform vec4 uChroma;\nuniform float uPale;\nuniform float uSeed;\nuniform float uSandCoat;\nuniform vec3 uCover;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vFin;\nvarying vec3 vRest;\nuniform vec3 uTint;\nuniform vec4 uChroma;\nuniform float uPale;\nuniform float uSeed;\nuniform float uSandCoat;\nuniform float uGrain;\nuniform vec3 uCover;\n${NOISE}`)
       .replace('void main() {', `${HELPERS}\nvoid main() {`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FIN_SURFACE}`)
       .replace('#include <lights_fragment_begin>', SUN_INJECT)
@@ -806,7 +822,7 @@ function finMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
   totalEmissiveRadiance += diffuseColor.rgb * mfThin * ((amUnderwater(nW, 1.0) + amUnderwater(-nW, 1.0)) * 0.04 + amSunCol() * amSunThrough() * back * 0.12);
 }`);
   };
-  m.customProgramCacheKey = () => (low ? 'mimiika-fin-low-v2' : 'mimiika-fin-v2');
+  m.customProgramCacheKey = () => (low ? 'mimiika-fin-low-v3' : 'mimiika-fin-v3');
   return m;
 }
 
@@ -1003,6 +1019,9 @@ export interface MmLookSpec {
   dark: number;
 }
 
+/** the sand grains' size on the skin (model mm) for an animal K × the model: ≈ 0.2 mm real, within 0.25 … 0.8 */
+export const sandGrain = (K: number): number => Math.min(0.8, Math.max(0.25, 0.2 / Math.max(K, 1e-3)));
+
 /** One squid's materials (programs shared between animals, uniforms its own). */
 export class MimiikaLook {
   readonly uniforms: MmUniforms;
@@ -1023,6 +1042,7 @@ export class MimiikaLook {
       uIrid: { value: 0.7 }, uPale: { value: 0 }, uSeed: { value: spec.seed }, uMantle: { value: 1 },
       uSandCoat: { value: 0 }, uHeadCover: { value: 0 }, uCover: { value: new Color(0.37, 0.37, 0.355) },
       uFinAmp: { value: new Vector2() }, uFinPh: { value: new Vector2() }, uFinK: { value: 1 }, uPupil: { value: 0.15 }, uLid: { value: 0.45 }, uGrooveFill: { value: 0 }, uHeadFromWorld: { value: new Matrix3() }, uLidCol: { value: new Color(0.2, 0.1, 0.07) }, uRelief: { value: 1 }, uGroundY: { value: -1e3 },
+      uSandFade: { value: 0.0022 }, uGrain: { value: sandGrain(1) }, uArmThin: { value: new Float32Array(8).fill(1) },
     };
     this.skin = skinMaterial(this.uniforms, false);
     this.skinLow = skinMaterial(this.uniforms, true);
@@ -1036,6 +1056,12 @@ export class MimiikaLook {
 
   /** the sediment it lies in (linear colour): the sand on its skin */
   setCover(r: number, g: number, b: number): void { this.uniforms.uCover.value.setRGB(r, g, b); }
+
+  /** the individual's size (its mantle length / the model's): the coat's fade into the bed and the grains follow it */
+  setScale(K: number): void {
+    this.uniforms.uSandFade.value = 0.0022 * K;
+    this.uniforms.uGrain.value = sandGrain(K);
+  }
 
   dispose(): void {
     for (const m of [this.skin, this.skinLow, this.fins, this.finsLow, this.eyes, this.eyesLow, this.cornea, this.viscera]) m.dispose();

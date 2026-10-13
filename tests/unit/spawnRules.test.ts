@@ -42,12 +42,47 @@ describe('the Tokyo Bay newcomers of round 28', () => {
 });
 
 describe('ミミイカ', () => {
+  const sp = species.find((s) => s.id === 'euprymna_morsei')!;
   it('lives on 走水 only (not on 葛西), up to 20 at a time', () => {
-    const sp = species.find((s) => s.id === 'euprymna_morsei')!;
     expect(sp).toBeDefined();
     for (const [i, r] of sp.spawn.entries()) {
       expect(r.maps, `rule ${i}`).toEqual(['hashirimizu']);
       expect(r.maxPopulation, `rule ${i}`).toBe(20);
     }
+  });
+  it('is measured by its mantle (ML 4–40 mm, mostly 1–2 cm), every rule inside that range', () => {
+    const L = sp.size.length_mm;
+    expect(L).toEqual({ min: 4, max: 40, mean: 14, sd: 5 });
+    expect(sp.size.measure_ja).toBe('外套長');
+    for (const [i, r] of sp.spawn.entries()) {
+      expect(r.length_mm, `rule ${i}`).toBeDefined();
+      expect(r.length_mm![0], `rule ${i}`).toBeGreaterThanOrEqual(L.min);
+      expect(r.length_mm![1], `rule ${i}`).toBeLessThanOrEqual(L.max);
+    }
+  });
+  it('is larger in winter and spring, with the new juveniles in summer and autumn', () => {
+    // density-weighted mean of the rules' midpoints (ML mm), aimed at spring 15–18, summer 11–15, autumn 12–14
+    // and winter 17–21
+    const mean = (season: 'spring' | 'summer' | 'autumn' | 'winter') => {
+      const rs = sp.spawn.filter((r) => r.season?.includes(season));
+      const w = rs.reduce((s, r) => s + r.density_per_100m2, 0);
+      return rs.reduce((s, r) => s + r.density_per_100m2 * (r.length_mm![0] + r.length_mm![1]) / 2, 0) / w;
+    };
+    expect(mean('spring')).toBeCloseTo(17.4, 0);
+    expect(mean('summer')).toBeCloseTo(12.0, 0);
+    expect(mean('autumn')).toBeCloseTo(13, 0);
+    expect(mean('winter')).toBeCloseTo(19, 0);
+  });
+  it('weighs about 2 g at the common 14 mm, near the lab adults (Jolly et al. 2022)', () => {
+    const { a, b } = sp.size.weightCoef, w = (ml: number) => a * ml ** b;
+    expect(Math.abs(w(14) - 2.0)).toBeLessThanOrEqual(0.2);
+    // ♂ 11.45 mm 1.41 g, ♀ 18.95 mm 3.70 g, each within 25 %
+    expect(Math.abs(w(11.45) / 1.41 - 1)).toBeLessThan(0.25);
+    expect(Math.abs(w(18.95) / 3.7 - 1)).toBeLessThan(0.25);
+  });
+  it('grows through 幼体 (≤ 9 mm) and 若い個体 (≤ 13 mm), its traits on absolute lengths', () => {
+    expect(sp.stages.map((s) => [s.id, s.maxLength_mm])).toEqual([['juvenile', 9], ['young', 13], ['adult', undefined]]);
+    // (each rule draws uniformly, so a percentile of N(mean, sd) would flag most of a rule)
+    for (const tr of sp.traits) expect(tr.when, tr.id).toMatch(/^length_mm[<>]=\d+$/);
   });
 });

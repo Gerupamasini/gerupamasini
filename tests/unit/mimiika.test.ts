@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { Group, Vector3, type Bone, type Mesh } from 'three';
-import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, surfacePoint } from '../../src/creatures/species/mimiika/anatomy';
+import { Euler, Group, Quaternion, Vector3, type Bone, type BufferAttribute, type Mesh, type SkinnedMesh } from 'three';
+import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, profileAt, surfacePoint, toModel } from '../../src/creatures/species/mimiika/anatomy';
 import { LODS, buildArms, buildBody, buildFin, buildFunnel, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
 import { createSquidBehavior, MODES, type Mode } from '../../src/creatures/species/mimiika/behavior';
-import { applyPose, emptyPose } from '../../src/creatures/species/mimiika/rig';
-import { buildModel, disposeModel } from '../../src/creatures/species/mimiika/model';
-import { MimiikaLook } from '../../src/creatures/species/mimiika/materials';
-import { lookSpecFor } from '../../src/creatures/species/mimiika/MimiikaDriver';
+import { ARM_AIM_MAX, applyPose, armEyeGap, armExtOf, armJoints, armThin, armThinAt, armTip, emptyPose, type Pose } from '../../src/creatures/species/mimiika/rig';
+import { buildModel, disposeModel, type MimiikaModel } from '../../src/creatures/species/mimiika/model';
+import { MimiikaLook, sandGrain } from '../../src/creatures/species/mimiika/materials';
+import { MimiikaDriver, lookSpecFor } from '../../src/creatures/species/mimiika/MimiikaDriver';
+import { SandFX } from '../../src/creatures/species/akaei/SandFX';
+import type { Individual } from '../../src/creatures/Individual';
 import { Rng } from '../../src/core/Rng';
 
 /** a sandy bottom with low ripples under 30 cm of water */
@@ -237,37 +239,6 @@ describe('ミミイカ: behaviour', () => {
     expect(b.pose.finAmp[0]).toBeGreaterThan(0.3);
   });
 
-  it('buries: sinks, throws sand over its head with the dorsal arms, and keeps its eyes out', () => {
-    const b = make(11);
-    b.burrow(30);
-    let raised = 0, sand = 0;
-    const armI = ARMS.findIndex((a) => a.pair === 0);
-    run(b, 12, () => {
-      // arm I curled back over the head: the sum of its joint curls goes strongly negative
-      let c = 0;
-      for (let k = 0; k < 5; k++) c += b.pose.armCurl[armI * 5 + k];
-      raised = Math.min(raised, c);
-      sand += b.fx.filter((e) => e.kind === 'sand').length;
-      b.fx.length = 0;
-    });
-    expect(b.state.phase).toBe('buried');
-    expect(b.state.bury).toBeGreaterThan(0.9);
-    expect(raised).toBeLessThan(-1.2);
-    expect(sand).toBeGreaterThan(8);
-    expect(b.pose.headCover).toBeGreaterThan(0.6);
-    expect(b.pose.sandCoat).toBeGreaterThan(0.6);
-    // the eyes' tops stay above the sand, the top of the mantle not far above it (it is covered)
-    const m = buildModel(new MimiikaLook(lookSpecFor('squid#2')), [2]);
-    applyPose(m.root, m.bones, b.pose);
-    const g = ground(b.pos.x, b.pos.z);
-    const eye = new Vector3();
-    (m.bones.J_eye_L as Bone).getWorldPosition(eye);
-    expect(eye.y + EYE.r / 1000 - g).toBeGreaterThan(0.001);
-    const mantleTop = new Vector3(0, 9.88 / 1000, -4.5 / 1000).applyMatrix4(m.root.matrixWorld);
-    expect(mantleTop.y - g).toBeLessThan(0.003);
-    disposeModel(m);
-  });
-
   it('escapes mantle first, away from the threat, with ink and jets, then lands', () => {
     const b = make(13);
     run(b, 1);
@@ -354,15 +325,718 @@ describe('ミミイカ: behaviour', () => {
   });
 });
 
+describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again)', () => {
+  const flat = (extra: Record<string, unknown> = {}) => ({ ground: () => 0, waterY: () => 0.3, ...extra });
+  const IIL = ARMS.findIndex((a) => a.name === 'IIL'), IIR = ARMS.findIndex((a) => a.name === 'IIR');
+  const shownPitch = (q: Quaternion) => -new Euler().setFromQuaternion(q, 'YXZ').x;
+  const PATTERNS = ['FBFB', 'BFB', 'FBFBFB', 'FBBFB'];
+  const T = 60;
+  interface Frame {
+    phase: string; mode: string; t: number; bury: number; pitch: number; shown: number; roll: number; funnelYaw: number; funnelSide: number;
+    fold: number; amp: number; mantle: number; sc: number; hc: number; stroke: { k: number; u: number; dir: string } | null;
+    ext: number[]; aimW: number[]; tipL: Vector3; tipR: Vector3; gap: number; J: Vector3[]; tips: Vector3[];
+    fx: { pos: Vector3; count: number }[]; pos: Vector3; quat: Quaternion; heading: number;
+  }
+  /** a burial on flat sand (heading 0.4), recorded every frame */
+  function burial(seed: number, K = 1, secs = 30, before?: (b: ReturnType<typeof createSquidBehavior>) => void) {
+    const r = new Rng(seed);
+    const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: K, start: { x: 0, z: 0, heading: 0.4 }, autonomous: false });
+    b.update(1 / T);
+    b.burrow(60);
+    const F: Frame[] = [];
+    for (let i = 0; i < secs * T; i++) {
+      before?.(b);
+      b.update(1 / T);
+      const st = b.state, P = b.pose;
+      F.push({
+        phase: st.phase, mode: st.mode, t: st.t, bury: st.bury, pitch: st.pitch, shown: shownPitch(P.quat), roll: st.roll, funnelYaw: P.funnelYaw, funnelSide: P.funnelSide,
+        fold: Math.max(P.finFold[0], P.finFold[1]), amp: Math.max(P.finAmp[0], P.finAmp[1]), mantle: P.mantle, sc: st.sandCoat, hc: st.headCover,
+        stroke: st.stroke ? { ...st.stroke } : null, ext: [...P.armExt], aimW: [...P.armAimW],
+        tipL: armTip(P, IIL, new Vector3()), tipR: armTip(P, IIR, new Vector3()), gap: P.armAimW[IIL] > 0 ? Math.min(armEyeGap(P, IIL), armEyeGap(P, IIR)) : 9,
+        J: armJoints(P, IIL, []).map((v) => v.clone()), tips: ARMS.map((_, i) => armTip(P, i, new Vector3())),
+        fx: b.fx.flatMap((e) => (e.kind === 'sand' ? [{ pos: e.pos.clone(), count: e.count }] : [])), pos: st.pos.clone(), quat: P.quat.clone(), heading: st.heading,
+      });
+      b.fx.length = 0;
+    }
+    return { b, F, plan: b.state.plan!, K };
+  }
+  /** a point of the root's frame (model mm) in the world, in model mm (the sand is at 0) */
+  const world = (f: Frame, p: Vector3, K: number) => p.clone().multiplyScalar(0.001 * K).applyQuaternion(f.quat).add(f.pos).multiplyScalar(1000 / K);
+  const fwdOf = (f: Frame) => new Vector3(Math.sin(f.heading), 0, Math.cos(f.heading));
+  const leftOf = (f: Frame) => new Vector3(Math.cos(f.heading), 0, -Math.sin(f.heading));
+  const first = (F: Frame[], p: string) => F.findIndex((f) => f.phase === p);
+  let cache: ReturnType<typeof burial>[] | null = null;
+  const all = () => (cache ??= Array.from({ length: 20 }, (_, i) => burial(i + 1)));
+
+  it('settles, blows, (pauses,) strokes and lies buried, in a bobtail\'s time; the draws are in st.plan', () => {
+    const counts = new Set<number>();
+    for (const { F, plan } of all()) {
+      const seq = F.map((f) => f.phase).filter((p, i, a) => i === 0 || p !== a[i - 1]);
+      expect(seq).toEqual(plan.gap > 0 ? ['settle', 'blow', 'gap', 'sweep', 'buried'] : ['settle', 'blow', 'sweep', 'buried']);
+      const at = (p: string) => first(F, p) / T;
+      expect(at('blow')).toBeGreaterThan(0.99);
+      expect(at('blow')).toBeLessThan(2.55);
+      const blow = (plan.gap > 0 ? at('gap') : at('sweep')) - at('blow');
+      expect(blow).toBeCloseTo(plan.blow, 1);
+      expect(blow).toBeGreaterThan(3.4);
+      expect(blow).toBeLessThan(9.2);
+      if (plan.gap > 0) { expect(at('sweep') - at('gap')).toBeLessThan(1.05); expect(plan.gap).toBeGreaterThan(0.19); }
+      const sweep = at('buried') - at('sweep');
+      expect(sweep).toBeGreaterThan(0.3 + 4 * 1.1 - 0.05);
+      expect(sweep).toBeLessThan(0.3 + 8 * 1.6 + 0.05);
+      // (S. parva 16–42 s; ミミイカ 「あっという間」: about 12–26 s here)
+      expect(at('buried')).toBeLessThan(26);
+      // J1 backward, a pause, then one of the runs; 4, 6 or 8 strokes of 1.1–1.6 s
+      expect(plan.jets[0]).toBe('B');
+      expect(PATTERNS).toContain(plan.jets.slice(1).join(''));
+      expect(plan.jetT[0]).toBeCloseTo(0.15, 9);
+      expect(plan.jetT[1] - plan.jetT[0]).toBeGreaterThanOrEqual(0.8);
+      expect(plan.jetT[1] - plan.jetT[0]).toBeLessThanOrEqual(1.3);
+      for (let j = 2; j < plan.jets.length; j++) { expect(plan.jetT[j] - plan.jetT[j - 1]).toBeGreaterThanOrEqual(0.9); expect(plan.jetT[j] - plan.jetT[j - 1]).toBeLessThanOrEqual(1.4); }
+      expect(plan.blow).toBeCloseTo(plan.jetT[plan.jets.length - 1] + 0.7, 9);
+      expect([4, 6, 8]).toContain(plan.strokes);
+      for (const d of plan.strokeT) { expect(d).toBeGreaterThanOrEqual(1.1); expect(d).toBeLessThanOrEqual(1.6); }
+      counts.add(plan.strokes);
+    }
+    expect(counts.size).toBeGreaterThan(1);
+  }, 60000);
+
+  it('jets backward and forward along its axis: a mantle squeeze each, sand behind or in front, the body tipping with each', () => {
+    for (const { F, plan, K } of all()) {
+      const blow = F.filter((f) => f.phase === 'blow');
+      let dips = 0;
+      blow.forEach((f, i) => { if (f.mantle < 0.95 && (i === 0 || blow[i - 1].mantle >= 0.95)) dips++; });
+      expect(dips).toBe(plan.jets.length);
+      for (const f of blow) {
+        if (!f.fx.length) continue;
+        let j = 0;
+        while (j < plan.jets.length - 1 && plan.jetT[j + 1] <= f.t + 1e-9) j++;
+        for (const e of f.fx) {
+          const d = e.pos.clone().sub(f.pos).dot(fwdOf(f)) / (0.001 * K);
+          if (plan.jets[j] === 'B') expect(d, `jet ${j} B`).toBeLessThan(-5);
+          else expect(d, `jet ${j} F`).toBeGreaterThan(10);
+        }
+      }
+      // no jet to the sides, no rocking (the funnel along the axis, the body level on flat sand)
+      for (const f of F) if (f.mode === 'BURROW') { expect(Math.abs(f.funnelYaw)).toBeLessThan(0.02); expect(Math.abs(f.roll)).toBeLessThan(0.01); }
+      // the tip over the damped pitch shows in the pose: the tail down with a backward jet, the head with a forward one
+      plan.jets.forEach((d, j) => {
+        const w = blow.filter((f) => f.t > plan.jetT[j] && f.t <= plan.jetT[j] + 0.3).map((f) => f.shown - f.pitch);
+        if (d === 'B') expect(Math.max(...w), `B jet ${j}`).toBeGreaterThan(0.03);
+        else expect(Math.min(...w), `F jet ${j}`).toBeLessThan(-0.02);
+      });
+    }
+  }, 60000);
+
+  it('sinks a step with each jet to three quarters, then all the way as it strokes, never rising', () => {
+    for (const { F, plan } of all()) {
+      const blow = F.filter((f) => f.phase === 'blow');
+      const at = (t: number) => blow.find((f) => f.t >= t) ?? blow[blow.length - 1];
+      expect(at(plan.jetT[0] + 0.6).bury).toBeGreaterThan(0.13);
+      const end = blow[blow.length - 1].bury;
+      expect(end).toBeGreaterThan(0.7);
+      expect(end).toBeLessThan(0.8);
+      // stepped: most of each jet's sinking within 0.6 s of it
+      plan.jets.forEach((_, j) => {
+        const next = j + 1 < plan.jets.length ? plan.jetT[j + 1] : plan.blow;
+        const all = at(next).bury - at(plan.jetT[j]).bury, soon = at(plan.jetT[j] + 0.6).bury - at(plan.jetT[j]).bury;
+        expect(soon, `jet ${j}`).toBeGreaterThan(0.75 * all);
+      });
+      for (let i = 1; i < F.length; i++) if (F[i].mode === 'BURROW') expect(F[i].bury).toBeGreaterThan(F[i - 1].bury - 1e-3);
+      const b = first(F, 'buried');
+      expect(F[b + 3 * T].bury).toBeGreaterThan(0.97);
+    }
+  }, 60000);
+
+  it('keeps its fins pressed flat (a mild beat against the first jet only)', () => {
+    for (const { F, plan } of all()) {
+      const b0 = first(F, 'blow');
+      const beat = F.filter((f) => f.phase === 'blow' && f.t > plan.jetT[0] && f.t < plan.jetT[0] + 0.4);
+      expect(Math.max(...beat.map((f) => f.amp))).toBeGreaterThan(0.1);
+      expect(Math.max(...beat.map((f) => f.amp))).toBeLessThan(0.35);
+      for (const f of F.slice(b0 + 1.2 * T)) { expect(f.fold).toBeLessThan(-0.85); expect(f.amp).toBeLessThan(0.06); }
+    }
+  }, 60000);
+
+  it('strokes with arm pair II alone, both arms in exact mirror sync, stretched to twice their length once a stroke', () => {
+    for (const { F, plan } of all()) {
+      const b0 = first(F, 'blow');
+      let armed = true, peaks = 0;
+      const peak = new Map<number, number>();
+      F.forEach((f, i) => {
+        if (f.phase === 'sweep') {
+          ARMS.forEach((a, n) => { if (a.pair !== 1) { expect(f.aimW[n]).toBe(0); expect(f.ext[n]).toBe(1); } });
+          if (f.stroke && f.stroke.u >= 0.05) { expect(f.aimW[IIL]).toBeGreaterThan(0.95); }
+          if (f.stroke) peak.set(f.stroke.k, Math.max(peak.get(f.stroke.k) ?? 0, f.ext[IIL]));
+        }
+        if (f.ext[IIL] < 1.6) armed = true;
+        if (armed && f.ext[IIL] > 1.9) { peaks++; armed = false; }
+        // L and R the same, mirrored (from the first jet on: the pair's own small motions taken over)
+        if (i > b0) {
+          expect(f.ext[IIR]).toBe(f.ext[IIL]);
+          expect(f.aimW[IIR]).toBe(f.aimW[IIL]);
+          expect(f.tipL.clone().setX(-f.tipL.x).distanceTo(f.tipR)).toBeLessThan(0.05);
+        }
+      });
+      expect(peaks).toBe(plan.strokes);
+      expect(peak.size).toBe(plan.strokes);
+      for (const v of peak.values()) { expect(v).toBeGreaterThan(1.9); expect(v).toBeLessThan(2.1); }
+    }
+  }, 60000);
+
+  it('reaches out low over the sand (forward, 45°, sideways, back and out), and arches back over the head, clear of the eyes', () => {
+    const AZ: Record<string, [number, number]> = { F: [0, 20], FL: [35, 60], L: [70, 100], BL: [105, 135] };
+    const headTop = new Vector3(0, surfacePoint(0.6, 0, HEAD_PROFILE)[1], 0.6 - Z_ROOT), backTop = new Vector3(0, surfacePoint(-4.5, 0)[1], -4.5 - Z_ROOT);
+    for (const { F, plan, K } of all()) {
+      for (let k = 0; k < plan.strokes; k++) {
+        const S = F.filter((f) => f.phase === 'sweep' && f.stroke?.k === k);
+        const dir = S[0].stroke!.dir;
+        expect(dir).toBe(['F', 'FL', 'L', 'BL'][k % 4]);
+        // the scoop: the tip on the sand, about 1.1 ML out from the crown
+        const sc = S.find((f) => f.stroke!.u >= 0.36)!;
+        const tip = world(sc, sc.tipL, K), crown = world(sc, new Vector3(2.1, 0.35, 14.8), K);
+        expect(tip.y, `stroke ${k} tip height`).toBeGreaterThan(-2.5);
+        expect(tip.y).toBeLessThan(1.0);
+        const d = tip.clone().sub(crown).setY(0);
+        expect(d.length(), `stroke ${k} reach`).toBeGreaterThan(24);
+        expect(d.length()).toBeLessThan(31);
+        const base = world(sc, sc.J[0], K), v = tip.clone().sub(base);
+        const az = (Math.atan2(v.dot(leftOf(sc)), v.dot(fwdOf(sc))) * 180) / Math.PI;
+        expect(az, `stroke ${k} ${dir} azimuth`).toBeGreaterThan(AZ[dir][0]);
+        expect(az).toBeLessThan(AZ[dir][1]);
+        // over the head (forward strokes) or the front of the back (the others), the tips in and down above it
+        const ar = S.find((f) => f.stroke!.u >= 0.76)!;
+        const to = dir === 'F' || dir === 'FL' ? headTop : backTop;
+        expect(Math.hypot(ar.tipL.x - to.x, ar.tipL.z - to.z), `stroke ${k} over the ${to === headTop ? 'head' : 'back'}`).toBeLessThan(5.5);
+        expect(ar.tipL.y - to.y).toBeGreaterThan(to === headTop ? 2.5 : 1.5);
+        expect(ar.tipL.y - to.y).toBeLessThan(to === headTop ? 6 : 5.5);
+        // the arch's top about an eye's height over the eyes
+        const apex = Math.max(...S.filter((f) => f.stroke!.u > 0.6 && f.stroke!.u < 0.9).flatMap((f) => f.J.map((p) => world(f, p, K).y)));
+        expect(apex, `stroke ${k} apex`).toBeGreaterThan(8);
+        expect(apex).toBeLessThan(13.5);
+      }
+      for (const f of F) {
+        // the arm's skin stays clear of the eyes' domes; the tips never cross the midline
+        expect(f.gap).toBeGreaterThan(0.3);
+        if (f.phase === 'sweep') expect(f.tipL.x).toBeGreaterThan(0.5);
+      }
+    }
+  }, 60000);
+
+  it('is coated as it buries: falling grains on the back from the jets, then the head from the forward strokes, the back from the others', () => {
+    for (const { F, plan } of all()) {
+      const blowEnd = F[first(F, plan.gap > 0 ? 'gap' : 'sweep') - 1];
+      expect(blowEnd.sc).toBeGreaterThan(0.15);
+      expect(blowEnd.sc).toBeLessThan(0.35);
+      expect(F.filter((f) => f.phase === 'blow').every((f) => f.hc === 0)).toBe(true);
+      const sw = F.filter((f) => f.phase === 'sweep' && f.stroke);
+      for (let i = 1; i < sw.length; i++) {
+        const dh = sw[i].hc - sw[i - 1].hc;
+        expect(Math.abs(dh)).toBeLessThan(0.03);
+        if (Math.abs(dh) > 1e-12) { expect(sw[i].stroke!.u).toBeGreaterThan(0.57); expect(sw[i - 1].stroke!.u).toBeLessThan(0.93); }
+      }
+      for (let k = 0; k < plan.strokes; k++) {
+        const S = sw.filter((f) => f.stroke!.k === k), a = S[0], z = S[S.length - 1];
+        if (z.hc > 0.999 || z.sc > 0.999) continue;
+        const head = a.stroke!.dir === 'F' || a.stroke!.dir === 'FL';
+        if (head) expect(z.hc - a.hc, `stroke ${k}`).toBeGreaterThan(z.sc - a.sc);
+        else expect(z.sc - a.sc, `stroke ${k}`).toBeGreaterThan(z.hc - a.hc);
+      }
+      // (× 8 / n: about as much cover whatever the number of strokes), made up to the full coat in 1.5 s
+      const b = first(F, 'buried');
+      expect(F[b - 1].hc).toBeGreaterThan(0.75);
+      expect(F[b + 1.5 * T].hc).toBeGreaterThanOrEqual(0.85);
+      expect(F[b + 1.5 * T].sc).toBeGreaterThanOrEqual(0.9);
+    }
+  }, 60000);
+
+  it('lies buried with only the eyes out, pupils turned up, the mantle still, the funnel to one side, every arm under the sand', () => {
+    for (const seed of [2, 5, 9]) {
+      const { b, F, K } = burial(seed, 1, 26);
+      const i = first(F, 'buried');
+      // (1 s in: arm II has blended back)
+      for (const p of F[i + T].tips) expect(world(F[i + T], p, K).y).toBeLessThan(0.5);
+      expect(F[i + T].aimW[IIL]).toBeLessThan(0.01);
+      const still = F.slice(i + 3 * T, i + 5 * T);
+      for (const f of still) { expect(Math.abs(f.mantle - 1)).toBeLessThan(0.002); expect(Math.abs(f.funnelSide)).toBeGreaterThan(0.9); }
+      expect(b.state.phase).toBe('buried');
+      expect(b.pose.gazeUp).toBeGreaterThan(0.35);
+      expect(b.pose.eyes[0].y).toBeGreaterThan(EYE.gaze[1] + 0.2);
+      const m = buildModel(new MimiikaLook(lookSpecFor('squid#2')), [2]);
+      applyPose(m.root, m.bones, b.pose);
+      const eye = new Vector3();
+      (m.bones.J_eye_L as Bone).getWorldPosition(eye);
+      expect(eye.y + EYE.r / 1000).toBeGreaterThan(0.001);
+      expect(new Vector3(0, 9.88 / 1000, -4.5 / 1000).applyMatrix4(m.root.matrixWorld).y).toBeLessThan(0.003);
+      disposeModel(m);
+    }
+  }, 60000);
+
+  it('comes out slowly: by day with its coat on, at night dropping it on the bottom before it moves off', () => {
+    const buried = (seed: number, night: boolean) => {
+      const r = new Rng(seed);
+      const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: 1, start: { x: 0, z: 0 }, autonomous: false, startBuried: true });
+      b.setSurroundings(0.3, night);
+      run(b, 2);
+      b.fx.length = 0;
+      return b;
+    };
+    for (const night of [false, true]) {
+      for (const seed of [1, 2, 3]) {
+        const b = buried(seed, night);
+        expect(b.state.plan).toBeNull();
+        b.hover(10);
+        expect(b.state.phase).toBe('emerge');
+        let t = 0, bury = b.state.bury, sheds = 0, lastT = -1, shedT = -1, coatAtShed = 1;
+        const dur = b.state.dur;
+        while (b.state.mode === 'BURROW' && t < 5) {
+          // (the driver asks again every frame where there is no sand: only the command waiting changes)
+          b.hover(6);
+          b.update(1 / T); t += 1 / T;
+          if (b.state.mode === 'BURROW') { expect(b.state.dur).toBe(dur); expect(b.state.t).toBeGreaterThan(lastT); lastT = b.state.t; }
+          expect(b.state.bury).toBeLessThan(bury + 1e-9);
+          bury = b.state.bury;
+          for (const e of b.fx) if (e.kind === 'sand' && e.count >= 12) { sheds++; shedT = t; coatAtShed = b.state.bury; }
+          b.fx.length = 0;
+          if (shedT < 0) expect(b.state.sandCoat).toBeGreaterThan(0.8);
+          else if (t > shedT + 0.25) expect(b.state.sandCoat).toBeLessThan(0.05);
+        }
+        expect(b.state.mode).toBe('HOVER');
+        expect(t).toBeGreaterThan(1.3);
+        if (night) {
+          expect(t).toBeLessThan(3.3);
+          expect(sheds).toBe(1);
+          expect(b.state.shedAt).toBeGreaterThan(0);
+          // (on the bottom, out of the sand)
+          expect(coatAtShed).toBeLessThan(0.08);
+        } else {
+          expect(t).toBeLessThan(2.8);
+          expect(sheds).toBe(0);
+          expect(b.state.shedAt).toBe(-1);
+          expect(b.state.sandCoat).toBeGreaterThan(0.8);
+        }
+      }
+    }
+    // burrow() while it rises: back down with the coat on; once the coat is off, it starts again
+    const a = buried(4, true);
+    a.hover(10); run(a, 0.5);
+    a.burrow(30);
+    expect(a.state.phase).toBe('buried');
+    expect(a.state.sandCoat).toBeGreaterThan(0.8);
+    const c = buried(4, true);
+    c.hover(10);
+    while (c.state.shedAt < 0) c.update(1 / T);
+    c.burrow(30);
+    expect(c.state.phase).toBe('settle');
+    // fleeing from the sand: the coat dropped at once, one burst
+    const e = buried(5, false);
+    e.escape(new Vector3(0.05, 0, 0));
+    let bursts = 0;
+    run(e, 0.25, () => { bursts += e.fx.filter((x) => x.kind === 'sand' && x.count >= 30).length; e.fx.length = 0; });
+    expect(bursts).toBe(1);
+    expect(e.state.sandCoat).toBe(0);
+    expect(e.state.headCover).toBe(0);
+  }, 60000);
+
+  it('blends arm II back when the burial is cut short, and keeps its own time when asked again', () => {
+    for (const cut of ['hunt', 'escape'] as const) {
+      let done = false, i0 = -1;
+      const { F } = burial(3, 1, 18, (b) => {
+        if (!done && b.state.stroke?.k === 2 && b.state.stroke.u > 0.3) { done = true; if (cut === 'hunt') b.hunt(); else b.escape(new Vector3(0.05, 0, 0)); }
+      });
+      i0 = F.findIndex((f) => f.mode !== 'BURROW');
+      expect(F[i0].mode).toBe(cut === 'hunt' ? 'HUNT' : 'ESCAPE');
+      expect(F[i0 - 1].ext[IIL]).toBeGreaterThan(1.8);
+      for (let i = i0; i < i0 + T; i++) expect(Math.abs(F[i].ext[IIL] - F[i - 1].ext[IIL])).toBeLessThan(0.15);
+      expect(F[i0 + T].ext[IIL]).toBeLessThan(1.05);
+      expect(F[i0 + T].aimW[IIL]).toBeLessThan(0.05);
+    }
+    // the brain asking to burrow every frame does not stretch the phases (only the burial that follows)
+    const a = burial(6, 1, 25), b = burial(6, 1, 25, (s) => s.burrow(20));
+    for (const p of ['blow', 'sweep', 'buried']) expect(first(b.F, p)).toBe(first(a.F, p));
+  }, 60000);
+
+  it('buries the same way at 14 mm and at 40 mm (the sand and the strokes in proportion)', () => {
+    for (const K of [0.56, 1.6]) for (const seed of [7, 8]) {
+      const { F, plan } = burial(seed, K, 27);
+      expect(first(F, 'buried') / T).toBeLessThan(26);
+      const blowEnd = F[first(F, plan.gap > 0 ? 'gap' : 'sweep') - 1];
+      expect(blowEnd.bury).toBeGreaterThan(0.7);
+      for (const f of F) {
+        expect(f.gap).toBeGreaterThan(0.3);
+        if (f.phase !== 'settle') expect(f.tipL.clone().setX(-f.tipL.x).distanceTo(f.tipR)).toBeLessThan(0.05);
+        for (const e of f.fx) if (f.phase === 'blow') expect(Math.abs(e.pos.clone().sub(f.pos).dot(fwdOf(f))) / (0.001 * K)).toBeGreaterThan(5);
+      }
+      const sc = F.find((f) => f.phase === 'sweep' && f.stroke && f.stroke.u >= 0.36)!;
+      const tip = world(sc, sc.tipL, K);
+      expect(tip.y).toBeGreaterThan(-2.5);
+      expect(tip.y).toBeLessThan(1.0);
+    }
+  }, 60000);
+});
+
 describe('ミミイカ: the model in a scene', () => {
   it('poses without NaN and the arms follow their curls', () => {
     const m = buildModel(new MimiikaLook(lookSpecFor('squid#3')));
     new Group().add(m.root);
     const b = make(31);
     b.burrow(20);
-    run(b, 6);
-    applyPose(m.root, m.bones, b.pose);
-    m.root.traverse((o) => { expect(Number.isFinite(o.matrixWorld.elements[12])).toBe(true); });
+    // (the whole burial, into the sand and out again)
+    for (let s = 0; s < 25; s++) {
+      run(b, 1);
+      if (s === 20) b.hover(5);
+      applyPose(m.root, m.bones, b.pose);
+      m.root.traverse((o) => { for (const e of o.matrixWorld.elements) expect(Number.isFinite(e)).toBe(true); });
+    }
     disposeModel(m);
+  });
+});
+
+describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', () => {
+  const X = new Vector3(1, 0, 0), Y = new Vector3(0, 1, 0);
+  const IIL = ARMS.findIndex((a) => a.name === 'IIL'), IIR = ARMS.findIndex((a) => a.name === 'IIR');
+  const sm = (x: number) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+  const model = () => { const m = buildModel(new MimiikaLook(lookSpecFor('squid#rig')), [0]); const holder = new Group(); holder.add(m.root); return { m, holder }; };
+  /** a pose with every arm joint curled and swung differently, the head turned (no aim, no stretch) */
+  const curled = () => {
+    const P = emptyPose();
+    P.pos.set(0.01, 0.02, -0.03);
+    P.quat.setFromEuler(new Euler(-0.3, 0.7, 0.05, 'YXZ'));
+    P.headPitch = 0.12; P.headYaw = -0.07;
+    for (let j = 0; j < 40; j++) { P.armCurl[j] = 0.9 * Math.sin(j * 1.7 + 0.3); P.armSwing[j] = 0.4 * Math.cos(j * 2.3 + 1.1); }
+    return P;
+  };
+  /** the body sunk to `bury` and pitched as the behaviour does (BURIED_PITCH), head pitch 0.05 */
+  const sunk = (bury: number) => {
+    const P = emptyPose();
+    P.pos.set(0, (8.75 - 15.75 * bury) * 0.001, 0);
+    P.quat.setFromEuler(new Euler(-(0.04 + sm(bury) * 0.32), 0, 0, 'YXZ'));
+    P.headPitch = 0.05;
+    return P;
+  };
+  /** a direction in the level frame (x the arm's own side out, y up, z forward; ψ from forward to the side, ε up) → head frame */
+  const toHead = (P: Pose, d: Vector3) => d.applyQuaternion(P.quat.clone().multiply(new Quaternion().setFromAxisAngle(X, -P.headPitch)).multiply(new Quaternion().setFromAxisAngle(Y, P.headYaw)).invert()).normalize();
+  type Key = { psi: number; elev: number; bend: number[]; curl: number[]; ext: number };
+  const aimArm = (P: Pose, i: number, k: Key) => {
+    const s = ARMS[i].side;
+    P.armAim[i].copy(toHead(P, new Vector3(Math.sin(k.psi) * Math.cos(k.elev) * s, Math.sin(k.elev), Math.cos(k.psi) * Math.cos(k.elev))));
+    P.armBend[i].copy(toHead(P, new Vector3(k.bend[0] * s, k.bend[1], k.bend[2])));
+    P.armAimW[i] = 1; P.armExt[i] = k.ext;
+    for (let j = 0; j < 5; j++) P.armCurl[i * 5 + j] = k.curl[j];
+  };
+  /** an arm's skinned vertices (world), thinned about their rest axis as the vertex shader does, and their rest t */
+  const meshArm = (m: MimiikaModel, P: Pose, i: number) => {
+    const arms = m.parts.Arms as SkinnedMesh, g = arms.geometry;
+    const aArm = g.getAttribute('aArm') as BufferAttribute, aSkin = g.getAttribute('aSkin') as BufferAttribute, pos = g.getAttribute('position') as BufferAttribute;
+    const B = armBase(ARMS[i]), base = new Vector3(...toModel(B.pos)), dir = new Vector3(...B.dir), ext = armExtOf(P, i);
+    const out: { p: Vector3; tt: number }[] = [];
+    for (let v = 0; v < aArm.count; v++) {
+      if (Math.round(aArm.getW(v)) !== i + 1) continue;
+      const ax = new Vector3(aArm.getX(v), aArm.getY(v), aArm.getZ(v));
+      const p = new Vector3().fromBufferAttribute(pos, v).sub(ax).multiplyScalar(armThinAt(ext, aSkin.getY(v))).add(ax);
+      arms.applyBoneTransform(v, p);
+      out.push({ p: p.applyMatrix4(arms.matrixWorld), tt: ax.clone().sub(base).dot(dir) * 1000 / ARMS[i].length });
+    }
+    return out;
+  };
+
+  it('poses exactly as before when no arm is aimed or stretched (aimW 0, ext 1)', () => {
+    // the joints and tips of every arm, and skinned vertices, measured before the aim and stretch were added (mm)
+    const JOINTS = [
+    18.9496, 26.2604, -19.8924, 20.5556, 26.8753, -18.3953, 20.8984, 26.1417, -16.264, 22.3401, 25.9765, -14.5055, 23.9609, 27.1881, -13.4548, 24.9181, 27.4124, -11.3977,
+    20.2393, 25.4868, -20.3893, 22.1121, 25.093, -18.1839, 24.4808, 26.5654, -17.3192, 26.6973, 28.4659, -17.2792, 29.0962, 28.3651, -15.6175, 30.7755, 28.9063, -13.2908,
+    20.8022, 24.0601, -20.0178, 23.9408, 22.9539, -20.482, 27.0449, 21.6728, -20.3691, 29.6667, 22.8387, -18.6208, 32.5345, 22.3419, -16.9419, 35.4601, 20.8303, -17.609,
+    20.2926, 23.0345, -19.1021, 21.5679, 24.7212, -17.3283, 20.8944, 26.5245, -15.3503, 22.2874, 28.1466, -13.605, 24.4839, 28.886, -12.1064, 24.6513, 30.4227, -9.8198,
+    17.6383, 26.1346, -18.8941, 18.1509, 26.5105, -16.7045, 18.0088, 28.4831, -15.5702, 17.9739, 30.4897, -14.4881, 18.179, 30.8189, -12.2414, 19.011, 31.8434, -10.3822,
+    16.9218, 25.1684, -17.8637, 15.2611, 25.959, -15.5958, 14.7802, 26.4374, -12.7557, 16.2337, 27.8274, -10.6388, 16.1324, 28.1624, -7.7398, 14.4871, 28.434, -5.3428,
+    17.3045, 23.7244, -17.3549, 19.5496, 25.7669, -15.9135, 22.725, 26.8068, -15.5604, 24.1129, 28.3895, -12.9416, 25.155, 29.8146, -10.0828, 28.3196, 30.6066, -9.2782,
+    18.4379, 22.8565, -17.6901, 18.7516, 23.2359, -14.9743, 18.7799, 21.3428, -12.9661, 19.295, 20.1079, -10.5521, 19.3371, 21.0865, -7.9717, 20.286, 20.5835, -5.4292,
+    ];
+    const VERTS = [
+    0, 18.1967, 27.0423, -21.142, 667, 22.6036, 25.4332, -14.5046, 1334, 21.6427, 25.8486, -14.5225, 2001, 30.3601, 28.636, -13.5382,
+    2668, 28.9101, 28.0531, -15.5327, 3335, 26.7666, 28.5197, -16.5767, 4002, 22.0591, 23.3769, -19.2742, 4669, 32.2799, 22.4827, -16.5125,
+    5336, 29.8579, 23.2763, -18.1661, 6003, 24.8971, 30.2235, -10.2586, 6670, 24.2824, 28.9757, -11.8437, 7337, 22.6256, 28.9209, -13.1687,
+    8004, 18.9373, 26.1769, -16.7881, 8671, 18.9349, 31.2133, -11.1911, 9338, 18.2521, 30.836, -11.4343, 10005, 15.5677, 27.08, -12.5297,
+    10672, 15.9312, 25.4976, -15.0816, 11339, 15.6689, 28.1561, -6.4303, 12006, 23.5191, 28.1771, -14.8941, 12673, 20.2393, 25.4349, -16.5766,
+    13340, 26.5321, 29.9421, -9.9086, 14007, 18.6816, 21.5926, -12.0916, 14674, 19.5268, 22.7977, -13.5869, 15341, 20.0765, 21.0485, -6.4202,
+    ];
+    const { m, holder } = model();
+    const P = curled();
+    expect([...P.armExt]).toEqual(new Array(8).fill(1));
+    expect([...P.armAimW]).toEqual(new Array(8).fill(0));
+    applyPose(holder, m.bones, P);
+    const v = new Vector3();
+    ARMS.forEach((a, i) => {
+      for (let k = 0; k <= 5; k++) {
+        if (k < 5) m.bones[`J_arm${a.name}_${k}`].getWorldPosition(v);
+        else v.set(0, 0, a.length / 5 / 1000).applyMatrix4(m.bones[`J_arm${a.name}_4`].matrixWorld);
+        const e = JOINTS.slice((i * 6 + k) * 3, (i * 6 + k) * 3 + 3);
+        expect(v.distanceTo(new Vector3(...e).multiplyScalar(0.001)) * 1000).toBeLessThan(2e-4);
+      }
+      // the same rotations as the old rest × curl × swing, bit for bit; the rest positions; no scale
+      for (let k = 0; k < 5; k++) {
+        const b = m.bones[`J_arm${a.name}_${k}`], rest = b.userData.rest as { quat: Quaternion; pos: Vector3 }, j = i * 5 + k;
+        const q = rest.quat.clone().multiply(new Quaternion().setFromAxisAngle(X, P.armCurl[j])).multiply(new Quaternion().setFromAxisAngle(Y, P.armSwing[j]));
+        expect(b.quaternion.toArray()).toEqual(q.toArray());
+        expect(b.position.toArray()).toEqual(rest.pos.toArray());
+        expect(b.scale.toArray()).toEqual([1, 1, 1]);
+      }
+    });
+    const arms = m.parts.Arms as SkinnedMesh;
+    for (let n = 0; n < VERTS.length; n += 4) {
+      arms.getVertexPosition(VERTS[n], v);
+      v.applyMatrix4(arms.matrixWorld);
+      expect(v.distanceTo(new Vector3(VERTS[n + 1], VERTS[n + 2], VERTS[n + 3]).multiplyScalar(0.001)) * 1000).toBeLessThan(2e-4);
+    }
+    // aimed at its own rest frame (the default aim and bend), an arm stays where it was
+    const P2 = curled();
+    P2.armAimW.fill(1);
+    applyPose(holder, m.bones, P2);
+    ARMS.forEach((a, i) => {
+      const b = m.bones[`J_arm${a.name}_0`], rest = b.userData.rest as { quat: Quaternion };
+      const q = rest.quat.clone().multiply(new Quaternion().setFromAxisAngle(X, P2.armCurl[i * 5])).multiply(new Quaternion().setFromAxisAngle(Y, P2.armSwing[i * 5]));
+      expect(Math.abs(b.quaternion.dot(q))).toBeGreaterThan(1 - 1e-9);
+    });
+    disposeModel(m);
+  });
+
+  it('gives the FK joints and tip of the bones and the skinned mesh (stretched, aimed, curled, at any size)', () => {
+    const { m, holder } = model();
+    holder.scale.setScalar(0.56);
+    const arms = m.parts.Arms as SkinnedMesh, g = arms.geometry;
+    const aSkin = g.getAttribute('aSkin') as BufferAttribute, aArm = g.getAttribute('aArm') as BufferAttribute;
+    // each arm's tube tip (its last ring closes on the axis)
+    const tipV = ARMS.map((_, i) => { let best = -1, bi = -1; for (let v = 0; v < aSkin.count; v++) if (Math.round(aArm.getW(v)) === i + 1 && Math.abs(aSkin.getX(v) - 2) < 0.01 && aSkin.getY(v) > best) { best = aSkin.getY(v); bi = v; } return bi; });
+    const keys: Key[] = [
+      { psi: 0.15, elev: 0.05, bend: [0, -1, 0], curl: [0, 0.02, 0.04, 0.08, 0.15], ext: 2 },
+      { psi: 1.45, elev: 0.1, bend: [0, -1, 0], curl: [0, 0.3, -0.2, 0.25, 0.4], ext: 2 },
+      { psi: 1.55, elev: 0.95, bend: [-0.65, -0.3, -0.7], curl: [0, 0.4, 0.6, 0.75, 0.7], ext: 1.35 },
+      { psi: 2.3, elev: 0.6, bend: [-0.45, -0.3, -0.85], curl: [0.1, 0.4, 0.55, 0.7, 0.65], ext: 2.2 },
+    ];
+    const J: Vector3[] = [], v = new Vector3(), w = new Vector3();
+    for (const k of keys) {
+      const P = sunk(0.85);
+      P.headYaw = 0.04;
+      for (const i of [IIL, IIR]) aimArm(P, i, k);
+      P.armExt[0] = 0.7;
+      applyPose(holder, m.bones, P);
+      ARMS.forEach((a, i) => {
+        armJoints(P, i, J);
+        for (let n = 0; n < 5; n++) {
+          m.bones[`J_arm${a.name}_${n}`].getWorldPosition(v);
+          expect(w.copy(J[n]).multiplyScalar(0.001).applyMatrix4(holder.matrixWorld).distanceTo(v)).toBeLessThan(1e-9);
+        }
+        arms.getVertexPosition(tipV[i], v);
+        v.applyMatrix4(arms.matrixWorld);
+        expect(armTip(P, i, w).multiplyScalar(0.001).applyMatrix4(holder.matrixWorld).distanceTo(v)).toBeLessThan(1e-6);
+      });
+    }
+    // straight and stretched to twice its length, the arm is twice as long, its tip on the aim
+    const P = sunk(0);
+    // (head on straight: its frame is the root's)
+    P.headPitch = 0;
+    P.armAim[IIL].set(0.4, 0.1, 1).normalize(); P.armAimW[IIL] = 1; P.armExt[IIL] = 2;
+    armJoints(P, IIL, J);
+    const d = J[5].clone().sub(J[0]);
+    expect(d.length()).toBeCloseTo(2 * ARMS[IIL].length, 6);
+    expect(d.normalize().dot(P.armAim[IIL])).toBeGreaterThan(1 - 1e-9);
+    // the range is clamped
+    P.armExt[IIL] = 5;
+    expect(armExtOf(P, IIL)).toBe(2.2);
+    disposeModel(m);
+  });
+
+  it('turns the first bone of an arm at most ≈ 50°, the rest at joints 1 and 2, and curls it towards the bend; L and R mirror', () => {
+    const { m, holder } = model();
+    const P = sunk(1);
+    aimArm(P, IIL, { psi: 2.2, elev: 0.9, bend: [-0.45, -0.3, -0.85], curl: [0, 0, 0, 0, 0], ext: 1.6 });
+    applyPose(holder, m.bones, P);
+    const rest = new Vector3(...armBase(ARMS[IIL]).dir);
+    const J = armJoints(P, IIL, []);
+    const seg = (k: number) => J[k + 1].clone().sub(J[k]).normalize();
+    // (the head frame is the root's turned by the head on the neck)
+    const head = new Quaternion().setFromAxisAngle(X, -P.headPitch).multiply(new Quaternion().setFromAxisAngle(Y, P.headYaw));
+    expect(Math.acos(seg(0).dot(rest.clone().applyQuaternion(head)))).toBeLessThan(ARM_AIM_MAX + 1e-6);
+    expect(Math.acos(seg(0).dot(rest.clone().applyQuaternion(head)))).toBeGreaterThan(ARM_AIM_MAX - 1e-6);
+    const aim = P.armAim[IIL].clone().applyQuaternion(head);
+    for (const k of [2, 3, 4]) expect(seg(k).dot(aim)).toBeGreaterThan(1 - 1e-9);
+    // a curl bends the arm towards the bend (its oral side)
+    const tip0 = armTip(P, IIL, new Vector3());
+    for (let j = 1; j < 5; j++) P.armCurl[IIL * 5 + j] = 0.3;
+    const bend = P.armBend[IIL].clone().applyQuaternion(head);
+    expect(armTip(P, IIL, new Vector3()).sub(tip0).dot(bend)).toBeGreaterThan(2);
+    // the right arm with the mirrored aim, bend and swing is the left one's mirror image
+    for (let j = 0; j < 5; j++) { P.armSwing[IIL * 5 + j] = 0.1 * j; P.armSwing[IIR * 5 + j] = -0.1 * j; P.armCurl[IIR * 5 + j] = P.armCurl[IIL * 5 + j]; }
+    P.armAim[IIR].copy(P.armAim[IIL]).setX(-P.armAim[IIL].x); P.armBend[IIR].copy(P.armBend[IIL]).setX(-P.armBend[IIL].x);
+    P.armAimW[IIR] = 1; P.armExt[IIR] = P.armExt[IIL];
+    const L = armJoints(P, IIL, []), R = armJoints(P, IIR, []);
+    for (let k = 0; k <= 5; k++) expect(L[k].clone().setX(-L[k].x).distanceTo(R[k])).toBeLessThan(1e-6);
+    disposeModel(m);
+  });
+
+  it('keeps the arm\'s skin clear of the eyes\' domes and out of the body, wherever arm II is aimed', () => {
+    const { m, holder } = model();
+    const Rd = EYE.r + EYE.skin;
+    const inBody = (pRoot: Vector3) => {
+      const z = pRoot.z + Z_ROOT, pr = profileAt(z);
+      if (z < -25 || z > 8.9 || pr.w < 0.05) return 9;
+      const dy = pRoot.y - pr.c;
+      return Math.pow(Math.abs(pRoot.x) / pr.w, 2.3) + Math.pow(Math.abs(dy) / (dy < 0 ? pr.h * 0.95 : pr.h), 2.3);
+    };
+    // the extreme aims of the burying strokes: all round from forward to far back, along the sand to steeply up,
+    // suckers down (reaching) or inwards and back (arching over the head), at rest length and stretched; and the
+    // spec's arch keys with their curls
+    const keys: Key[] = [];
+    for (const psi of [0, 0.8, 1.6, 2.4]) for (const elev of [-0.2, 0.4, 1.0, 1.4]) for (const ext of [1, 2]) {
+      keys.push({ psi, elev, bend: [0, -1, 0], curl: [0, 0, 0, 0, 0], ext });
+      if (elev > 0) keys.push({ psi, elev, bend: [-0.65, -0.3, -0.7], curl: [0, 0, 0, 0, 0], ext });
+    }
+    keys.push({ psi: 0.5, elev: 0.9, bend: [0, -1, 0], curl: [0, 0.1, 0.15, 0.2, 0.3], ext: 1.15 });
+    keys.push({ psi: 1.2, elev: 0.55, bend: [-0.3, -0.8, -0.5], curl: [0, 0.2, 0.3, 0.4, 0.45], ext: 1.75 });
+    keys.push({ psi: 1.55, elev: 0.95, bend: [-0.65, -0.3, -0.7], curl: [0, 0.4, 0.6, 0.75, 0.7], ext: 1.35 });
+    keys.push({ psi: 1.75, elev: 0.95, bend: [-0.45, -0.3, -0.85], curl: [0, 0.4, 0.55, 0.7, 0.65], ext: 1.65 });
+    let worstEye = Infinity, worstFk = Infinity, worstBody = Infinity;
+    const eyeC = new Vector3(), inv = holder.matrixWorld.clone();
+    for (const bury of [0.78, 1]) for (const k of keys) {
+      const P = sunk(bury);
+      aimArm(P, IIL, k);
+      applyPose(holder, m.bones, P);
+      inv.copy(holder.matrixWorld).invert();
+      m.bones.J_eye_L.getWorldPosition(eyeC);
+      let eye = Infinity;
+      for (const { p, tt } of meshArm(m, P, IIL)) {
+        if (tt >= 0) eye = Math.min(eye, p.distanceTo(eyeC) * 1000 - Rd);
+        // (beyond its base, which sits in the crown)
+        if (tt > 0.2) worstBody = Math.min(worstBody, inBody(p.clone().applyMatrix4(inv).multiplyScalar(1000)));
+      }
+      worstEye = Math.min(worstEye, eye);
+      // the FK estimate is a lower bound, within a few tenths of a mm
+      const fk = armEyeGap(P, IIL);
+      expect(fk).toBeLessThan(eye + 0.02);
+      expect(fk).toBeGreaterThan(eye - 0.6);
+      worstFk = Math.min(worstFk, fk);
+    }
+    expect(worstEye).toBeGreaterThan(0.3);
+    expect(worstFk).toBeGreaterThan(0.3);
+    expect(worstBody).toBeGreaterThan(1);
+    disposeModel(m);
+  });
+
+  it('thins a stretched arm about its own axis, and not at all at rest length', () => {
+    expect(armThin(1)).toBe(1);
+    expect(armThin(0.6)).toBe(1);
+    expect(armThin(2)).toBeCloseTo(Math.SQRT1_2, 12);
+    for (let t = -0.1; t <= 1; t += 0.05) expect(armThinAt(1, t)).toBe(1);
+    // the base on the crown keeps its girth
+    expect(armThinAt(2, 0)).toBe(1);
+    expect(armThinAt(2, 0.5)).toBeCloseTo(Math.SQRT1_2, 12);
+    for (const t of [0, 1, 2] as const) {
+      const m = buildModel(new MimiikaLook(lookSpecFor('squid#thin')), [t]);
+      // every skin part carries aArm (zeros off the arms: a stale attribute value cannot thin them)
+      for (const name of ['Mantle', 'Head', 'Funnel', 'Tentacles', 'Arms'] as const) {
+        const part = m.parts[name];
+        if (!part) continue;
+        const a = part.geometry.getAttribute('aArm') as BufferAttribute;
+        expect(a.count).toBe(part.geometry.getAttribute('position').count);
+        if (name !== 'Arms') { for (let v = 0; v < a.count; v++) expect(a.getW(v)).toBe(0); continue; }
+        // on the arms: the arm's index + 1 and a point on its rest axis
+        for (let v = 0; v < a.count; v += 7) {
+          const i = Math.round(a.getW(v)) - 1;
+          expect(i).toBeGreaterThanOrEqual(0);
+          const B = armBase(ARMS[i]), base = new Vector3(...toModel(B.pos)), dir = new Vector3(...B.dir);
+          const q = new Vector3(a.getX(v), a.getY(v), a.getZ(v)).sub(base);
+          expect(q.addScaledVector(dir, -q.dot(dir)).length()).toBeLessThan(1e-9);
+        }
+      }
+      // the driver passes each arm's stretch to the shader: 1 at rest length
+      const P = emptyPose();
+      MimiikaDriver.applyMaterials(m, P);
+      expect([...m.look.uniforms.uArmThin.value]).toEqual(new Array(8).fill(1));
+      P.armExt[IIL] = 2;
+      MimiikaDriver.applyMaterials(m, P);
+      expect(m.look.uniforms.uArmThin.value[IIL]).toBeCloseTo(Math.SQRT1_2, 6);
+      expect(m.look.uniforms.uArmThin.value[IIR]).toBe(1);
+      disposeModel(m);
+    }
+    // the skin's vertex shader declares and applies it; the fade and the grains are uniforms
+    const look = new MimiikaLook(lookSpecFor('squid#glsl'));
+    const chunks = ['common', 'beginnormal_vertex', 'begin_vertex', 'project_vertex', 'color_fragment', 'roughnessmap_fragment', 'normal_fragment_maps', 'lights_physical_fragment', 'lights_fragment_begin', 'lights_fragment_maps', 'emissivemap_fragment', 'opaque_fragment'].map((c) => `#include <${c}>`).join('\n') + '\nvoid main() {';
+    for (const mat of [look.skin, look.skinLow, look.fins, look.finsLow]) {
+      const shader = { uniforms: {}, vertexShader: chunks, fragmentShader: chunks } as unknown as Parameters<NonNullable<typeof mat.onBeforeCompile>>[0];
+      mat.onBeforeCompile(shader, null as never);
+      const skin = mat === look.skin || mat === look.skinLow;
+      if (skin) {
+        expect(shader.vertexShader).toContain('attribute vec4 aArm;');
+        expect(shader.vertexShader).toContain('uniform float uArmThin[8];');
+        expect(shader.fragmentShader).toContain('uniform float uSandFade;');
+        expect(shader.fragmentShader).toContain('smoothstep(0.0, uSandFade, vWPos.y - uGroundY)');
+      }
+      expect(shader.fragmentShader).toContain('uniform float uGrain;');
+      expect(shader.fragmentShader).toContain('p / uGrain + 51.0');
+      expect(shader.fragmentShader).not.toContain('p / 0.3 + 51.0');
+      for (const u of ['uArmThin', 'uSandFade', 'uGrain']) expect(shader.uniforms).toHaveProperty(u);
+    }
+    look.dispose();
+  });
+
+  it('leaves the アカエイ\'s sand exactly as it was, and settles the squid\'s on the sand under it', () => {
+    const runFx = (fx: SandFX) => {
+      let seed = 7;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const out: number[] = [];
+      for (let f = 0; f < 240; f++) {
+        if (f % 9 === 0) fx.emit(new Vector3(0.05 * Math.sin(f), 0.02, 0.05), new Vector3(0.03, f % 2 ? 0.05 : -0.09, -0.02), 9, 0.03, 0.05, 1.5 + (f % 3), 0.5, rnd);
+        fx.update(1 / 60, (x, z) => 0.01 * Math.sin(x * 9) + 0.004 * z);
+        if (f % 40 === 39) out.push(...(fx.points.geometry.getAttribute('position').array as Float32Array), ...(fx.points.geometry.getAttribute('aPuff').array as Float32Array));
+      }
+      fx.dispose();
+      return out;
+    };
+    const a = runFx(new SandFX(new Group())), b = runFx(new SandFX(new Group(), { floor: 0.004, everyFrame: false, killOnFloor: false }));
+    expect(a).toEqual(b);
+    // the ray's default: one sprite in eight is held 4 mm over the sand from the start, the others only late in life;
+    // the clouds swell 1.8–3.2×
+    const ray = new SandFX(new Group());
+    ray.emit(new Vector3(0, 0.001, 0), new Vector3(0, -0.2, 0), 16, 0, 0.01, 10, 0.5, () => 0.5);
+    for (let f = 0; f < 6; f++) ray.update(1 / 60, () => 0);
+    const y = ray.points.geometry.getAttribute('position') as BufferAttribute, puff = ray.points.geometry.getAttribute('aPuff') as BufferAttribute;
+    expect(y.getY(0)).toBeCloseTo(0.004, 9);
+    expect(y.getY(8)).toBeCloseTo(0.004, 9);
+    expect(y.getY(3)).toBeLessThan(0);
+    for (let f = 0; f < 560; f++) ray.update(1 / 60, () => 0);
+    expect(puff.getX(1) / 0.01).toBeGreaterThan(1.8);
+    ray.dispose();
+    // the squid's: floor ∝ size (never under 0.3 mm), tested every frame; poured grains (kill) vanish into the sand
+    // and barely swell
+    expect(MimiikaDriver.sandFxOptions(0.56)).toEqual({ floor: 0.0008 * 0.56, everyFrame: true });
+    expect(MimiikaDriver.sandFxOptions(0.2).floor).toBe(0.0003);
+    const squid = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
+    squid.emit(new Vector3(0, 0.003, 0), new Vector3(0, -0.02, 0), 4, 0, 0.002, 10, 0.5, () => 0.5);
+    squid.emit(new Vector3(0, 0.003, 0), new Vector3(0, -0.02, 0), 4, 0, 0.002, 10, 0.5, () => 0.5, 1.1, true);
+    for (let f = 0; f < 60; f++) squid.update(1 / 60, () => 0);
+    const sy = squid.points.geometry.getAttribute('position') as BufferAttribute, sp = squid.points.geometry.getAttribute('aPuff') as BufferAttribute;
+    for (let i = 0; i < 4; i++) { expect(sy.getY(i)).toBeCloseTo(0.0008 * 0.56, 9); expect(sp.getY(i)).toBeGreaterThan(0); }
+    for (let i = 4; i < 8; i++) expect(sp.getY(i)).toBe(0);
+    const grains = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
+    grains.emit(new Vector3(0, 0.01, 0), new Vector3(0, 0, 0), 1, 0, 0.002, 1, 0.5, () => 0.5, 1.1, true);
+    for (let f = 0; f < 55; f++) grains.update(1 / 60, () => 0);
+    expect((grains.points.geometry.getAttribute('aPuff') as BufferAttribute).getX(0)).toBeLessThan(0.002 * 0.75 * 1.1 + 1e-9);
+    squid.dispose(); grains.dispose();
+  });
+
+  it('scales the sand on its skin with its size: the fade into the bed 2.2 mm × K, grains ≈ 0.2 mm', () => {
+    for (const length_mm of [5, 14, 40]) {
+      const d = new MimiikaDriver(), holder = MimiikaDriver.makeModel().root;
+      new Group().add(holder);
+      const ind = { id: `squid#${length_mm}`, length_mm, pos: new Vector3(), home: new Vector3(), heading: 0 } as unknown as Individual;
+      d.attach(holder, ind);
+      const K = length_mm / 25, u = d.view!.look.uniforms;
+      expect(u.uSandFade.value).toBeCloseTo(0.0022 * K, 12);
+      expect(u.uGrain.value).toBeCloseTo(Math.min(0.8, Math.max(0.25, 0.2 / K)), 12);
+      expect(u.uGrain.value).toBeCloseTo(sandGrain(K), 12);
+      // (the stretched arms are not culled at the screen's edge)
+      expect((d.view!.parts.Arms as SkinnedMesh).boundingSphere!.radius).toBe(0.05);
+      d.dispose();
+    }
   });
 });

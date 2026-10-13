@@ -136,6 +136,16 @@ function layPatch(g: BufferGeometry, x: number, z: number, heading: number, half
 
 interface Imprint { mesh: Mesh; mat: ShaderMaterial; age: number; life: number; strength: number }
 
+/** how the clouds meet the ground (the defaults are the ray's: coarse clouds that come to rest 4 mm over the sand) */
+export interface SandFXOptions {
+  /** how far over the ground a settling sprite stops (m) */
+  floor?: number;
+  /** test every sprite against the floor every frame (by default one in eight, and all in the second half of their life) */
+  everyFrame?: boolean;
+  /** a sprite that reaches the floor is gone (grains that fall back into the sand), unless emit says otherwise */
+  killOnFloor?: boolean;
+}
+
 export class SandFX {
   private readonly pos = new Float32Array(MAX * 3);
   private readonly vel = new Float32Array(MAX * 3);
@@ -151,8 +161,16 @@ export class SandFX {
   private readonly imprints: Imprint[] = [];
   private readonly size = new Vector2();
   private shadowTimer = 0;
+  /** per particle: it is gone when it reaches the floor */
+  private readonly kill = new Uint8Array(MAX);
+  private readonly floor: number;
+  private readonly everyFrame: boolean;
+  private readonly killOnFloor: boolean;
 
-  constructor(private readonly parent: Object3D) {
+  constructor(private readonly parent: Object3D, opts: SandFXOptions = {}) {
+    this.floor = opts.floor ?? 0.004;
+    this.everyFrame = opts.everyFrame ?? false;
+    this.killOnFloor = opts.killOnFloor ?? false;
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(this.pos, 3));
     g.setAttribute('aPuff', new BufferAttribute(this.puff, 4));
@@ -183,8 +201,11 @@ export class SandFX {
     (this.puffMat.uniforms.uSand.value as Color).setRGB(c.x, c.y, c.z);
   }
 
-  /** a cloud of sediment: count sprites around `at`, thrown with `vel` (m/s) plus a spread */
-  emit(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.5, rnd: () => number = Math.random): void {
+  /**
+   * a cloud of sediment: count sprites around `at`, thrown with `vel` (m/s) plus a spread. Each sprite swells as the
+   * cloud spreads (1.8–3.2 × its size), or by `grow` × its start size (≈ 1.1 for single grains); `kill`: gone at the floor
+   */
+  emit(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.5, rnd: () => number = Math.random, grow?: number, kill = this.killOnFloor): void {
     for (let k = 0; k < count; k++) {
       const i = this.next;
       this.next = (this.next + 1) % MAX;
@@ -200,7 +221,8 @@ export class SandFX {
       this.life[i * 4] = 0;
       this.life[i * 4 + 1] = life * (0.6 + 0.8 * rnd());
       this.life[i * 4 + 2] = size * (0.5 + 0.5 * rnd());
-      this.life[i * 4 + 3] = size * (1.8 + 1.4 * rnd());
+      this.life[i * 4 + 3] = grow === undefined ? size * (1.8 + 1.4 * rnd()) : this.life[i * 4 + 2] * grow;
+      this.kill[i] = kill ? 1 : 0;
       this.puff[i * 4 + 1] = 0;
       this.puff[i * 4 + 2] = rnd();
       this.puff[i * 4 + 3] = alpha;
@@ -222,14 +244,14 @@ export class SandFX {
     layPatch(this.shadow.geometry, x, z, heading, halfW * grow, halfL * grow, ground, 0.002);
   }
 
-  /** leave an oval of disturbed sand (burrowing, a feeding pit) */
-  imprint(x: number, z: number, heading: number, halfW: number, halfL: number, ground: (x: number, z: number) => number, strength = 1, life = 150): void {
+  /** leave an oval of disturbed sand (burrowing, a feeding pit); `lift`: how far over the ground it is laid (m) */
+  imprint(x: number, z: number, heading: number, halfW: number, halfL: number, ground: (x: number, z: number) => number, strength = 1, life = 150, lift = 0.0015): void {
     if (this.imprints.length >= 3) { const old = this.imprints.shift()!; old.mesh.removeFromParent(); old.mesh.geometry.dispose(); old.mat.dispose(); }
     const mat = multiplyMaterial(IMPRINT_FRAG, { uAmount: { value: 0 }, uSeed: { value: Math.random() * 50 } });
     const mesh = new Mesh(patchGeometry(), mat);
     mesh.name = 'AkaeiImprint';
     mesh.renderOrder = 1;
-    layPatch(mesh.geometry, x, z, heading, halfW, halfL, ground, 0.0015);
+    layPatch(mesh.geometry, x, z, heading, halfW, halfL, ground, lift);
     this.parent.add(mesh);
     this.imprints.push({ mesh, mat, age: 0, life, strength });
   }
@@ -257,9 +279,12 @@ export class SandFX {
       this.pos[i * 3] += v[i * 3] * dt;
       this.pos[i * 3 + 1] += v[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += v[i * 3 + 2] * dt;
-      if ((i & 7) === 0 || t > 0.5) {
-        const g = ground(this.pos[i * 3], this.pos[i * 3 + 2]) + 0.004;
-        if (this.pos[i * 3 + 1] < g) { this.pos[i * 3 + 1] = g; v[i * 3 + 1] = 0; }
+      if (this.everyFrame || (i & 7) === 0 || t > 0.5) {
+        const g = ground(this.pos[i * 3], this.pos[i * 3 + 2]) + this.floor;
+        if (this.pos[i * 3 + 1] < g) {
+          if (this.kill[i]) { L[i * 4 + 1] = 0; this.puff[i * 4 + 1] = 0; continue; }
+          this.pos[i * 3 + 1] = g; v[i * 3 + 1] = 0;
+        }
       }
       this.puff[i * 4] = L[i * 4 + 2] + (L[i * 4 + 3] - L[i * 4 + 2]) * Math.sqrt(t);
       this.puff[i * 4 + 1] = this.puff[i * 4 + 3] * Math.min(1, t * 8) * (1 - t) * (1 - t);

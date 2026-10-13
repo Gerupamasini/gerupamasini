@@ -1,6 +1,6 @@
 import { Group, LOD, Matrix4, Mesh, Skeleton, SkinnedMesh, Sphere, Vector3, type Bone, type BufferGeometry, type Material } from 'three';
 import { EYE, ML_MM } from './anatomy';
-import { LODS, buildArms, buildBody, buildCornea, buildEye, buildFin, buildFunnel, buildTentacles, buildViscera, rigDefinition, type RigDef } from './geometry';
+import { LODS, buildArms, buildBody, buildCornea, buildEye, buildFin, buildFunnel, buildTentacles, buildViscera, mimiikaRig } from './geometry';
 import { createBones } from './rig';
 import type { MimiikaLook } from './materials';
 
@@ -19,12 +19,10 @@ interface TierGeometry {
   cornea: BufferGeometry | null;
 }
 
-let RIG: RigDef | null = null;
 const TIERS: (TierGeometry | null)[] = [null, null, null];
 
-export function mimiikaRig(): RigDef {
-  return (RIG ??= rigDefinition());
-}
+// (the rig is cached in geometry.ts, where rig.ts's arm FK reads it too without an import cycle)
+export { mimiikaRig };
 
 /** one tier's geometry, built once and shared by every squid */
 export function mimiikaGeometry(t: 0 | 1 | 2): TierGeometry {
@@ -63,7 +61,8 @@ export interface MimiikaModel {
 }
 
 const IDENTITY = new Matrix4();
-const SPHERE = new Sphere(new Vector3(0, 0, 0), 0.035);
+// (an arm stretched to twice its length reaches ≈ 44 mm from the root: not culled at the screen's edge)
+const SPHERE = new Sphere(new Vector3(0, 0, 0), 0.05);
 
 /**
  * One squid: its skeleton, its own materials and three tiers of shared geometry.

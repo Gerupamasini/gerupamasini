@@ -94,7 +94,7 @@ export function HomeMenu({ app }: { app: App }) {
           <div class="name">{infoSp.names.ja}<span class="num">#{String(info.number).padStart(4, '0')}</span></div>
           <div class="sci">{infoSp.names.sci}</div>
           <div class="facts">
-            <span>{t('individual.length')} <span class="num">{(info.length_mm / 10).toFixed(1)} cm</span></span>
+            <span>{infoSp.size.measure_ja ?? t('individual.length')} <span class="num">{(info.length_mm / 10).toFixed(1)} cm</span></span>
             <span>{t('individual.weight')} <span class="num">{info.weight_g.toFixed(1)} g</span></span>
             <span>{t(`sex.${info.sex}`)}</span>
             <span>{infoSp.stages.find((s) => s.id === info.stage)?.ja ?? info.stage}</span>

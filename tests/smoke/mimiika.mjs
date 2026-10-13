@@ -46,7 +46,8 @@ try {
   // late morning (JST), the tide half in, at the water's edge
   await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket?.(); const d = new Date(); a.clock.setDebugTime(Date.UTC(d.getUTCFullYear(), 5, 12, 1, 30)); a.setTideOverride(0.2); a.teleport('waterline'); });
   await waitFrames(page, 6);
-  // three juveniles on the sand a little way out in front of the player: one resting, one buried, one further
+  // three squid on the sand a little way out in front of the player (a juvenile, a common one, a large one, by mantle
+  // length): one buried, one resting, one further
   const fish = await page.evaluate(() => {
     const a = window.__higata, cs = a.creatures;
     const species = cs.spawner.speciesList.find((s) => s.id === 'euprymna_morsei');
@@ -72,7 +73,7 @@ try {
     const out = [];
     [[0, 0], [0.25, 0.12], [-0.3, 0.35]].forEach(([s, f], i) => {
       const x = p.x + fx * (d + f) + fz * s, z = p.z + fz * (d + f) - fx * s;
-      const ind = cs.spawner.create({ species, ruleIndex: 0, cell: 0, seed: 4242 + i * 17, x, z, lengthRange: [26 + i * 3, 28 + i * 3] }, Date.now());
+      const ind = cs.spawner.create({ species, ruleIndex: 0, cell: 0, seed: 4242 + i * 17, x, z, lengthRange: [[8, 9], [13, 15], [20, 22]][i] }, Date.now());
       cs.spawn(ind);
       out.push({ id: ind.id, len: ind.length_mm, pos: [x, z].map((v) => +v.toFixed(2)), depth: +a.world.habitat.depthAt(x, z).toFixed(3) });
     });
@@ -95,13 +96,13 @@ try {
   const shot = async (name) => { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, `mimiika-${name}.png`) }); };
   const intent = (id, kind, seconds) => page.evaluate(([id, kind, seconds]) => { window.__higata.creatures.driverOf(id).setIntent({ id: 99, kind, urgency: 0.5, seconds }); }, [id, kind, seconds]);
   const label = (id) => page.evaluate((id) => window.__higata.creatures.driverOf(id).debugLabel(), id);
-  console.log('day', await look(fish.out[0].id, 0.45, 0.5, -0.8));
+  console.log('day', await look(fish.out[0].id, 0.3, 0.5, -0.8));
   await intent(fish.out[0].id, 'burrow', 90);
   await waitFrames(page, 60);
   console.log('buried', await label(fish.out[0].id));
   await shot('ingame-buried');
   await intent(fish.out[1].id, 'rest', 30);
-  await look(fish.out[1].id, 0.4, 0.5, -0.8);
+  await look(fish.out[1].id, 0.3, 0.5, -0.8);
   await waitFrames(page, 30);
   console.log('rest', await label(fish.out[1].id));
   await shot('ingame-rest');
@@ -110,7 +111,7 @@ try {
   await intent(fish.out[1].id, 'forage', 12);
   await waitFrames(page, 40);
   console.log('night hunt', await label(fish.out[1].id));
-  await look(fish.out[1].id, 0.4, 0.5, -0.7);
+  await look(fish.out[1].id, 0.3, 0.5, -0.7);
   await shot('ingame-night-hunt');
   await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, fish.out[1].id);
   await waitFrames(page, 14);

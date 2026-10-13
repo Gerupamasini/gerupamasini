@@ -53,6 +53,8 @@ export const SpeciesSchema = z.object({
   }),
   size: z.object({
     length_mm: z.object({ min: z.number(), max: z.number(), mean: z.number(), sd: z.number() }),
+    /** what `length_mm` measures, as labelled in the UI (default 全長; a squid's is its mantle, 外套長) */
+    measure_ja: z.string().optional(),
     weightCoef: z.object({ a: z.number(), b: z.number() }),
     /** the least water an aquatic animal stays in, as a share of its length (default 0.15; a flat ray with a long tail needs far less) */
     minDepthFraction: z.number().positive().optional(),
