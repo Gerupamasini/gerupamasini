@@ -105,7 +105,11 @@ export interface FormSpec {
   /** the gape: from between the lips at the front (y0) back and down to the corner of the mouth (s, y1) */
   gape: { s: number; y0: number; y1: number };
   /** the lips' rolls where they meet (their radii) and the furrow along their outer edges */
-  lips: { upper: number; lower: number; margin: number };
+  /**
+   * the lips' rolls (the skin rounding into the gape) and the furrow along their outer edge; `rolls`: fleshy lips built
+   * on top of that as tubes along the gape (radius at the middle of the front, TL), upper and lower
+   */
+  lips: { upper: number; lower: number; margin: number; rolls?: { upper: number; lower: number } };
   /** how far the lower lip juts past the upper (TL) */
   jut: number;
   /** seen from in front, how much higher the gape is in the middle than at its sides (a ∧) */
@@ -231,7 +235,10 @@ export class MulletForm {
     const w = 1.7 * this.mouthHalfWidth;
     // only about the mouth: the snout's profile above and the chin below keep their measured lines
     const near = 1 - smooth(0.01, 0.026, Math.abs(y - this.gapeY(s)));
-    return this.chevron * Math.max(0, 1 - Math.abs(x) / w) * (1 - smooth(0.004, 0.024, s)) * near;
+    // straight sides, rounded over the middle (a point there would crease the lips)
+    const a = Math.abs(x) / w, r = 0.22;
+    const tent = a < r ? 1 - r / 2 - (a * a) / (2 * r) : 1 - a;
+    return this.chevron * Math.max(0, tent) / (1 - r / 2) * (1 - smooth(0.004, 0.024, s)) * near;
   }
 
   /**
@@ -354,7 +361,7 @@ export const SUBASHIRI = new MulletForm({
   eye: { s: 0.093, y: -0.019, r: 0.036, bulge: 0.0035, pupil: 0.5 },
   // the gape: just under the upper lip at the front (the ∧ raises its middle to −0.007), down to its corner
   gape: { s: 0.042, y0: -0.0125, y1: -0.027 },
-  lips: { upper: 0.0048, lower: 0.0046, margin: 0.0008 },
+  lips: { upper: 0.0048, lower: 0.0046, margin: 0.0008, rolls: { upper: 0.0056, lower: 0.0047 } },
   jut: 0.0015,
   chevron: 0.0055,
   preopEdge: [[-0.085, 0.13], [-0.068, 0.146], [-0.05, 0.155], [-0.03, 0.159], [-0.01, 0.157], [0.01, 0.152], [0.03, 0.147], [0.045, 0.145]],

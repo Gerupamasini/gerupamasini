@@ -35,8 +35,9 @@ ${eyeGLSL(F, 0.55)}  } else if (part > 1.5 && part < 2.5) {
     col = vec3(0.32, 0.31, 0.27);
     hkMetal = 0.1; hkRough = 0.6; hkCoat = 0.0;
   } else if (part > 2.5 && part < 3.5) {
-    // ---- the mouth's lining: pale, wet, in shadow
-    col = vec3(0.42, 0.3, 0.3) * (0.85 + 0.3 * hkNoise(vRest.xz * 900.0));
+    // ---- the mouth's lining: dark and wet, finely speckled (the papillae over the lips' inner margins and the palate)
+    col = vec3(0.3, 0.25, 0.24) * (0.8 + 0.4 * hkNoise(vRest.xz * 900.0));
+    col = mix(col, vec3(0.62, 0.58, 0.52), 0.55 * smoothstep(0.72, 0.9, hkNoise(vRest.xz * 2600.0 + 3.0)));
     hkMetal = 0.0; hkRough = 0.4; hkCoat = 0.5;
   } else if (part > 3.5) {
     // ---- the gill cover's rounded free edge and its inner face: a pale silvery lining, soft-edged
