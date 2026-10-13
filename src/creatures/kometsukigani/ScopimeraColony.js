@@ -1,4 +1,4 @@
-import { Group, Vector3 } from 'three';
+import { Color, Group, Vector3 } from 'three';
 import { ScopimeraGlobosa, ScopimeraDriver, makeEnv, seasonFor, STATE } from './ScopimeraGlobosa.js';
 import { BurrowRenderer, RENDER_ORDER, shaftAxis } from './Burrows.js';
 import { SandPellets } from './SandPellets.js';
@@ -61,7 +61,8 @@ export class ScopimeraColony {
     this.crabGroup.name = 'kometsukigani-crabs';
     this.renderer = new BurrowRenderer();
     this.pellets = new SandPellets({ quality });
-    const sand = SAND_LINEAR.clone();
+    // the pellets (and the grains on the crabs) are the flat's own sand
+    const sand = drySandColour(terrain, SAND_LINEAR);
     this.pellets.setSandColor(sand);
     this.sand = sand;
     this.group.add(this.renderer.group, this.pellets.group, this.crabGroup);
@@ -908,6 +909,27 @@ export class ScopimeraColony {
 }
 
 // ============================================================================================ helpers
+
+/**
+ * The dry sand's colour where the crabs live, as the flat's shader draws it (linear albedo, Terrain.colorAt): the
+ * mean over the exposed sand of the crabs' band (葛西: a near-neutral grey). The pellets are that sand, sorted and
+ * pressed; the fallback when the flat is under water or the terrain cannot tell.
+ */
+function drySandColour(terrain, fallback) {
+  if (!terrain?.colorAt || !terrain.substrateAt) return fallback.clone();
+  const half = terrain.half, lvl = terrain.uWater?.value ?? -Infinity, N = 32;
+  const c = new Color();
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = -half + ((i + 0.5) / N) * 2 * half, z = -half + ((j + 0.5) / N) * 2 * half;
+    if (!terrain.inside(x, z, 6) || terrain.substrateAt(x, z) !== 'sand') continue;
+    const h = terrain.heightAt(x, z);
+    if (h < -0.55 || h > 1.0 || h < lvl + 0.15) continue;
+    terrain.colorAt(x, z, c);
+    r += c.r; g += c.g; b += c.b; n++;
+  }
+  return n >= 8 ? new Color(r / n, g / n, b / n) : fallback.clone();
+}
 
 function hashI(a, b, c, d) {
   let h = 2166136261 >>> 0;

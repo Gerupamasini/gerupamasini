@@ -33,7 +33,8 @@ const lin = (r, g, b) => new Color(r, g, b).convertSRGBToLinear();
  * The flat's clean sand as the terrain draws it (Terrain SUBSTRATE_COLORS.sand — a linear vertex colour, not
  * sRGB): pellets are that same sand, sorted and pressed; burrow walls are it, wet.
  */
-const SAND_LINEAR = new Color(0.68, 0.56, 0.36);
+/** 葛西's dry sand as the flat draws it (Terrain.colorAt there: its grey times the flat's sand tint); the colony samples the real flat */
+const SAND_LINEAR = new Color(0.5, 0.44, 0.33);
 
 const COMMON = /* glsl */ `
 float kgH31(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -286,8 +287,8 @@ const FRAG_SURFACE = /* glsl */ `
     float pig = kgPig(P + vec3(seedP), D, fw, tone);
     // the dorsum's ground is darker than the limbs' (049, 069: the pale is in the granules, not between them), and
     // darkest in the blotches
-    // (and the darkening is toward a warm brown, not toward olive: 049, 060, 063)
-    baseC *= mix(vec3(1.0), vec3(0.36, 0.28, 0.22), (0.3 + 0.7 * blot) * dorsal);
+    // (and the darkening is toward a grey-brown, the sand's own shade — not olive, not a warm brown)
+    baseC *= mix(vec3(1.0), vec3(0.42, 0.38, 0.33), (0.3 + 0.7 * blot) * dorsal);
     vec3 pigC = mix(marb * 0.42, marb * 1.05 + vec3(0.01, 0.007, 0.0), tone);
     vec3 dcol = mix(baseC, pigC, pig);
     // the translucent rim inside the lateral and posterior margins: fewer dots, paler (008)
@@ -314,7 +315,7 @@ const FRAG_SURFACE = /* glsl */ `
       float fl = kgN3(vec3(qs * 130.0, seedP + 7.0) + vec3(0.0, 0.0, P.y * 130.0)) * 0.7 + kgN3(vec3(qs * 260.0, seedP + 9.0)) * 0.3;
       float flecks = smoothstep(0.62, 0.74, fl) * paleField * (1.0 - smoothstep(0.004, 0.012, fw));
       float apex = smoothstep(0.55, 0.95, tub) * (0.35 + 0.4 * paleField) + smoothstep(0.6, 1.0, tub2) * (0.15 + 0.35 * D);
-      vec3 paleC = mix(ground * 1.12 + vec3(0.03, 0.025, 0.01), vec3(0.78, 0.7, 0.5), 0.25);
+      vec3 paleC = mix(ground * 1.12 + vec3(0.03, 0.03, 0.025), vec3(0.75, 0.72, 0.64), 0.25);
       dcol = mix(dcol, paleC, clamp(apex + flecks * 0.6, 0.0, 0.8) * (dorsal + 0.5 * side));
       // micro-relief that no two square millimetres share: fine pits and a grainy skin
       h += (kgN3(P * 420.0 + seedP) - 0.5) * 0.0007 * (1.0 - smoothstep(0.0008, 0.003, fw));
@@ -359,9 +360,10 @@ const FRAG_SURFACE = /* glsl */ `
     float trEdge = (1.0 - smoothstep(0.004, 0.01, abs(q.x - ${f3(STERNUM.trough[0])}))) * step(zs, 0.06);
     // the live underside's violet: deep in pale and purplish individuals (b30, 3.webp), faint in the sand-coloured
     // ones; a thin lilac in b39, silvery in b61
-    float violetAmt = clamp(0.35 + 0.5 * purple + 0.3 * red + 0.4 * smoothstep(0.82, 0.86, pale), 0.0, 1.0);
+    // (葛西's crabs: only a faint lilac under the grey; the deep violet is the volcanic-sand populations')
+    float violetAmt = clamp(0.12 + 0.5 * purple + 0.3 * red, 0.0, 1.0);
     float violet = violetAmt * (1.0 - smoothstep(-0.04, 0.06, zs) * 0.6) * smoothstep(0.07, 0.13, q.x);
-    vec3 vcol = mix(vec3(0.56, 0.55, 0.6), vec3(0.11, 0.06, 0.34), violet * (0.75 + 0.25 * smoothstep(0.12, 0.3, q.x)));
+    vec3 vcol = mix(vec3(0.57, 0.57, 0.57), vec3(0.11, 0.06, 0.34), violet * (0.75 + 0.25 * smoothstep(0.12, 0.3, q.x)));
     vcol = mix(vcol, vec3(0.82, 0.82, 0.84), clamp(suture + sEdge * 0.7 + trEdge * 0.6, 0.0, 1.0) * 0.85);
     h -= suture * 0.002;
     vcol = mix(vcol, vec3(0.1, 0.09, 0.11), kgSpeck(P * 85.0 + seedP + 11.0, 0.45, 0.26, fw * 85.0, idd) * 0.5);
@@ -532,7 +534,7 @@ const FRAG_SURFACE = /* glsl */ `
     float pg = kgPig(P + vec3(limb * 4.0, seg * 2.0, seedP), Da, fw, tone);
     armB *= 1.0 - 0.18 * capTop;
     vec3 arm = mix(armB, mix(limbD * 0.3, limbD * 0.85, tone), pg * 0.92);
-    // (the violet flush of the arm is a breeding male's, 6.webp — not the faint red of the grey morph, 069)
+    // (the violet flush of the arm is a breeding male's on volcanic sand, 6.webp — never with 葛西's red ≤ 0.05)
     arm = mix(arm, mix(arm, vec3(0.3, 0.22, 0.6) * 0.5, 0.6), smoothstep(0.5, 0.9, red) * 0.6);
     // granular arm; the palm finely so, the fingers smooth
     float palmG = 0.0;
@@ -562,7 +564,7 @@ const FRAG_SURFACE = /* glsl */ `
       // proximal upper part; never white
       // (063: a warm golden tan, rgb ≈ 144, 118, 88 under the evening sun — darker and warmer than cream)
       // (warm tan in the sandy individuals, 063; bluish-white and glassy in the pale ones, 002–004)
-      vec3 palmB = mix(mix(limbG, vec3(0.5, 0.52, 0.56), 0.45), vec3(0.56, 0.41, 0.22), 0.1 + 0.8 * legTint) * (0.88 + 0.1 * kgFbm2(P * 7.0 + seedP + limb));
+      vec3 palmB = mix(mix(limbG, vec3(0.52, 0.53, 0.54), 0.45), vec3(0.52, 0.48, 0.42), 0.1 + 0.8 * legTint) * (0.88 + 0.1 * kgFbm2(P * 7.0 + seedP + limb));
       float dusk = clamp(smoothstep(0.12, 0.025, x) * 0.8 + smoothstep(-0.03, 0.05, P.y) * (1.0 - smoothstep(0.15, 0.24, x)), 0.0, 1.0);
       dusk *= 0.55 + 0.45 * kgFbm2(P * 30.0 + seedP);
       float Dp = clamp(0.46 + 0.5 * dusk + 0.55 * (kgFbm(P * 22.0 + vec3(limb, 4.0, seedP)) - 0.5), 0.03, 0.95);
@@ -593,12 +595,12 @@ const FRAG_SURFACE = /* glsl */ `
       float edge = smoothstep(0.1, 0.8, cutSide);
       // (002–004, 011: porcelain — a translucent bluish white, a whiter streak along the middle of each finger;
       // horn-coloured in the sandy and brown individuals, 063)
-      vec3 fcol = mix(vec3(0.38, 0.42, 0.48), mix(limbG, vec3(0.6, 0.5, 0.32), 0.5), 0.12 + 0.7 * legTint) * (0.9 + 0.1 * kgFbm2(P * 12.0 + seedP + limb));
+      vec3 fcol = mix(vec3(0.42, 0.44, 0.47), mix(limbG, vec3(0.56, 0.53, 0.47), 0.5), 0.12 + 0.7 * legTint) * (0.9 + 0.1 * kgFbm2(P * 12.0 + seedP + limb));
       // (the margins, where the light crosses more of the glassy cuticle, read greyer; the middle whiter)
       float mid = smoothstep(0.55, 0.95, abs(cos(th)));
       fcol *= 0.72 + 0.28 * mid;
       fcol = mix(fcol, vec3(0.62, 0.65, 0.7), mid * smoothstep(0.08, 0.3, ft) * (1.0 - smoothstep(0.65, 0.9, ft)) * 0.45);
-      fcol = mix(fcol, vec3(0.72, 0.48, 0.16), (1.0 - smoothstep(0.0, 0.2, ft)) * (0.12 + 0.4 * legTint));
+      fcol = mix(fcol, vec3(0.6, 0.5, 0.36), (1.0 - smoothstep(0.0, 0.2, ft)) * (0.1 + 0.25 * legTint));
       fcol = mix(fcol, fcol * 0.72, edge * smoothstep(0.1, 0.4, ft) * 0.4);
       fcol = mix(fcol, mix(pinkL, pink, 0.3 + 0.7 * red), smoothstep(0.5, 0.92, ft) * smoothstep(0.3, 0.8, red) * 0.8);
       fcol = mix(fcol, mix(vec3(0.5, 0.3, 0.1), vec3(0.25, 0.08, 0.06), red), smoothstep(0.9, 0.99, ft) * 0.8);
@@ -648,7 +650,7 @@ const FRAG_SURFACE = /* glsl */ `
     float pg = kgPig(P + vec3(limb * 1.7, seg * 2.3, seedP), D, fw, tone);
     vec3 lg = mix(lgB, mix(limbD * 0.3, limbD * 0.85, tone), pg * 0.92);
     // erythrophores: a few red-brown dots (010)
-    lg = mix(lg, vec3(0.32, 0.06, 0.03), kgSpeck(P * 120.0 + vec3(limb, seg, seedP + 5.0), 0.06, 0.3, fw * 120.0, idd) * 0.6);
+    lg = mix(lg, vec3(0.3, 0.2, 0.14), kgSpeck(P * 120.0 + vec3(limb, seg, seedP + 5.0), 0.06, 0.3, fw * 120.0, idd) * 0.5);
     // silvery-white chromatophores scattered through the clear cuticle, the legs' sparkle (003, 010, 013)
     float wsp = kgSpeck(P * 230.0 + vec3(limb * 2.0, seg * 3.0, seedP + 17.0), 0.32, 0.3, fw * 230.0, idd);
     lg = mix(lg, vec3(0.8, 0.8, 0.77), wsp * 0.55 * (1.0 - 0.5 * band));
@@ -657,13 +659,13 @@ const FRAG_SURFACE = /* glsl */ `
     lg = mix(lg, limbD * 0.55, jd * (0.35 + 0.25 * sj));
     // and each segment's distal margin is a thin amber-orange rim (003, 002, 049: a bright line at every joint)
     float rimJ = smoothstep(0.93, 0.975, t) * (1.0 - smoothstep(0.985, 1.0, t)) * step(part, 14.5);
-    lg = mix(lg, vec3(0.62, 0.38, 0.14), rimJ * 0.7);
+    lg = mix(lg, vec3(0.52, 0.44, 0.34), rimJ * 0.45);
     ao *= 1.0 - 0.3 * jd;
     // purplish individuals: the legs carry the tint (024, 025, 040–044)
     lg = mix(lg, lg * vec3(1.04, 0.94, 1.08), purple * 0.5);
     if (part > 12.5 && part < 13.5) lg = mix(lg, maroon * (0.7 + 0.6 * kgFbm2(P * 20.0 + limb)), smoothstep(0.45, 0.9, red) * 0.85 * smoothstep(-0.2, 0.6, sin(th)));
     // the coxae share the underside's violet
-    if (part < 12.5) lg = mix(lg, vec3(0.17, 0.075, 0.33), clamp(0.45 + 0.35 * purple + 0.3 * red, 0.0, 1.0) * 0.55 * (1.0 - smoothstep(0.0, 0.6, sin(th))));
+    if (part < 12.5) lg = mix(lg, vec3(0.17, 0.075, 0.33), clamp(0.1 + 0.35 * purple + 0.3 * red, 0.0, 1.0) * 0.55 * (1.0 - smoothstep(0.0, 0.6, sin(th))));
     // glossier than the carapace, smoothest on the clear margins, uneven (049, 068: the legs shine)
     rough = 0.3 + 0.12 * (kgFbm2(P * 16.0 + vec3(limb, seg, seedP)) - 0.5) - 0.08 * marginT + 0.06 * jd + uKgAsym.w;
     trans = 0.5 + 0.35 * marginT;
@@ -729,7 +731,7 @@ const FRAG_SURFACE = /* glsl */ `
   float mem = vKgInfo.x * step(4.5, part) * step(part, 15.5);
   if (mem > 0.001) {
     // the joint membrane: soft, translucent amber-brown, darker than the cuticle on either side (009, 049, 063)
-    col = mix(col, vec3(0.36, 0.25, 0.14) * (0.8 + 0.4 * kgFbm2(P * 60.0 + seedP)), mem * 0.8);
+    col = mix(col, vec3(0.36, 0.3, 0.23) * (0.8 + 0.4 * kgFbm2(P * 60.0 + seedP)), mem * 0.8);
     ao *= 1.0 - 0.35 * mem;
     rough = mix(rough, 0.45, mem);
     trans = mix(trans, 0.8, mem);
@@ -890,25 +892,22 @@ export function makeSetaeMaterial() {
 }
 
 /**
- * Individual colouring from a seeded generator: most crabs are dull sand-grey-brown (cryptic, "a motionless crab is
- * effectively invisible" [L]); some darker (065–070), some paler / translucent (027, 028), a few strongly purplish.
- */
-/**
- * Named colour morphs seen in the photographs, for the viewer's photo-match presets and for tests:
- * pale (aquarium and specimens, yellowish-tan marbling on near-white, 002–004), khaki (aquarium, sandy), grey (field on dark sand, black and
- * white mottling), purple (field, a dark violet male with red-maroon legs and pink chelae — breeding colours).
- */
-/**
- * Colour morphs calibrated on the photographs (linear values given in sRGB-ish authoring space, converted by lin):
- * pale (2.webp), khaki (4.webp), grey (5.webp, the field on dark sand), brown (specimens 007–009), purple (6.webp,
- * the displaying male). red: the breeding flush (pink-red chelae, maroon meri) of males in the waving season.
+ * Colour morphs, all close to the sand they live on — 葛西's flat, whose dry sand the game draws with a linear albedo
+ * of about 0.50, 0.44, 0.33 (Terrain.colorAt; on screen, after the look, the near-neutral grey of the photographs,
+ * sRGB ≈ 127, 131, 128): the same warm-grey hue, a pale cuticle under fine grey-brown dots, lighter or darker from
+ * crab to crab ("a motionless crab is effectively invisible" [L]). Values in sRGB-ish authoring space, converted
+ * by lin. No purple morph (the violet males of dark volcanic sands, 6.webp, do not live here); `purple` stays 0 and
+ * `red`, the breeding flush, stays a hint.
+ *   pale  — lighter grey-white (2.webp's pale crab, toned to the flat's grey)
+ *   khaki — the commonest: grey with a faint warm cast
+ *   grey  — neutral grey, densely dotted
+ *   brown — darker grey-brown, heavily mottled
  */
 const MORPHS = {
-  pale: { tint: [0.7, 0.63, 0.45], dark: [0.3, 0.23, 0.15], purple: 0.08, pale: 0.85, red: 0.15, cover: 0.6, legTint: 0.12 },
-  khaki: { tint: [0.7, 0.6, 0.44], dark: [0.33, 0.23, 0.14], purple: 0.0, pale: 0.8, red: 0.05, cover: 0.8, legTint: 0.6 },
-  grey: { tint: [0.72, 0.7, 0.66], dark: [0.2, 0.18, 0.16], purple: 0.1, pale: 0.6, red: 0.35, cover: 0.85, legTint: 0.2 },
-  brown: { tint: [0.74, 0.62, 0.42], dark: [0.2, 0.14, 0.09], purple: 0.0, pale: 0.7, red: 0.1, cover: 0.35, legTint: 0.7 },
-  purple: { tint: [0.56, 0.44, 0.62], dark: [0.22, 0.13, 0.25], purple: 1.0, pale: 0.0, red: 0.9, cover: 0.5, legTint: 0.5 },
+  pale: { tint: [0.75, 0.72, 0.64], dark: [0.29, 0.27, 0.23], purple: 0, pale: 0.85, red: 0.04, cover: 0.65, legTint: 0.3 },
+  khaki: { tint: [0.71, 0.67, 0.58], dark: [0.27, 0.24, 0.2], purple: 0, pale: 0.8, red: 0.03, cover: 0.7, legTint: 0.5 },
+  grey: { tint: [0.68, 0.66, 0.6], dark: [0.22, 0.21, 0.19], purple: 0, pale: 0.65, red: 0.04, cover: 0.8, legTint: 0.35 },
+  brown: { tint: [0.64, 0.6, 0.52], dark: [0.21, 0.19, 0.16], purple: 0, pale: 0.7, red: 0.04, cover: 0.45, legTint: 0.55 },
 };
 
 export function paletteFor(name, seed = 1) {
@@ -922,15 +921,14 @@ export function paletteFor(name, seed = 1) {
 }
 
 /**
- * a random individual: a morph with jitter. The crabs match the sand they live on (cryptic, [L]): on the flat's
- * pale grey-brown sand the sand-coloured morphs are the common ones (on dark volcanic sand, 5.webp and 6.webp,
- * it would be grey and purple)
+ * a random individual: a morph with a small jitter. The crabs match the sand they live on (cryptic, [L]): on 葛西's
+ * grey sand every morph is a sand grey
  */
 export function crabPalette(rand, sex = 'm') {
   const r = rand();
-  const name = r < 0.34 ? 'khaki' : r < 0.58 ? 'brown' : r < 0.78 ? 'pale' : r < 0.92 ? 'grey' : 'purple';
+  const name = r < 0.38 ? 'khaki' : r < 0.64 ? 'grey' : r < 0.84 ? 'pale' : 'brown';
   const P = MORPHS[name];
-  const j = () => 0.92 + rand() * 0.16;
+  const j = () => 0.95 + rand() * 0.1;
   const tint = P.tint.map((v) => v * j()), dark = P.dark.map((v) => v * j());
   return {
     tint: lin(tint[0], tint[1], tint[2]), dark: lin(dark[0], dark[1], dark[2]),
@@ -1026,10 +1024,11 @@ float pelH = 0.0;`)
   float g = kgDome(vPelLocal * 7.0, 0.85, 0.38, fw * 7.0, off, id);
   vec3 c = uPelSand * (0.85 + 0.3 * kgH31(floor(vPelLocal * 7.0)));
   // the odd pale quartz or shell grain and dark mineral grain, as in the sand around (not salt and pepper)
-  c = id > 0.95 - 0.13 * uPelPepper ? mix(c, vec3(0.78, 0.75, 0.7), 0.6 + 0.3 * uPelPepper) : (id > 0.92 - 0.13 * uPelPepper ? c * 0.62 : (id < 0.25 * uPelPepper ? c * 0.35 : c));
+  // (葛西: few and faint — a pellet is the sand around it, not a speckled ball)
+  c = id > 0.97 - 0.15 * uPelPepper ? mix(c, vec3(0.78, 0.75, 0.7), 0.3 + 0.6 * uPelPepper) : (id > 0.95 - 0.16 * uPelPepper ? c * 0.75 : (id < 0.25 * uPelPepper ? c * 0.35 : c));
   c = mix(uPelSand * 0.9, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
-  // the sorted pellet is a touch paler than the surface it came from (organic film removed)
-  c *= mix(1.06, 0.9, vPel.z);
+  // dried, a feeding pellet is the dry sand's own colour; an excavation lump, from below, a little darker
+  c *= mix(1.0, 0.9, vPel.z);
   c *= mix(1.0, 0.62, pelWet);
   pelWet = max(pelWet, vPelDiss);
   c = mix(c, uPelSand * 0.7, vPelDiss * 0.5);
