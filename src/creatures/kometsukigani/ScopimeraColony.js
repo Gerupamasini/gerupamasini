@@ -913,20 +913,30 @@ export class ScopimeraColony {
 // ============================================================================================ helpers
 
 /**
- * The dry sand's colour where the crabs live, as the flat's shader draws it (linear albedo, Terrain.colorAt): the
- * mean over the sand of the crabs' band, dry (葛西: a warm grey the game's look turns to the photographs' grey). The
- * pellets' fallback colour and the grains on the crabs; the fallback below when the terrain cannot tell.
+ * The sand's colour where the crabs live, as the flat draws it (drySandAt: damp, linear albedo): the mean over the
+ * sand of the crabs' band (葛西: a grey). The pellets' fallback colour and the grains on the crabs; the fallback below
+ * when the terrain cannot tell.
  */
 /**
- * The sand's colour at a point as the flat draws it when dry (Terrain.colorAt with the water line set aside: the
- * pellet's own moisture and drying are the pellet shader's)
+ * The sand's colour at a point as the crabs' damp flat draws it: Terrain.colorAt read with the water line set aside
+ * (its dry albedo: substrate, the flat's sand tint, the broad patches), then darkened and neutralised as the flat's
+ * shader does its damp sand (Terrain.look.wetDark and the wet flat's grey) — most of the way, the pellets being a
+ * touch drier than the ground they lie on. Without this a dried pellet is the dry sand's colour, twice as light as
+ * the damp sand of the crabs' band at low water (measured on screen: 143 against 83).
  */
+const DAMP = 0.85;
 function drySandAt(terrain, x, z, out) {
   const w = terrain.uWater;
-  if (!w) return terrain.colorAt(x, z, out);
-  const lvl = w.value;
-  w.value = -1e9;
-  try { terrain.colorAt(x, z, out); } finally { w.value = lvl; }
+  if (w) {
+    const lvl = w.value;
+    w.value = -1e9;
+    try { terrain.colorAt(x, z, out); } finally { w.value = lvl; }
+  } else terrain.colorAt(x, z, out);
+  const k = terrain.look?.wetDark?.value ?? 0.45;
+  // (the flat's shader: × wetDark, then 55 % of the way to × (0.84, 0.92, 1.06))
+  out.r *= 1 + (k * (0.45 + 0.55 * 0.84) - 1) * DAMP;
+  out.g *= 1 + (k * (0.45 + 0.55 * 0.92) - 1) * DAMP;
+  out.b *= 1 + (k * (0.45 + 0.55 * 1.06) - 1) * DAMP;
   return out;
 }
 

@@ -33,8 +33,11 @@ const lin = (r, g, b) => new Color(r, g, b).convertSRGBToLinear();
  * The flat's clean sand as the terrain draws it (Terrain SUBSTRATE_COLORS.sand — a linear vertex colour, not
  * sRGB): pellets are that same sand, sorted and pressed; burrow walls are it, wet.
  */
-/** 葛西's dry sand as the flat draws it (Terrain.colorAt there: its grey times the flat's sand tint); the colony samples the real flat */
-const SAND_LINEAR = new Color(0.5, 0.44, 0.33);
+/**
+ * 葛西's sand where the crabs live, as the flat draws it at low water: the dry albedo (its grey × the flat's sand tint,
+ * 0.50, 0.44, 0.33) darkened and neutralised as damp sand (Colony drySandAt); the colony samples the real flat
+ */
+const SAND_LINEAR = new Color(0.25, 0.227, 0.183);
 
 const COMMON = /* glsl */ `
 float kgH31(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -218,7 +221,7 @@ const FRAG_SURFACE = /* glsl */ `
   float legTint = uKgMorph.w;
   // (a cool grey-white in the pale ones, 2.webp, 4.webp, 003 — not beige)
   vec3 limbG = mix(mix(vec3(0.48, 0.47, 0.43), ground * 0.95, legTint), mix(ground, marb, 0.4), 1.0 - pale);
-  vec3 limbD = mix(mix(vec3(0.15, 0.12, 0.085), marb * 1.1 + vec3(0.02, 0.015, 0.008), 0.35 + 0.45 * legTint), marb * 0.75, 1.0 - pale);
+  vec3 limbD = mix(mix(vec3(0.17, 0.16, 0.14), marb * 1.1 + vec3(0.02, 0.018, 0.014), 0.35 + 0.45 * legTint), marb * 0.75, 1.0 - pale);
   vec3 pink = vec3(0.74, 0.25, 0.27), pinkL = vec3(0.86, 0.5, 0.52), maroon = vec3(0.24, 0.025, 0.035);
   vec3 black = vec3(0.012, 0.010, 0.009);
   vec3 cream = vec3(0.62, 0.55, 0.40);
@@ -288,7 +291,7 @@ const FRAG_SURFACE = /* glsl */ `
     // the dorsum's ground is darker than the limbs' (049, 069: the pale is in the granules, not between them), and
     // darkest in the blotches
     // (and the darkening is toward a grey-brown, the sand's own shade — not olive, not a warm brown)
-    baseC *= mix(vec3(1.0), vec3(0.42, 0.38, 0.33), (0.3 + 0.7 * blot) * dorsal);
+    baseC *= mix(vec3(1.0), vec3(0.58, 0.56, 0.52), (0.25 + 0.65 * blot) * dorsal);
     vec3 pigC = mix(marb * 0.42, marb * 1.05 + vec3(0.01, 0.007, 0.0), tone);
     vec3 dcol = mix(baseC, pigC, pig);
     // the translucent rim inside the lateral and posterior margins: fewer dots, paler (008)
@@ -892,10 +895,11 @@ export function makeSetaeMaterial() {
 }
 
 /**
- * Colour morphs, all close to the sand they live on — 葛西's flat, whose dry sand the game draws with a linear albedo
- * of about 0.50, 0.44, 0.33 (Terrain.colorAt; on screen, after the look, the near-neutral grey of the photographs,
- * sRGB ≈ 127, 131, 128): the same warm-grey hue, a pale cuticle under fine grey-brown dots, lighter or darker from
- * crab to crab ("a motionless crab is effectively invisible" [L]). Values in sRGB-ish authoring space, converted
+ * Colour morphs, all close to the sand they live on — 葛西's flat, whose damp sand of the crabs' band the game draws
+ * with a linear albedo of about 0.21, 0.19, 0.15 (dry 0.50, 0.44, 0.33 × the damp darkening and grey; on screen the
+ * photographs' grey): measured in the viewer's albedo view, the whole crab averages 0.20–0.25 (sRGB 122–139), its
+ * mottled carapace a little darker, its legs a little lighter — a pale cuticle under fine grey-brown dots, lighter
+ * or darker from crab to crab ("a motionless crab is effectively invisible" [L]). Values in sRGB-ish authoring space, converted
  * by lin. No purple morph (the violet males of dark volcanic sands, 6.webp, do not live here); `purple` stays 0 and
  * `red`, the breeding flush, stays a hint.
  *   pale  — lighter grey-white (2.webp's pale crab, toned to the flat's grey)
@@ -904,10 +908,10 @@ export function makeSetaeMaterial() {
  *   brown — darker grey-brown, heavily mottled
  */
 const MORPHS = {
-  pale: { tint: [0.75, 0.72, 0.64], dark: [0.29, 0.27, 0.23], purple: 0, pale: 0.85, red: 0.04, cover: 0.65, legTint: 0.3 },
-  khaki: { tint: [0.71, 0.67, 0.58], dark: [0.27, 0.24, 0.2], purple: 0, pale: 0.8, red: 0.03, cover: 0.7, legTint: 0.5 },
-  grey: { tint: [0.68, 0.66, 0.6], dark: [0.22, 0.21, 0.19], purple: 0, pale: 0.65, red: 0.04, cover: 0.8, legTint: 0.35 },
-  brown: { tint: [0.64, 0.6, 0.52], dark: [0.21, 0.19, 0.16], purple: 0, pale: 0.7, red: 0.04, cover: 0.45, legTint: 0.55 },
+  pale: { tint: [0.76, 0.74, 0.68], dark: [0.4, 0.38, 0.35], purple: 0, pale: 0.85, red: 0.04, cover: 0.75, legTint: 0.3 },
+  khaki: { tint: [0.73, 0.7, 0.63], dark: [0.37, 0.35, 0.31], purple: 0, pale: 0.8, red: 0.03, cover: 0.75, legTint: 0.5 },
+  grey: { tint: [0.71, 0.7, 0.66], dark: [0.34, 0.33, 0.31], purple: 0, pale: 0.7, red: 0.04, cover: 0.8, legTint: 0.35 },
+  brown: { tint: [0.68, 0.65, 0.58], dark: [0.32, 0.3, 0.27], purple: 0, pale: 0.7, red: 0.04, cover: 0.6, legTint: 0.55 },
 };
 
 export function paletteFor(name, seed = 1) {
