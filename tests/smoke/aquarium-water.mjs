@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Build first. The home tank's renderer: every quality tier draws without shader errors; the bed's relief carries the
 // animals and the decorations; the water pass covers the tank (and only the tank); the camera may go under water;
-// the shrimp's own shader survives the tank's caustic copy. Screenshots in tests/smoke/out/water-*.png.
+// the shrimp's own shader survives the tank's caustic copy; the surface is still until a flow stirs it. Screenshots in
+// tests/smoke/out/water-*.png.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -77,8 +78,35 @@ try {
   assert.deepEqual(errors, [], 'no errors under water');
   console.log('under water');
 
+  // the surface is still but for what stirs it: the slopes of the surface texture, overall and near the outlets
+  const surface = () => page.evaluate(() => {
+    const a = window.__higata, w = a.tank.water, rt = w.surfRT, W = rt.width, H = rt.height, buf = new Uint16Array(W * H * 4);
+    a.renderer.gl.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+    const half = (h) => { const e = (h >> 10) & 0x1f, m = (h & 0x3ff) / 1024; return (h & 0x8000 ? -1 : 1) * (e ? (1 + m) * 2 ** (e - 15) : m * 2 ** -14); };
+    const U = a.tank.U, hx = U.uTankHalf.value.x, hz = U.uTankHalf.value.y, J = U.uJets.value, JV = U.uJetValues.value, s = [0, 0, 0, 0];
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = (j * W + i) * 4, g = half(buf[k + 1]) ** 2 + half(buf[k + 2]) ** 2, x = ((i + 0.5) / W - 0.5) * 2 * hx, z = ((j + 0.5) / H - 0.5) * 2 * hz;
+      let near = false; for (let q = 0; q < 4; q++) if (JV[q * 2] > 0.3 && Math.hypot(x - J[q * 4], z - J[q * 4 + 1]) < 0.09) near = true;
+      s[near ? 0 : 2] += g; s[near ? 1 : 3]++;
+    }
+    return { stir: w.stir, slope: Math.sqrt((s[0] + s[2]) / (s[1] + s[3])), near: s[1] ? Math.sqrt(s[0] / s[1]) : 0, far: Math.sqrt(s[2] / s[3]) };
+  });
+  await page.evaluate(() => window.__higata.tank.resetView());
+  await page.waitForFunction(() => window.__higata.tank.water.stir < 0.1); await frames(4);
+  const still = await surface();
+  await page.evaluate(() => { const e = window.__higata.tank.equipment; e.addDevice('flowPump'); e.applyPreset(); });
+  await page.waitForFunction(() => window.__higata.tank.water.stir > 0.6); await frames(4);
+  const stirred = await surface();
+  await page.screenshot({ path: new URL('water-stirred.png', output).pathname });
+  assert.ok(still.slope < 0.025, `still water ${JSON.stringify(still)}`);
+  assert.ok(stirred.slope > 2 * still.slope && stirred.near > 1.3 * stirred.far, `a flow pump stirs the surface, most near its outlet ${JSON.stringify(stirred)}`);
+  await page.evaluate(() => { const e = window.__higata.tank.equipment; e.removeDevice(e.currentLayout.devices.find((d) => d.kind === 'flowPump').id); });
+  await page.waitForFunction(() => window.__higata.tank.water.stir < 0.1);
+  assert.deepEqual(errors, []);
+  console.log('still water, stirred by a pump', JSON.stringify({ still, stirred }));
+
   // without float targets (or before the pipeline), the plain path still runs: the tank's own render
   await page.evaluate(() => { const a = window.__higata; a.tank.resetView(); a.renderer.gl.render(a.tank.scene, a.tank.camera); });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'passed', bed, checks: ['four tiers', 'relief under feet and decorations', 'substrates', 'under water', 'plain render'] }));
+  console.log(JSON.stringify({ status: 'passed', bed, checks: ['four tiers', 'relief under feet and decorations', 'substrates', 'under water', 'still water stirred by the flows', 'plain render'] }));
 } finally { await browser?.close(); server.kill(); }

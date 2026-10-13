@@ -30,10 +30,11 @@ uniform float uDebug;   // 1: which way each ray went (green: met something, blu
 float dbgBranch = 0.0;
 varying vec2 vNdc;
 
+uniform float uStir;   // how stirred the surface is (0 still water, 1 strong flows)
 // capillary ripples finer than the simulation's grid: the bar's reflection breaks into glints, the view through
-// the surface shimmers (faded out where they would be finer than a pixel)
+// the surface shimmers (faded out where they would be finer than a pixel; faint on still water)
 vec3 microNormal(vec3 n, vec2 p, float px) {
-  float fade = 1.0 - smoothstep(0.0015, 0.005, px);
+  float fade = (1.0 - smoothstep(0.0015, 0.005, px)) * (0.25 + 0.75 * uStir);
   vec2 g = vec2(0.0);
   // three short wave trains at odd angles, each bent by the next, so no grid shows
   vec2 q = p * 210.0;
