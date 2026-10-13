@@ -1,5 +1,5 @@
 import { Matrix4, Quaternion, Vector3, Euler } from 'three';
-import { CHELIPED, LEGS, STANCE, CARAPACE } from './ScopimeraGlobosaMorphology.js';
+import { CHELIPED, LEGS, STANCE } from './ScopimeraGlobosaMorphology.js';
 import { CHELA_POSES, DEG } from './ScopimeraGlobosaRig.js';
 import { clamp, damp, dampAngle, fbm1, lerp, noise1, smooth01, smoothstep, Spring, wrapAngle } from './util.js';
 
@@ -635,7 +635,7 @@ export class CrabAnimator {
 
   /** fingertip target helpers in Body space */
   mouthPoint(out, side) {
-    return out.set(side * 0.03, CARAPACE.marginY + 0.05, 0.44);
+    return out.set(side * 0.03, 0.31, 0.37);
   }
 
   updateChelae(dt) {

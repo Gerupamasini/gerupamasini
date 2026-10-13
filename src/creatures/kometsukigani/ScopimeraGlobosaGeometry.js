@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Vector3 } from 'three';
-import { ABDOMEN, CARAPACE, CHELIPED, EYE, LEGS, MXP3 } from './ScopimeraGlobosaMorphology.js';
+import { ABDOMEN, CARAPACE, CHELIPED, EYE, FACE, LEGS, MXP3, STERNUM } from './ScopimeraGlobosaMorphology.js';
 import { SEGMENTS, SIDES, sharedRig } from './ScopimeraGlobosaRig.js';
 import { clamp, hash01, mulberry, smoothstep, TAU } from './util.js';
 
@@ -194,12 +194,9 @@ const OUTLINE = [
   [0.41, -0.35], [0.34, -0.388], [0.25, -0.405], [0.12, -0.411], [0, -0.412],
 ];
 
-let OUTLINE_POLY = null;
-/** dense, smoothed outline (centripetal Catmull–Rom), mirrored to the full closed loop */
-function outlinePoly() {
-  if (OUTLINE_POLY) return OUTLINE_POLY;
+/** a half outline (x ≥ 0) smoothed with Catmull–Rom into a dense polyline */
+function smoothHalf(pts) {
   const half = [];
-  const pts = OUTLINE;
   for (let k = 0; k < pts.length - 1; k++) {
     const p0 = pts[Math.max(0, k - 1)], p1 = pts[k], p2 = pts[k + 1], p3 = pts[Math.min(pts.length - 1, k + 2)];
     for (let s = 0; s < 16; s++) {
@@ -209,15 +206,12 @@ function outlinePoly() {
     }
   }
   half.push(pts[pts.length - 1]);
-  OUTLINE_POLY = half;
   return half;
 }
 
-/** outline radius along a direction θ (0 = +Z front, π/2 = +X left), by ray–polyline intersection */
-export function outlineRadius(th) {
-  const poly = outlinePoly();
+/** radius of a smoothed half outline along a bearing θ (0 = +Z front, π/2 = +X left), by ray–polyline intersection */
+function polyRadius(poly, th, fallback) {
   const dx = Math.abs(Math.sin(th)), dz = Math.cos(th);
-  let best = 0.45;
   for (let k = 0; k < poly.length - 1; k++) {
     const [ax, az] = poly[k], [bx, bz] = poly[k + 1];
     const ex = bx - ax, ez = bz - az;
@@ -225,9 +219,29 @@ export function outlineRadius(th) {
     if (Math.abs(den) < 1e-12) continue;
     const s = (ax * ez - az * ex) / den;
     const u = (ax * dz - az * dx) / den;
-    if (s > 0 && u >= -1e-6 && u <= 1 + 1e-6) { best = s; break; }
+    if (s > 0 && u >= -1e-6 && u <= 1 + 1e-6) return s;
   }
-  return best;
+  return fallback;
+}
+
+const OUTLINE_POLY = smoothHalf(OUTLINE);
+const STERNUM_POLY = smoothHalf(STERNUM.outline);
+
+/** carapace outline radius along a bearing θ */
+export function outlineRadius(th) { return polyRadius(OUTLINE_POLY, th, 0.45); }
+
+/** sternum outline radius along a bearing θ */
+function sternumRadius(th) { return polyRadius(STERNUM_POLY, th, 0.2); }
+
+/** the face's midline profile: z at height y (Morphology FACE) */
+function faceZ(y) {
+  const F = FACE;
+  if (y >= F[0][0]) return F[0][1];
+  for (let k = 0; k < F.length - 1; k++) {
+    const [y0, z0] = F[k], [y1, z1] = F[k + 1];
+    if (y <= y0 && y >= y1) return z0 + (z1 - z0) * (y0 - y) / (y0 - y1);
+  }
+  return F[F.length - 1][1];
 }
 
 /**
@@ -240,12 +254,20 @@ function marginY(th) {
   return CARAPACE.marginY + CARAPACE.frontRise * smoothstep(0.35, 0.85, c) - 0.04 * smoothstep(0.2, 1, -c);
 }
 
+/** the four walking legs' coxal notches along the sternum's lateral margin (z), filled by the coxae */
+const COXA_Z = LEGS.map((L) => L.base[2]);
+
 /**
  * Carapace + cephalothorax as one closed surface over (θ, s): θ around the vertical axis, s from the dorsal pole
- * (s = 0) through the girth (s = .5) to the sternum (s = 1). The crab is globose: an inflated, nearly elliptic dome
- * over the plan outline, the sides continuing round below the margin and only then curving in to the sternum; the
- * face a little fuller (blunter) than the sides but still rounded — no box, no crest (063, 049, 060, 027).
+ * (s = 0) through the girth (s = .5) down the side walls to the sternum's margin (s = 0.82) and across the sternum
+ * to its centre (s = 1). The dorsum is an inflated, nearly elliptic dome over the plan outline (063, 049, 060,
+ * 027). Below the girth the branchiostegites bulge and then curve in to the sternum's lateral margin (b69, b30);
+ * in front the face recedes from the deflexed front down and back to the sternum's straight front edge — the
+ * buccal frame, which the third maxillipeds close, faces forward and down (Morphology FACE; b69, b30, b66, b67).
+ * The sternum is a broad, gently convex shield with the sutures between its sternites, coxal notches along its
+ * sides and a trough down the middle for the male's abdomen (Morphology STERNUM).
  */
+const WALL_END = 0.82;
 function carapaceFn(u, v, o, inside) {
   inside.set(0, 0.26, 0);
   const th = u * TAU;
@@ -253,22 +275,56 @@ function carapaceFn(u, v, o, inside) {
   const c = Math.cos(th), sn = Math.sin(th);
   const front = smoothstep(0.55, 1, c), back = smoothstep(0.3, 1, -c);
   const H = CARAPACE.height, ym = marginY(th);
-  let rho, y;
+  let x, y, z, nx, ny, nz, faceK = 0;
   const phi = Math.PI * v;
   if (v <= 0.5) {
     // dome: blunter toward the front (deflexed front, eyes on the rim)
     const nu = 1.75 + 0.15 * front - 0.1 * back;
-    rho = Math.pow(Math.sin(phi), 2 / nu);
+    const rho = Math.pow(Math.sin(phi), 2 / nu);
     y = ym + (H - ym) * Math.pow(Math.max(0, Math.cos(phi)), 2 / nu);
+    x = rho * R * sn; z = rho * R * c;
+    nx = sn * Math.sin(phi); nz = c * Math.sin(phi); ny = Math.cos(phi) * 1.3;
   } else {
-    const nl = 2.1 + 1.3 * front + 0.3 * back;
-    const k = Math.pow(Math.sin(phi), 2 / nl);
-    // the branchiostegites bulge, then tuck in toward the sternum; the face less so
-    const inset = 1 - (1 - CARAPACE.ventralInset) * (1 - 0.6 * front) * smoothstep(0.62, 1, v);
-    rho = k * inset;
-    y = ym * (1 - Math.pow(Math.abs(Math.cos(phi)), 2 / nl));
+    // the sternum's margin along this bearing, notched where each coxa sits
+    let Rs = sternumRadius(th);
+    const zs0 = Rs * c, xs0 = Rs * Math.abs(sn);
+    if (xs0 > 0.22) for (const zc of COXA_Z) Rs *= 1 - 0.07 * Math.exp(-(((zs0 - zc) / 0.026) ** 2));
+    const yS = STERNUM.edgeY;
+    if (v <= WALL_END) {
+      const t = (v - 0.5) / (WALL_END - 0.5);
+      // the side walls (branchiostegites): straight down from the girth, bulging, then curving in to the sternum
+      const a = t * Math.PI / 2;
+      const rSide = Rs + (R - Rs) * Math.pow(Math.cos(a), 0.7);
+      const ySide = yS + (ym - yS) * (1 - Math.sin(a));
+      // the face: from the front margin down the profile to the sternum's front edge, curving back at its sides
+      // into the pterygostomial regions, which slope back to the side walls without a step (b67, b68: no niche
+      // round the buccal frame)
+      const yF = ym + (yS - ym) * t;
+      const zF = faceZ(yF);
+      const rF = c > 0.05 ? zF / c : 9;
+      const xF = rF * Math.abs(sn);
+      faceK = c > 0.05 ? (1 - smoothstep(0.2, 0.42, xF)) * smoothstep(0.1, 0.3, c) : 0;
+      const zF2 = zF - 0.45 * xF * xF;
+      const r = rSide + (Math.min(rF, R) * (zF2 / Math.max(zF, 1e-3)) - rSide) * faceK;
+      y = ySide + (yF - ySide) * faceK;
+      x = r * sn; z = r * c;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      nx = sn * (ca + (0.05 - ca) * faceK); nz = c * (ca + (1 - ca) * faceK); ny = -sa + (sa - 0.55) * faceK;
+    } else {
+      // the sternum: from its margin to its centre, gently convex
+      const w = (v - WALL_END) / (1 - WALL_END);
+      const r = Rs * (1 - w);
+      x = r * sn; z = r * c;
+      y = yS * Math.pow(1 - w, 1.5);
+      const ax = Math.abs(x);
+      // (the sutures between the sternites are narrower than the mesh: the material cuts them, b30, b66)
+      // the trough the male abdomen lies in, and its rim round the abdomen's tip
+      const [hw, dep] = STERNUM.trough;
+      const tr = (1 - smoothstep(hw - 0.012, hw + 0.012, ax)) * smoothstep(-0.4, -0.36, z) * (1 - smoothstep(0.03, 0.065, z + 0.6 * ax * ax));
+      y += dep * tr;
+      nx = 0; ny = -1; nz = 0;
+    }
   }
-  let x = rho * R * sn, z = rho * R * c;
   // ---- regional relief (silhouette scale only; grooves and granules are in the material)
   const ax = Math.abs(x);
   const dorsal = v < 0.5 ? 1 : 0;
@@ -277,7 +333,6 @@ function carapaceFn(u, v, o, inside) {
   // the regions as low convex lobes separated by shallow furrows (4.webp seen from the front catches a highlight
   // on every lobe; 6.webp, 008): branchial, epibranchial (behind the orbit), protogastric, mesogastric, cardiac,
   // intestinal
-  // (low and soft: the live crab's dorsum reads as one inflated dome with faint regions, 060, 049, 057)
   // (049 seen from above and behind shows every lobe in light and shade: the relief is not faint)
   dy += dorsal * (0.028 * g(0.29, -0.1, 0.17) + 0.018 * g(0.31, 0.17, 0.09) + 0.015 * g(0.11, 0.2, 0.08)
     + 0.012 * g(0, 0.08, 0.07) + 0.015 * g(0, -0.15, 0.08) + 0.009 * g(0, -0.3, 0.08));
@@ -297,7 +352,7 @@ function carapaceFn(u, v, o, inside) {
   // ---- the front, measured along the rim (axR: the outline's half-width at this bearing), so it follows the outline
   const axR = R * Math.abs(sn);
   const frontS = smoothstep(0.5, 0.75, c);
-  const rimBand = smoothstep(0.34, 0.46, v) * (1 - smoothstep(0.54, 0.64, v));
+  const rimBand = smoothstep(0.34, 0.46, v) * (1 - smoothstep(0.54, 0.6, v));
   // orbits: a cavity under the front margin from beside the frontal lobe to the external orbital angle, where the
   // eyestalk stands and folds down (063, 069, 002, 001, 009)
   const orb = smoothstep(0.075, 0.11, axR) * (1 - smoothstep(0.33, 0.39, axR)) * frontS * rimBand;
@@ -305,31 +360,27 @@ function carapaceFn(u, v, o, inside) {
   // rises a little again at the frontal lobe (063, 016, 069, 004)
   const ga = (cx, r) => Math.exp(-(((axR - cx) / r) ** 2));
   const undul = frontS * (0.014 * ga(0.375, 0.045) - 0.016 * ga(0.21, 0.085) + 0.006 * ga(0.03, 0.05));
-  // front: a narrow lobe between the eyestalks, deflexed — it bends down over the face (004, 063, 016)
-  const frontLobe = (1 - smoothstep(0.05, 0.08, axR)) * smoothstep(0.88, 0.97, c) * smoothstep(0.3, 0.46, v) * (1 - smoothstep(0.56, 0.66, v));
-  // the antennular fossae: two dark pits under the front lobe, between the eyestalk bases and above the epistome,
-  // each holding a folded antennule (063, 027: two small round knobs side by side, a narrow septum between them)
+  // front: a narrow lobe between the eyestalks, deflexed — it bends down over the face (004, 063, 016, b67: a narrow
+  // stem down to the epistome between the antennular fossae)
+  const frontLobe = (1 - smoothstep(0.05, 0.08, axR)) * smoothstep(0.88, 0.97, c) * smoothstep(0.3, 0.46, v) * (1 - smoothstep(0.54, 0.6, v));
+  // the antennular fossae: two pits under the front lobe, each holding a folded antennule (063, 027, b67)
   const fx = smoothstep(0.015, 0.035, ax) * (1 - smoothstep(0.085, 0.11, ax));
-  const fossa = fx * smoothstep(0.33, 0.36, y) * (1 - smoothstep(0.41, 0.44, y)) * smoothstep(0.85, 0.95, c) * (v > 0.45 ? 1 : 0);
-  // buccal frame: the face recess where the third maxillipeds sit
-  // (the frame holds the maxillipeds: 0.42 CW across, from the sternum up to 0.35 — the arches of their tops stand
-  // clear of the face, 063)
-  const bx = 1 - smoothstep(0.19, 0.26, ax);
-  const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.37, 0.43, y));
-  const buccal = bx * byw * smoothstep(0.8, 0.97, c) * (v > 0.5 ? 1 : 0);
+  const fossa = fx * smoothstep(0.35, 0.37, y) * (1 - smoothstep(0.405, 0.43, y)) * faceK;
+  // the epistome: a low transverse ridge above the buccal frame, its lower edge two arcs meeting in a point on the
+  // midline (b67: the pale "bow" over the maxillipeds)
+  const epi = faceK * Math.exp(-(((y - (0.338 - 0.03 * Math.max(0, 1 - ax / 0.1))) / 0.012) ** 2)) * (1 - smoothstep(0.17, 0.22, ax));
   // displacement: along the (approximate) outward normal of the base shape
-  const nx = sn * (v <= 0.5 ? Math.sin(phi) : 1), nz = c * (v <= 0.5 ? Math.sin(phi) : 1), ny = v <= 0.5 ? Math.cos(phi) * 1.3 : -Math.abs(Math.cos(phi));
   const nl = Math.hypot(nx, ny, nz) || 1;
-  // (the buccal frame is deep enough that the maxillipeds lie in it, their tops not hidden behind the face)
-  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.035 * buccal - 0.04 * fossa;
+  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.03 * fossa + 0.006 * epi;
   x += (nx / nl) * disp; z += (nz / nl) * disp; y += (ny / nl) * disp * (dorsal ? 1 : 0.4) + (dorsal ? dy * 0.4 : 0);
   // the margin's undulation, fading away from the rim; the lobe's downward bend
-  y += undul * (smoothstep(0.2, 0.46, v) * (1 - smoothstep(0.5, 0.7, v)));
+  y += undul * (smoothstep(0.2, 0.46, v) * (1 - smoothstep(0.5, 0.6, v)));
   y -= 0.008 * frontLobe * smoothstep(0.42, 0.56, v);
   o.set(x, y, z);
-  // part: dorsal carapace, lateral wall (branchiostegite / pterygostomial), face, buccal cavity, sternum
+  // part: dorsal carapace, lateral wall (branchiostegite / pterygostomial), face, sternum
   let part = PART.CARAPACE;
-  if (v > 0.5) part = c > 0.8 && y > 0.05 ? PART.FACE : (v > 0.8 ? PART.STERNUM : PART.BRANCHIO);
+  if (v > WALL_END) part = PART.STERNUM;
+  else if (v > 0.5) part = faceK > 0.5 && y > 0.03 ? PART.FACE : PART.BRANCHIO;
   else if (v > 0.44) part = c > 0.8 ? PART.FACE : PART.BRANCHIO;
   // (the orbit's shading: a shallow cavity, half-lit — 063 shows the eyestalk bases in shade, not in a black hole)
   return [part, 0, Math.max(orb * 0.55, fossa * 0.8), 0];
@@ -453,14 +504,14 @@ function buildMxp(B, res) {
 }
 
 /**
- * Antennules: folded in their fossae under the front, each showing as a small rounded knob (063, 027); the slender
- * antennae beside them are too fine to show at this scale. A small ellipsoid each, on the Body.
+ * Antennules: folded in their fossae under the front, each showing as a small rounded knob (063, 027, b67); the
+ * slender antennae beside them are too fine to show at this scale. A small ellipsoid each, on the Body.
  */
 function buildAntennules(B, res) {
   const body = sharedRig().index.get('Body');
   const n = Math.max(6, Math.round(res.radial * 0.6)), m = Math.max(4, Math.round(res.radial * 0.4));
   for (const sx of [1, -1]) {
-    const c = new Vector3(sx * 0.055, 0.385, 0.37), r = [0.021, 0.019, 0.017];
+    const c = new Vector3(sx * 0.055, 0.386, 0.356), r = [0.018, 0.016, 0.014];
     patch(B, {
       rows: m, cols: n, bone: body, wrapCols: true,
       fn: (u, v, o, inside) => {
@@ -473,28 +524,63 @@ function buildAntennules(B, res) {
   }
 }
 
+/**
+ * The abdomen, folded tight under the body in its trough on the sternum: six somites and the telson, each somite a
+ * low convex plate with a narrow groove between it and the next. The male's a narrow strip with broad basal
+ * somites across the sternum's posterior margin; the female's a broad rounded plate covering most of the sternum
+ * (Morphology ABDOMEN; b30, b66, b69, b61, b39). Bone-local: z forward from the posterior margin, x across, the
+ * visible face toward −y. One plate per sex; the other sex's is collapsed.
+ */
+function abdomenProfile(A) {
+  const L = A.somites.reduce((a, b) => a + b, 0), Lt = L + A.telson;
+  const cuts = [];
+  let acc = 0;
+  for (const s of A.somites) { acc += s; cuts.push(acc); }
+  const base = A.somites[0] + A.somites[1];
+  /** half-width at a distance zz forward of the posterior margin */
+  const hw = (zz) => {
+    if (zz >= L) return 0.5 * A.telsonWidth * Math.sqrt(Math.max(0, 1 - ((zz - L) / A.telson) ** 2));
+    // the basal somites across the posterior margin, then the body of the abdomen, narrowing to the telson
+    const toBody = smoothstep(base * 0.6, base + 0.03, zz);
+    const mid = A.width + (A.telsonWidth - A.width) * smoothstep(L * 0.6, L, zz) * (A.width > A.baseWidth ? 1 : 0.4);
+    const bulge = A.width > A.baseWidth ? Math.sin(Math.PI * clamp(zz / L, 0, 1)) * 0.06 : 0;
+    return 0.5 * (A.baseWidth + (mid - A.baseWidth) * toBody) + bulge * 0.5;
+  };
+  return { L, Lt, cuts, hw };
+}
+
 function buildAbdomen(B, res) {
   const rig = sharedRig();
   for (const sex of ['m', 'f']) {
     const bone = rig.index.get(sex === 'm' ? 'Abdomen_M' : 'Abdomen_F');
     const A = sex === 'm' ? ABDOMEN.male : ABDOMEN.female;
-    const rows = Math.max(3, Math.round(res.radial * 0.6)), cols = Math.max(4, res.radial);
-    patch(B, {
-      rows, cols, bone,
-      fn: (u, v, o, inside) => {
-        const zz = v * A.length;                          // forward from the posterior margin
-        // the telson rounded off (3.webp: the male's abdomen ends in a broad round tip)
-        const tip = sex === 'm' ? Math.sqrt(Math.max(0.06, 1 - Math.pow(Math.max(0, v - 0.7) / 0.3, 2))) : Math.sqrt(Math.max(0.05, 1 - Math.pow(Math.max(0, v - 0.55) / 0.45, 2)));
-        const w = (A.width0 + (A.width1 - A.width0) * v) * 0.5 * tip;
-        const x = (u * 2 - 1) * w;
-        // a low convex plate with rounded flanks, folded tight into the sternal cavity: its margins sink into the
-        // sternum and only the middle stands a little proud — it never hangs below the body (063, 027 from the front)
-        const bulge = (sex === 'm' ? 0.022 : 0.02) * Math.sqrt(Math.max(0, 1 - (u * 2 - 1) ** 2)) * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, v * 1.2)));
-        o.set(x, -bulge, zz);
-        inside.set(x, 1, zz);
-        return [PART.ABDOMEN, 140, 0, 0.2];
-      },
-    });
+    const { Lt, cuts, hw } = abdomenProfile(A);
+    const n = Math.max(4, res.radial), m = Math.max(5, Math.round(res.ringK * Lt * 0.9));
+    // (only the outer face: the inner one lies against the sternum, and the rim thins to nothing)
+    for (const face of [1]) {
+      patch(B, {
+        rows: m, cols: n, bone,
+        fn: (u, v, o, inside) => {
+          // v along the abdomen (rows), u across (cols); the rim rolls round from the outer face to the inner one
+          const zz = v * Lt;
+          const w = hw(zz);
+          const q = u * 2 - 1;
+          const x = q * w;
+          // each somite a low dome across, the grooves between them (b30: the live male's segments stand out)
+          const cut = cuts.reduce((d, cz) => Math.min(d, Math.abs(zz - cz)), 1);
+          const groove = Math.exp(-((cut / 0.006) ** 2));
+          // (thin at the rim and at the posterior margin, where the outer and inner faces meet)
+          // (and toward the telson's tip, so the plate ends in a rounded edge, not a point)
+          const tipK = zz > Lt - A.telson ? Math.sqrt(Math.max(0, 1 - ((zz - Lt + A.telson) / A.telson) ** 2)) : 1;
+          const rim = Math.sqrt(Math.max(0, 1 - q * q)) * smoothstep(0, 0.01, zz) * Math.sqrt(tipK);
+          const dome = rim * (sex === 'm' ? 0.016 : 0.014) * (0.7 + 0.3 * smoothstep(0, 0.05, zz));
+          const y = face > 0 ? -(0.004 * rim + dome - 0.003 * groove * rim) : 0.004 * rim;
+          o.set(x, y, zz);
+          inside.set(x, y + face, zz);
+          return [PART.ABDOMEN, sex === 'm' ? 140 : 141, 0, 0.2];   // segment 0 male, 1 female (Material)
+        },
+      });
+    }
   }
 }
 

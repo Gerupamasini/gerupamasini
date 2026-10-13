@@ -67,18 +67,20 @@ export const LEG_JOINTS = {
 export const CHELA_POSES = {
   /**
    * fold, fitted to keypoints of the front view 063 (CW 317 px; a large male) and, for depth, the view from above
-   * and behind 049: the carpus knob lies across above each palm like a shoulder at the anterolateral corner, level
-   * with the eyes (centre 0.37 CW out, 0.37 up); the palm hangs beside the maxillipeds, not over them, with its broad
-   * face forward (centre 0.32 out, 0.15 up, just in front of the face); the fingers point down, their tips 0.23 CW
-   * from the midline on the sand — side by side, not crossed under the face (also 002, 061, 2.webp, 4.webp)
+   * and behind 049: the carpus knob lies across above each palm like a shoulder under the anterolateral corner
+   * (centre 0.36 CW out, 0.32 up); the palm hangs beside the maxillipeds, not over them, with its broad face forward
+   * (centre 0.33 out, 0.15 up); the fingers point down, their tips 0.22 CW from the midline on the sand — side by
+   * side, not crossed under the face (also 002, 061, 2.webp, 4.webp). The limb comes forward from the coxa at the
+   * sternum's anterolateral corner (b66, b69). The other presets keep their knob, palm and fingertip where they were
+   * before the coxa moved there
    */
-  fold: [-1.303, 1.341, 0, -0.176, 2.669, 0.176, 0.04],
-  scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
-  mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
+  fold: [-1.4, 1.697, 0, 0.168, 1.995, 0.593, 0.04],
+  scoop: [0.472, 0.274, 0, -0.012, 0.424, -1.014, 0.3],
+  mouth: [0.124, 0.839, 0, 0.405, 1.085, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */
-  wave: [-1.2, 1.38, 0, -0.2, -0.055, 0.92, 0.02],
-  guard: [0.0, 1.05, 0, 0.05, 1.2, -0.8, 0.25],
-  tuck: [0.18, 0.7, 0, 0.45, 1.85, -1.6, 0.0],
+  wave: [-1.11, 1.579, 0, 0.176, -0.2, 0.549, 0.02],
+  guard: [0.256, 0.767, 0, 0.299, 0.266, -0.553, 0.25],
+  tuck: [0.037, 0.749, 0, 0.65, 0.804, -1.329, 0.0],
 };
 
 /** cheliped joints: [axis, min, max] */
@@ -120,9 +122,9 @@ export function rigDefinition() {
     add(`Mxp3_${id}`, body, new Vector3(sign * hx, hy, hz), basisQuat(xAx, yAx), { limb: `Mxp3_${id}`, side: sign });
   }
   // where the sorted sand is pressed into a pellet: above the mouth, at the top of the buccal frame [L]
-  add('Mouth', body, new Vector3(0, 0.33, 0.42));
-  add('Abdomen_M', body, new Vector3(0, 0.006, ABDOMEN.z0));
-  add('Abdomen_F', body, new Vector3(0, 0.006, ABDOMEN.z0));
+  add('Mouth', body, new Vector3(0, 0.31, 0.35));
+  add('Abdomen_M', body, new Vector3(0, 0.012, ABDOMEN.z0));
+  add('Abdomen_F', body, new Vector3(0, 0.012, ABDOMEN.z0));
 
   for (const { id, sign } of SIDES) {
     const C = CHELIPED;

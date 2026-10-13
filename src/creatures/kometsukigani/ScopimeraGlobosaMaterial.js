@@ -1,5 +1,11 @@
 import { Color, DoubleSide, FrontSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, MultiplyBlending, Vector4 } from 'three';
-import { CHELIPED, EYE, MXP3 } from './ScopimeraGlobosaMorphology.js';
+import { ABDOMEN, CHELIPED, EYE, MXP3, STERNUM } from './ScopimeraGlobosaMorphology.js';
+
+const f3 = (x) => x.toFixed(3);
+/** GLSL: distance from the mirrored body point q (|x|, z) to the nearest sternal suture (Morphology STERNUM.sutures) */
+const STERNUM_SUTURES = STERNUM.sutures.map(([[x0, z0], [x1, z1]]) => `kgSegD(q, vec2(${f3(x0)}, ${f3(z0)}), vec2(${f3(x1)}, ${f3(z1)}))`).reduce((a, b) => `min(${a}, ${b})`);
+/** GLSL: distance (CW) from the abdomen's local zz to the nearest somite boundary, per sex (Geometry abdomenProfile) */
+const abdCuts = (A) => { let acc = 0; return A.somites.map((x) => (acc += x)).map((c) => `abs(zz - ${f3(c)})`).reduce((a, b) => `min(${a}, ${b})`); };
 
 /**
  * コメツキガニ materials. Everything procedural, evaluated in the shader from the bind-pose coordinates the geometry
@@ -39,6 +45,7 @@ float kgN3(vec3 x){
 }
 float kgFbm(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * kgN3(p); p = p * 2.03 + vec3(17.1, 9.2, 3.7); a *= 0.5; } return s / 0.9375; }
 float kgFbm2(vec3 p){ return (kgN3(p) * 0.65 + kgN3(p * 2.1 + 7.7) * 0.35); }
+float kgSegD(vec2 p, vec2 a, vec2 b){ vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0)); }
 // Speckles: points jittered anywhere in their cell, found among the 2×2×2 nearest cells (no grid shows), each
 // with its own size and a ragged, stellate outline (melanophores are not discs). Coverage is anti-aliased and,
 // once a speck is smaller than a pixel, fades to its mean so nothing shimmers. id: the nearest speck's hash.
@@ -230,8 +237,10 @@ const FRAG_SURFACE = /* glsl */ `
     vec2 q = vec2(abs(P.x), P.z);      // mirrored (the body plan is symmetric)
     vec2 qs = P.xz;                    // signed (the pigment and the wear are not)
     float dorsal = 1.0 - smoothstep(0.43, 0.5, s);
-    float ventral = smoothstep(0.8, 0.9, s);
-    float faceM = smoothstep(0.3, 0.38, P.z) * smoothstep(0.44, 0.52, s) * (1.0 - ventral);
+    // the sternal plate past the wall (Geometry WALL_END 0.82); the face, the sector of the wall that recedes from the
+    // front margin back and down to the buccal frame and the sternum's front (Geometry faceK)
+    float ventral = smoothstep(0.805, 0.83, s);
+    float faceM = (1.0 - smoothstep(0.22, 0.4, q.x)) * smoothstep(0.03, 0.1, P.z) * smoothstep(0.44, 0.52, s) * (1.0 - ventral);
     float side = (1.0 - dorsal) * (1.0 - ventral);
     float cover = uKgMorph.z;
     // ---- pigment density, built from several scales (060, 049, 057, 008, 009): a broad, asymmetric variation of
@@ -326,24 +335,31 @@ const FRAG_SURFACE = /* glsl */ `
     float gran = 0.5 + 0.5 * cos(q.x * 6.2831853 * 34.0);
     h += subOrb * faceM * 0.003 * gran;
     vec3 fcol = mix(dcol, ground, subOrb * gran * 0.2);
-    float lowF = smoothstep(0.12, 0.04, P.y);
+    float lowF = smoothstep(0.1, 0.03, P.y);
     fcol = mix(fcol, mix(vec3(0.5, 0.46, 0.4), vec3(0.5, 0.46, 0.56), clamp(purple + red, 0.0, 1.0)), lowF * 0.3);
-    // ---- ventral (3.webp): the sternum's lateral plates violet ("the underside red-purple" [L]), deepest toward the
-    // legs, pale lavender in front of the chelipeds' bases; every suture and plate margin white; fine grey dots.
+    // ---- ventral (b30, b39, b61 live; b66, b69 specimens; 3.webp): the sternum's lateral plates violet ("the
+    // underside red-purple" [L]) to blue in the live crab, deepest toward the legs, paler at the front between the
+    // chelipeds' bases; every suture and plate margin white (Morphology STERNUM: the anterior sutures nearly
+    // transverse, the posterior ones swept back); fine black dots all over (b66)
     float zs = P.z;
-    float sutD = min(min(abs(zs - 0.235 + 0.6 * q.x * q.x), abs(zs - 0.085 + 0.5 * q.x * q.x)), min(abs(zs + 0.05 + 0.4 * q.x * q.x), abs(zs + 0.18 + 0.3 * q.x * q.x)));
-    float suture = (1.0 - smoothstep(0.004, 0.014, sutD)) * smoothstep(0.17, 0.27, q.x);
-    // the live underside's violet: deep in pale and purplish individuals (3.webp), faint in the sand-coloured ones
+    float sutD = ${STERNUM_SUTURES};
+    float suture = (1.0 - smoothstep(0.003, 0.009, sutD));
+    // the plate margins: along the coxal sockets and beside the abdominal trough
+    float sEdge = smoothstep(0.815, 0.825, s) * (1.0 - smoothstep(0.835, 0.85, s));
+    float trEdge = (1.0 - smoothstep(0.004, 0.01, abs(q.x - ${f3(STERNUM.trough[0])}))) * step(zs, 0.06);
+    // the live underside's violet: deep in pale and purplish individuals (b30, 3.webp), faint in the sand-coloured
+    // ones; a thin lilac in b39, silvery in b61
     float violetAmt = clamp(0.35 + 0.5 * purple + 0.3 * red + 0.4 * smoothstep(0.82, 0.86, pale), 0.0, 1.0);
-    float violet = violetAmt * (1.0 - smoothstep(0.16, 0.26, zs)) * smoothstep(0.03, 0.12, q.x);
-    vec3 vcol = mix(vec3(0.54, 0.52, 0.6), vec3(0.11, 0.045, 0.3), violet * (0.8 + 0.2 * smoothstep(0.1, 0.3, q.x)));
-    vcol = mix(vcol, vec3(0.82, 0.82, 0.84), suture * 0.85);
+    float violet = violetAmt * (1.0 - smoothstep(-0.04, 0.06, zs) * 0.6) * smoothstep(0.07, 0.13, q.x);
+    vec3 vcol = mix(vec3(0.56, 0.55, 0.6), vec3(0.11, 0.06, 0.34), violet * (0.75 + 0.25 * smoothstep(0.12, 0.3, q.x)));
+    vcol = mix(vcol, vec3(0.82, 0.82, 0.84), clamp(suture + sEdge * 0.7 + trEdge * 0.6, 0.0, 1.0) * 0.85);
+    h -= suture * 0.002;
     vcol = mix(vcol, vec3(0.1, 0.09, 0.11), kgSpeck(P * 85.0 + seedP + 11.0, 0.45, 0.26, fw * 85.0, idd) * 0.5);
     vcol *= 1.0 - (1.0 - smoothstep(0.004, 0.012, q.x)) * 0.3;
     // the front of the sternum lies back under the maxillipeds and the folded chelae: in their shade in the living
     // crab (063, 027), whatever the sun — too small for the shadow map to catch
-    vcol *= 1.0 - 0.55 * smoothstep(0.14, 0.3, zs);
-    float under = smoothstep(0.6, 0.72, s) * (1.0 - ventral) * (1.0 - smoothstep(0.3, 0.42, P.z));
+    vcol *= 1.0 - 0.45 * smoothstep(-0.02, 0.08, zs);
+    float under = smoothstep(0.6, 0.72, s) * (1.0 - ventral) * (1.0 - faceM);
     vec3 ucol = mix(vcol, vec3(0.55, 0.56, 0.62), (1.0 - smoothstep(0.6, 0.7, s)) * 0.6);
     vec3 scol = mix(dcol, ucol, under);
     col = dcol * dorsal + scol * side * (1.0 - faceM) + fcol * faceM * (1.0 - dorsal) + vcol * ventral;
@@ -359,8 +375,12 @@ const FRAG_SURFACE = /* glsl */ `
     float dirt = clamp(smoothstep(0.5, 0.85, dn + cavity * 0.45), 0.0, 1.0) * uKgAsym.z * (1.0 - ventral);
     col = mix(col, vec3(0.3, 0.25, 0.18), dirt * 0.5);
     rough = mix(rough, 0.86, dirt * 0.6);
-    // the buccal cavity (behind the third maxillipeds): dark
-    float cav = (1.0 - smoothstep(0.16, 0.2, q.x)) * smoothstep(0.09, 0.13, P.y) * (1.0 - smoothstep(0.33, 0.37, P.y)) * smoothstep(0.37, 0.4, P.z) * (1.0 - dorsal);
+    // the buccal cavity (behind the third maxillipeds, in the receding face): dark
+    float cav = (1.0 - smoothstep(0.17, 0.21, q.x)) * smoothstep(0.03, 0.07, P.y) * (1.0 - smoothstep(0.3, 0.335, P.y)) * faceM;
+    // the epistome above it: a pale bow across the face, its middle drawn down to a point (b67, b68)
+    float epiY = 0.338 - 0.03 * max(0.0, 1.0 - q.x / 0.1);           // Geometry carapaceFn epi
+    float epi = (1.0 - smoothstep(0.006, 0.014, abs(P.y - epiY))) * (1.0 - smoothstep(0.17, 0.22, q.x)) * faceM;
+    col = mix(col, mix(ground, vec3(0.78, 0.76, 0.72), 0.5), epi * 0.6);
     col = mix(col, vec3(0.02, 0.016, 0.014), cav);
     rough = mix(rough, 0.35, cav);
     ao = mix(ao, 0.25, cav);
@@ -462,13 +482,16 @@ const FRAG_SURFACE = /* glsl */ `
   }
   // ------------------------------------------------------------------ abdomen (folded under the sternum)
   else if (part < 8.5) {
-    // pale grey-blue, finely speckled, a dusky patch on its middle segments; sutures faint (3.webp)
-    vec3 a = mix(vec3(0.6, 0.64, 0.7), limbG, 0.25);
-    a = mix(a, a * 0.62, exp(-pow((P.z - 0.22) / 0.07, 2.0)) * 0.6);
+    // pale grey-blue to white, finely speckled, a dusky line down its middle somites (b30, b66, 3.webp); the somite
+    // boundaries thin pale-edged lines (b30: the live male's segments stand out)
+    float zz = P.z - ${f3(ABDOMEN.z0)};
+    float cut = seg > 0.5 ? ${abdCuts(ABDOMEN.female)} : ${abdCuts(ABDOMEN.male)};
+    vec3 a = mix(vec3(0.62, 0.65, 0.72), limbG, 0.22);
+    a = mix(a, a * vec3(0.72, 0.66, 0.6), (1.0 - smoothstep(0.012, 0.03, abs(P.x))) * smoothstep(0.08, 0.14, zz) * 0.5);
     a = mix(a, vec3(0.08, 0.08, 0.1), kgSpeck(P * 95.0 + seedP + 23.0, 0.55, 0.26, fw * 95.0, idd) * 0.55);
-    float segs = 1.0 - smoothstep(0.0, 0.006, abs(fract(P.z * 9.0 + 0.2) - 0.5) - 0.47);
-    a *= 1.0 - segs * 0.15;
-    h -= segs * 0.0015;
+    float segs = 1.0 - smoothstep(0.002, 0.007, cut);
+    a = mix(a * (1.0 - segs * 0.2), vec3(0.8, 0.8, 0.82), (1.0 - smoothstep(0.006, 0.01, cut)) * smoothstep(0.003, 0.006, cut) * 0.35);
+    h -= segs * 0.0012;
     col = a; rough = 0.5; wetBias = 0.15;
     ao *= 0.5;
   }

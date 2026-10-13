@@ -42,8 +42,6 @@ export const CARAPACE = {
    * body height as the scale) [P]
    */
   eyeBase: [0.125, 0.4, 0.36],
-  /** sternum ventral face is y = 0; the branchiostegite wall meets it at about this inset [R] */
-  ventralInset: 0.88,
 };
 
 /**
@@ -79,15 +77,23 @@ export const EYE = {
  */
 export const MXP3 = {
   /**
-   * each plate: width (lateral hinge to the midline), height (top of the merus' arch to the ischium's lower edge),
-   * dome height. 063 (CW 317 px): the pair 0.42 CW across and 0.33 tall, from 0.02 to 0.35 above the sternum, the
-   * suture at 0.19 and the notch between the arches from 0.29 up; 027 (CW 285 px): 0.40 × 0.32 [P]
+   * each plate: width (lateral hinge to the midline), height (top of the merus' arch to the ischium's lower edge,
+   * along the plate), dome height. 063 (CW 317 px): the pair 0.42 CW across and 0.33 tall seen from the front, from
+   * 0.02 to 0.35 above the sternum, the suture at 0.19 and the notch between the arches from 0.29 up; 027 (CW 285
+   * px): 0.40 × 0.32. Those heights are foreshortened by the lean (below): along the plate 0.33 / cos 33° ≈ 0.39,
+   * the top just under the epistome, the arches level with the antennular fossae (b67, b68) [P]
    */
-  width: 0.212, height: 0.33, thick: 0.03,
-  /** hinge (outer margin) position: x, y (the plate's mid-height), z (body frame) */
-  hinge: [0.21, 0.185, 0.42],
-  /** plates lean back from vertical (the face slopes a little) */
-  leanDeg: 8,
+  width: 0.212, height: 0.39, thick: 0.03,
+  /**
+   * hinge (outer margin) position: x, y (the plate's mid-height), z (body frame) — just in front of the face
+   * (Morphology FACE), the top at 0.35 above the sternum, the lower edge at 0.02 and 0.14 forward of the sternum
+   */
+  hinge: [0.21, 0.185, 0.25],
+  /**
+   * the plates' tilt from vertical, the top forward: the buccal frame faces forward and down, so they show 0.33 CW
+   * of their length from the front (063) and 0.15–0.2 from below (b69, b30, b66) [P]
+   */
+  leanDeg: -33,
 };
 
 /**
@@ -98,8 +104,11 @@ export const MXP3 = {
  * of the merus [L].
  */
 export const CHELIPED = {
-  /** coxa socket (body frame) and the limb's bind direction (yaw from +Z toward the side, pitch down) */
-  base: [0.21, 0.11, 0.285], yawDeg: 30, pitchDeg: -20,
+  /**
+   * coxa socket (body frame): at the sternum's anterolateral corner, just behind and beside the buccal frame (b69,
+   * b30, b66); and the limb's bind direction (yaw from +Z toward the side, pitch down)
+   */
+  base: [0.245, 0.06, 0.05], yawDeg: 30, pitchDeg: -20,
   coxa: 0.045, basis: 0.04, ischium: 0.04,
   /** merus and carpus slender: the live crab's arm is a thin rod beside the face, not a block (063, 027, 049) [P] */
   merus: 0.26, merusH: 0.11, merusW: 0.07,
@@ -138,23 +147,24 @@ export const CHELIPED = {
  * the meri and carpi show from the front in 063 [P]. Each merus has one undivided oval tympanum covering most of
  * its broad face, above and below [L] (the dark speckled ovals of 009, 010, 049).
  *
- * base: coxa socket (x, y, z) on the ventrolateral edge, under the lateral margin. The four sockets sit in a row
- * along the posterior two-thirds of the side, P2's level with the carapace's middle (z 0.09, just behind the
- * cheliped) and P5's at the posterolateral corner (z −0.27), each coxa nearly touching the next (008, 009 from above;
- * 012, 2.webp from below) [P]. yawDeg: bind direction in the horizontal plane measured from the lateral axis toward
+ * base: coxa socket (x, y, z) in the coxal notches along the sternum's lateral margin (Morphology STERNUM): a close
+ * row from just behind the cheliped's coxa (z −0.02) to the sternum's posterior corner (z −0.29), each coxa nearly
+ * touching the next (b69, b66, b30 from below; 012, 2.webp). The proximal segments run out and forward (P2) or back
+ * (P5) under the branchiostegites, so the meri leave the carapace's margin about 0.1 further forward or back
+ * (008, 009 from above) [P]. yawDeg: bind direction in the horizontal plane measured from the lateral axis toward
  * the front (009, 008: P2 points forward, P3 a little forward, P4 a little back, P5 back) [P]. roll: the leg's twist about its
  * long axis, the dorsal face tilted forward (the anterior margin down): most on the first leg (29°), least on the
  * last (9°). With a depth of a little over a third of the breadth the meri then show 0.15–0.16 CW from above
  * (009, 057) and 0.12–0.13 from the front (063) — both measured with the silhouette fits of SHAPE_AUDIT.md 7 [P].
  */
 export const LEGS = [
-  { name: 1, pereiopod: 'P2', base: [0.33, 0.09, 0.09], yawDeg: 56, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+  { name: 1, pereiopod: 'P2', base: [0.29, 0.05, -0.02], yawDeg: 56, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
     merusB: 0.16, merusD: 0.058, carpusB: 0.1, carpusD: 0.044, propB: 0.09, propD: 0.037, dacB: 0.064, dacD: 0.03, roll: 0.5 },
-  { name: 2, pereiopod: 'P3', base: [0.37, 0.085, -0.035], yawDeg: 22, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.51, carpus: 0.21, propodus: 0.24, dactylus: 0.33,
+  { name: 2, pereiopod: 'P3', base: [0.32, 0.05, -0.115], yawDeg: 22, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.51, carpus: 0.21, propodus: 0.24, dactylus: 0.33,
     merusB: 0.165, merusD: 0.06, carpusB: 0.102, carpusD: 0.045, propB: 0.092, propD: 0.038, dacB: 0.066, dacD: 0.031, roll: 0.35 },
-  { name: 3, pereiopod: 'P4', base: [0.36, 0.085, -0.155], yawDeg: -14, coxa: 0.05, basis: 0.046, ischium: 0.041, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+  { name: 3, pereiopod: 'P4', base: [0.325, 0.05, -0.205], yawDeg: -14, coxa: 0.05, basis: 0.046, ischium: 0.041, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
     merusB: 0.16, merusD: 0.058, carpusB: 0.1, carpusD: 0.044, propB: 0.09, propD: 0.037, dacB: 0.064, dacD: 0.03, roll: 0.25 },
-  { name: 4, pereiopod: 'P5', base: [0.31, 0.09, -0.265], yawDeg: -44, coxa: 0.045, basis: 0.042, ischium: 0.038, merus: 0.37, carpus: 0.16, propodus: 0.19, dactylus: 0.26,
+  { name: 4, pereiopod: 'P5', base: [0.29, 0.05, -0.29], yawDeg: -36, coxa: 0.045, basis: 0.042, ischium: 0.038, merus: 0.37, carpus: 0.16, propodus: 0.19, dactylus: 0.26,
     merusB: 0.14, merusD: 0.052, carpusB: 0.088, carpusD: 0.04, propB: 0.08, propD: 0.034, dacB: 0.058, dacD: 0.028, roll: 0.15 },
 ];
 
@@ -184,11 +194,59 @@ export const STANCE = {
 
 /** abdomen: male narrow (006), female broad and rounded (062); folded tight under the sternum [P][L] */
 export const ABDOMEN = {
-  /** male: a narrow plate about a fifth of the body wide, tapering to a rounded telson (3.webp, 006) */
-  male: { width0: 0.26, width1: 0.22, length: 0.42 },
-  female: { width0: 0.52, width1: 0.46, length: 0.44 },
-  z0: -0.36,
+  /**
+   * male: a narrow strip lying in a trough along the midline of the sternum, from its posterior margin almost to its
+   * front — the basal somites 1–2 broad across the posterior margin, somites 3–6 parallel-sided, the telson a
+   * rounded tip (b30, b66, b69: 0.17–0.26 of the sternum's width; 062) [P]. widths at the base (somites 1–2), along
+   * somites 3–6 and at the telson; somite lengths from the base forward (b30)
+   */
+  male: { baseWidth: 0.25, width: 0.15, telsonWidth: 0.12, somites: [0.035, 0.035, 0.06, 0.065, 0.07, 0.075], telson: 0.085 },
+  /**
+   * female: a broad rounded plate covering most of the sternum, its lateral margins nearly reaching the coxae, the
+   * front rounded (b61, b39, 2.webp): widths at the base, the widest point (somites 4–5) and the telson
+   */
+  female: { baseWidth: 0.4, width: 0.56, telsonWidth: 0.2, somites: [0.03, 0.035, 0.06, 0.07, 0.075, 0.08], telson: 0.07 },
+  /** the posterior margin of the abdomen (body z), at the sternum's posterior end [P] */
+  z0: -0.385,
 };
+
+/**
+ * The sternum (the body's underside), measured on the ventral views b69, b66 (specimens) and b30, b39, 2.webp (live
+ * crabs on their backs), scaled by the third maxillipeds' width (0.42–0.45 CW, as in 063): a broad shield 0.66 CW
+ * across between the coxae and 0.47 long, its front a straight edge behind the buccal frame (z 0.08), the cheliped
+ * coxae at its anterolateral corners and the four walking legs' coxae in a close row along each side, the last at
+ * the posterior corner [P]. Plan outline, left half, front midline round to the posterior midline.
+ */
+export const STERNUM = {
+  outline: [
+    [0, 0.08], [0.1, 0.08], [0.17, 0.076], [0.215, 0.064], [0.245, 0.04], [0.27, 0.005], [0.295, -0.04],
+    [0.316, -0.09], [0.33, -0.15], [0.33, -0.2], [0.316, -0.25], [0.29, -0.3], [0.25, -0.34], [0.19, -0.37],
+    [0.1, -0.386], [0, -0.39],
+  ],
+  /** height of its lateral margin above its centre: the plate is gently convex [P] */
+  edgeY: 0.025,
+  /**
+   * sutures between the sternites: from beside the abdomen out to the gaps between the coxae, the anterior ones
+   * nearly transverse, the posterior ones swept back (b30, b66: white lines on the live crab) [P]: [x, z] medial
+   * end → lateral end
+   */
+  sutures: [
+    [[0.085, 0.012], [0.262, 0.01]],
+    [[0.085, -0.068], [0.305, -0.066]],
+    [[0.085, -0.148], [0.33, -0.163]],
+    [[0.085, -0.228], [0.318, -0.252]],
+  ],
+  /** the trough the male abdomen lies in: half-width, depth [P] */
+  trough: [0.082, 0.012],
+};
+
+/**
+ * The face in profile, on the midline: the deflexed front, the antennular fossae under it, the epistome, and the
+ * buccal frame sloping down and back to the sternum's front — the third maxillipeds face forward and down (seen
+ * from below they show 0.15–0.2 CW of their length, from the front 0.33: b69, b30, b66 against 063) [P].
+ * [y, z] from the front margin down.
+ */
+export const FACE = [[0.44, 0.41], [0.4, 0.388], [0.36, 0.352], [0.33, 0.322], [0.02, 0.118], [0.0, 0.08]];
 
 /** size: carapace width (mm). Max ≈ 10 mm (males), ≈ 8 mm (females) (Wada 1981); lab adults 8 ± 1 mm (Sassa & Watabe 2008) [L] */
 export const SIZE = { meanCW_mm: 8.0, sdCW_mm: 1.2, minCW_mm: 3.5, maxCW_mm: 10.5, maleMax_mm: 10.5, femaleMax_mm: 8.5 };
