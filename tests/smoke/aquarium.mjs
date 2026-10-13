@@ -50,16 +50,28 @@ try {
   const initialWallet = await page.evaluate(() => { const a = window.__higata; return { money: a.encyclopedia.money.value, tickets: a.equipmentCollection.value.tickets, draws: a.equipmentCollection.value.draws }; });
   assert.deepEqual(initialWallet, { money: 0, tickets: 10, draws: 0 });
   await page.getByRole('button', { name: /排出アイテム・確率を見る/ }).click();
-  assert.equal(await page.locator('.gacha-pool li').count(), 36);
-  await page.getByLabel('ガチャの設備種類').selectOption('stand'); assert.equal(await page.locator('.gacha-pool li').count(), 2);
+  // The pool as the screen lists it ("R · 0.83% · 未所持"): every design but the initial ones, N weighing 4 and R 1.
+  // Its size and total weight come from the list, so the test follows the catalog as it grows.
+  const pool = await page.locator('.gacha-pool li').evaluateAll((lis) => lis.map((li) => {
+    const [rarity, pct] = li.querySelector('small').textContent.split(' · ');
+    return { name: li.querySelector('strong').textContent, rarity, pct: parseFloat(pct) };
+  }));
+  assert.ok(pool.length >= 36 && pool.every((p) => p.rarity === 'N' || p.rarity === 'R'), JSON.stringify(pool.slice(0, 3)));
+  assert.ok(Math.abs(pool.reduce((n, p) => n + p.pct, 0) - 100) < 0.5, 'the listed rates add up to 100%');
+  const gachaWeight = pool.reduce((n, p) => n + (p.rarity === 'R' ? 1 : 4), 0);
+  const stands = pool.filter((p) => /キャビネット|メタルフレーム/.test(p.name)).length;
+  await page.getByLabel('ガチャの設備種類').selectOption('stand'); assert.equal(await page.locator('.gacha-pool li').count(), stands);
   await page.getByRole('button', { name: /排出アイテム・確率を見る/ }).click();
   await page.evaluate(() => window.__higata.addMoney(1200));
-  // Controlled draws make the integration reproducible, including duplicates and all relevant finishes.
-  await page.evaluate(() => {
+  // Controlled draws make the integration reproducible, including duplicates and all relevant finishes. The values
+  // are positions in the first 90 weight units (the 60 cm designs, five units per category: ivory 4, studio 1), which
+  // keep their order when sizes are added at the end of the pool: 9.5 stand-studio, 0.5 tank-ivory, 20.5 ledLight-ivory,
+  // 50.5 airStone-ivory, 54.5 airStone-studio.
+  await page.evaluate((total) => {
     window.__gachaRandom = Math.random;
     const values = [9.5, 0.5, 20.5, 50.5, 50.5, 54.5, 9.5, 0.5, 50.5, 54.5]; let i = 0;
-    Math.random = () => values[i++ % values.length] / 90;
-  });
+    Math.random = () => values[i++ % values.length] / total;
+  }, gachaWeight);
   await page.getByRole('button', { name: /10回引く/ }).click();
   await page.waitForFunction(() => !window.__higata.gachaBusy.value && window.__higata.equipmentCollection.value.draws === 10);
   await page.evaluate(() => { Math.random = window.__gachaRandom; });
@@ -73,7 +85,7 @@ try {
   assert.deepEqual(await page.evaluate(() => ({ collection: window.__higata.equipmentCollection.value, money: window.__higata.encyclopedia.money.value })), draw);
   await page.screenshot({ animations: 'disabled', path: new URL('aquarium-gacha.png', output).pathname });
   // Test-only grant exercises the single draw button and concurrent draw guard.
-  await page.evaluate(() => { const a = window.__higata; a.equipmentCollection.value = { ...a.equipmentCollection.value, tickets: 2 }; window.__gachaRandom = Math.random; Math.random = () => 85.5 / 90; });
+  await page.evaluate((total) => { const a = window.__higata; a.equipmentCollection.value = { ...a.equipmentCollection.value, tickets: 2 }; window.__gachaRandom = Math.random; Math.random = () => 85.5 / total; }, gachaWeight);
   await page.getByRole('button', { name: /1回引く/ }).click();
   await page.waitForFunction(() => !window.__higata.gachaBusy.value && window.__higata.equipmentCollection.value.draws === 11);
   assert.equal(await page.evaluate(() => window.__higata.equipmentCollection.value.tickets), 1);
@@ -143,11 +155,18 @@ try {
   const fishHeight = await page.evaluate(() => { const a = window.__higata, o = a.tank.occupants[0]; return o.root.getWorldPosition(a.tank.camera.position.clone()).y; });
   assert.ok(fishHeight >= 0.73 && fishHeight <= 1.04);
   await page.getByRole('button', { name: '‹ 設備一覧', exact: true }).click();
-  await page.getByRole('button', { name: '背面を見る', exact: true }).click();
+  await page.getByRole('button', { name: '背面', exact: true }).click();
   await page.evaluate(() => { for (let i = 0; i < 70; i++) window.__higata.tank.updateFrozen(); });
   const rearFrame = await page.evaluate(() => window.__higata.frameCount); await page.waitForFunction((f) => window.__higata.frameCount >= f + 2, rearFrame);
   await page.screenshot({ animations: 'disabled', path: new URL('aquarium-rear.png', output).pathname });
-  await page.evaluate(() => window.__higata.writeSave());
+  // The fish above went straight into the tank's list; a save request settles the introduction quest it completes (as
+  // putting it in by hand would). Ambient fish behavior may complete the behavior quest at any moment, so it counts as
+  // claimed: the reload then has nothing new to award and the CR balance stays exact.
+  await page.evaluate(() => {
+    const a = window.__higata, c = a.equipmentCollection.value, p = c.progression;
+    if (!p.questRewards.includes('behavior')) a.equipmentCollection.value = { ...c, progression: { ...p, questRewards: [...p.questRewards, 'behavior'] } };
+    a.requestSave(); return a.writeSave();
+  });
   const saved = await page.evaluate(() => ({ layout: window.__higata.tank.currentLayout, collection: window.__higata.equipmentCollection.value, money: window.__higata.encyclopedia.money.value }));
   await page.reload(); await page.waitForFunction(() => !!window.__higata);
   await page.getByRole('button', { name: /つづきから/ }).click(); await page.waitForFunction(() => window.__higata.mode === 'home');
