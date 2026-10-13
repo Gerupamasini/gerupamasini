@@ -1,19 +1,20 @@
 import type { EquipmentLayout } from '../aquarium/state';
+import { TankAmamo, TANK_AMAMO_RADIUS } from './TankAmamo';
 import { CatmullRomCurve3, DoubleSide, Group, IcosahedronGeometry, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, SphereGeometry, TubeGeometry, Vector3, type BufferGeometry } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export type TankSubstrate = 'sand' | 'mud' | 'none';
-export type TankItemType = 'stone_s' | 'stone_l' | 'driftwood' | 'shell' | 'plant';
+export const TANK_ITEM_TYPES = ['stone_s', 'stone_l', 'driftwood', 'shell', 'plant', 'amamo'] as const;
+export type TankItemType = typeof TANK_ITEM_TYPES[number];
 export interface TankItem { id: string; type: TankItemType; x: number; z: number; rot: number }
 export interface TankLayout { substrate: TankSubstrate; items: TankItem[]; equipment?: EquipmentLayout }
 
 export const TANK_SUBSTRATES: TankSubstrate[] = ['sand', 'mud', 'none'];
-export const TANK_ITEM_TYPES: TankItemType[] = ['stone_s', 'stone_l', 'driftwood', 'shell', 'plant'];
 export const TANK_MAX_ITEMS = 12;
 export const defaultTankLayout = (): TankLayout => ({ substrate: 'sand', items: [] });
 
 /** Footprint radius (m) used to keep items apart when placing them. */
-export const ITEM_RADIUS: Record<TankItemType, number> = { stone_s: 0.02, stone_l: 0.05, driftwood: 0.09, shell: 0.022, plant: 0.04 };
+export const ITEM_RADIUS: Record<TankItemType, number> = { stone_s: 0.02, stone_l: 0.05, driftwood: 0.09, shell: 0.022, plant: 0.04, amamo: TANK_AMAMO_RADIUS };
 
 function mulberry(seed: number): () => number {
   let a = seed >>> 0;
@@ -199,7 +200,8 @@ function seagrass(seed: number, rnd: () => number): Group {
 }
 
 /** A decoration as a group whose origin sits on the sand. The caller lights its meshes and sets the shadows. */
-export function buildTankItem(type: TankItemType, seed: number): Group {
+export function buildTankItem(type: TankItemType, seed: number, amamo?: TankAmamo): Group {
+  if (type === 'amamo') return (amamo ?? new TankAmamo()).create(seed);
   const g = new Group();
   const rnd = mulberry(seed);
   switch (type) {

@@ -38,6 +38,8 @@ jobs:
         run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:room
       - name: Aquarium shop, capacity and introduction quest regressions
         run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:progression
+      - name: Aquarium amamo model and placement regressions
+        run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:amamo
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

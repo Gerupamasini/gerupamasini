@@ -10,6 +10,7 @@ npm run dev          # http://localhost:5173/gerupamasini/
 npm run check        # 型検査 + 単体テスト + データ検証
 npm run build        # dist/ を生成（GitHub Pages 用のベースパス /gerupamasini/）
 npm run smoke:progression # ビルド後、水槽・ろ過装置のショップ、飼育上限、導入クエストをブラウザで検証
+npm run smoke:amamo   # ビルド後、既存アマモモデルの水槽配置・操作・保存・スマホ表示を検証
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
@@ -45,6 +46,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
+- [水槽のアマモ](docs/aquarium-amamo/README.md) 既存モデルをレイアウト用インテリアとして配置・移動・回転・保存。画質と距離によるLOD、スマホ画面写真。
 - [水槽・ろ過装置のショップと導入クエスト](docs/aquarium-progression/README.md) CRでの解放・Lv.5までの強化、最大20匹の飼育、9件のクエストとスマホ画面写真。
 - [生きものの物理](docs/creatures/physics.md) 全種共通の物理層（`src/creatures/physics/`）。生きもの同士が重ならないように押し分ける接触、体の足場の面に沿って寝かせる接地（ハゼ類・アサリ類）、うねりと寄せ波で小さな魚を前後に運んで揺らす水の動き。
 - [砂煙](docs/creatures/sand-dust.md) 魚やエイが舞い上げる砂（`src/creatures/fx/SandDust.ts`）。全種共通の 1 回の描画で、膨らんでゆっくり沈みうねりで揺れる泥の雲・すぐ落ちる砂粒・漂う墨。底質で色と量が変わり、画質で間引く。いまはアカエイ・イシガレイ・ミミイカ。

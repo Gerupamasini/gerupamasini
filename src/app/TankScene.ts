@@ -18,6 +18,7 @@ import type { LoadedModel } from '../creatures/models/ModelLoader';
 import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
+import { TankAmamo, TankAmamoPlant } from './TankAmamo';
 import { Box3, Group } from 'three';
 import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
 import { MAX_TANK_ANIMALS, animalSlotPosition } from '../aquarium/progression';
@@ -109,6 +110,12 @@ export class TankScene {
   private readonly nudgeV2 = new Vector3();
   private readonly nudgeV3 = new Vector3();
   private readonly itemObjects = new Map<string, Object3D>();
+  private readonly amamo = new TankAmamo(kit => {
+    for (const material of [...kit.leafMat, ...kit.sheathMat, kit.rhizomeMat, kit.rootMat]) {
+      const chain = material.onBeforeCompile, key = material.customProgramCacheKey();
+      lightByCaustics(material, this.U, `tank-${key}`, { chain });
+    }
+  });
   private itemSeq = 0;
   /** the tank's shared uniform block: the water, the caustic light on the materials, the passes */
   readonly U: Record<string, IUniform>;
@@ -392,7 +399,7 @@ export class TankScene {
     this.equipment.applyPreset();
     if (!layout.equipment && layout.substrate === 'none') this.moveBottomEquipment(-SAND_H);
     this.applySubstrate();
-    for (const o of this.itemObjects.values()) { this.disposeLitMaterials(o); o.traverse((m) => { if (m instanceof Mesh) m.geometry.dispose(); }); o.removeFromParent(); }
+    for (const o of this.itemObjects.values()) this.disposeItem(o);
     this.itemObjects.clear();
     for (const it of this.layout.items) this.spawnItem(it);
   }
@@ -431,15 +438,29 @@ export class TankScene {
 
   private spawnItem(it: TankItem): void {
     const seed = [...it.id].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 7);   // the same id always gives the same shape
-    const obj = buildTankItem(it.type, seed);
+    const obj = buildTankItem(it.type, seed, this.amamo);
     const meshes: Mesh[] = [];
     obj.traverse((o) => { if ((o as Mesh).isMesh) { const m = o as Mesh; m.castShadow = m.castShadow !== false && it.type !== 'plant'; m.receiveShadow = true; meshes.push(m); } });
-    this.lightMeshesByCaustics(meshes, it.type === 'plant');
+    if (!(obj instanceof TankAmamoPlant)) this.lightMeshesByCaustics(meshes, it.type === 'plant');
     obj.position.set(it.x, this.itemY(it.x, it.z), it.z);
     obj.rotation.y = it.rot;
     obj.userData.itemId = it.id;
     this.itemsRoot.add(obj);
     this.itemObjects.set(it.id, obj);
+    this.updateAmamo();
+  }
+
+  private updateAmamo(dt = 0): void {
+    this.amamo.update(this.camera, this.aquariumRoot.position.y + this.dimensions.waterHeight, this.preset.vegetation, dt, this.equipment.flows);
+  }
+
+  private disposeItem(obj: Object3D): void {
+    if (obj instanceof TankAmamoPlant) obj.dispose();
+    else {
+      this.disposeLitMaterials(obj);
+      obj.traverse(o => { if (o instanceof Mesh) o.geometry.dispose(); });
+      obj.removeFromParent();
+    }
   }
 
   /** Add a decoration at a free spot; null when the tank is full. */
@@ -461,7 +482,7 @@ export class TankScene {
 
   removeItem(id: string): void {
     const obj = this.itemObjects.get(id);
-    if (obj) { this.disposeLitMaterials(obj); obj.traverse((o) => { if (o instanceof Mesh) o.geometry.dispose(); }); obj.removeFromParent(); }
+    if (obj) this.disposeItem(obj);
     this.itemObjects.delete(id);
     this.layout.items = this.layout.items.filter((i) => i.id !== id);
   }
@@ -682,6 +703,7 @@ export class TankScene {
   /** The tier's shadows, water rate, specks and passes (the occupants' model tiers are reloaded by setQuality). */
   private applyPreset(): void {
     const preset = this.preset;
+    this.updateAmamo();
     this.lampLight.castShadow = preset.shadows;
     this.lampLight.shadow.map?.dispose(); this.lampLight.shadow.map = null;
     this.lampLight.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
@@ -842,6 +864,7 @@ export class TankScene {
   updateFrozen(): void {
     if (!this.aquariumRoot.visible) return;
     this.equipment.updateFrozen(this.camera);
+    this.updateAmamo();
     this.updateEquipmentLighting();
     this.updateProbe(1 / 60);
     this.sortOverlay(1 / 60);
@@ -861,6 +884,7 @@ export class TankScene {
     else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
     else this.controls?.update();
     this.equipment.update(dt, this.camera, this.gl.domElement.height);
+    this.updateAmamo(dt);
     this.updateEquipmentLighting();
     let flow = 0;
     for (const f of this.equipment.flows) flow += f.flowRate;
@@ -899,6 +923,8 @@ export class TankScene {
   }
 
   dispose(): void {
+    for (const obj of this.itemObjects.values()) this.disposeItem(obj);
+    this.itemObjects.clear();
     this.equipment.dispose();
     this.deactivate();
     this.clearOccupants();

@@ -120,11 +120,12 @@ function LayoutTab({ app }: { app: App }) {
   const selected = ui.tankSelected.value;
   return (
     <Fragment>
-      <h4>{t('tank.substrate')}</h4>
+      <div class="tank-substrate-row"><h4>{t('tank.substrate')}</h4>
       <div class="seg">
         {TANK_SUBSTRATES.map((s) => (
           <button key={s} class={layout.substrate === s ? 'on' : ''} onClick={() => app.tankSetSubstrate(s)}>{t(`tank.sub.${s}`)}</button>
         ))}
+      </div>
       </div>
       <h4>{t('tank.add')} <span class="num" style={{ marginLeft: '8px' }}>{layout.items.length} / {TANK_MAX_ITEMS}</span></h4>
       <div class="tank-add">

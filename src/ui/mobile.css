@@ -223,9 +223,13 @@
 .touch-device .tank-editor-panel h4 { margin: 8px 0 4px; letter-spacing: 0; }
 .touch-device .tank-editor-panel .equipment-detail-head h4 { margin: 0; }
 .touch-device .tank-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-.touch-device .tank-add button { min-height: 36px; padding: 4px; font-size: 11px; letter-spacing: 0; }
+.touch-device .tank-add button { min-height: 32px; height:32px; padding: 4px; font-size: 11px; letter-spacing: 0; }
+.touch-device .tank-substrate-row { display:flex; align-items:center; gap:8px; }
+.touch-device .tank-editor-panel .tank-substrate-row h4 { margin:0; flex-shrink:0; font-size:11px; }
+.touch-device .tank-substrate-row .seg { flex:1; margin:0; }
+.touch-device .drawer .tank-substrate-row .seg button { min-height:30px; height:30px; padding:3px 6px; font-size:11px; }
 .touch-device .tank-items li { padding: 4px 6px; font-size: 12px; }
-.touch-device .tank-item-actions button { min-height: 36px; }
+.touch-device .tank-item-actions button { min-height:30px; height:30px; padding:3px 8px; font-size:11px; }
 .touch-device .card.zukan { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); padding: 12px; overflow: hidden; }
 .touch-device .zukan .card-head { margin-bottom: 8px; }
 .touch-device .zukan-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
@@ -301,6 +305,11 @@
   .touch-device .gacha-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (orientation: landscape) and (max-height: 400px) {
+  .touch-device .tank-editor-panel .drawer-body > h4 { margin:4px 0 2px; font-size:11px; }
+  .touch-device .tank-add { gap:3px; margin:3px 0; }
+  .touch-device .tank-add button { height:28px; min-height:28px; padding:2px; }
+  .touch-device .tank-items li { padding:2px 4px; margin:1px 0; }
+  .touch-device .tank-item-actions button { height:28px; min-height:28px; }
   .touch-device .tank-editor-panel .drawer-head button { height: 32px; min-height: 32px; }
   .touch-device .tank-editor-panel > .seg { padding: 2px; }
   .touch-device .tank-editor-panel > .seg button { min-height: 30px; }

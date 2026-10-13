@@ -2,7 +2,7 @@ import { get, set, setMany, del } from 'idb-keyval';
 import { z } from 'zod';
 import type { TicketState } from './GameClock';
 import type { IndividualRecord } from '../creatures/Individual';
-import type { TankLayout } from '../app/TankLayout';
+import { TANK_ITEM_TYPES, type TankLayout } from '../app/TankLayout';
 import { canPlaceTank, initialRoom, type AquariumRoom } from '../aquarium/room';
 import { TANK_DIMENSIONS, type TankSize } from '../aquarium/state';
 import { equipmentItem, tankSizeItemId } from '../aquarium/catalog';
@@ -69,7 +69,7 @@ const progressSchema = z.object({
 });
 const layoutSchema = z.object({
   substrate: z.enum(['sand', 'mud', 'none']),
-  items: z.array(z.object({ id: z.string().min(1), type: z.enum(['stone_s', 'stone_l', 'driftwood', 'shell', 'plant']), x: finite.min(-1).max(1), z: finite.min(-1).max(1), rot: finite })).max(12),
+  items: z.array(z.object({ id: z.string().min(1), type: z.enum(TANK_ITEM_TYPES), x: finite.min(-1).max(1), z: finite.min(-1).max(1), rot: finite })).max(12),
   equipment: z.unknown().optional(),
 });
 /** Validate before migration or writing: a version number alone is not a save. */

@@ -3,6 +3,8 @@ import { AquariumEquipment, TANK_DIMENSIONS, type RoomTank } from '../aquarium';
 import { animalSlotPosition } from '../aquarium/progression';
 import { TANK_OFFSET_Y, SAND_H } from './TankScene';
 import { buildTankItem } from './TankLayout';
+import { TankAmamo } from './TankAmamo';
+import type { Quality } from '../core/Settings';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { generateIndividual } from '../creatures/Individual';
@@ -16,6 +18,7 @@ export class RoomTanks extends Group {
   private key = '';
   private rigs: AquariumEquipment[] = [];
   private drivers: Driver[] = [];
+  private readonly amamoBeds: { plants: TankAmamo; waterY: number }[] = [];
   private readonly water = new MeshStandardMaterial({ color: 0x8eafbb, transparent: true, opacity: 0.14, roughness: 0.12, side: DoubleSide, depthWrite: false });
   private readonly glass = new MeshStandardMaterial({ color: 0xcde2e7, transparent: true, opacity: 0.08, roughness: 0.15, depthWrite: false });
   private readonly sand = new MeshStandardMaterial({ color: 0xb09c78, roughness: 0.95 });
@@ -33,7 +36,9 @@ export class RoomTanks extends Group {
       const water = new Mesh(new PlaneGeometry(d.width - 0.005, d.depth - 0.005).rotateX(-Math.PI / 2), this.water); water.position.y = d.waterHeight; root.add(water);
       const floor = tank.layout.substrate === 'none' ? 0 : SAND_H;
       if (floor) { const bed = new Mesh(new BoxGeometry(d.width - 0.005, floor, d.depth - 0.005), tank.layout.substrate === 'mud' ? this.mud : this.sand); bed.position.y = floor / 2; root.add(bed); }
-      for (const item of tank.layout.items) { const decoration = buildTankItem(item.type, [...item.id].reduce((n, c) => n + c.charCodeAt(0), 0)); decoration.position.set(item.x, floor, item.z); decoration.rotation.y = item.rot; decoration.userData.roomDecoration = true; root.add(decoration); }
+      const plants = new TankAmamo(kit => { kit.uniforms.uAmWater.value = TANK_OFFSET_Y + d.waterHeight; });
+      this.amamoBeds.push({ plants, waterY: TANK_OFFSET_Y + d.waterHeight });
+      for (const item of tank.layout.items) { const seed = [...item.id].reduce((n, c) => (Math.imul(n, 31) + c.charCodeAt(0)) >>> 0, 7); const decoration = buildTankItem(item.type, seed, plants); decoration.position.set(item.x, floor, item.z); decoration.rotation.y = item.rot; decoration.userData.roomDecoration = true; root.add(decoration); }
       for (const [slot, record] of tank.individuals.entries()) {
         const sp = species(record.speciesId), entry = sp && DRIVERS[sp.model.driver ?? '']; if (!sp || !entry) continue;
         void (async () => {
@@ -53,10 +58,14 @@ export class RoomTanks extends Group {
       }
     }
   }
-  updateLOD(camera: Camera): void { this.rigs.forEach(r => r.traverse(o => { if (o instanceof LOD) o.update(camera); })); }
+  updateLOD(camera: Camera, dt = 0, quality: Quality = 'low'): void {
+    this.rigs.forEach(r => r.traverse(o => { if (o instanceof LOD) o.update(camera); }));
+    this.amamoBeds.forEach(bed => bed.plants.update(camera, bed.waterY, quality, dt));
+  }
   private clearTanks(): void {
     ++this.generation; this.drivers.forEach(d => d.dispose()); this.drivers = [];
     this.rigs.forEach(r => r.dispose()); this.rigs = [];
+    this.amamoBeds.forEach(bed => bed.plants.dispose()); this.amamoBeds.length = 0;
     this.traverse(o => {
       if (o.userData.roomDecoration) {
         const materials = new Set<Material>();

@@ -1943,7 +1943,7 @@ export class App {
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
     } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
       if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
-      this.roomTanks.updateLOD(this.tank.camera);
+      this.roomTanks.updateLOD(this.tank.camera, mode === 'tankEdit' || mode === 'roomPlacement' ? 0 : dt, this.settings.homeQuality);
       const heroOn = !!this.hero && this.tank.heroActive;
       if (heroOn) this.hero!.setLighting(this.tank.lighting);
       if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
