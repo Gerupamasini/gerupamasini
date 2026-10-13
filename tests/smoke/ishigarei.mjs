@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PNG } from 'pngjs';
 import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -18,6 +19,39 @@ const PORT = 5204;
 const url = `http://localhost:${PORT}/gerupamasini/`;
 const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Mean colour on the back of a buried fish against the ground in a ring round it, in a screenshot: the relative
+ * difference per channel (worst) and both means (sRGB 0..255).
+ */
+async function coverMatch(page, id, file) {
+  const pts = await page.evaluate((id) => {
+    const a = window.__higata, d = a.creatures.driverOf(id), st = d.behaviour.state, K = d.root.scale.x, cam = a.camera;
+    const W = innerWidth, H = innerHeight, v = cam.position.clone();
+    const fx = Math.sin(st.heading), fz = Math.cos(st.heading);
+    const at = (x, z, y) => { v.set(x, y ?? a.world.terrain.heightAt(x, z), z).project(cam); return [Math.round((v.x + 1) / 2 * W), Math.round((1 - v.y) / 2 * H)]; };
+    const back = [];
+    for (const s of [0.01, 0.018, 0.026]) for (const l of [-0.005, 0, 0.005]) back.push(at(st.pos.x - fx * s * K + fz * l * K, st.pos.z - fz * s * K - fx * l * K, st.pos.y + 0.002 * K));
+    const ring = [];
+    // just outside the fins: an ellipse round the body (half length 46 mm, half width 30 mm on the 70 mm fish)
+    for (let i = 0; i < 16; i++) { const th = (i / 16) * Math.PI * 2, a = Math.cos(th) * 0.046 * K, l = Math.sin(th) * 0.03 * K; ring.push(at(st.pos.x - fx * 0.016 * K + fx * a + fz * l, st.pos.z - fz * 0.016 * K + fz * a - fx * l)); }
+    return { back, ring };
+  }, id);
+  const buf = await page.screenshot({ path: file });
+  const png = PNG.sync.read(buf);
+  const mean = (list) => {
+    const m = [0, 0, 0]; let n = 0;
+    for (const [x, y] of list) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const X = x + dx, Y = y + dy;
+      if (X < 0 || Y < 0 || X >= png.width || Y >= png.height) continue;
+      const k = (Y * png.width + X) * 4; m[0] += png.data[k]; m[1] += png.data[k + 1]; m[2] += png.data[k + 2]; n++;
+    }
+    return m.map((c) => c / Math.max(1, n));
+  };
+  const cover = mean(pts.back), ground = mean(pts.ring);
+  const diff = cover.map((c, i) => (c - ground[i]) / Math.max(1, ground[i]));
+  return { worst: Math.max(...diff.map(Math.abs)), diff: diff.map((x) => +x.toFixed(3)), cover: cover.map(Math.round), ground: ground.map(Math.round) };
+}
 async function waitFrames(page, n, timeoutMs = 900000) {
   const start = await page.evaluate(() => window.__higata?.frameCount ?? 0);
   await page.waitForFunction((target) => (window.__higata?.frameCount ?? 0) >= target, start + n, { timeout: timeoutMs });
@@ -95,10 +129,37 @@ try {
   console.log('rest', await look(fish.out[0].id, 0.55, 0.5, -0.75));
   await waitFrames(page, 8);
   await page.screenshot({ path: path.join(outDir, 'ishigarei-ingame-crouch.png') });
-  await page.evaluate((id) => { const a = window.__higata; a.creatures.driverOf(id).setIntent({ id: 99, kind: 'burrow', urgency: 0.5, seconds: 60 }); }, fish.out[0].id);
+  await page.evaluate((id) => { const a = window.__higata, i = a.creatures.get(id); i.brain.busyUntil = Infinity; i.brain.done = false; a.creatures.driverOf(id).setIntent({ id: 99, kind: 'burrow', urgency: 0.5, seconds: 60 }); }, fish.out[0].id);
   await waitFrames(page, 40);
   console.log('burrow', await page.evaluate((id) => window.__higata.creatures.driverOf(id).debugLabel(), fish.out[0].id));
   await page.screenshot({ path: path.join(outDir, 'ishigarei-ingame-buried.png') });
+  // the sand thrown over it takes the colour of the ground round it
+  // (the player stands back, out of their flight distance; whichever lies buried, the first told again to dig in)
+  await look(fish.out[0].id, 1.6, 1.5, -0.6);
+  const ids = fish.out.map((f) => f.id);
+  let buried = null;
+  for (let round = 0; round < 60 && !buried; round++) {
+    const st = await page.evaluate((ids) => {
+      const cs = window.__higata.creatures;
+      // (told through the driver, the brain is kept busy meanwhile, or its next idle choice would cut the digging short)
+      const d0 = cs.driverOf(ids[0]), i0 = cs.get(ids[0]);
+      if (d0 && i0 && d0.behaviour.state.mode !== 'BURROW_IN_SAND') {
+        i0.brain.busyUntil = Infinity; i0.brain.done = false;
+        d0.setIntent({ id: 98, kind: 'burrow', urgency: 0.5, seconds: 120 });
+      }
+      return ids.map((id) => { const b = cs.driverOf(id)?.behaviour; return b ? [id, b.state.mode, b.state.phase, +b.state.bury.toFixed(2)] : [id, 'gone']; });
+    }, ids);
+    buried = st.find((x) => x[2] === 'buried' && x[3] > 0.8)?.[0] ?? null;
+    if (!buried) { if (round % 5 === 0) console.log('waiting for a buried one', JSON.stringify(st)); await waitFrames(page, 3); }
+  }
+  if (!buried) throw new Error('no flounder buried itself');
+  // the observation's own camera, close
+  await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); const o = a.observation; for (let i = 0; i < 8; i++) o.nudge(-1); o.zoom = true; }, buried);
+  await waitFrames(page, 10);
+  const match = await coverMatch(page, buried, path.join(outDir, 'ishigarei-ingame-cover.png'));
+  console.log('cover', JSON.stringify(match));
+  if (match.worst > 0.1) { console.error(`the sand over the fish does not match the ground (${JSON.stringify(match)})`); code = 1; }
+  await page.evaluate(() => window.__higata.exitObserve());
   await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, fish.out[1].id);
   await waitFrames(page, 14);
   console.log('observed', await page.evaluate((id) => window.__higata.creatures.driverOf(id).debugLabel(), fish.out[1].id));

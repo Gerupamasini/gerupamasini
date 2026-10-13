@@ -1,4 +1,4 @@
-import { Color, Group, Vector3, type Object3D } from 'three';
+import { Color, Group, Vector3, type Mesh, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
 import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import { WaterRider } from '../../physics/water';
@@ -7,7 +7,7 @@ import { Rng, hashInts } from '../../../core/Rng';
 import { createFlounderBehavior } from './behavior.js';
 import { applyPose } from './rig.js';
 import { jawAxis } from './rig.js';
-import { IshigareiLook, SUBSTRATE_TINT, type IshLookSpec } from './materials';
+import { IshigareiLook, wetSubstrateTint, type IshLookSpec } from './materials';
 import { buildModel, disposeModel, syncEyes, LOD1_AT, LOD2_AT, MODEL_TL, type IshigareiModel } from './model';
 import { shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { tickAmimehagiMaterials } from '../amimehagi/materials';
@@ -280,19 +280,29 @@ export class IshigareiDriver implements Driver {
     this.substrateT -= sdt;
     if (this.substrateT <= 0) {
       this.substrateT = 0.7;
-      const s = ctx.floor.sampleAt?.(st.pos.x, st.pos.z);
-      this.bed = s?.substrate;
-      const c = SUBSTRATE_TINT[s?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
-      model.look.setSubstrate(new Color(c[0], c[1], c[2]));
-      // background matching: the melanophores follow the brightness of the ground, slowly
-      const lum = (c[0] + c[1] + c[2]) / 3;
-      this.melGoal = model.look.melaninBase * (1.1 - 1.6 * (lum - 0.19));
+      // the colour of the ground here as it is drawn (the flat's terrain, the tank's bed); without it, the table's
+      // colour of the substrate under water. A bare floor (null) leaves the last sediment's colour
+      const sample = ctx.floor.sampleAt?.(st.pos.x, st.pos.z);
+      this.bed = sample?.substrate;
+      const c = ctx.floor.colorAt
+        ? ctx.floor.colorAt(st.pos.x, st.pos.z, this.groundCol)
+        : wetSubstrateTint(sample?.substrate ?? 'sand', this.groundCol);
+      model.look.setBed(ctx.floor.bed, st.pos.x, st.pos.z);
+      if (c) {
+        model.look.setSubstrate(c);
+        // background matching: the melanophores follow the brightness of the ground, slowly
+        const lum = (c.r + c.g + c.b) / 3;
+        this.melGoal = model.look.melaninBase * Math.min(1.4, Math.max(0.55, 1.1 - 2.2 * (lum - 0.13)));
+      }
     }
     u.uMelanin.value += (this.melGoal - u.uMelanin.value) * (1 - Math.exp(-sdt * 0.1));
     const level = this.locked ? 0 : model.lod.getCurrentLevel();
     // the sediment under the fish (the near tiers lay the blind side and the fins onto it)
     const ground = model.look.ground;
     ground.uniforms.uGroundSink.value = P.sink + P.bury * 0.0012 * root.scale.x;
+    // buried, it lies in the sediment: a low mound with the eyes standing out, not a slab on top of it
+    const fl = Math.min(1, Math.max(0, (P.bury - 0.25) / 0.55));
+    ground.uniforms.uGroundFlat.value = fl * fl * (3 - 2 * fl);
     if (level <= 1) {
       // the patch is in world space (the shader clamps world positions); the floor is in the parent's frame, which
       // the raised home tank and the case only translate
@@ -302,6 +312,7 @@ export class IshigareiDriver implements Driver {
       ground.update(st.pos.x + o.x, st.pos.z + o.z, 0.15 * root.scale.x, (x, z) => ctx.floor.heightAt(x - o.x, z - o.z) + o.y, moved);
     }
     this.updateShadow(P);
+    this.setFinsBuried(P.bury > 0.6);
     this.wash(sdt);
     if (st.mode !== this.lastMode) { this.lastMode = st.mode; this.emit(st.mode.toLowerCase()); }
     this.busy = this.clock < this.until || !f.settled;
@@ -345,6 +356,24 @@ export class IshigareiDriver implements Driver {
     this.washAt.y = ctx.floor.heightAt(this.washAt.x, this.washAt.z) + 0.0015 * K;
     d.stream(dt, rate * K, this.washAt, this.washV, 0.004 * K, 0.008 * K, 1.8, 0.25);
   }
+  private finsBuried = false;
+
+  /** buried, the fins are sand like the bed round them: drawn opaque with it (the transparent pass would show them as
+   *  a veil, and the faded ray tips as a dotted rim); in the open, the translucent membrane again. The meshes' own
+   *  materials, as the home tank lights its own copies of them. */
+  private setFinsBuried(on: boolean): void {
+    if (on === this.finsBuried || !this.model) return;
+    this.finsBuried = on;
+    this.model.root.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh || mesh.renderOrder !== 2) return;
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        m.transparent = !on; m.depthWrite = on; m.alphaTest = on ? 0.5 : 0;
+        m.needsUpdate = true;
+      }
+    });
+  }
+  private readonly groundCol = new Color();
   private readonly origin = new Vector3();
   private readonly originPrev = new Vector3(Number.NaN, 0, 0);
 
@@ -352,7 +381,8 @@ export class IshigareiDriver implements Driver {
   private updateShadow(P: { lift: number; bury: number }): void {
     const f = this.fish, sh = this.shadows, root = this.root;
     if (!f || !sh || this.shadowSlot < 0 || !root || !this.ctx) return;
-    const strength = underwaterSun(sunOf(root), this.sun) * (1 - P.bury);
+    // (under the sand it casts none: what shows of it would be a dark rim through the gaps between the ray tips)
+    const strength = underwaterSun(sunOf(root), this.sun) * (1 - Math.min(1, P.bury / 0.45));
     if (strength <= 0.01) { sh.hide(this.shadowSlot); return; }
     const st = f.state, L = this.sun, K = root.scale.x;
     const h = P.lift + 0.0019 * K;

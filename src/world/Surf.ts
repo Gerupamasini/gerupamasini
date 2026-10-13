@@ -107,6 +107,9 @@ float surfNoise(vec2 p) {
   float n = i.x + i.y * 57.0;
   return mix(mix(surfHash(n), surfHash(n + 1.0), f.x), mix(surfHash(n + 57.0), surfHash(n + 58.0), f.x), f.y);
 }
+// where the swash has drained (or never reaches), the surface lies this far under the sand: clear of the ripples'
+// troughs (the ripple sheet near the viewer has them as real hollows), which the beach's sand drains
+const float SURF_DRY = 0.02;
 float surfNoise1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(surfHash(i * 1.375 + 0.125), surfHash(i * 1.375 + 1.5), f); }
 // a point in the shore's own frame: x seaward, y along the shore
 vec2 surfFrame(vec2 p) { vec2 d = uSurfDir.xy; return vec2(dot(p, d), dot(p, vec2(-d.y, d.x))); }
@@ -343,7 +346,7 @@ Surf surfEval(vec2 xz, float level, float t, bool full) {
   float D = level - Z.x;
   S.D = D;
   // high and dry, above any run-up: the ground itself
-  if (D < -0.9 * uSurf.x - 0.12) { S.eta = -D - 0.002; S.sw = 1.0; return S; }
+  if (D < -0.9 * uSurf.x - 0.12) { S.eta = -D - SURF_DRY; S.sw = 1.0; return S; }
   vec4 A = surfAuxAt(xz);
   float f = surfLvMix(level);
   float T = mix(Z.y, Z.z, f), shelter = mix(A.y, A.z, f);
@@ -421,7 +424,7 @@ Surf surfEval(vec2 xz, float level, float t, bool full) {
   // up the beach (and a little below the still waterline) the surface is the swash's
   if (wsw > 0.0) {
     surfSwashAt(sy, D, ph, ta, m, shelter, full);
-    float esw = gSwash.x > 0.0 ? -D + gSwash.x : -D - 0.002;
+    float esw = gSwash.x > 0.0 ? -D + gSwash.x : -D - SURF_DRY;
     eta = mix(eta, esw, wsw);
     S.sw = wsw;
     S.film = gSwash.x; S.flow = gSwash.y; S.front = gSwash.z * wsw; S.swAge = gSwash.w; S.swUp = gSwUp;
