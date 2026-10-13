@@ -1,5 +1,6 @@
 // ミミイカ viewer: one squid in the photo views (side, back, front, oblique; any tier, any skin state, any behaviour)
 // and a sandy shallow with a few squid driven by the game's own driver, a stand-in brain and the game's water pass.
+// The size line-up: animals of 5–30 mm mantle length side by side on a 1 cm grid.
 // ?capture hides the panel and exposes window.__mm for scripted renders (tools/models/mimiika/render.mjs).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -12,6 +13,7 @@ import { createSquidBehavior } from '../../src/creatures/species/mimiika/behavio
 import { applyPose } from '../../src/creatures/species/mimiika/rig.ts';
 import { makeMysidModel, poseMysid } from '../../src/creatures/species/mimiika/prey.ts';
 import { sandDustFor } from '../../src/creatures/fx/SandDust.ts';
+import { SandFX } from '../../src/creatures/species/akaei/SandFX.ts';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../../src/creatures/species/amimehagi/materials.ts';
 import { WaterPass, makeSpillTexture } from '../../src/world/Water.ts';
 import { createWaves } from '../../src/world/Waves.ts';
@@ -33,7 +35,8 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 let funnelYaw = null, funnelSide = null;
-let scene = null, sq = null, beh = null, studioFx = null, studioPrey = null, squids = [], mode = 'side', lod = 0, seed = 1, simT = 0;
+let scene = null, sq = null, beh = null, studioFx = null, studioPit = null, studioPrey = null, squids = [], lineup = [], mode = 'side', lod = 0, seed = 1, simT = 0;
+let studioNight = false;
 let chromaOverride = null;
 const info = document.getElementById('info');
 
@@ -41,9 +44,12 @@ function clear() {
   if (sq) disposeModel(sq);
   sq = null; beh = null;
   studioFx?.release(); studioFx = null;
+  studioPit?.dispose(); studioPit = null;
   studioPrey = null;
   for (const f of squids) f.driver.dispose();
   squids.length = 0;
+  for (const l of lineup) disposeModel(l.m);
+  lineup.length = 0;
   scene = new THREE.Scene();
 }
 
@@ -59,6 +65,13 @@ const studioFloor = { heightAt: () => FLOOR, waterAt: () => 0.3 };
 const INK = new THREE.Vector3(0.012, 0.01, 0.011);
 
 function poseStudio(dt = 0) {
+  for (const l of lineup) {
+    const Q = l.beh.update(dt || 1 / 60);
+    applyPose(l.holder, l.m.bones, Q);
+    syncLevel(l.m, 0, false);
+    MimiikaDriver.applyMaterials(l.m, Q);
+    l.m.look.uniforms.uGroundY.value = FLOOR;
+  }
   if (!sq) return;
   const P = beh.update(dt || 1 / 60);
   // (render scripts can hold the funnel turned aside, as in photographs 20 and 29)
@@ -69,13 +82,16 @@ function poseStudio(dt = 0) {
   MimiikaDriver.applyMaterials(sq, P);
   sq.look.uniforms.uGroundY.value = FLOOR;
   if (chromaOverride) { sq.look.uniforms.uChroma.value.set(...chromaOverride.slice(0, 4)); sq.look.uniforms.uPale.value = chromaOverride[4] ?? 0; }
-  // the sand and the ink: the game's shared dust (the driver's own mapping)
+  // the sand and the ink: the game's shared dust (the driver's own mapping); the pit on the ray's decals
   studioFx.tick(dt || 1 / 60, { floor: studioFloor });
   for (const e of beh.fx) {
+    if (e.kind === 'pit') { if (e.fill) studioPit.fillImprint(e.fill); else if (e.deepen) studioPit.growImprint(e.strength); else studioPit.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007, MimiikaDriver.PIT_LOOK); continue; }
     if (e.kind === 'ink') studioFx.ink(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, INK);
+    else if (e.kill) studioFx.grains(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
     else studioFx.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 1);
   }
   beh.fx.length = 0;
+  studioPit.update(dt || 1 / 60);
   if (beh.prey) {
     if (!studioPrey) { studioPrey = makeMysidModel(); scene.add(studioPrey); }
     if (beh.prey.state === 'caught' && beh.state.phase === 'capture') sq.bones.J_tenL_5.getWorldPosition(beh.prey.pos);
@@ -103,8 +119,11 @@ function studio(view) {
   }
   sq = buildModel(new MimiikaLook(lookSpecFor(`viewer#${seed}`)));
   beh = createSquidBehavior({ world: studioWorld, rng: mulberry(seed * 977 + 3), scale: 1, start: { x: 0, z: 0, heading: Math.PI / 2 }, autonomous: false });
+  beh.setSurroundings(0.3, studioNight);
   studioFx = sandDustFor(scene).source(mulberry(seed * 131 + 7));
   studioFx.setColour(new THREE.Vector3(0.55, 0.52, 0.47));
+  studioPit = new SandFX(scene);
+  studioPit.shadow.visible = false;
   if (tank) sq.look.setCover(0.55, 0.52, 0.47);
   for (let i = 0; i < 90; i++) beh.update(1 / 30);
   showLod(sq, lod);
@@ -115,6 +134,47 @@ function studio(view) {
   const cams = { side: [0.004, 0.012, 0.12], top: [0.002, 0.13, 0.0001], front: [0.12, 0.02, 0.0], oblique: [0.075, 0.06, 0.075], tank: [0.05, 0.03, 0.1] };
   camera.position.set(...(cams[view] ?? cams.side));
   controls.target.set(0.002, 0.006, 0);
+  camera.fov = 30;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+/** animals of these mantle lengths side by side on the tank's sand, a 1 cm grid under them (seen from above) */
+const LINEUP_MM = [5, 10, 14, 20, 30];
+function lineupScene() {
+  studio('tank');
+  scene.remove(sq.root);
+  disposeModel(sq);
+  sq = null;
+  // the grid: 1 cm lines, every 5 cm darker
+  const pts = [], pts5 = [];
+  for (let i = -12; i <= 12; i++) (i % 5 ? pts : pts5).push(i / 100, FLOOR + 0.0002, -0.06, i / 100, FLOOR + 0.0002, 0.06);
+  for (let j = -6; j <= 6; j++) (j % 5 ? pts : pts5).push(-0.12, FLOOR + 0.0002, j / 100, 0.12, FLOOR + 0.0002, j / 100);
+  for (const [a, c] of [[pts, 0x6a5f50], [pts5, 0x2a241c]]) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(a, 3));
+    scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: c })));
+  }
+  let x = -0.085;
+  LINEUP_MM.forEach((mm, i) => {
+    const K = mm / 25, holder = new THREE.Group();
+    holder.scale.setScalar(K);
+    const m = buildModel(new MimiikaLook(lookSpecFor(`lineup#${i}`)));
+    m.look.setScale(K);
+    m.look.setCover(0.55, 0.52, 0.47);
+    holder.add(m.root);
+    showLod(m, 0);
+    scene.add(holder);
+    // (side by side, heads up the screen; each sitting awake on the sand)
+    x += 0.75 * mm / 1000 + 0.004;
+    const b = createSquidBehavior({ world: studioWorld, rng: mulberry(i * 31 + 7), scale: K, start: { x, z: 0, heading: Math.PI }, autonomous: false });
+    b.rest(600);
+    x += 0.75 * mm / 1000 + 0.004;
+    lineup.push({ m, holder, beh: b, mm });
+  });
+  for (let i = 0; i < 90; i++) poseStudio(1 / 30);
+  camera.position.set(0.0, 0.27, 0.0001);
+  controls.target.set(0.0, 0.0, 0.0);
   camera.fov = 30;
   camera.updateProjectionMatrix();
   controls.update();
@@ -167,7 +227,7 @@ function individual(i, x, z, len) {
   const species = { id: 'euprymna_morsei', model: { modelLength_mm: 25, driver: 'mimiika' }, brain: { params: {} } };
   return {
     id: `euprymna_morsei#${(0x5100 + i * 7919).toString(16)}`, species, pos: new THREE.Vector3(x, 0, z), home: new THREE.Vector3(x, 0, z), heading: i * 1.9,
-    length_mm: len, weight_g: 3, sex: 'f', stage: 'adult', traits: [], lengthPct: 50, wariness: 1, alert: 0, energy: 1, lod: 1,
+    length_mm: len, weight_g: 2, sex: 'f', stage: 'adult', traits: [], lengthPct: 50, wariness: 1, alert: 0, energy: 1, lod: 1,
     brain: { busyUntil: 0, intentId: 0, cooldowns: new Map(), nextTick: 0, done: true, lastIntentKind: '' },
     rng: new Rng(1234 + i * 77), cell: 7, ruleIndex: 0, mismatchSince: 0, spawnedAt: 0, strandedSince: 0,
   };
@@ -225,7 +285,7 @@ function flatScene(opts = {}) {
   const n = opts.count ?? 3;
   for (let i = 0; i < n; i++) {
     const a = i * 2.4, r = 0.05 + 0.1 * i;
-    const ind = individual(i, Math.cos(a) * r, Math.sin(a) * r, [26, 22, 30, 24][i % 4]);
+    const ind = individual(i, Math.cos(a) * r, Math.sin(a) * r, [12, 15, 20, 8][i % 4]);
     const root = MimiikaDriver.makeModel().root;
     holder.add(root);
     const d = new MimiikaDriver();
@@ -296,6 +356,7 @@ function renderFlat() {
 function setScene(s, opts) {
   mode = s;
   if (s === 'flat') flatScene(opts);
+  else if (s === 'lineup') lineupScene();
   else studio(s);
 }
 
@@ -340,7 +401,8 @@ function loop(now) {
     else { simT += dt; tickAmimehagiMaterials(simT); poseStudio(dt); }
     render();
   }
-  info.textContent = mode === 'flat' ? squids.map((f, i) => `${i}: ${f.driver.debugLabel()}`).join('\n') : `${mode}  LOD${lod}  ${beh ? `${beh.state.mode}/${beh.state.phase}` : ''}`;
+  const stroke = beh?.state.stroke;
+  info.textContent = mode === 'flat' ? squids.map((f, i) => `${i}: ${f.driver.debugLabel()}`).join('\n') : `${mode}  LOD${lod}  ${beh ? `${beh.state.mode}/${beh.state.phase}${stroke ? ` ${stroke.k + 1}/${beh.state.plan?.strokes ?? '?'} ${stroke.dir}` : ''}` : ''}`;
   requestAnimationFrame(loop);
 }
 
@@ -354,6 +416,20 @@ resize();
 setScene('side');
 requestAnimationFrame(loop);
 
+const stepper = (i) => () => (mode === 'flat' ? squids[i]?.driver.behaviour : beh);
+function step30() {
+  simT += 1 / 30;
+  tickAmimehagiMaterials(simT);
+  if (mode === 'flat') stepFlat(1 / 30); else poseStudio(1 / 30);
+}
+/** steps (30 a second) until `done(behaviour)` or `max` s, then `after` s more, and renders */
+function stepUntil(done, max, i, after) {
+  const b = stepper(i);
+  for (let k = 0; k < max * 30; k++) { step30(); if (b() && done(b())) break; }
+  for (let k = 0; k < after * 30; k++) step30();
+  render();
+}
+
 window.__mm = {
   set(o) {
     if (o.seed !== undefined) seed = o.seed;
@@ -362,6 +438,7 @@ window.__mm = {
     if ('funnelYaw' in o) funnelYaw = o.funnelYaw;
     if ('funnelSide' in o) funnelSide = o.funnelSide;
     if ('chroma' in o) chromaOverride = o.chroma ? (CHROMA[o.chroma] ?? o.chroma) : null;
+    if ('night' in o) { studioNight = !!o.night; beh?.setSurroundings(0.3, studioNight); }
     if (o.scene) setScene(o.scene, o);
     else if (sq) showLod(sq, lod);
     if (mode !== 'flat') poseStudio();
@@ -387,17 +464,25 @@ window.__mm = {
     render();
   },
   mode(m, i) { command(m, i); },
-  /** simulated time until the behaviour (of squid i on the flat) reaches `phase` (or `max` seconds) */
+  /** simulated time until the behaviour (of squid i on the flat) reaches `phase` (or one of several; or `max` seconds) */
   until(phase, max = 20, i = 0, after = 0) {
-    const b = () => (mode === 'flat' ? squids[i]?.driver.behaviour : beh);
-    for (let k = 0; k < max * 30; k++) {
-      simT += 1 / 30;
-      tickAmimehagiMaterials(simT);
-      if (mode === 'flat') stepFlat(1 / 30); else poseStudio(1 / 30);
-      if (b()?.state.phase === phase) break;
-    }
-    for (let k = 0; k < after * 30; k++) { simT += 1 / 30; tickAmimehagiMaterials(simT); if (mode === 'flat') stepFlat(1 / 30); else poseStudio(1 / 30); }
-    render();
+    const ph = Array.isArray(phase) ? phase : [phase];
+    stepUntil((b) => ph.includes(b.state.phase), max, i, after);
+  },
+  /** … until arm II's stroke k (from 0) is u (0 … 1) through (an animal born buried or back from an ambush has none) */
+  untilStroke(k, u, max = 30, i = 0, after = 0) {
+    stepUntil((b) => { const st = b.state; return (st.phase === 'sweep' && st.stroke && (st.stroke.k > k || (st.stroke.k === k && st.stroke.u >= u))) || (st.phase === 'buried' && !!st.plan && st.plan.strokes <= k); }, max, i, after);
+  },
+  /** … until `after` s past the n-th jet towards dir ('B' backward, 'F' forward; J1 is B 0) */
+  untilJet(dir, n = 0, after = 0, max = 20, i = 0) {
+    const due = (st) => { if (!st.plan) return Infinity; let c = -1; for (let j = 0; j < st.plan.jets.length; j++) if (st.plan.jets[j] === dir && ++c === n) return st.plan.jetT[j]; return Infinity; };
+    stepUntil((b) => b.state.phase === 'blow' && b.state.t >= due(b.state) + after, max, i, 0);
+  },
+  /** … until `after` s past the next time it drops its sand coat */
+  untilShed(max = 20, i = 0, after = 0) {
+    const b0 = stepper(i)();
+    const was = b0 ? b0.state.shedAt : -1;
+    stepUntil((b) => b.state.shedAt !== was, max, i, after);
   },
   follow(o) {
     const b = mode === 'flat' ? squids[o.i ?? 0]?.driver.behaviour : beh;
@@ -410,6 +495,8 @@ window.__mm = {
   },
   state() {
     if (mode === 'flat') return squids.map((f) => ({ s: f.driver.debugLabel(), p: f.driver.behaviour.pos.toArray().map((v) => +v.toFixed(3)) }));
-    return { mode, lod, s: `${beh.state.mode}/${beh.state.phase}`, bury: +beh.state.bury.toFixed(2), alt: +(beh.state.alt * 1000).toFixed(1) };
+    if (!beh) return { mode, lineup: lineup.map((l) => l.mm) };
+    const st = beh.state;
+    return { mode, lod, s: `${st.mode}/${st.phase}`, t: +st.t.toFixed(2), bury: +st.bury.toFixed(2), alt: +(st.alt * 1000).toFixed(1), hc: +st.headCover.toFixed(2), sc: +st.sandCoat.toFixed(2), stroke: st.stroke ? `${st.stroke.k} ${st.stroke.dir} ${st.stroke.u.toFixed(2)}` : null, jets: st.plan?.jets.join(''), strokes: st.plan?.strokes };
   },
 };

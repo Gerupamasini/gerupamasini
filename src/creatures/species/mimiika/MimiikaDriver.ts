@@ -4,12 +4,13 @@ import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '..
 import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
-import { createSquidBehavior, type SquidApi } from './behavior';
-import { applyPose } from './rig';
+import { createSquidBehavior, type FxEvent, type SquidApi } from './behavior';
+import { applyPose, armExtOf, armThin } from './rig';
 import { MimiikaLook, SUBSTRATE_TINT, type MmLookSpec } from './materials';
 import { buildModel, disposeModel, syncLevel, LOD1_AT, LOD2_AT, MODEL_ML, type MimiikaModel } from './model';
 import { makeMysidModel, poseMysid } from './prey';
 import { keepSandDust, sandDustFor, type DustSource } from '../../fx/SandDust';
+import { SandFX, type ImprintLook } from '../akaei/SandFX';
 import { CONTACT_SHADOWS, shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../amimehagi/materials';
 
@@ -26,6 +27,17 @@ export function lookSpecFor(id: string): MmLookSpec {
 }
 
 const INK = new Vector3(0.012, 0.01, 0.011);
+const _v = new Vector3();
+
+/**
+ * Sand events the behaviour may give beyond FxEvent's: single grains that swell little (`grow` × their start size) and
+ * are gone where they reach the sand (`kill`: the shared dust's grains), sand darker than the bed (`shade`, and `grow`: the shared dust
+ * takes neither), and the pit it blows (kind 'pit':
+ * centre, heading, half-sizes in m, how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one, `fill`
+ * fills it in over that many seconds).
+ */
+type SandEvent = FxEvent & { grow?: number; kill?: boolean; shade?: number };
+interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number; fill?: number }
 
 /**
  * ミミイカ (Euprymna morsei): the small bobtail squid of the sandy shallows. By day it lies buried with only its eyes
@@ -42,6 +54,9 @@ export class MimiikaDriver implements Driver {
   private squid: SquidApi | null = null;
   /** the sand and the ink it throws into the water (shared by every animal under the parent) */
   private dust: DustSource | null = null;
+  /** the pit it blows in the sand as it buries */
+  private pitFx: SandFX | null = null;
+  private readonly bedCol = new Color();
   private preyModel: Group | null = null;
   private shadows: ShadowLayer | null = null;
   private shadowSlot = -1;
@@ -88,7 +103,13 @@ export class MimiikaDriver implements Driver {
     return m.root;
   }
 
-  /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand and ink: DriverEntry.keep. */
+  /**
+   * The hollow the jets blow round it (42, 44–46): a crater darkest round the sinking body, its wall shading off into
+   * a faint rim of thrown-out sand (the ray's resting oval is a shallow, even darkening).
+   */
+  static readonly PIT_LOOK: ImprintLook = { dark: 0.5, centre: 0.12, bowl: [0.64, 0.78], rim: 0.25, wobble: 0.08 };
+
+  /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand, the pit and ink: DriverEntry.keep. */
   static keep(parent: Object3D): { dispose(): void } {
     const m = buildModel(new MimiikaLook(lookSpecFor('keep')));
     for (const t of m.tentacles) if (t) t.visible = true;
@@ -99,12 +120,16 @@ export class MimiikaDriver implements Driver {
     const prey = makeMysidModel();
     parent.add(prey);
     const fx = keepSandDust(parent);
+    // (the pit it blows as it buries)
+    const pit = new SandFX(parent);
+    pit.imprint(0, 0, 0, 0.01, 0.015, () => 0, 0.5, 150, 0.0007, MimiikaDriver.PIT_LOOK);
     return {
       dispose: () => {
         m.root.removeFromParent(); disposeModel(m);
         far.root.removeFromParent(); disposeModel(far);
         prey.removeFromParent();
         fx.dispose();
+        pit.dispose();
       },
     };
   }
@@ -121,6 +146,7 @@ export class MimiikaDriver implements Driver {
     u.uPale.value = P.chroma.pale;
     u.uSandCoat.value = P.sandCoat;
     u.uHeadCover.value = P.headCover;
+    for (let i = 0; i < u.uArmThin.value.length; i++) u.uArmThin.value[i] = armThin(armExtOf(P, i));
     u.uPupil.value = P.pupil;
     u.uLid.value = P.lid;
     // the head's funnel groove fills as the funnel swings out of it
@@ -135,6 +161,8 @@ export class MimiikaDriver implements Driver {
     this.ind = individual;
     const scale = individual.length_mm / 1000 / MODEL_ML;
     this.model = buildModel(new MimiikaLook(lookSpecFor(individual.id)));
+    // (the sand coat's fade into the bed and its grains follow the size)
+    this.model.look.setScale(scale);
     root.add(this.model.root);
     root.scale.setScalar(scale);   // (once: the size does not change in the field)
     const lv = this.model.lod.levels;
@@ -153,6 +181,9 @@ export class MimiikaDriver implements Driver {
     const parent = root.parent ?? root;
     const dustRng = new Rng(hashInts(strHash(individual.id), 0xd057));
     this.dust = sandDustFor(parent).source(() => dustRng.next());
+    // (the ray's decals, for the pit only: its contact shadow is the layer below)
+    this.pitFx = new SandFX(parent);
+    this.pitFx.shadow.visible = false;
     this.shadows = shadowLayerFor(parent);
     this.shadowSlot = this.shadows.claim();
     root.visible = false;
@@ -163,6 +194,7 @@ export class MimiikaDriver implements Driver {
     this.shadowSlot = -1;
     this.shadows = null;
     this.dust?.release(); this.dust = null;
+    this.pitFx?.dispose(); this.pitFx = null;
     this.preyModel?.removeFromParent(); this.preyModel = null;
     if (this.model) disposeModel(this.model);
     this.model = null;
@@ -240,10 +272,12 @@ export class MimiikaDriver implements Driver {
     const sdt = Math.min(0.1, dt * ctx.simScale);
     this.clock += sdt;
     this.player.copy(ctx.player);
-    if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
     // nothing to dig into (a bare tank, the acrylic case): it does not bury, and one born buried comes out
+    // (known before the first intent, which may have been waiting for the context: else it could start a burial)
     this.canBurrow = ctx.canBurrow !== false;
-    if (!this.canBurrow && s.state.bury > 0.05 && s.state.mode !== 'ESCAPE' && s.state.mode !== 'SWIM') s.hover(6);
+    if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
+    // (once it hangs on its fins the sand lets it go: not asked again every frame, which would restart the rise)
+    if (!this.canBurrow && s.state.bury > 0.05 && s.state.mode !== 'ESCAPE' && s.state.mode !== 'SWIM' && s.state.mode !== 'HOVER') s.hover(6);
     if (!!ctx.locked !== this.locked) {
       this.locked = !!ctx.locked;
       model.lod.autoUpdate = !this.locked;
@@ -256,11 +290,11 @@ export class MimiikaDriver implements Driver {
     if (this.substrateT <= 0) {
       this.substrateT = 0.8;
       const smp = ctx.floor.sampleAt?.(s.state.pos.x, s.state.pos.z);
-      const c = SUBSTRATE_TINT[smp?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
-      model.look.setCover(c[0], c[1], c[2]);
+      const c = sandColour(smp?.substrate, ctx.floor.colorAt?.(s.state.pos.x, s.state.pos.z, this.bedCol) ?? null, _v);
+      model.look.setCover(c.x, c.y, c.z);
       this.dust?.setBed(smp?.substrate);
       // background matching: the darker the bottom, the more the brown set spreads
-      const lum = (c[0] + c[1] + c[2]) / 3;
+      const lum = (c.x + c.y + c.z) / 3;
       s.setSurroundings((0.37 - lum) / 0.2, this.night);
     }
     {
@@ -280,7 +314,7 @@ export class MimiikaDriver implements Driver {
     ind.heading = st.heading;
     this.groundY = ctx.floor.heightAt(st.pos.x, st.pos.z);
     AMH_UNIFORMS.uSurfaceY.value = ctx.floor.waterAt(st.pos.x, st.pos.z);
-    if (this.rider.tiltX !== 0 || this.rider.tiltZ !== 0) P.quat.setFromEuler(this.rock.set(-st.pitch + this.rider.tiltX, st.heading, st.roll + this.rider.tiltZ));
+    if (this.rider.tiltX !== 0 || this.rider.tiltZ !== 0) P.quat.setFromEuler(this.rock.set(-(st.pitch + st.pitchKick) + this.rider.tiltX, st.heading, st.roll + this.rider.tiltZ));
     applyPose(root, model.bones, P);
     const level = this.locked ? 0 : model.lod.getCurrentLevel();
     const tentaclesOut = P.ten[0].ext > 0.12 || P.ten[1].ext > 0.12;
@@ -298,18 +332,31 @@ export class MimiikaDriver implements Driver {
   /** sand and ink: only near enough to be seen (the far tier skips them) */
   private effects(dt: number, ctx: DriverContext, level: number): void {
     const s = this.squid!, dust = this.dust;
+    const near = level <= 1 || this.locked;
     if (dust) {
-      dust.near = level <= 1 || this.locked;
-      if (dust.near) {
-        dust.tick(dt, ctx);
-        for (const e of s.fx) {
-          if (e.kind === 'ink') dust.ink(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, INK);
-          // (a little squid's throw: the silt, and a grain or so in each puff)
-          else dust.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 1);
-        }
+      dust.near = near;
+      if (near) dust.tick(dt, ctx);
+    }
+    const ground = (x: number, z: number) => ctx.floor.heightAt(x, z);
+    for (const ev of s.fx as (SandEvent | PitEvent)[]) {
+      if (!near) continue;
+      if (ev.kind === 'pit') {
+        // (laid just over the bed: under a small squid's buried eyes)
+        const K = this.root?.scale.x ?? 1;
+        if (ev.fill) this.pitFx?.fillImprint(ev.fill);
+        else if (ev.deepen) this.pitFx?.growImprint(ev.strength);
+        else this.pitFx?.imprint(ev.pos.x, ev.pos.z, ev.heading, ev.halfW, ev.halfL, ground, ev.strength, ev.life ?? 150, Math.min(0.0015, 0.0003 + 0.0004 * K), MimiikaDriver.PIT_LOOK);
+        continue;
       }
+      if (!dust) continue;
+      if (ev.kind === 'ink') dust.ink(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha, INK);
+      // single grains (the poured sand, the shed coat's spray) fall back onto the bed; the rest is the silt a jet
+      // throws, with a grain or so in each puff
+      else if (ev.kill) dust.grains(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha);
+      else dust.kick(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha, 1);
     }
     s.fx.length = 0;
+    this.pitFx?.update(dt);
   }
 
   private updatePrey(level: number): void {
@@ -336,7 +383,8 @@ export class MimiikaDriver implements Driver {
     const k = h / Math.max(L.y, 0.2);
     const cx = st.pos.x + Math.sin(st.heading) * 0.002 * K, cz = st.pos.z + Math.cos(st.heading) * 0.002 * K;
     const x = cx - L.x * k, z = cz - L.z * k;
-    const gy = this.ctx.floor.heightAt(x, z) + 0.002;
+    // (lifted clear of the sand, but under the arms and belly of a small squid lying on it)
+    const gy = this.ctx.floor.heightAt(x, z) + Math.min(0.002, 0.0006 + 0.0012 * K);
     const blur = 0.002 * K + 0.25 * P.lift;
     const len = MODEL_ML * K * 1.25 + 2 * blur, wid = MODEL_ML * K * 0.78 + 2 * blur;
     const opacity = strength * (0.5 - 0.3 * Math.min(1, P.lift / (MODEL_ML * K * 3)));
@@ -405,6 +453,17 @@ export class MimiikaDriver implements Driver {
     this.squid = null;
     this.listeners.clear();
   }
+}
+
+/**
+ * The bed's colour for the sand coat: the substrate's grey from the table (the brightness the coat and the background
+ * matching are tuned to), in the hue of the bed as it is drawn here (Floor.colorAt: 走水's warm sand), when there is one.
+ */
+export function sandColour(sub: string | undefined, drawn: Readonly<Color> | null, out: Vector3): Vector3 {
+  const c = SUBSTRATE_TINT[sub ?? 'sand'] ?? SUBSTRATE_TINT.sand;
+  out.set(c[0], c[1], c[2]);
+  const l = drawn ? (drawn.r + drawn.g + drawn.b) / 3 : 0;
+  return l > 1e-4 ? out.set(drawn!.r, drawn!.g, drawn!.b).multiplyScalar((c[0] + c[1] + c[2]) / 3 / l) : out;
 }
 
 /** the sand's colour as a Color (for a viewer's bed) */
