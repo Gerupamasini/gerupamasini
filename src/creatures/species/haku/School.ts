@@ -1,5 +1,8 @@
 import { Vector3 } from 'three';
 import type { Rng } from '../../../core/Rng';
+import type { MeadowProbe } from '../../drivers/Driver';
+import { HAKU, S_PIVOT, type MulletForm } from './anatomy';
+import { pickBed, pickBlade, trackBlade, type GrazeSpot } from './graze';
 import { restPose, type SwimPose } from './swim';
 
 /**
@@ -9,7 +12,11 @@ import { restPose, type SwimPose } from './swim';
  * States
  *  IDLE          hovering in mid-water, facing into the current, pectorals sculling, short beat-and-coast bursts
  *  SCHOOL_SWIM   travelling as a polarised school a few centimetres under the surface
- *  FORAGE        a loose aggregation; each fish picks at the bottom film or at the surface by itself
+ *  FORAGE        a loose aggregation; each fish feeds by itself: the fry pick at the bottom film or at the surface, the
+ *                スバシリ graze, scraping the film of diatoms and fine algae off the eelgrass leaves (a few bites along
+ *                a leaf with a twist of the head, the leaf tugged, flecks drifting off) or tipping head-down to the
+ *                bed and puffing the sand back out of their gill slits; between bouts they lift their heads and look
+ *                round, the bigger ones longer
  *  ESCAPE        a startle wave runs through the school from the fish that saw the threat: each fish C-starts away
  *                when the wave reaches it (2.5 m/s plus its own 10–50 ms latency), bursts at ~22 body lengths/s,
  *                then the school regroups tight and polarised and keeps going
@@ -31,7 +38,12 @@ export interface FishEnv {
   bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** least water the fish may be in (m) */
   minDepth: number;
+  /** the eelgrass of the flat, where there is one (leaves to graze) */
+  meadow?: MeadowProbe | null;
 }
+
+/** what a feeding fish stirs up or spits out: epiphyte flecks scraped off a leaf, sand from the bed and its gill slits */
+export type PuffKind = 'flecks' | 'silt';
 
 /** startle wave speed through the school (m/s): the Trafalgar effect outruns any approaching threat */
 export const STARTLE_WAVE = 2.5;
@@ -89,12 +101,36 @@ export class HakuFish {
   private beating = true;
   private stateSeenAt = -1;
   private stuck = 0;
-  /** behaviour events (idle, school_swim, forage, escape, surface_swim) */
+  /** behaviour events (idle, school_swim, forage, escape, surface_swim, graze) */
   onEvent: ((id: string) => void) | null = null;
+  /** the player's menace as this fish feels it (the creature system's alert, 0..1), set by the driver each update */
+  alarm = 0;
+  /** how much of the fish is drawn (0 near … 2 far): how closely a leaf it grazes is followed */
+  detail: 0 | 1 | 2 = 0;
+  /** a puff at `at` (world) heading off along `dir`, `amount` about how many motes */
+  onPuff: ((kind: PuffKind, at: Vector3, dir: Vector3, amount: number) => void) | null = null;
+  /** the leaf the fish tugs at as it bites (null: let go), and how far round it the leaves are pulled (m) */
+  onTug: ((at: Vector3 | null, radius: number) => void) | null = null;
+  // grazing: the spot, the stage of the bout, its clocks, the side the fish rolls to
+  private graze: GrazeSpot | null = null;
+  private gzPhase: 'approach' | 'bite' | 'chew' | 'scan' = 'approach';
+  private gzT = 0;
+  private biteT = 0;
+  private biteLen = 0.26;
+  /** how long this chew or scan lasts (s) */
+  private gzLen = 0.6;
+  private bitePuffed = false;
+  private rollSide = 1;
   private readonly tmp = new Vector3();
+  private readonly tmp2 = new Vector3();
+  private readonly tmp3 = new Vector3();
 
-  constructor(tl: number, rng: Rng) {
+  /** the fry or the juvenile: its shape (how deep it is) and how it feeds */
+  readonly form: MulletForm;
+
+  constructor(tl: number, rng: Rng, form: MulletForm = HAKU) {
     this.tl = tl;
+    this.form = form;
     this.p = {
       speed: rng.range(0.88, 1.12), latency: rng.range(0.012, 0.05), sep: rng.range(0.9, 1.15), depth: rng.range(-1, 1),
       amp: rng.range(0.9, 1.1), rollPhase: rng.range(0, TAU), wander: rng.range(0, 1000), turn: rng.range(0.85, 1.15),
@@ -106,7 +142,29 @@ export class HakuFish {
   get forward(): Vector3 { return this.tmp.set(Math.sin(this.heading), 0, Math.cos(this.heading)); }
 
   /** body depth (m) */
-  get depthBody(): number { return this.tl * 0.18; }
+  get depthBody(): number { return this.tl * this.form.depth; }
+
+  /** how wary the fish is for its size: 0 for the fry, 1 for a 10 cm スバシリ (bigger fish have more to lose) */
+  get vigilance(): number { return clamp((this.tl - 0.028) / 0.07, 0, 1); }
+
+  /** the mouth (world): the snout's tip ahead of the body's centre, along heading and pitch */
+  snout(out: Vector3): Vector3 {
+    const r = S_PIVOT * this.tl, cp = Math.cos(this.pitch);
+    return out.set(this.pos.x + Math.sin(this.heading) * cp * r, this.pos.y - Math.sin(this.pitch) * r, this.pos.z + Math.cos(this.heading) * cp * r);
+  }
+
+  /** stop grazing: free the leaf for the others, let it go */
+  private endGraze(school: School): void {
+    if (this.graze?.key) school.claims.delete(this.graze.key);
+    if (this.graze) this.onTug?.(null, 0);
+    this.graze = null;
+    this.gzPhase = 'approach';
+  }
+
+  /** leaving the school or put somewhere else: give up the spot it grazes */
+  leave(school: School): void {
+    this.endGraze(school);
+  }
 
   /** where the fish's centre may go at (x, z): between just off the bottom and just under the film */
   layer(env: FishEnv, x: number, z: number): { bottom: number; surface: number; lo: number; hi: number } {
@@ -137,10 +195,10 @@ export class HakuFish {
       if (st === 'SURFACE_SWIM') this.onEvent?.('surface_swim');
       else if (st === 'SCHOOL_SWIM') this.onEvent?.('school_swim');
       else if (st === 'IDLE') this.onEvent?.('idle');
-      if (st !== 'FORAGE') { this.fgMode = 'pause'; this.fgT = 0; }
+      if (st !== 'FORAGE') { this.fgMode = 'pause'; this.fgT = 0; this.endGraze(school); }
     }
     // the startle wave
-    if (this.reactAt >= 0 && this.time >= this.reactAt) this.cStart(school.escapeHeadingFor(this, env));
+    if (this.reactAt >= 0 && this.time >= this.reactAt) { this.endGraze(school); this.cStart(school.escapeHeadingFor(this, env)); }
     const escaping = this.escT >= 0;
     // until the wave reaches it, a fish carries on with what the school was doing
     const mode: HakuState = escaping ? 'ESCAPE' : st === 'ESCAPE' ? school.prevState : st;
@@ -224,7 +282,9 @@ export class HakuFish {
         break;
       }
       case 'FORAGE': {
-        const r = this.forage(dt, env, L, D);
+        // at its spot, the fish holds itself to it (a leaf swaying, the bed) rather than swimming with the school
+        if (this.grazing(dt, school, env)) return;
+        const r = this.forage(dt, env, L, D, school);
         dx += r.dx; dz += r.dz; U = r.U; yTarget = r.y; peckPitch = r.pitch; turnMax = 4;
         break;
       }
@@ -337,19 +397,67 @@ export class HakuFish {
     else this.pos.y = (Lh.bottom + Lh.surface) / 2;
   }
 
-  /** the foraging cycle: pick a spot on the bottom film or at the surface, ease up to it, peck, pause */
-  private forage(dt: number, env: FishEnv, L: { bottom: number; surface: number }, D: number): { dx: number; dz: number; U: number; y: number; pitch: number } {
+  /**
+   * The foraging cycle: pick a spot, ease up to it, feed, pause. The fry peck at the bottom film or at the surface; the
+   * スバシリ graze a leaf of the eelgrass where there is one near, otherwise the bed (and now and then the surface).
+   */
+  private forage(dt: number, env: FishEnv, L: { bottom: number; surface: number }, D: number, school: School): { dx: number; dz: number; U: number; y: number; pitch: number } {
     const bl = this.tl;
     this.fgT -= dt;
     let dx = 0, dz = 0, U = 0.5 * bl, pitch = 0;
     let y = L.surface - clamp(0.35 * D, 0.015, 0.08);
+    const g = this.graze;
+    if (g && this.gzPhase === 'approach') {
+      // ---- easing up to a leaf (it sways: followed every frame) or down to the bed
+      if (g.kind === 'blade' && env.meadow) trackBlade(env.meadow, g, this.pos.x, this.pos.z, this.detail === 0 ? 8 : this.detail === 1 ? 5 : 3);
+      const m = this.snout(this.tmp2);
+      const gx = g.point.x - m.x, gz = g.point.z - m.z, gl = Math.hypot(gx, gz);
+      const dyM = g.point.y - m.y;
+      dx = (gx / Math.max(gl, 1e-6)) * 2.4; dz = (gz / Math.max(gl, 1e-6)) * 2.4;
+      U = clamp(Math.hypot(gl, dyM) * 3.2, 0.35 * bl, 1.8 * bl);
+      if (g.kind === 'bed') {
+        // down to the bed, the head tipping further the closer it comes, so that the mouth meets the sand
+        pitch = 0.2 + 0.38 * (1 - clamp(gl / (1.5 * bl), 0, 1));
+        y = g.point.y + Math.sin(this.pitch) * S_PIVOT * bl + 0.04 * bl;
+        this.fgBottom = true;
+      } else {
+        // the body at the spot's height, the snout up or down to it
+        y = g.point.y;
+        pitch = clamp(Math.atan2(-dyM, Math.max(gl, 0.4 * bl)) * 0.8, -0.5, 0.5);
+      }
+      if (Math.hypot(gl, dyM) < (g.kind === 'bed' ? 0.22 : 0.16) * bl) {
+        this.gzPhase = 'bite';
+        this.gzT = 0;
+        this.biteT = 0;
+        const sub = this.form.id === 'subashiri';
+        g.bites = sub ? 2 + Math.floor(Math.random() * 4) : 1 + Math.floor(Math.random() * 2);
+        this.rollSide = Math.random() < 0.5 ? -1 : 1;
+        this.onEvent?.('graze');
+      }
+      if (this.fgT <= 0) { this.endGraze(school); this.fgMode = 'pause'; this.fgT = 0.4; }
+      return { dx, dz, U, y, pitch };
+    }
     if (this.fgMode === 'pause') {
       U = 0.4 * bl;
       this.pose.pecL = this.pose.pecR = 0.6;
+      // an uneasy fish does not start to feed: it hangs in the water, looking round
+      if (this.fgT <= 0 && this.alarm > 0.3 - 0.15 * this.vigilance) this.fgT = 0.5;
       if (this.fgT <= 0) {
-        // the bottom's diatom film in shallow water, otherwise mostly what floats at the top
-        this.fgBottom = Math.random() < (D < 0.25 ? 0.65 : 0.25);
-        const a = this.heading + (Math.random() * 2 - 1) * 0.9, r = (2 + Math.random() * 3) * bl;
+        const sub = this.form.id === 'subashiri';
+        const rnd = Math.random;
+        // a leaf of the eelgrass, where there is one near (the スバシリ mostly, the fry now and then)
+        if (env.meadow && rnd() < (sub ? 0.8 : 0.3)) {
+          const spot = pickBlade(env.meadow, this.pos.x, this.pos.z, this.pos.y, bl, this.depthBody, (x, z) => env.floor.waterAt(x, z), school.claims, rnd);
+          if (spot) { this.startGraze(spot, school); return { dx, dz, U, y: this.pos.y, pitch }; }
+        }
+        // the bed, by the スバシリ (not in a tank: no film to graze on the glass bottom)
+        if (sub && !env.bounds && rnd() < 0.85) {
+          const spot = pickBed(this.pos.x, this.pos.z, this.heading, 3 * bl, this.depthBody, env.floor, rnd);
+          if (spot) { this.startGraze(spot, school); return { dx, dz, U, y: this.pos.y, pitch }; }
+        }
+        // the fry's peck: the bottom's diatom film in shallow water, otherwise mostly what floats at the top
+        this.fgBottom = rnd() < (D < 0.25 ? 0.65 : 0.25);
+        const a = this.heading + (rnd() * 2 - 1) * 0.9, r = (2 + rnd() * 3) * bl;
         const tx = this.pos.x + Math.sin(a) * r, tz = this.pos.z + Math.cos(a) * r;
         const Lt = this.layer(env, tx, tz);
         if (Lt.surface - Lt.bottom < 2 * this.depthBody) { this.fgT = 0.3; }
@@ -380,6 +488,132 @@ export class HakuFish {
       if (this.fgT <= 0) { this.fgMode = 'pause'; this.fgT = 0.3 + Math.random() * 0.9; }
     }
     return { dx, dz, U, y, pitch };
+  }
+
+  /** lift the head and look round (longer for a bigger, warier fish); `extra` s on top */
+  private toScan(extra: number): void {
+    this.gzPhase = 'scan';
+    this.gzT = 0;
+    this.gzLen = extra + 0.25 + 1.1 * this.vigilance * (0.5 + Math.random() * 0.5);
+    this.onTug?.(null, 0);
+  }
+
+  private startGraze(spot: GrazeSpot, school: School): void {
+    this.graze = spot;
+    this.gzPhase = 'approach';
+    if (spot.key) school.claims.add(spot.key);
+    this.fgT = 3.5;
+  }
+
+  /**
+   * A grazing bout at its spot: the fish holds its mouth to the leaf (following its sway) or to the bed, and bites —
+   * the mouth opens, the lips press in, close and scrape with a twist of the head, the leaf is tugged, flecks drift
+   * off; each bite a little further along. Then it backs off and chews (the gill covers working; off the bed, a puff
+   * of sand out of the gill slits), lifts its head and looks round, longer the bigger and the more uneasy it is.
+   * Returns false while the fish is still on its way (the school's steering takes it there).
+   */
+  private grazing(dt: number, school: School, env: FishEnv): boolean {
+    const g = this.graze;
+    if (!g || this.gzPhase === 'approach') return false;
+    const tl = this.tl, v = this.vigilance;
+    // startled off the spot by the player's approach (sooner the bigger the fish)
+    if (this.alarm > 0.55 - 0.3 * v) {
+      this.endGraze(school);
+      this.fgMode = 'pause';
+      this.fgT = 1 + 1.5 * v;
+      return false;
+    }
+    if (g.kind === 'blade' && env.meadow) trackBlade(env.meadow, g, this.pos.x, this.pos.z, this.detail === 0 ? 10 : this.detail === 1 ? 6 : 3);
+    this.gzT += dt;
+    let gap = 0.06 * tl, jaw = 0.12, shake = 0, lift = 0, pitchWant: number;
+    const sx = g.point.x - this.pos.x, sz = g.point.z - this.pos.z;
+    const hd = Math.hypot(sx, sz);
+    pitchWant = g.kind === 'bed' ? 0.58 : clamp(Math.atan2(-(g.point.y - this.pos.y), Math.max(hd, 0.2 * tl)), -0.55, 0.55);
+    const m = this.snout(this.tmp2);
+    if (this.gzPhase === 'bite') {
+      this.biteT += dt;
+      const u = this.biteT / this.biteLen;
+      // open → press in → close and scrape (a twist of the head) → let go
+      jaw = u < 0.35 ? u / 0.35 : u < 0.55 ? 1 - 0.9 * ((u - 0.35) / 0.2) : 0.1;
+      gap = tl * (0.05 - 0.075 * Math.sin(Math.PI * clamp(u / 0.6, 0, 1)));
+      shake = u > 0.35 && u < 0.7 ? Math.sin(Math.PI * (u - 0.35) / 0.35) : 0;
+      if (u > 0.3 && u < 0.7) {
+        // the leaf is pulled toward the mouth (the push from its far side); the bed gives
+        if (g.kind === 'blade') this.onTug?.(this.tmp3.copy(g.point).addScaledVector(g.face, -0.14 * tl), 0.22 * tl);
+        this.rollKick = -this.rollSide * 0.32 * (0.6 + 0.4 * Math.sin(Math.PI * u));
+      } else if (g.kind === 'blade') this.onTug?.(null, 0);
+      if (u >= 0.5 && !this.bitePuffed) {
+        this.bitePuffed = true;
+        // what comes off: flecks of the film from the leaf, a little sand from the bed
+        this.onPuff?.(g.kind === 'blade' ? 'flecks' : 'silt', m, this.tmp3.set(g.face.x * 0.6, 0.5, g.face.z * 0.6), g.kind === 'blade' ? 3 : 2);
+      }
+      if (u >= 1) {
+        this.biteT = 0;
+        this.bitePuffed = false;
+        this.biteLen = 0.22 + 0.1 * Math.random();
+        g.bites--;
+        // the next bite a little along: down the leaf, or on along the bed
+        if (g.kind === 'blade') g.arc = Math.max(g.arcMin, g.arc - (0.06 + 0.14 * Math.random()) * tl);
+        else g.point.set(g.point.x + Math.sin(this.heading) * 0.08 * tl, g.point.y, g.point.z + Math.cos(this.heading) * 0.08 * tl);
+        if (g.kind === 'bed') g.point.y = env.floor.heightAt(g.point.x, g.point.z);
+        // the bigger fish breaks off between bites to look round now and then
+        if (g.bites > 0 && Math.random() < 0.25 * v) this.toScan(0.4 + 0.4 * Math.random());
+        if (g.bites <= 0) { this.gzPhase = 'chew'; this.gzT = 0; this.gzLen = 0.55 + 0.4 * Math.random(); this.onTug?.(null, 0); }
+      }
+    } else if (this.gzPhase === 'chew') {
+      // back off a little, the jaws working, the gill covers flaring: off the bed, a puff of sand from the gill slits
+      gap = tl * (0.06 + 0.22 * clamp(this.gzT / 0.4, 0, 1));
+      lift = 0.08 * tl * clamp(this.gzT / 0.4, 0, 1);
+      jaw = 0.12 + 0.12 * Math.max(0, Math.sin(this.gzT * TAU * 4));
+      this.pose.oper = Math.max(this.pose.oper, 0.85 * Math.abs(Math.sin(this.gzT * TAU * 2.2)));
+      pitchWant *= 0.5;
+      if (g.kind === 'bed' && this.gzT - dt < 0.25 && this.gzT >= 0.25) {
+        for (const side of [-1, 1]) {
+          const h = this.heading, c = Math.cos(h), s = Math.sin(h);
+          // the gill slit on this side: a little behind the eye, low on the head
+          const fx = 0.13 * tl, lx = side * 0.075 * tl;
+          const at = this.tmp3.set(this.pos.x + s * fx + c * lx, this.pos.y - 0.02 * tl, this.pos.z + c * fx - s * lx);
+          this.onPuff?.('silt', at, this.tmp.set(c * side * 0.8 - s * 0.4, 0.15, -s * side * 0.8 - c * 0.4), 5);
+        }
+      }
+      if (this.gzT > this.gzLen) this.toScan(0);
+    } else {
+      // scan: the head up, still, looking round (longer for a bigger, warier fish), then on to the next spot
+      gap = tl * 0.35;
+      // off the bed: up into the water to look round
+      lift = (g.kind === 'bed' ? 0.3 : 0.08) * tl;
+      jaw = 0.1;
+      pitchWant = -0.12;
+      if (this.gzT > this.gzLen + 1.5 * this.alarm) {
+        if (g.bites > 0) { this.gzPhase = 'bite'; this.biteT = 0; }
+        else { this.endGraze(school); this.fgMode = 'pause'; this.fgT = 0.1 + 0.4 * Math.random(); }
+      }
+    }
+    // ---- hold to the spot: face it, the mouth `gap` off it, the body following the leaf's sway
+    const want = hd > 1e-5 ? Math.atan2(sx, sz) : this.heading;
+    const turn = wrap(want - this.heading);
+    const yaw = clamp(turn * 9, -4, 4);
+    this.yawRate = damp(this.yawRate, yaw, 14, dt);
+    this.heading = wrap(this.heading + this.yawRate * dt + this.rollSide * 0.9 * shake * dt * 6);
+    const cp = Math.cos(this.pitch), r = S_PIVOT * tl + gap;
+    const tx = g.point.x - Math.sin(this.heading) * cp * r, tz = g.point.z - Math.cos(this.heading) * cp * r;
+    const ty = g.point.y + Math.sin(this.pitch) * r + lift;
+    const k = 1 - Math.exp(-12 * dt);
+    const L = this.layer(env, tx, tz);
+    this.pos.x += (tx - this.pos.x) * k + school.current.x * dt * 0.3;
+    this.pos.z += (tz - this.pos.z) * k + school.current.z * dt * 0.3;
+    // the body clear of the sand however it is tipped (head down: the snout leads; head up: the tail hangs lower)
+    const floor = L.bottom + Math.max(0.3 * this.depthBody, 0.55 * this.depthBody * Math.cos(this.pitch) + Math.max(0, -Math.sin(this.pitch)) * 0.55 * tl);
+    this.pos.y += (clamp(ty, floor, L.surface - 0.25 * this.depthBody) - this.pos.y) * k;
+    this.vy = 0;
+    this.speed = 0.1 * tl;
+    this.fgBottom = g.kind === 'bed';
+    this.finishPose(dt, 'FORAGE', pitchWant, false);
+    this.pose.jaw = Math.max(this.pose.jaw, jaw);
+    this.pose.headBend = damp(this.pose.headBend, g.kind === 'bed' && this.gzPhase === 'bite' ? 0.18 : 0, 10, dt);
+    // the pectorals brake and steady the fish at its spot
+    this.pose.pecL = this.pose.pecR = 0.75;
+    return true;
   }
 
   /** speed, turn and state into the swimming pose (wave, curvature, roll, fins) */
@@ -456,6 +690,8 @@ export class School {
   private env: FishEnv | null = null;
   private readonly sorted: { f: HakuFish; d: number }[] = [];
   private readonly nb: HakuFish[] = [];
+  /** leaves being grazed by a member (so that two fish do not crowd one) */
+  readonly claims = new Set<string>();
 
   constructor(readonly key: string, private readonly seed: number) {
     this.travel = (seed % 628) / 100;
@@ -497,7 +733,9 @@ export class School {
       const tl = this.members[0]?.tl ?? 0.025;
       // a school's radius for its numbers: about one body length per fish of spacing in a flattish layer
       this.radius = Math.max(2 * tl, 1.05 * tl * Math.sqrt(n) * (this.state === 'FORAGE' ? 1.6 : this.state === 'IDLE' ? 1.25 : 1) * (1 - 0.2 * this.alert));
-      this.alert = Math.max(0, this.alert - dtc * 0.15);
+      // a school of bigger, warier fish stays tight and quick for longer after a fright
+      const v = this.members[0]?.vigilance ?? 0;
+      this.alert = Math.max(0, this.alert - dtc * 0.15 * (1 - 0.6 * v));
     }
     if (this.time - this.lastFlowAt > 0.5 || this.lastFlowAt < 0) this.updateFlow(env);
     // the state runs out

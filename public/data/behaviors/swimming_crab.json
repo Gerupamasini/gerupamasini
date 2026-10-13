@@ -1,0 +1,33 @@
+{
+  "id": "swimming_crab",
+  "tickHz": { "near": 4, "mid": 1, "far": 0.3 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": "$runDistance_m", "urgency": 1, "param": "escape" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_below", "args": { "m": 0.04 } },
+      { "type": "action", "name": "move_to_deeper", "args": { "minDepth_m": 0.12 } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.5 } },
+      { "type": "cooldown", "seconds": 10, "child": { "type": "action", "name": "display", "args": { "param": "defend", "seconds": [2, 4] } } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "time_is", "args": { "v": "day" } },
+      { "type": "random", "weights": [0.34, 0.22, 0.2, 0.24], "children": [
+        { "type": "action", "name": "burrow", "args": { "seconds": "$buryDay_s" } },
+        { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+        { "type": "action", "name": "forage", "args": { "seconds": [5, 12] } },
+        { "type": "action", "name": "wander", "args": { "distance_m": "$wanderDistance_m", "stayNearHome_m": 3 } }
+      ]}
+    ]},
+    { "type": "random", "weights": [0.14, 0.36, 0.4, 0.1], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "wander", "args": { "distance_m": "$wanderDistance_m", "stayNearHome_m": 4 } },
+      { "type": "action", "name": "forage", "args": { "seconds": [6, 14] } },
+      { "type": "action", "name": "burrow", "args": { "seconds": [20, 60] } }
+    ]}
+  ]}
+}

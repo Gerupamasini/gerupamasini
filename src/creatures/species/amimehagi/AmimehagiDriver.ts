@@ -1,6 +1,7 @@
 import { Group, Vector2, Vector3, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { MODEL_TL } from './anatomy';
@@ -42,6 +43,9 @@ export class AmimehagiDriver implements Driver {
   private readonly sun = new Vector3();
   private readonly player = new Vector3(Number.NaN, 0, 0);
   private shadowTick = 0;
+  /** carried to and fro by the swell and the surf, rocked by their surges */
+  private readonly rider = new WaterRider();
+  private readonly bodyState: BodyState = { mode: 'water', heading: 0, y: 0 };
   private placed = false;
   busy = false;
   /** the vegetation the fish lives in (the page's meadow bridge; a viewer may give its own) */
@@ -177,10 +181,15 @@ export class AmimehagiDriver implements Driver {
     // a long frame is taken in steps of at most 1/60 s so the burst and the pecks look the same at any frame rate
     const steps = Math.max(1, Math.ceil(sdt * 60 - 1e-6));
     for (let i = 0; i < steps; i++) f.update(sdt / steps, env);
+    // the swell carries the little filefish to and fro among the blades, as it sways them (a burst outruns it)
+    const r = this.rider.step(sdt, ctx.water, ctx.floor, f.pos.x, f.pos.y, f.pos.z, f.heading, f.tl, f.state === 'ESCAPE' ? 0.3 : 1, env.minDepth);
+    f.pos.addScaledVector(r.vel, sdt);
+    const L = f.layer(env, f.pos.x, f.pos.z);
+    f.pos.y = Math.min(L.hi, Math.max(L.lo, f.pos.y));
     ind.pos.copy(f.pos);
     ind.heading = f.heading;
     root.position.copy(f.pos);
-    root.rotation.set(-f.pitch, f.heading, f.roll, 'YXZ');
+    root.rotation.set(-f.pitch + r.tiltX, f.heading, f.roll + r.tiltZ, 'YXZ');
     root.visible = true;
     AMH_UNIFORMS.uSurfaceY.value = ctx.floor.waterAt(f.pos.x, f.pos.z);
     model.look.dark = f.dark;
@@ -224,7 +233,22 @@ export class AmimehagiDriver implements Driver {
     if (heading !== undefined) f.heading = heading;
     this.placed = false;
     ind.pos.x = x; ind.pos.z = z;
+    this.rider.reset();
     this.busy = false;
+  }
+
+  /** always swimming (its position is its pivot, a little behind the eye) */
+  body(): BodyState {
+    const f = this.fish, b = this.bodyState;
+    if (f && this.placed) { b.heading = f.heading; b.y = f.pos.y - 0.25 * f.tl; }
+    else if (this.ind) { b.heading = this.ind.heading; b.y = this.ind.pos.y; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const f = this.fish, ind = this.ind;
+    if (f) { f.pos.x += dx; f.pos.z += dz; }
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

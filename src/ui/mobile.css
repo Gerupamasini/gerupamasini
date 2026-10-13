@@ -172,6 +172,11 @@
 .mobile-specimen-actions { display: flex; gap: 4px; margin-top: 4px; }
 .touch-device .mobile-specimen-actions .btn { flex: 1; height: 40px; min-height: 40px; padding: 4px; font-size: 11px; letter-spacing: 0; white-space: normal; }
 .mobile-specimen-detail > .small { display: block; font-size: 11px; line-height: 16px; }
+.mobile-specimen-meta { display:flex; align-items:center; justify-content:space-between; gap:4px; }
+.mobile-specimen-meta > .small { font-size:11px; line-height:16px; }
+.mobile-fish-tab.has-pages .mobile-specimen-detail { margin-top:2px; }
+.touch-device .mobile-specimen-meta .specimen-pagination { margin:0; gap:4px; }
+.touch-device .mobile-specimen-meta .specimen-pagination .btn { height:28px; min-height:28px; padding:3px 6px; font-size:11px; }
 .touch-device .mobile-case-panel { height: clamp(250px, 32dvh, 320px); }
 .touch-device .mobile-case-panel .drawer-body { padding: 0; }
 .touch-device .tank-editor-panel .drawer-body { padding: 4px 0 0; }

@@ -1,11 +1,12 @@
 import {
   AnimationMixer, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneGeometry,
-  PMREMGenerator, Scene, Vector3, WebGLRenderer, ACESFilmicToneMapping, SRGBColorSpace, Box3, type WebGLRenderTarget,
+  PMREMGenerator, Scene, Vector3, WebGLRenderer, CustomToneMapping, SRGBColorSpace, Box3, type WebGLRenderTarget,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { SpeciesDef } from '../../data/schemas';
-import { instantiateModel } from '../../creatures/models/ModelLoader';
+import { configureModelLoader, instantiateModel } from '../../creatures/models/ModelLoader';
+import { installToneMap } from '../../render/ToneMapGlsl';
 import { DRIVERS } from '../../creatures/drivers/index';
 import { QUALITY_PRESETS, type Quality } from '../../core/Settings';
 
@@ -26,9 +27,11 @@ export class ModelPreview {
   constructor(readonly canvas: HTMLCanvasElement, private readonly quality: Quality = 'mid') {
     this.renderer = new WebGLRenderer({ canvas, antialias: quality === 'high', alpha: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
+    installToneMap();
+    this.renderer.toneMapping = CustomToneMapping;
     this.renderer.toneMappingExposure = 0.9;
     this.renderer.setPixelRatio(Math.min(QUALITY_PRESETS[quality].maxDpr, window.devicePixelRatio || 1));
+    configureModelLoader(this.renderer);   // (a no-op once the game's renderer has)
     this.camera = new PerspectiveCamera(35, 1, 0.002, 20);
     const pmrem = new PMREMGenerator(this.renderer);
     this.scene.background = new Color(0.05, 0.06, 0.07);

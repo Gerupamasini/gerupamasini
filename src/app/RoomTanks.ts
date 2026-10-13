@@ -1,5 +1,6 @@
 import { BoxGeometry, DoubleSide, Group, Light, LOD, Mesh, MeshStandardMaterial, PlaneGeometry, Vector3, type Camera, type Material } from 'three';
 import { AquariumEquipment, TANK_DIMENSIONS, type RoomTank } from '../aquarium';
+import { animalSlotPosition } from '../aquarium/progression';
 import { TANK_OFFSET_Y, SAND_H } from './TankScene';
 import { buildTankItem } from './TankLayout';
 import { instantiateModel } from '../creatures/models/ModelLoader';
@@ -42,9 +43,11 @@ export class RoomTanks extends Group {
           const object = model?.root ?? entry.placeholder?.().root; if (!object) return;
           const ind = generateIndividual(sp, record.number + slot, 0, 0, 0, 0, Date.now());
           Object.assign(ind, { id: record.id, length_mm: record.length_mm, weight_g: record.weight_g, sex: record.sex, stage: record.stage, traits: record.traits, gravid: !!record.gravid, dress: !!record.dress });
-          ind.pos.set((slot - 1.5) * Math.min(0.07, d.width / 6), floor, (slot % 2 ? 1 : -1) * d.depth * 0.12); ind.home.copy(ind.pos);
+          const [x, z] = animalSlotPosition(slot, tank.individuals.length, d.width, d.depth);
+          ind.pos.set(x, floor, z); ind.home.copy(ind.pos);
           const driver = entry.create(); driver.attach(object, ind, model?.extras ?? {}, model?.bones ?? {}, model?.meshes ?? []); this.drivers.push(driver); root.add(object); object.userData.roomOccupantId = record.id;
-          driver.update(0, { floor: { heightAt: () => floor, waterAt: () => d.waterHeight }, player: new Vector3(0, 1, 2), simScale: 1, nowMs: Date.now(), bounds: { minX: -d.width / 2 + 0.02, maxX: d.width / 2 - 0.02, minZ: -d.depth / 2 + 0.02, maxZ: d.depth / 2 - 0.02 }, canBurrow: floor > 0 });
+          const bedMat = !floor ? null : tank.layout.substrate === 'mud' ? this.mud : this.sand;
+          driver.update(0, { floor: { heightAt: () => floor, waterAt: () => d.waterHeight, colorAt: (_x, _z, out) => (bedMat ? out.copy(bedMat.color) : null) }, player: new Vector3(0, 1, 2), simScale: 1, nowMs: Date.now(), bounds: { minX: -d.width / 2 + 0.02, maxX: d.width / 2 - 0.02, minZ: -d.depth / 2 + 0.02, maxZ: d.depth / 2 - 0.02 }, canBurrow: floor > 0 });
           this.onChanged?.();
         })().catch(error => console.warn('[room] background model unavailable', error));
       }

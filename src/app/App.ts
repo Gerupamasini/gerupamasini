@@ -2,37 +2,43 @@ import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
 import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
+import { RIPPLE_SHEET_RADIUS } from '../world/Terrain';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
-import { loadSettings, saveSettings, normalizeSettings, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
+import { loadSettings, saveSettings, normalizeSettings, QUALITY_LABELS, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
 import { formatJst, jstParts } from '../core/Time';
 import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { World } from './World';
+import { World, farShadowSize } from './World';
 import { LAYOUTS } from '../world/maps/hashirimizu';
-import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
+import { TankScene } from './TankScene';
 import { RoomTanks } from './RoomTanks';
 import { canPlaceTank, freeTankPosition, initialRoom, newRoomTank, resizedTankLayout, roomCapacity, tankSizeItemId, TANK_DIMENSIONS, TANK_SIZES, type AquariumRoom, type TankSize } from '../aquarium';
 import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { equipmentUnlocked, progressionOf, tankAnimalCapacity, tankUnlocked, buyAquariumUpgrade, isFilterKind, installedFilter, makeEquipment, claimIntroQuests, type FilterKind } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { BinocularView } from '../player/BinocularView';
 import { ClamField } from '../world/ClamField';
+import { ScopimeraColony } from '../creatures/kometsukigani/ScopimeraColony.js';
 import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
-import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { configureModelLoader, instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { AutoQuality } from '../render/AutoQuality';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
+import { spawnsOnMap } from '../creatures/Spawner';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
 import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
@@ -47,6 +53,7 @@ import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
 import { FieldRenderer } from '../render/FieldRenderer';
+import { TankRenderer } from '../render/tank/TankRenderer';
 import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 
 const HUD_HZ = 4;
@@ -57,7 +64,8 @@ const CLAM_DRIVERS = new Set(['asari', 'hamaguri']);
 /** scratch: the camera's forward direction for the reticle picks */
 const reticleDir = new Vector3();
 
-export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams' | 'oysters' | 'amamo';
+export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams' | 'oysters' | 'amamo' | 'crabs';
+const CRAB_SPECIES = 'scopimera_globosa';
 
 export class App {
   readonly renderer: GameRenderer;
@@ -77,6 +85,8 @@ export class App {
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
+  /** the home tank's HDR frame (water, glass, light shafts, bloom) */
+  tankRenderer: TankRenderer | null = null;
   private field: FieldRenderer | null = null;
   /** the タモ in the player's hands */
   net: NetView | null = null;
@@ -95,6 +105,12 @@ export class App {
   targetClam = -1;
   /** a clam built in full for observation */
   private watchedClam: { index: number; id: string } | null = null;
+  /** the コメツキガニ of the flat: burrows, pellets, the live crabs near the player */
+  crabs: ScopimeraColony | null = null;
+  /** the crab burrow under the reticle (index into the colony), or -1 */
+  targetBurrow = -1;
+  private birdsAcc = 0;
+  private birds: Vector3[] = [];
   /** the reef oyster the player is looking at (index into the reef), or -1 */
   targetOyster = -1;
   /** a reef oyster built in full for observation */
@@ -106,7 +122,18 @@ export class App {
   target: Individual | null = null;
   lockedId: string | null = null;
   frameCount = 0;
-  readonly tankMax = TANK_MAX_OCCUPANTS;
+  get aquariumProgression() { return progressionOf(this.equipmentCollection.value); }
+  get tankMax(): number {
+    void ui.tankLayoutVersion.value;
+    return this.currentRoomTank ? tankAnimalCapacity(this.currentRoomTank.size, this.tank.equipment.currentLayout, this.aquariumProgression) : 0;
+  }
+  get introQuestState() {
+    const progress = Object.values(this.encyclopedia.progress.value);
+    return { discovered: progress.filter(p => p.discovered !== undefined).length, captures: this.encyclopedia.stats.captures,
+      behaviors: progress.reduce((n, p) => n + Object.keys(p.behaviors).length, 0),
+      tankAnimals: this.encyclopedia.tankItems.value.length + this.aquariumRoom.value.tanks.filter(t => t.id !== this.activeTankId.value).reduce((n, t) => n + t.individuals.length, 0),
+      tankCount: this.aquariumRoom.value.tanks.length };
+  }
   readonly aquariumRoom = signal<AquariumRoom>({ version: 1, tanks: [], mainTankId: null });
   readonly activeTankId = signal<string | null>(null);
   readonly roomBusy = signal(false);
@@ -137,6 +164,7 @@ export class App {
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     this.renderer = new GameRenderer(canvas);
+    configureModelLoader(this.renderer.gl);
     this.camera = new PerspectiveCamera(70, this.renderer.aspect, 0.05, 2500);
     this.input = new Input(canvas);
     document.documentElement.classList.toggle('touch-device', this.input.touchDevice);
@@ -239,8 +267,9 @@ export class App {
     // the first run on an integrated or software GPU (a laptop) starts on 低, as does a touch device; the player is
     // told, and may change it
     let fresh = false;
-    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return this.renderer.weakGpu ? { quality: 'low' } : {}; });
-    const autoLow = fresh && this.settings.quality === 'low';
+    // (on a PC the flat's tier is then measured in the flat itself, the first time: stepAutoQuality)
+    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return { ...(this.renderer.weakGpu ? { quality: 'low' as const } : {}), fieldAuto: !this.input.touchDevice }; });
+    const autoLow = fresh && this.settings.quality === 'low' && !this.settings.fieldAuto;
     if (fresh) void saveSettings(this.settings);   // (so the first run's choice, and its notice, happen once)
     ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.homeQuality);
@@ -263,7 +292,8 @@ export class App {
     this.encyclopedia = new Encyclopedia(this.data);
     this.encyclopedia.onChanged = () => { this.claimEquipmentRewards(); this.requestSave(); };
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
-    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; };
+    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; this.tank.markRoomChanged(); };
+    this.tankRenderer = new TankRenderer(this.renderer.gl, this.renderer.caps.floatRT);
     // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
     // edit screen), not from behind the 図鑑, the menu or the title
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
@@ -397,6 +427,7 @@ export class App {
 
   async addRoomTank(size: TankSize, position?: [number, number]): Promise<boolean> {
     if (!this.save || this.mode !== 'roomPlacement' || this.roomBusy.value || !TANK_SIZES.includes(size)) return false;
+    if (!tankUnlocked(this.aquariumProgression, size)) { toast('このサイズはショップでCRを使って解放できます', 'info'); return false; }
     this.rememberActiveTank(); const room = this.aquariumRoom.value;
     if (room.tanks.length >= this.roomTankLimit) { toast('2台目はLv.5、3台目はLv.10で解放されます', 'info'); return false; }
     const point = position ?? freeTankPosition(room.tanks, size);
@@ -472,12 +503,13 @@ export class App {
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
       if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
+      this.fieldDay = dayNo;
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       // the shaders compile behind the loading screen (in parallel where the browser can), before anything draws the
       // flat: otherwise the first frame stalls for as long as they take
       performance.mark('world:built');
       ui.loading.value = { frac: 0.6, label: t('loading.shaders') };
-      await this.field?.compile(this.world.scene, this.camera, this.world.water);
+      await this.field?.compile(this.world.scene, this.camera, this.world.water, { upscale: !this.input.touchDevice });
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
@@ -496,6 +528,7 @@ export class App {
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
+      this.creatures.water = this.world.motion;
       await this.creatures.preload();
       // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
       ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
@@ -521,6 +554,18 @@ export class App {
       const L = this.world.layout;
       this.clams = !map.animals ? null : L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       if (this.clams) this.world.scene.add(this.clams.group);
+      // the コメツキガニ colony: only on the flats its spawn rules name (葛西; data/species/scopimera_globosa.json)
+      const crabSp = this.data.species.get(CRAB_SPECIES);
+      if (crabSp && map.animals && spawnsOnMap(crabSp, map.id)) {
+        const q = this.settings.quality === 'low' ? 0 : this.settings.quality === 'high' ? 2 : 1;
+        this.crabs = new ScopimeraColony({
+          scene: this.world.scene, terrain: this.world.terrain, habitat: this.world.habitat, tide: this.world.tide, creatures: this.creatures,
+          species: crabSp, removed: this.removed, seed: hashInts(map.id.length * 53, 1003), quality: q, shadows: this.renderer.preset.shadows,
+        });
+        // the creature system let one of the colony's crabs go (captured, or a time jump cleared the flat)
+        this.creatures.events.on('despawn', (ind) => { if (ind.managed === 'colony') this.crabs?.forget(ind.id); });
+        this.crabs.prewarm(this.renderer.gl, this.camera);
+      }
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
       this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
       this.applyHeroSetting();
@@ -534,9 +579,11 @@ export class App {
     this.slowSecs = 0;
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
-    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
+    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.resetLife(null);
     this.leftFieldAt = 0;
     this.setMode('field');
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: { ...this.aquariumProgression, visitedField: true } };
+    this.requestSave();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
   }
@@ -547,7 +594,11 @@ export class App {
     this.lockedId = null;
     this.target = null;
     this.targetClam = -1;
+    this.targetBurrow = -1;
     this.watchedClam = null;
+    // (the crab colony before the creature system: it hands its live crabs back to it)
+    this.crabs?.dispose();
+    this.crabs = null;
     this.creatures?.dispose();
     this.creatures = null;
     this.clams?.dispose();
@@ -586,6 +637,9 @@ export class App {
     const canvasBefore = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
     // Preserve the public legacy API used by old clients; the menu edits each scene independently.
     if (patch.quality) patch = { homeQuality: patch.quality, fieldQuality: patch.quality, ...patch };
+    // a tier picked for the flat ends the measured choice; asking for the measured choice again measures again
+    if (patch.fieldQuality && patch.fieldAuto === undefined) patch = { ...patch, fieldAuto: false };
+    if (patch.fieldAuto === true && !this.settings.fieldAuto) patch = { ...patch, autoGpu: '' };
     this.settings = normalizeSettings({ ...this.settings, ...patch });
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
@@ -596,19 +650,26 @@ export class App {
     await saveSettings(this.settings);
   }
 
+  /** Whether the scene shown (or behind the overlay) is the flat. */
+  private get fieldScene(): boolean {
+    const from = ui.overlayFrom.value;
+    return this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
+  }
+
   /** Overlays use the setting of the scene they were opened from. */
   get activeQuality(): Quality {
-    const from = ui.overlayFrom.value;
-    const field = this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
-    return field ? this.settings.fieldQuality : this.settings.homeQuality;
+    return this.fieldScene ? this.settings.fieldQuality : this.settings.homeQuality;
   }
 
   private applySceneQuality(): void {
     if (!this.settings) return;
     this.sceneDirty = true;
     this.renderer.setQuality(this.activeQuality);
+    // the flat on a PC is drawn smaller and scaled up by FSR 1, its size kept to the frame rate (phones as they were)
+    this.renderer.setUpscaling(this.fieldScene && !!this.field && !this.input.touchDevice);
     const preset = QUALITY_PRESETS[this.settings.fieldQuality];
     this.field?.setQuality(preset);
+    this.field?.setTaa(preset.taa && !this.input.touchDevice);
     this.applyPreset();
     this.creatures?.setQuality(preset);
     this.fieldCase?.setQuality(preset);
@@ -618,9 +679,13 @@ export class App {
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
+    this.world?.farShadow.setSize(farShadowSize(preset));
+    this.world?.terrainShadow.setEnabled(preset.shadows);
+    this.world?.setSurfQuality(preset);
     const light = this.world?.sky.sunLight;
     if (light) {
       light.castShadow = preset.shadows;
@@ -637,6 +702,7 @@ export class App {
     }
     this.applyHeroSetting();
     this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
+    this.tankRenderer?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
     // the kept models' programs follow the field's variant (the shadows on or off change the shaders): compiled again
     // after the light above has changed, when the field's quality did
     if (fieldChanged && this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
@@ -651,6 +717,8 @@ export class App {
     this.world?.terrain.setLite(field.water === 'lite');
     this.tank?.setLite(home.tankWater === 'lite');
     CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+    SAND_DUST.amount = QUALITY_PRESETS[this.activeQuality].sandDust;
+    SAND_DUST.enabled = SAND_DUST.amount > 0;
     AKAEI_DETAIL.viewScale = field.viewScale;
     AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
   }
@@ -685,7 +753,7 @@ export class App {
   // ------------------------------------------------------------------ ticket
   useTicket(targetGameMs: number): boolean {
     if (!this.clock.useTicket(targetGameMs)) return false;
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     if (this.save) this.save.ticket.usedCount++;
     toast(`${t('ticket.active')}: ${jstParts(targetGameMs).year}年 ${formatJst(targetGameMs, { date: true })}`, 'info');
     this.requestSave();
@@ -694,8 +762,19 @@ export class App {
 
   cancelTicket(): void {
     this.clock.cancelTicket();
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     this.requestSave();
+  }
+
+  /** The water or the clock jumped: everyone but the watched animal is placed again for the flat as it is now. */
+  private resetLife(lockedId: string | null): void {
+    this.creatures?.resetPopulation(lockedId);
+    this.crabs?.reset(lockedId);
+  }
+
+  /** debug: force the breeding season for the crabs (waving) or let the calendar decide */
+  setCrabSeason(doy: number | null): void {
+    if (this.crabs) this.crabs.seasonOverride = doy;
   }
 
   // ------------------------------------------------------------------ debug
@@ -716,20 +795,35 @@ export class App {
 
   setDebugTime(ms: number | null): void {
     this.clock.setDebugTime(ms);
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, timeOverride: ms !== null };
     this.curveCacheMin = -1;
   }
 
   setTideOverride(level: number | null): void {
     if (this.world) this.world.tideOverride = level;
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, tideOverride: level };
   }
 
   setOvercast(v: number): void {
     if (this.world) this.world.overcast = v;
     ui.debugState.value = { ...ui.debugState.value, overcast: v };
+  }
+
+  /** the day the flat was entered on (its sea, its rays' resting marks) */
+  private fieldDay = 0;
+
+  /** debug: another sea on an open shore (height m, period s); null: the day's own */
+  setSea(over: { height?: number; period?: number } | null): void {
+    this.world?.setSeaState(over, this.fieldDay);
+    ui.debugState.value = { ...ui.debugState.value };
+  }
+
+  /** debug: the surf's views (0 off, 1 the zones, 2 the foams, 3 the phase / breaking / swash depth) */
+  setSurfDebug(mode: number): void {
+    this.world?.water.setSurfDebug(mode);
+    ui.debugState.value = { ...ui.debugState.value, surfView: mode };
   }
 
   setMarkers(on: boolean): void {
@@ -799,6 +893,7 @@ export class App {
         break;
       }
       case 'pool': { const pool = w.habitat.pools[0]; if (pool) { x = pool.cx + 6; z = pool.cz; yaw = Math.PI / 2; } break; }
+      case 'crabs': { const c = this.crabs?.nearestPatch(p.position.x, p.position.z); if (c) { x = c[0]; z = c[1] - 1.6; yaw = Math.PI; } break; }
       case 'oysters': {
         // beside the nearest big clump of the reef, crouched and looking at it
         const reef = w.oysters;
@@ -1113,11 +1208,22 @@ export class App {
     if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
     this.shovel?.setDigPoint(p, this.camera);
     const nowSec = this.clock.nowGame() / 1000;
+    const caught: Individual[] = [];
+    // a コメツキガニ burrow under the blade: the crab at home in it comes up with the sand
+    if (this.crabs && this.crabs.burrowNear(p.x, p.z, 0.06) >= 0) {
+      const ind = this.crabs.dig(p.x, p.z, 0.06);
+      if (ind) { if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn'); else caught.push(ind); }
+      this.lastTool = tool;
+      this.capture.start(tool, caught);
+      this.shovel?.show();
+      this.setMode('capture');
+      return;
+    }
+    this.crabs?.startleAt(p, 1.2, 0.9);
     // a practised hand finds the clam under a wider blade
     const k = clams.dig(p.x, p.z, (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')), nowSec);
     clams.startle(p.x, p.z, 1.5, nowSec);
     world.oysters?.touch(p, 0.35);
-    const caught: Individual[] = [];
     const sp = this.data.species.get('ruditapes_philippinarum');
     const full = () => this.encyclopedia.caseItems.value.length + caught.length >= this.encyclopedia.caseMax;
     if (k >= 0 && sp) {
@@ -1214,13 +1320,16 @@ export class App {
   }
 
   async tankPut(rec: IndividualRecord): Promise<void> {
-    if (!this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
+    if (this.roomBusy.value || !this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
     if (this.encyclopedia.tankItems.value.length >= this.tankMax) return;
+    const tankId = this.activeTankId.value;
+    this.roomBusy.value = true;
     // the animal's model loads behind a curtain rather than in a stutter
-    await this.transition(t('transition.put'), async () => {
+    try { await this.transition(t('transition.put'), async () => {
+      if (this.activeTankId.value !== tankId || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id) || this.encyclopedia.tankItems.value.length >= this.tankMax) return;
       this.encyclopedia.moveToTank(rec);
       await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    });
+    }); } finally { this.roomBusy.value = false; }
   }
 
   /** debug: set a tool's catch count (its proficiency) by hand; nets share one */
@@ -1375,12 +1484,16 @@ export class App {
   }
 
   /** The shop is a room of its own: a curtain, then the counter. */
-  openShop(): void {
-    if (this.mode !== 'home') return;
+  openShop(tab: 'tools' | 'tanks' | 'filters' | 'quests' = 'tools'): void {
+    if (this.mode === 'shop') { ui.shopTab.value = tab; ui.shopSelected.value = null; return; }
+    if (!['home', 'tankEdit', 'roomPlacement'].includes(this.mode) || this.roomBusy.value) return;
     ui.homeInfo.value = null;
     ui.homePanel.value = 'none';
     ui.shopSelected.value = null;
+    ui.shopTab.value = tab;
     void this.transition(t('transition.shop'), () => {
+      if (this.mode !== 'home') this.setMode('home');
+      this.tank.setViewInputEnabled(true);
       if (!this.shop) this.shop = new ShopScene(this.renderer.aspect, (id) => t(`shop.item.${id}`));
       this.stockShop();
       this.openOverlay('shop');
@@ -1419,6 +1532,27 @@ export class App {
       this.equipmentCollection.value = reward.collection;
       toast(`研究の報酬：設備ガチャチケット ${reward.awarded}枚`, 'success');
     }
+  }
+
+  private claimIntroductionRewards(): void {
+    const reward = claimIntroQuests(this.aquariumProgression, this.introQuestState);
+    if (!reward.awarded) return;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: reward.progression };
+    this.encyclopedia.money.value += reward.awarded;
+    toast(`クエスト達成：${reward.titles.join('・')}  +${reward.awarded} CR`, 'success');
+  }
+
+  buyTankSize(size: TankSize): boolean { return this.buyAquariumProgression('tank', size); }
+  buyFilterLevel(kind: FilterKind): boolean { return this.buyAquariumProgression('filter', kind); }
+  private buyAquariumProgression(type: 'tank' | 'filter', id: TankSize | FilterKind): boolean {
+    if (!this.save || this.mode !== 'shop' || this.savingSuspended || this.roomBusy.value) return false;
+    const bought = buyAquariumUpgrade(this.aquariumProgression, this.encyclopedia.money.value, type, id);
+    if (!bought) return false;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: bought.progression };
+    this.encyclopedia.money.value = bought.money;
+    ui.tankLayoutVersion.value++;
+    toast(`${type === 'tank' ? `${id}cm水槽を解放` : 'フィルターを解放・強化'}  −${bought.cost} CR`, 'success');
+    this.requestSave(); return true;
   }
 
   async rollGacha(count: number): Promise<void> {
@@ -1524,28 +1658,39 @@ export class App {
     if (fixed) replacing = item.category;
     const record = replacing ? layout.devices.find((d) => d.id === replacing) : undefined;
     if (replacing && !fixed && record?.kind !== item.category) return false;
+    if (!equipmentUnlocked(this.equipmentCollection.value, itemId)) { toast('この水槽・フィルターはショップでCRを使って解放してください', 'info'); return false; }
     if (this.usedEquipmentQuantity(itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('未所持、または別の水槽で使用中です', 'info'); return false; }
     const active = this.currentRoomTank;
     if (!active) return false;
     if (item.category === 'stand' && item.size !== active.size) { toast('この水槽に対応するサイズの台を選んでください', 'info'); return false; }
     if (item.category === 'tank' && item.size !== active.size) {
       const size = item.size!;
+      const resized = resizedTankLayout(this.tank.currentLayout, active.size, size, item.id);
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(size, resized.equipment!, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
       if (!canPlaceTank(this.aquariumRoom.value.tanks, size, active.position, active.id)) { toast('大きい水槽を置くスペースがありません。部屋の設置画面で位置を変えてください', 'warn'); return false; }
-      const next = { ...active, size, layout: resizedTankLayout(this.tank.currentLayout, active.size, size, item.id), individuals: [...this.encyclopedia.tankItems.value] };
+      const next = { ...active, size, layout: resized, individuals: [...this.encyclopedia.tankItems.value] };
       this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
       this.roomBusy.value = true;
       void this.showRoomTank().finally(() => { this.roomBusy.value = false; });
       ui.tankLayoutVersion.value++; this.requestSave(); return true;
     }
-    if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
-    if (replacing) rig.setItem(replacing, itemId);
-    else {
-      const id = rig.addDevice(item.category as EquipmentKind, itemId);
-      if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
-      if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
-        const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+    const changingFilter = isFilterKind(item.category) && installedFilter(layout) !== item.category;
+    if (changingFilter) {
+      const next = { ...layout, devices: [...layout.devices.filter(d => !isFilterKind(d.kind)), makeEquipment(item.category as FilterKind, `${item.category}-1`, this.tank.dimensions)] };
+      next.devices[next.devices.length - 1].itemId = itemId;
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(active.size, next, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
+      rig.setLayout(next); ui.equipmentSelected.value = next.devices[next.devices.length - 1].id;
+    } else {
+      if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
+      if (replacing) rig.setItem(replacing, itemId);
+      else {
+        const id = rig.addDevice(item.category as EquipmentKind, itemId);
+        if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
+        if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
+          const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+        }
+        ui.equipmentSelected.value = id;
       }
-      ui.equipmentSelected.value = id;
     }
     if (!this.commitTankLayout()) {
       rig.setLayout(layout); rig.applyPreset(); ui.equipmentSelected.value = selected;
@@ -1604,7 +1749,9 @@ export class App {
 
   // ------------------------------------------------------------------ save
   requestSave(): void {
-    if (!this.save || this.savingSuspended || this.saveTimer !== null) return;
+    if (!this.save || this.savingSuspended) return;
+    this.claimIntroductionRewards();
+    if (this.saveTimer !== null) return;
     this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.writeSave(); }, 1000);
   }
 
@@ -1734,6 +1881,14 @@ export class App {
     return rate >= 0 ? 'rising' : 'falling';
   }
 
+  /** the home tank's frame for the debug line: internal resolution, its share of the screen's, the GPU time */
+  private tankStats(): string | undefined {
+    const r = this.tankRenderer;
+    if (!r || !this.tankVisible()) return undefined;
+    const s = r.stats;
+    return `${s.width}×${s.height} ${Math.round(s.scale * 100)}%${s.gpuMs > 0 ? ` GPU ${s.gpuMs.toFixed(1)}ms` : ''}`;
+  }
+
   private frame(now: number): void {
     this.raf = requestAnimationFrame((n) => this.frame(n));
     try {
@@ -1749,6 +1904,8 @@ export class App {
   private frameErrors = 0;
   private slowSecs = 0;
   private slowHinted = false;
+  /** the flat's tier being measured on this computer (settings.fieldAuto), while it runs */
+  private autoQuality: AutoQuality | null = null;
   /** when the flat was last entered (the first seconds there are the models' first draws, not the frame rate) */
   private fieldSince = 0;
 
@@ -1846,16 +2003,26 @@ export class App {
     }
     this.renderer.gl.toneMappingExposure = this.tankVisible() ? 0.6 : (world?.exposure ?? 0.5);
 
+    const gpu = this.renderer.gpuTimer;
+    let drewField = false;
     if (mode === 'shop' && this.shop) {
       this.shop.update(dt);
+      gpu.begin();
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
+      gpu.end();
     } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
       if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       this.roomTanks.updateLOD(this.tank.camera);
-      if (this.hero && this.tank.heroActive) {
-        this.hero.setLighting(this.tank.lighting);
-        this.hero.render(this.tank.scene, this.tank.camera, dt);
-      } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+      const heroOn = !!this.hero && this.tank.heroActive;
+      if (heroOn) this.hero!.setLighting(this.tank.lighting);
+      // (the tank's own renderer times its passes itself: timer queries of one kind cannot nest)
+      if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
+      else {
+        gpu.begin();
+        if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
+        else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+        gpu.end();
+      }
     } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
@@ -1872,6 +2039,7 @@ export class App {
         this.binoculars.update(this.camera, dt);
       }
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
+      if (this.crabs) this.updateCrabs(this.worldVisible() ? dt : 0, gameMs);
       // the oyster reef: open under the water, shut when the tide leaves or when footsteps come near
       world.oysters?.update(this.worldVisible() ? dt : 0, this.camera, world.tideLevel, { pos: player.position, speed: player.speedNow, running: player.running });
       creatures.update({
@@ -1879,13 +2047,16 @@ export class App {
         playerSpeed: player.speedNow, playerCrouched: player.crouching, playerRunning: player.running,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
       });
+      gpu.begin();
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {
         const anchor = creatures.anchorOf(this.lockedId!) ?? player.position;
         this.hero.setLighting(this.heroLightingFromWorld(anchor));
         this.hero.render(world.scene, this.camera, dt, world.water);
       } else if (this.field) this.field.render(world.scene, this.camera, world.water);
       else this.renderer.gl.render(world.scene, this.camera);
+      drewField = true;
       if ((this.net?.group.visible || this.shovel?.group.visible || this.binoculars?.group.visible) && (mode === 'capture' || mode === 'field')) this.renderNetOverlay(world.scene);
+      gpu.end();
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }
@@ -1893,9 +2064,11 @@ export class App {
     }
 
     this.sceneDirty = false;
+    this.renderer.afterFrame(dt, drewField);
+    this.stepAutoQuality(dt, mode);
     this.fpsAcc += dt; this.fpsCount++;
     // a flat that crawls: say once where the lighter picture is (after the first seconds, which are the models' first draws)
-    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal') {
+    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal' && !this.settings.fieldAuto) {
       this.slowSecs = dt >= 1 / 20 ? this.slowSecs + dt : Math.max(0, this.slowSecs - dt * 0.5);
       if (this.slowSecs > 8) { this.slowHinted = true; toast(t('toast.slowHint'), 'info', 9000); }
     }
@@ -1905,6 +2078,56 @@ export class App {
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
     if (this.save && (this.worldVisible() || mode === 'home')) this.save.stats.playSeconds += dt;
     this.input.endFrame();
+  }
+
+  /** The crab colony's frame: perception inputs (player, birds, sun, tide) and the observation's close shadows. */
+  private updateCrabs(dt: number, gameMs: number): void {
+    const world = this.world!, player = this.player!, creatures = this.creatures!, crabs = this.crabs!;
+    this.birdsAcc += dt;
+    if (this.birdsAcc > 0.25) {
+      this.birdsAcc = 0;
+      this.birds = creatures.individuals.filter((i) => i.species.taxon.group === 'bird').map((i) => i.pos);
+    }
+    crabs.update({
+      dt, gameMs, simScale: this.simScale, camera: this.camera, player: player.position, eyeHeight: this.camera.position.y - player.position.y,
+      sunDir: world.sunDir, sunElevation: world.sunElevation, tideLevel: world.tideLevel, tideRate: world.tideRate, lockedId: this.lockedId, birds: this.birds,
+    });
+    // watching a crab up close: the sun's shadow map is pulled in around it, so legs cast real shadows on the sand
+    const locked = this.lockedId ? creatures.get(this.lockedId) : null;
+    const focus = this.mode === 'observe' && !!locked && locked.species.id === CRAB_SPECIES && this.renderer.preset.shadows;
+    crabs.shadowFocus = focus;
+    crabs.pellets.setShadows(focus);
+    world.sky.focusShadow(focus ? creatures.anchorOf(this.lockedId!) : null, 0.16);
+  }
+
+  /**
+   * The flat's tier, measured in the flat the first time it is played on this GPU (settings.fieldAuto): the view held
+   * at the tier's full size while AutoQuality times it, a tier up or down until one keeps the frame rate. Leaving the
+   * flat (or the menu) breaks the measurement off; it starts again next time.
+   */
+  private stepAutoQuality(dt: number, mode: Screen): void {
+    const s = this.settings, gpuId = this.renderer.gpuName || '?';
+    const wanted = !!s && s.fieldAuto && s.autoGpu !== gpuId && mode === 'field' && this.renderer.upscalingOn && !document.hidden;
+    if (!wanted) {
+      if (this.autoQuality) { this.autoQuality = null; this.renderer.setFixedScale(null); }
+      return;
+    }
+    if (!this.autoQuality) {
+      this.autoQuality = new AutoQuality(s.fieldQuality);
+      this.renderer.setFixedScale(this.renderer.tierScale);
+    }
+    const gpu = this.renderer.gpuTimer;
+    const v = this.autoQuality.update(dt, gpu.available ? gpu.ms : Number.NaN);
+    if (v.kind === 'change') {
+      // (the tier is applied at once; the view is then held at the new tier's size)
+      void this.updateSettings({ fieldQuality: v.to, fieldAuto: true });
+      this.renderer.setFixedScale(this.renderer.tierScale);
+    } else if (v.kind === 'done') {
+      this.autoQuality = null;
+      this.renderer.setFixedScale(null);
+      void this.updateSettings({ fieldQuality: v.quality, fieldAuto: true, autoGpu: gpuId });
+      toast(t('toast.autoMeasured').replace('{q}', QUALITY_LABELS[v.quality]), 'info', 8000);
+    }
   }
 
   /** The タモ over the finished frame: its own depth, no water on it, never cut by the ground. */
@@ -2030,16 +2253,19 @@ export class App {
       const toolHint = netInHand
         ? ''
         : (dg && !dg.far ? `[E] ${t('hud.dig')}` : t('hud.tooFar'));
-      // a clam's siphon holes under the reticle
+      // a clam's siphon holes under the reticle, or a コメツキガニ's burrow
       this.targetClam = -1;
-      if (this.clams && this.world && this.clams.group.visible) {
+      this.targetBurrow = -1;
+      const clamsShown = !!this.clams && this.clams.group.visible;
+      if (this.world && (clamsShown || this.crabs)) {
         const g = this.groundUnderReticle(3.5);
-        if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
+        if (g && clamsShown) this.targetClam = this.clams!.nearest(g.x, g.z, 0.16);
+        if (g && this.crabs) this.targetBurrow = this.crabs.burrowNear(g.x, g.z, 0.05);
       }
       const optic = this.toolType() === 'optic';
       // an oyster of the reef under the reticle (within arm's reach and a step)
       this.targetOyster = -1;
-      if (!this.target && this.targetClam < 0 && !optic && this.world?.oysters?.group.visible) {
+      if (!this.target && this.targetClam < 0 && this.targetBurrow < 0 && !optic && this.world?.oysters?.group.visible) {
         this.targetOyster = this.world.oysters.pickRay(this.camera.position, this.camera.getWorldDirection(reticleDir), 2.6);
       }
       if (optic && !this.binoculars?.raised) {
@@ -2056,6 +2282,10 @@ export class App {
         prompt = sp.locomotion === 'burrow' && !(netInHand && this.creatures.canNetCapture(this.target.id))
           ? `${sp.names.ja}   [F] ${t('hud.observe')}   ${digHint}`
           : `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
+      } else if (this.targetBurrow >= 0) {
+        const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
+        const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
+        prompt = `${t('crab.burrow')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.toolDef(digId!)?.ja ?? ''}` : t('tools.noShovel')}`;
       } else if (this.targetClam >= 0) {
         const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
         const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
@@ -2094,7 +2324,7 @@ export class App {
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
       const reef = this.world?.oysters;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats() } };
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), tank: this.tankStats(), gpuMs: Number.isFinite(this.renderer.gpuTimer.ms) ? this.renderer.gpuTimer.ms : null, view: `${this.renderer.renderSize.x}×${this.renderer.renderSize.y}${this.renderer.upscaled ? ` → ${this.renderer.gl.domElement.width}×${this.renderer.gl.domElement.height} FSR` : ''}` } };
     }
   }
 }

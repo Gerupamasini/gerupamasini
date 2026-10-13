@@ -12,6 +12,7 @@ import { MimiikaDriver, lookSpecFor } from '../../src/creatures/species/mimiika/
 import { createSquidBehavior } from '../../src/creatures/species/mimiika/behavior.ts';
 import { applyPose } from '../../src/creatures/species/mimiika/rig.ts';
 import { makeMysidModel, poseMysid } from '../../src/creatures/species/mimiika/prey.ts';
+import { sandDustFor } from '../../src/creatures/fx/SandDust.ts';
 import { SandFX } from '../../src/creatures/species/akaei/SandFX.ts';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../../src/creatures/species/amimehagi/materials.ts';
 import { WaterPass, makeSpillTexture } from '../../src/world/Water.ts';
@@ -34,7 +35,7 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 let funnelYaw = null, funnelSide = null;
-let scene = null, sq = null, beh = null, studioFx = null, studioInk = null, studioPrey = null, squids = [], lineup = [], mode = 'side', lod = 0, seed = 1, simT = 0;
+let scene = null, sq = null, beh = null, studioFx = null, studioPit = null, studioPrey = null, squids = [], lineup = [], mode = 'side', lod = 0, seed = 1, simT = 0;
 let studioNight = false;
 let chromaOverride = null;
 const info = document.getElementById('info');
@@ -42,8 +43,8 @@ const info = document.getElementById('info');
 function clear() {
   if (sq) disposeModel(sq);
   sq = null; beh = null;
-  studioFx?.dispose(); studioFx = null;
-  studioInk?.dispose(); studioInk = null;
+  studioFx?.release(); studioFx = null;
+  studioPit?.dispose(); studioPit = null;
   studioPrey = null;
   for (const f of squids) f.driver.dispose();
   squids.length = 0;
@@ -60,6 +61,8 @@ function showLod(m, l) {
 // ---------------------------------------------------------------- studio and tank
 const FLOOR = -0.0001;
 const studioWorld = { ground: () => FLOOR, waterY: () => 0.3, canBurrow: () => true };
+const studioFloor = { heightAt: () => FLOOR, waterAt: () => 0.3 };
+const INK = new THREE.Vector3(0.012, 0.01, 0.011);
 
 function poseStudio(dt = 0) {
   for (const l of lineup) {
@@ -79,14 +82,16 @@ function poseStudio(dt = 0) {
   MimiikaDriver.applyMaterials(sq, P);
   sq.look.uniforms.uGroundY.value = FLOOR;
   if (chromaOverride) { sq.look.uniforms.uChroma.value.set(...chromaOverride.slice(0, 4)); sq.look.uniforms.uPale.value = chromaOverride[4] ?? 0; }
+  // the sand and the ink: the game's shared dust (the driver's own mapping); the pit on the ray's decals
+  studioFx.tick(dt || 1 / 60, { floor: studioFloor });
   for (const e of beh.fx) {
-    // (the pit it blows: laid just over the bed, under the buried eyes)
-    if (e.kind === 'pit') { if (e.fill) studioFx.fillImprint(e.fill); else if (e.deepen) studioFx.growImprint(e.strength); else studioFx.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007, MimiikaDriver.PIT_LOOK); continue; }
-    (e.kind === 'ink' ? studioInk : studioFx).emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, undefined, e.grow, e.kill, e.shade);
+    if (e.kind === 'pit') { if (e.fill) studioPit.fillImprint(e.fill); else if (e.deepen) studioPit.growImprint(e.strength); else studioPit.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007, MimiikaDriver.PIT_LOOK); continue; }
+    if (e.kind === 'ink') studioFx.ink(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, INK);
+    else if (e.kill) studioFx.grains(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
+    else studioFx.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 1);
   }
   beh.fx.length = 0;
-  studioFx.update(dt || 1 / 60, () => FLOOR);
-  studioInk.update(dt || 1 / 60, () => FLOOR - 1);
+  studioPit.update(dt || 1 / 60);
   if (beh.prey) {
     if (!studioPrey) { studioPrey = makeMysidModel(); scene.add(studioPrey); }
     if (beh.prey.state === 'caught' && beh.state.phase === 'capture') sq.bones.J_tenL_5.getWorldPosition(beh.prey.pos);
@@ -115,14 +120,10 @@ function studio(view) {
   sq = buildModel(new MimiikaLook(lookSpecFor(`viewer#${seed}`)));
   beh = createSquidBehavior({ world: studioWorld, rng: mulberry(seed * 977 + 3), scale: 1, start: { x: 0, z: 0, heading: Math.PI / 2 }, autonomous: false });
   beh.setSurroundings(0.3, studioNight);
-  // (the game's sand: clouds settle on the bed, poured grains vanish into it)
-  studioFx = new SandFX(scene, MimiikaDriver.sandFxOptions(1));
-  studioFx.shadow.visible = false;
-  // (the floor's sand: the squid's clouds take the bed's own tone, sandFxOptions)
-  studioFx.setSandColour(new THREE.Vector3(0.55, 0.52, 0.47));
-  studioInk = new SandFX(scene);
-  studioInk.shadow.visible = false;
-  studioInk.setSandColour(new THREE.Vector3(0.012, 0.01, 0.011));
+  studioFx = sandDustFor(scene).source(mulberry(seed * 131 + 7));
+  studioFx.setColour(new THREE.Vector3(0.55, 0.52, 0.47));
+  studioPit = new SandFX(scene);
+  studioPit.shadow.visible = false;
   if (tank) sq.look.setCover(0.55, 0.52, 0.47);
   for (let i = 0; i < 90; i++) beh.update(1 / 30);
   showLod(sq, lod);

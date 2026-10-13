@@ -10,6 +10,7 @@ import { DRIVERS } from '../../src/creatures/drivers/index';
 import { AkaeiModel } from '../../src/creatures/species/akaei/AkaeiModel';
 import { akaeiBuild } from '../../src/creatures/species/akaei/AkaeiDriver';
 import { SandFX } from '../../src/creatures/species/akaei/SandFX';
+import { sandDustFor } from '../../src/creatures/fx/SandDust';
 import { IshigareiLook } from '../../src/creatures/species/ishigarei/materials';
 import { lookSpecFor } from '../../src/creatures/species/ishigarei/IshigareiDriver';
 import { buildModel as buildFlounder, disposeModel } from '../../src/creatures/species/ishigarei/model';
@@ -19,6 +20,9 @@ import { MimiikaLook } from '../../src/creatures/species/mimiika/materials';
 import { lookSpecFor as squidLook } from '../../src/creatures/species/mimiika/MimiikaDriver';
 import { buildModel as buildSquid, disposeModel as disposeSquid } from '../../src/creatures/species/mimiika/model';
 import { makeMysidModel } from '../../src/creatures/species/mimiika/prey';
+import { GazamiLook } from '../../src/creatures/species/gazami/materials';
+import { lookSpecFor as crabLook } from '../../src/creatures/species/gazami/GazamiDriver';
+import { buildModel as buildCrab, disposeModel as disposeCrab } from '../../src/creatures/species/gazami/model';
 
 /**
  * The kept models (DriverEntry.keep) exist so that the species' shader programs are compiled once, behind the loading
@@ -57,19 +61,25 @@ describe('kept models cover every material variant the species are drawn with', 
     const fxParent = new Group();
     const fx = new SandFX(fxParent);
     fx.imprint(1, 1, 0.3, 0.2, 0.4, () => 0);
+    const dust = sandDustFor(fxParent);
     expect(missing(kept, keysUnder(fxParent)), 'sand effects').toEqual([]);
     fx.dispose();
+    dust.dispose();
     keeper.dispose();
     expect(parent.children.length).toBe(0);
   });
 
-  it('イシガレイ: the skin of every tier, the fins and the eyes', () => {
+  it('イシガレイ: the skin of every tier, the fins and the eyes, and the sand it throws', () => {
     const parent = new Group();
     const keeper = DRIVERS.ishigarei.keep!(parent);
     const kept = keysUnder(parent);
     const m = buildFlounder(new IshigareiLook(lookSpecFor('flounder#7')));
     expect(missing(kept, keysUnder(m.root))).toEqual([]);
     disposeModel(m);
+    const fxParent = new Group();
+    const dust = sandDustFor(fxParent);
+    expect(missing(kept, keysUnder(fxParent)), 'dust').toEqual([]);
+    dust.dispose();
     keeper.dispose();
     expect(parent.children.length).toBe(0);
   });
@@ -86,7 +96,25 @@ describe('kept models cover every material variant the species are drawn with', 
     disposeSquid(far);
     expect(missing(kept, keysUnder(makeMysidModel()))).toEqual([]);
     const fxParent = new Group();
+    const dust = sandDustFor(fxParent);
+    expect(missing(kept, keysUnder(fxParent))).toEqual([]);
+    dust.dispose();
+    keeper.dispose();
+    expect(parent.children.length).toBe(0);
+  });
+
+  it('ガザミ: the shell of every tier, the setae and the sand effects', () => {
+    const parent = new Group();
+    const keeper = DRIVERS.gazami.keep!(parent);
+    const kept = keysUnder(parent);
+    for (const sex of ['m', 'f'] as const) {
+      const m = buildCrab(new GazamiLook(crabLook(`crab#${sex}`, sex, sex === 'm' ? 140 : 30)));
+      expect(missing(kept, keysUnder(m.root))).toEqual([]);
+      disposeCrab(m);
+    }
+    const fxParent = new Group();
     const fx = new SandFX(fxParent);
+    fx.imprint(1, 1, 0.3, 0.05, 0.03, () => 0);
     expect(missing(kept, keysUnder(fxParent))).toEqual([]);
     fx.dispose();
     keeper.dispose();

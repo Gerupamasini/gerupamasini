@@ -10,12 +10,15 @@ import { EventBus } from '../core/EventBus';
 import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
-import { minDepthFor, type Individual } from './Individual';
+import { fleeScale, minDepthFor, type Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe, ScentProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
 import type { HeroInstance } from './species/mahaze/hero/applyHero';
+import { AnimalContacts } from './physics/animals';
+import type { ContactBody } from './physics/contacts';
+import type { WaterMotion } from './physics/water';
 
 interface View {
   tier: Tier | 'placeholder';
@@ -35,6 +38,8 @@ interface Entry {
   unsub: () => void;
   /** the last spot where an aquatic animal had enough water under it */
   lastWet?: Vector3;
+  /** its body for the contacts between the animals */
+  body?: ContactBody;
 }
 
 export interface CreatureFrame {
@@ -79,6 +84,12 @@ export class CreatureSystem {
   private nowMs = 0;
   /** when set, hero-tier models get the volumetric materials (observation lock) */
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
+  /** how the flat's water moves (the swell, the surf): what swims in it is carried and rocked (set by the app) */
+  water: WaterMotion | null = null;
+  /** the animals' bodies: they push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
+  private readonly drawn: Entry[] = [];
+  private readonly minDepthOf = (ind: Individual): number => (isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : 0);
 
   constructor(
     private readonly scene: Scene,
@@ -100,7 +111,7 @@ export class CreatureSystem {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
       sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
-      sandTint: terrain.sandTint,
+      colorAt: (x, z, out) => terrain.colorAt(x, z, out),
     };
   }
 
@@ -246,7 +257,7 @@ export class CreatureSystem {
       const dist = ind.pos.distanceTo(f.playerPos);
       // alert dynamics: what the animal makes of the player depends on how the player moves — standing still it is
       // soon forgotten, a slow crouched approach barely registers, a walk is noticed, a run sends everything off
-      const fleeD = Number(ind.species.brain.params.fleeDistance_m ?? 2);
+      const fleeD = Number(ind.species.brain.params.fleeDistance_m ?? 2) * fleeScale(ind);
       const menace = f.playerRunning ? 2.2 : f.playerSpeed < 0.05 ? 0 : f.playerCrouched ? 0.4 : 1;
       if (dist < fleeD * 2.5 && menace > 0) ind.alert = Math.min(1, ind.alert + f.dt * menace * ind.wariness * (dist < fleeD * 1.3 ? 0.4 : 0.12));
       else ind.alert = Math.max(0, ind.alert - f.dt * (dist < fleeD * 2.5 ? 0.05 : 0.08));
@@ -266,16 +277,26 @@ export class CreatureSystem {
       }
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
-        const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
+        const every = ind.lod <= 1 || e.driver.everyFrame ? 1 : ind.lod === 2 ? 2 : 4;
         if (this.frameIndex % every === 0) {
           e.driver.update(f.dt * every, {
             floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId,
-            minDepth: isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : undefined,
+            minDepth: isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : undefined, water: this.water,
           });
         }
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
+    // the animals in view push each other aside (the unseen ones are left to themselves)
+    const drawn = this.drawn;
+    drawn.length = 0;
+    for (const e of this.entries.values()) if (e.view) drawn.push(e);
+    this.contacts.step(f.dt * f.simScale, drawn, { floor: this.floor }, this.minDepthOf);
+  }
+
+  /** contacts made in the last frame (debug) */
+  get touching(): number {
+    return this.contacts.contacts.touching;
   }
 
   private issue(e: Entry, intent: Intent, nowSec: number): void {
@@ -407,7 +428,7 @@ export class CreatureSystem {
   private keepInWater(f: CreatureFrame): void {
     for (const e of this.entries.values()) {
       const ind = e.ind;
-      if (!isAquatic(ind.species) || ind.id === f.lockedId) continue;
+      if (!isAquatic(ind.species) || ind.managed || ind.id === f.lockedId) continue;
       // every animal in view every frame (a dart is fast); the unseen ones at a few hertz
       if (ind.lod > 2 && (this.frameIndex & 7) !== 0) continue;
       const need = minDepthFor(ind.species, ind.length_mm);
@@ -495,21 +516,29 @@ export class CreatureSystem {
     this.despawn(id);
   }
 
-  /** Nearest individual under the screen centre within `maxDist` metres. */
+  /**
+   * The individual under the screen centre within `maxDist` metres: of those whose pick sphere the view ray
+   * passes through, the one closest to the ray (relative to its sphere), then the nearer. Animals out of sight
+   * (down a burrow) are skipped.
+   */
   pickTarget(camera: Camera, maxDist = 8, coneDeg = 0): Individual | null {
     camera.getWorldDirection(this.tmp);
     this.ray.set(camera.position, this.tmp);
     const cone = Math.tan(coneDeg * Math.PI / 180);
-    let best: Individual | null = null, bestD = Infinity;
+    let best: Individual | null = null, bestScore = Infinity;
     for (const e of this.entries.values()) {
-      if (!e.view) continue;
+      if (!e.view || e.driver.hidden) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
       // (through the binoculars a small bird far off still counts when it is within a degree or so of the centre)
       const r = Math.max(0.12, e.view.radius * scale * 1.6, cone * e.ind.pos.distanceTo(camera.position));
-      this.sphere.set(e.driver.anchor(), r);
+      const a = e.driver.anchor();
+      this.sphere.set(a, r);
       const d = e.ind.pos.distanceTo(camera.position);
       if (d > maxDist) continue;
-      if (this.ray.intersectsSphere(this.sphere) && d < bestD) { bestD = d; best = e.ind; }
+      if (!this.ray.intersectsSphere(this.sphere)) continue;
+      const off = Math.sqrt(this.ray.distanceSqToPoint(a)) / r;
+      const score = off + d / maxDist * 0.25;
+      if (score < bestScore) { bestScore = score; best = e.ind; }
     }
     return best;
   }
@@ -530,6 +559,8 @@ export class CreatureSystem {
   canNetCapture(id: string): boolean {
     const e = this.entries.get(id);
     if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
+    // (an animal out of sight, a コメツキガニ down its burrow, is dug out, not netted)
+    if (e.driver.hidden) return false;
     // (a swimmer that can hide in the sand, the flounder, answers for itself too)
     if (e.ind.species.locomotion !== 'burrow' && !e.driver.canNetCapture) return true;
     // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.

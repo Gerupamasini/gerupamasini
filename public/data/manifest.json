@@ -17,7 +17,9 @@
     "syngnathus_schlegeli",
     "platichthys_bicoloratus",
     "hemitrygon_akajei",
-    "euprymna_morsei"
+    "euprymna_morsei",
+    "scopimera_globosa",
+    "portunus_trituberculatus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -32,7 +34,9 @@
     "pipefish_grass",
     "flatfish_sand",
     "ray_benthic",
-    "squid_sand"
+    "squid_sand",
+    "crab_burrow",
+    "swimming_crab"
   ],
   "maps": [
     "kasai_west",

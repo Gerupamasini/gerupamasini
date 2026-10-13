@@ -11,6 +11,8 @@ import { modelFor, variantOf } from '../creatures/models/choice';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
+import { AnimalContacts } from '../creatures/physics/animals';
+import type { ContactBody } from '../creatures/physics/contacts';
 
 /** the clear acrylic case: 36 cm wide, 16 cm deep, 18 cm tall, water 13 cm; 5 mm walls */
 export const CASE_W = 0.36, CASE_D = 0.16, CASE_H = 0.18, CASE_WATER = 0.13;
@@ -25,6 +27,8 @@ interface CaseOccupant {
   driver: Driver;
   root: Object3D;
   unsub: () => void;
+  /** its body for the contacts between the case's animals */
+  body?: ContactBody;
 }
 
 /**
@@ -42,6 +46,8 @@ export class FieldCase {
    */
   readonly animals = new Group();
   private readonly occupants: CaseOccupant[] = [];
+  /** the animals push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
   /** the acrylic bottom's top face, world y (follows the bob when afloat) */
   private floorY = 0;
   private readonly floor: Floor = { heightAt: () => this.floorY, waterAt: () => this.floorY + CASE_WATER };
@@ -268,6 +274,8 @@ export class FieldCase {
       o.root.position.x = Math.max(minX, Math.min(maxX, o.root.position.x));
       o.root.position.z = Math.max(minZ, Math.min(maxZ, o.root.position.z));
     }
+    const ix = this.halfX - 0.008, iz = this.halfZ - 0.008;
+    this.contacts.step(dt, this.occupants, { floor: this.floor, bounds: { minX: c.x - ix, maxX: c.x + ix, minZ: c.z - iz, maxZ: c.z + iz } });
   }
 
   dispose(): void {

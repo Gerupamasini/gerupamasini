@@ -4,6 +4,11 @@ import { AquariumEquipment, AquariumDevice, AquariumTank, Cable, EQUIPMENT_KINDS
 
 const camera = () => { const c = new PerspectiveCamera(40, 1, 0.003, 20); c.position.set(0.6, 0.3, 0.8); c.updateMatrixWorld(); return c; };
 const triangles = (root: AquariumDevice, level: number) => { let n = 0; root.lod.levels[level].object.traverse((o) => { if (o instanceof Mesh) n += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3; }); return n; };
+const canisterRig = () => {
+  const rig = new AquariumEquipment(), layout = rig.currentLayout;
+  layout.devices = layout.devices.map(d => d.kind === 'filter' ? { ...d, id: 'canisterFilter', kind: 'canisterFilter', itemId: 'canisterFilter-initial', position: [-0.205, -0.69, -0.05] } : d);
+  rig.setLayout(layout); rig.applyPreset(); return rig;
+};
 
 describe('aquarium equipment', () => {
   it('constructs every device with progressively lighter LODs and one shared palette', () => {
@@ -22,7 +27,7 @@ describe('aquarium equipment', () => {
     tank.dispose(); materials.dispose();
   });
   it('powers lamps, water circulation and air through actual connections, with immediate OFF propagation', () => {
-    const rig = new AquariumEquipment(); rig.update(0.016, camera());
+    const rig = canisterRig(); rig.update(0.016, camera());
     expect(rig.lightLevel).toBe(1); expect(rig.flows.some((f) => f.device === 'canisterFilter')).toBe(true);
     expect(rig.getObjectByProperty('type', 'Points')?.visible).toBe(true);
     rig.changeDevice('powerStrip', { enabled: false }); rig.update(0.016, camera());
@@ -32,7 +37,7 @@ describe('aquarium equipment', () => {
     rig.update(0.016, camera()); expect(rig.flows).toHaveLength(0); rig.dispose();
   });
   it('rejects incompatible, duplicate and cyclic power connections without changing the circuit', () => {
-    const rig = new AquariumEquipment(), before = rig.currentLayout.connections.length;
+    const rig = canisterRig(), before = rig.currentLayout.connections.length;
     const bad = { id: 'bad', kind: 'water' as const, from: { device: 'powerStrip', port: 'socket0' }, to: { device: 'canisterFilter', port: 'in' }, radius: 0.008 };
     expect(rig.connect(bad)).toMatch(/種類/); expect(rig.currentLayout.connections).toHaveLength(before);
     const existing = rig.currentLayout.connections.find((c) => c.to.device === 'ledLight')!;
@@ -75,11 +80,20 @@ describe('aquarium equipment', () => {
     rig.removeDevice('thermometer'); rig.update(1, camera()); expect(rig.devices.get('heater')!.powered).toBe(false); rig.dispose();
   });
   it('requires a complete serial chiller circuit and returns a directed local water velocity', () => {
-    const rig = new AquariumEquipment(); const chiller = rig.addDevice('chiller')!; rig.autoConnect(); rig.update(0.016, camera());
+    const rig = canisterRig(); const chiller = rig.addDevice('chiller')!; rig.autoConnect(); rig.update(0.016, camera());
     expect(rig.currentLayout.connections.some((c) => c.from.device === 'canisterFilter' && c.to.device === chiller)).toBe(true);
     const f = rig.flows[0]; expect(f).toBeDefined(); expect(rig.sampleFlow(f.position).dot(f.direction)).toBeGreaterThan(0);
     expect(rig.sampleFlow(new Vector3(10, 10, 10)).length()).toBe(0);
     rig.disconnect(rig.currentLayout.connections.find((c) => c.from.device === chiller && c.kind === 'water')!.id); rig.update(0.016, camera()); expect(rig.flows).toHaveLength(0); rig.dispose();
+  });
+  it('supplies a chiller with a circulation pump without granting a second filter type', () => {
+    const rig = new AquariumEquipment(), chiller = rig.addDevice('chiller')!;
+    expect(rig.applyPreset()).toBe(true); rig.update(0.016, camera());
+    const pump = rig.currentLayout.devices.find(d => d.kind === 'circulationPump')!;
+    expect(pump).toBeDefined(); expect(rig.devices.has('canisterFilter')).toBe(false);
+    expect(rig.currentLayout.connections.some(c => c.from.device === pump.id && c.to.device === chiller)).toBe(true);
+    expect(rig.warnings).toHaveLength(0); expect(rig.canRemoveDevice('filter')).toBe(false);
+    rig.dispose();
   });
   it('supports parametric hose/cable paths without losing endpoints, including repeated points', () => {
     const m = new EquipmentMaterials(), a: [number, number, number] = [0, 0, 0], b: [number, number, number] = [0.3, 0.4, -0.2];

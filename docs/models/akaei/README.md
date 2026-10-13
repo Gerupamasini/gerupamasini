@@ -60,7 +60,7 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 | `material.ts` | 皮膚シェーダ（背・腹・尾の色、粘液の艶、細かな凹凸、砂の被覆、薄い縁の透過）、眼のテクスチャ、内部・棘の材質 |
 | `AkaeiModel.ts` | 個体ごとの骨格と部位、LOD の切り替え、`AkaeiPose` → ボーン |
 | `AkaeiDriver.ts` | 5 つの行動、移動・高さ・姿勢、尾の追従チェーン、砂の演出、`Driver` の実装 |
-| `SandFX.ts` | 砂煙（シーンの光で照らす点スプライト）、接地影、掘り跡 |
+| `SandFX.ts` | 接地影、掘り跡（砂煙は全種共通の `src/creatures/fx/SandDust.ts`: [`docs/creatures/sand-dust.md`](../../creatures/sand-dust.md)） |
 
 ## 3. 個体差
 

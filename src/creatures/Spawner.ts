@@ -34,6 +34,11 @@ const MIN_SPAWN_DIST = 10;
 /** species the world lays itself (the clam field's アサリ, the reef's マガキ), not the spawner */
 const FIELD_SPECIES = new Set(['ruditapes_philippinarum', 'crassostrea_gigas']);
 
+/** Whether any of the species' spawn rules lets it live on this map (a rule without `maps` allows every map). */
+export function spawnsOnMap(sp: Pick<SpeciesDef, 'spawn'>, mapId: string): boolean {
+  return sp.spawn.some((r) => !r.maps || r.maps.includes(mapId));
+}
+
 /** Evaluates spawn rules on the habitat's coarse cells around the player and decides who appears and who leaves. */
 export class Spawner {
   private speciesList: SpeciesDef[];
@@ -95,7 +100,7 @@ export class Spawner {
     {
       for (const { cell, cx, cz } of cells) {
         for (const sp of this.speciesList) {
-          if (FIELD_SPECIES.has(sp.id) || this.hidden.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef; other burrowers spawn here, sparsely
+          if (FIELD_SPECIES.has(sp.id) || this.hidden.has(sp.id) || sp.placement === 'world') continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef, コメツキガニ by its colony; other burrowers spawn here, sparsely
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
@@ -174,7 +179,7 @@ export class Spawner {
     for (const ind of live) {
       const d = Math.hypot(ind.pos.x - px, ind.pos.z - pz);
       if (d > DESPAWN_RADIUS) { out.push(ind); continue; }
-      if (ind.pitId !== undefined) continue;   // pit residents stay as long as the player is around
+      if (ind.pitId !== undefined || ind.managed) continue;   // pit residents stay as long as the player is around; world systems manage their own
       const rule = ind.species.spawn[ind.ruleIndex];
       const cell = this.habitat.coarseIndex(ind.pos.x, ind.pos.z);
       const matches = rule ? this.ruleMatches(rule, cell, env) || ind.species.spawn.some((r) => this.ruleMatches(r, cell, env)) : true;

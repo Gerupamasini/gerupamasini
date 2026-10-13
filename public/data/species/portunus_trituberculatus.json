@@ -1,0 +1,66 @@
+{
+  "id": "portunus_trituberculatus",
+  "names": { "ja": "ガザミ", "sci": "Portunus trituberculatus", "en": "Gazami crab" },
+  "taxon": { "group": "crustacean", "family": "Portunidae" },
+  "locomotion": "walk",
+  "aquatic": true,
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "gazami",
+    "modelLength_mm": 100,
+    "viewDistance_m": 14,
+    "driver": "gazami",
+    "clips": { "idle": "Idle", "move": "Walk", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 12, "max": 230, "mean": 62, "sd": 36 },
+    "weightCoef": { "a": 0.00007, "b": 3.0 },
+    "minDepthFraction": 0.3
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": true },
+  "stages": [
+    { "id": "juvenile", "ja": "稚ガニ", "maxLength_mm": 40 },
+    { "id": "subadult", "ja": "若ガニ", "maxLength_mm": 110 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    { "tags": ["bare", "shallow", "eelgrass_edge"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.08, 1.4], "season": ["summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.9, "group": [1, 1], "maxPopulation": 10, "length_mm": [14, 120] },
+    { "tags": ["shallow", "deep", "bare"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.3, 2.0], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.25, "group": [1, 1], "maxPopulation": 4, "length_mm": [60, 230] },
+    { "tags": ["shallow", "channel", "pool"], "substrate": ["sand", "muddy_sand", "channel"], "depth_m": [0.08, 1.2], "season": ["summer", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 0.4, "group": [1, 1], "maxPopulation": 6, "length_mm": [14, 90] }
+  ],
+  "brain": {
+    "tree": "swimming_crab",
+    "params": {
+      "fleeDistance_m": 1.0,
+      "runDistance_m": 1.2,
+      "restMean_s": 10,
+      "buryDay_s": [30, 120],
+      "wanderDistance_m": [0.2, 1.2]
+    }
+  },
+  "capture": {
+    "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"],
+    "baseDifficulty": 0.62,
+    "alertPenalty": 0.5
+  },
+  "encyclopedia": {
+    "description": "内湾の砂泥底にすむ大型のワタリガニの仲間。甲は横に大きく張り出し、甲幅は甲長の 2 倍ほどで、前側縁には外眼窩歯を含めて 9 本の鋭い歯が並び、最後の 1 本は長い側棘になって左右に突き出す。甲の中央には和名の由来ではないが学名（trituberculatus＝三つのこぶ）のとおり 3 つの小さな隆起がある。はさみ脚は長く、腕節や長節に鋭い棘が並び、指は長く歯が並ぶ。最後の脚（第 5 脚）は先の 2 節が平たい櫂（かい）になっていて、これを 8 の字にかいて横向きにすばやく泳ぐ。甲は青緑〜褐色や紫褐色で白い斑点が散り、歩脚は青みを帯び、はさみの先は赤紫色。雄ははさみが長く腹部（ふんどし）が細い T 字形、雌は腹部が幅広い。昼は砂に浅く潜って眼と甲の前縁だけを出していることが多く、夕方から夜に出てきて貝や小魚、死骸を探して歩き回る。驚くとはさみを振り上げて広げ威嚇し、さらに近づくと横走りで素早く逃げ、深みでは泳ぎ去る。干潟や浅場で見られるのは主に夏から秋の若いカニ。",
+    "habitatHint": "夏から秋、走水や葛西の浅い砂底や澪筋。昼は砂に潜って眼だけを出している。近づくとはさみを振り上げ、横走りで逃げたり泳ぎ去ったりする。",
+    "behaviors": [
+      { "id": "idle", "ja": "休む", "hint": "はさみを体の前に折りたたみ、砂の上に低く伏せる" },
+      { "id": "walk", "ja": "横歩き", "hint": "左右の歩脚 3 本ずつを交互に運び、横向きに歩く" },
+      { "id": "forage", "ja": "摂餌", "hint": "左右のはさみで交互に砂の上の餌をつまみ、口へ運ぶ" },
+      { "id": "burrow", "ja": "砂に潜る", "hint": "後ろから砂に潜り、眼と甲の前縁だけを出す" },
+      { "id": "defend", "ja": "威嚇", "hint": "体を起こし、はさみを高く広げて振り上げる" },
+      { "id": "escape", "ja": "逃走", "hint": "横走りで素早く逃げる。深みでは泳ぎ去る" },
+      { "id": "swim", "ja": "遊泳", "hint": "平たい第 5 脚を 8 の字にかいて横向きに泳ぐ" }
+    ],
+    "placeholderModel": false
+  }
+}

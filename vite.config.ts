@@ -49,8 +49,11 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         hermitLab: fileURLToPath(new URL('./hermit-lab.html', import.meta.url)),
+        // surf-lab.html: the surf on a beach made to show it (sea, tide, hour and camera in hand)
+        surfLab: fileURLToPath(new URL('./surf-lab.html', import.meta.url)),
       },
-      output: { manualChunks: { three: ['three'] } },
+      // (the model loaders, with the meshopt and Zstandard decoders they carry, go with three)
+      output: { manualChunks: { three: ['three', 'three/addons/loaders/GLTFLoader.js', 'three/addons/loaders/KTX2Loader.js', 'three/addons/libs/meshopt_decoder.module.js'] } },
     },
   },
   server: { port: 5173, host: true },

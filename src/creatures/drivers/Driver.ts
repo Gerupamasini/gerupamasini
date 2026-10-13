@@ -1,8 +1,10 @@
-import type { Object3D, Vector3 } from 'three';
+import type { Color, IUniform, Object3D, Vector3 } from 'three';
 import type { Individual } from '../Individual';
 import type { HabitatSample } from '../../world/Habitat';
 import type { AmamoUniforms } from '../../world/amamo/kit';
 import type { ShootSpec } from '../../world/amamo/AmamoPatch';
+import type { BodyMode } from '../physics/contacts';
+import type { WaterMotion } from '../physics/water';
 
 export type IntentKind = 'rest' | 'wander' | 'moveTo' | 'flee' | 'forage' | 'display' | 'burrow' | 'special';
 
@@ -57,8 +59,12 @@ export interface Floor {
   heightAt(x: number, z: number): number;
   waterAt(x: number, z: number): number;
   sampleAt?(x: number, z: number): HabitatSample | null;
-  /** the map's tint on its sand and muddy sand (Terrain.setSandTint; absent: none, the plain substrate colours) */
-  sandTint?: Readonly<Vector3>;
+  /** the sediment's colour as it is drawn here (linear albedo, before the light); null where there is none (a bare
+   *  tank). For what takes on the colour of the bottom: sand over a buried flatfish, a fish matching its background */
+  colorAt?(x: number, z: number, out: Color): Color | null;
+  /** a bed drawn by the tank's sand shader (BED_SAND_GLSL): its uniforms, the world position of its frame's origin
+   *  and the silt in it, so that sand over an animal can be drawn grain for grain as the bed round it */
+  bed?: { uniforms: Record<string, IUniform>; origin: Vector3; siltAt(x: number, z: number): number } | null;
   /** the eelgrass meadow, on a flat that has one */
   meadow?: MeadowProbe | null;
   /** the carrion lying about, for the scavengers */
@@ -78,6 +84,17 @@ export interface DriverContext {
   minDepth?: number;
   /** false where there is nothing to dig into (an acrylic case, a bare tank): burrowers stay on the surface */
   canBurrow?: boolean;
+  /** how the water moves (the swell, an open shore's surf), for what swims in it; absent: still water (a tank, the case) */
+  water?: WaterMotion | null;
+}
+
+/** How an animal's body meets the others this frame (the physics' contacts, physics/contacts.ts). */
+export interface BodyState {
+  mode: BodyMode;
+  /** its heading (rad; forward = (sin, cos)) */
+  heading: number;
+  /** the height of its underside (m) */
+  y: number;
 }
 
 export interface Driver {
@@ -95,11 +112,23 @@ export interface Driver {
    * (an aquatic animal is never left on the sand).
    */
   holdAt?(x: number, z: number, heading?: number): void;
+  /** its body as the contacts see it (absent: on the bed at the individual's place, facing its heading) */
+  body?(): BodyState;
+  /**
+   * Move the animal by (dx, dz) where it is, carrying on with whatever it was doing: a push from another body. Its own
+   * position and the individual's move at once, its drawing at its next update. (Absent: it is never pushed; the
+   * others give way to it.)
+   */
+  nudge?(dx: number, dz: number): void;
   onEvent(cb: (e: BehaviorEvent) => void): () => void;
   /** anchor point for cameras (world) */
   anchor(): Vector3;
   /** mouth / gill opening for hero interior materials (species that have them) */
   readonly openings?: { mouth: number; gill: number };
+  /** out of sight (e.g. down its burrow): not pickable, not catchable */
+  readonly hidden?: boolean;
+  /** wants an update every frame whatever its distance tier (procedural gaits that plant feet) */
+  readonly everyFrame?: boolean;
   /** short state text appended to the debug marker (species with an internal behaviour model) */
   debugLabel?(): string;
   dispose(): void;

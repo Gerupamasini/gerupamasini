@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Euler, Group, Quaternion, Vector3, type Bone, type BufferAttribute, type Mesh, type SkinnedMesh } from 'three';
+import { Color, Euler, Group, Quaternion, Vector3, type Bone, type BufferAttribute, type Mesh, type SkinnedMesh } from 'three';
 import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, profileAt, surfacePoint, toModel } from '../../src/creatures/species/mimiika/anatomy';
 import { LODS, buildArms, buildBody, buildFin, buildFunnel, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
 import { ARM_II_KEYS, createSquidBehavior, MODES, type Mode, type PitEvent } from '../../src/creatures/species/mimiika/behavior';
@@ -1237,15 +1237,15 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
     const m1 = imprint(g1);
     expect(U(m1).uLook.value.toArray()).toEqual([0.24, 0, 0.1, 0.18]);
     expect(U(m1).uBowl.value.toArray()).toEqual([0.62, 0.86]);
-    for (let i = 0; i < 74; i++) ray.update(1, () => 0);
+    for (let i = 0; i < 74; i++) ray.update(1);
     expect(U(m1).uAmount.value).toBeCloseTo(0.8, 9);
-    for (let i = 0; i < 38; i++) ray.update(1, () => 0);
+    for (let i = 0; i < 38; i++) ray.update(1);
     expect(U(m1).uAmount.value).toBeCloseTo(0.8 * (1 - 37 / 75), 6);
-    for (let i = 0; i < 40; i++) ray.update(1, () => 0);
+    for (let i = 0; i < 40; i++) ray.update(1);
     expect(imprint(g1)).toBeUndefined();
     ray.dispose();
     // the squid's: darker, most in the middle, a crisper wall, a lighter rim; filled in from now in the time given
-    const g2 = new Group(), sq = new SandFX(g2, MimiikaDriver.sandFxOptions(0.56));
+    const g2 = new Group(), sq = new SandFX(g2);
     sq.imprint(0, 0, 0.3, 0.75 * ML * 0.56, 1.05 * ML * 0.56, () => 0, 0.4, 60, 0.0006, MimiikaDriver.PIT_LOOK);
     const m2 = imprint(g2), look = U(m2).uLook.value.toArray(), bowl = U(m2).uBowl.value.toArray();
     expect(look[0] + look[1]).toBeGreaterThan(2 * 0.24);
@@ -1254,103 +1254,45 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
     expect(look[3]).toBeLessThan(0.18);
     expect(bowl[1] - bowl[0]).toBeLessThan(0.86 - 0.62);
     sq.growImprint(1);
-    for (let i = 0; i < 10 * 60; i++) sq.update(1 / 60, () => 0);
+    for (let i = 0; i < 10 * 60; i++) sq.update(1 / 60);
     expect(U(m2).uAmount.value).toBeCloseTo(1, 9);
     sq.fillImprint(2.5);
-    for (let i = 0; i < 75; i++) sq.update(1 / 60, () => 0);
+    for (let i = 0; i < 75; i++) sq.update(1 / 60);
     expect(U(m2).uAmount.value).toBeCloseTo(0.5, 1);
-    for (let i = 0; i < 80; i++) sq.update(1 / 60, () => 0);
+    for (let i = 0; i < 80; i++) sq.update(1 / 60);
     expect(imprint(g2)).toBeUndefined();
     sq.dispose();
   });
 
-  it('takes its coat and its clouds\' colour from the bed under it, the map\'s own tint on the sand included (走水)', () => {
-    const tint = new Vector3(0.98, 0.9, 0.74), v = new Vector3();
-    expect(sandColour('sand', undefined, v).toArray()).toEqual(SUBSTRATE_TINT.sand);
-    expect(sandColour(undefined, tint, v).toArray()).toEqual(new Vector3(...SUBSTRATE_TINT.sand).multiply(tint).toArray());
-    expect(sandColour('muddy_sand', tint, v).toArray()).toEqual(new Vector3(...SUBSTRATE_TINT.muddy_sand).multiply(tint).toArray());
-    // (the terrain tints only its sand and muddy sand)
-    expect(sandColour('mud', tint, v).toArray()).toEqual(SUBSTRATE_TINT.mud);
-    const cover = (sandTint?: Vector3) => {
+  it('takes its coat\'s colour from the bed under it: the table\'s grey brightness in the drawn bed\'s hue (走水\'s warm sand)', () => {
+    const warmBed = new Color(0.3, 0.27, 0.2), v = new Vector3();
+    const lum = (c: number[]) => (c[0] + c[1] + c[2]) / 3;
+    expect(sandColour('sand', null, v).toArray()).toEqual(SUBSTRATE_TINT.sand);
+    expect(sandColour(undefined, null, v).toArray()).toEqual(SUBSTRATE_TINT.sand);
+    for (const sub of ['sand', 'muddy_sand', 'mud']) {
+      const c = sandColour(sub, warmBed, v).toArray();
+      expect(lum(c)).toBeCloseTo(lum(SUBSTRATE_TINT[sub]), 9);
+      expect(c[0] / c[2]).toBeCloseTo(0.3 / 0.2, 9);
+    }
+    // (a bed drawn black gives no hue: the table's colour)
+    expect(sandColour('sand', new Color(0, 0, 0), v).toArray()).toEqual(SUBSTRATE_TINT.sand);
+    const cover = (bed?: Color) => {
       const d = new MimiikaDriver(), holder = MimiikaDriver.makeModel().root;
       new Group().add(holder);
       const r = new Rng(3);
       const ind = { id: 'bed#1', length_mm: 14, pos: new Vector3(), home: new Vector3(), heading: 0, alert: 0, rng: { next: () => r.next(), chance: (p: number) => r.next() < p } } as unknown as Individual;
       d.attach(holder, ind);
-      const floor = { heightAt: () => 0, waterAt: () => 0.3, sampleAt: () => ({ substrate: 'sand' }), ...(sandTint ? { sandTint } : {}) };
+      const floor = { heightAt: () => 0, waterAt: () => 0.3, sampleAt: () => ({ substrate: 'sand' }), ...(bed ? { colorAt: (_x: number, _z: number, out: Color) => out.copy(bed) } : {}) };
       d.update(1 / 60, { floor, player: new Vector3(0, 1, 0.5), simScale: 1, nowMs: 0 } as unknown as DriverContext);
       const c = d.view!.look.uniforms.uCover.value.toArray();
       d.dispose();
       return c;
     };
-    // a tank, the case, the viewer: the plain sand as before; 走水: its warm sand
+    // a floor that draws no colour (the viewer): the plain sand as before; 走水: its warm sand
     for (const [a, e] of cover().map((x, i) => [x, SUBSTRATE_TINT.sand[i]])) expect(a).toBeCloseTo(e, 6);
-    const warm = cover(tint), want = new Vector3(...SUBSTRATE_TINT.sand).multiply(tint).toArray();
-    for (let i = 0; i < 3; i++) expect(warm[i]).toBeCloseTo(want[i], 6);
+    const warm = cover(warmBed);
+    expect(lum(warm)).toBeCloseTo(lum(SUBSTRATE_TINT.sand), 6);
     expect(warm[0] / warm[2]).toBeGreaterThan(1.25);
-  });
-
-  it('leaves the アカエイ\'s sand exactly as it was, and settles the squid\'s on the sand under it', () => {
-    const runFx = (fx: SandFX) => {
-      let seed = 7;
-      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-      const out: number[] = [];
-      for (let f = 0; f < 240; f++) {
-        if (f % 9 === 0) fx.emit(new Vector3(0.05 * Math.sin(f), 0.02, 0.05), new Vector3(0.03, f % 2 ? 0.05 : -0.09, -0.02), 9, 0.03, 0.05, 1.5 + (f % 3), 0.5, rnd);
-        fx.update(1 / 60, (x, z) => 0.01 * Math.sin(x * 9) + 0.004 * z);
-        if (f % 40 === 39) out.push(...(fx.points.geometry.getAttribute('position').array as Float32Array), ...(fx.points.geometry.getAttribute('aPuff').array as Float32Array));
-      }
-      fx.dispose();
-      return out;
-    };
-    const a = runFx(new SandFX(new Group())), b = runFx(new SandFX(new Group(), { floor: 0.004, everyFrame: false, killOnFloor: false }));
-    expect(a).toEqual(b);
-    // the ray's default: one sprite in eight is held 4 mm over the sand from the start, the others only late in life;
-    // the clouds swell 1.8–3.2×
-    const ray = new SandFX(new Group());
-    ray.emit(new Vector3(0, 0.001, 0), new Vector3(0, -0.2, 0), 16, 0, 0.01, 10, 0.5, () => 0.5);
-    for (let f = 0; f < 6; f++) ray.update(1 / 60, () => 0);
-    const y = ray.points.geometry.getAttribute('position') as BufferAttribute, puff = ray.points.geometry.getAttribute('aPuff') as BufferAttribute;
-    expect(y.getY(0)).toBeCloseTo(0.004, 9);
-    expect(y.getY(8)).toBeCloseTo(0.004, 9);
-    expect(y.getY(3)).toBeLessThan(0);
-    for (let f = 0; f < 560; f++) ray.update(1 / 60, () => 0);
-    expect(puff.getX(1) / 0.01).toBeGreaterThan(1.8);
-    ray.dispose();
-    // the squid's: floor ∝ size (never under 0.3 mm), tested every frame; poured grains (kill) vanish into the sand
-    // and barely swell
-    expect(MimiikaDriver.sandFxOptions(0.56)).toEqual({ floor: 0.0008 * 0.56, everyFrame: true, tone: 1.05, sink: 0.012 });
-    expect(MimiikaDriver.sandFxOptions(0.2).floor).toBe(0.0003);
-    const squid = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
-    squid.emit(new Vector3(0, 0.003, 0), new Vector3(0, -0.02, 0), 4, 0, 0.002, 10, 0.5, () => 0.5);
-    squid.emit(new Vector3(0, 0.003, 0), new Vector3(0, -0.02, 0), 4, 0, 0.002, 10, 0.5, () => 0.5, 1.1, true);
-    for (let f = 0; f < 60; f++) squid.update(1 / 60, () => 0);
-    const sy = squid.points.geometry.getAttribute('position') as BufferAttribute, sp = squid.points.geometry.getAttribute('aPuff') as BufferAttribute;
-    for (let i = 0; i < 4; i++) { expect(sy.getY(i)).toBeCloseTo(0.0008 * 0.56, 9); expect(sp.getY(i)).toBeGreaterThan(0); }
-    for (let i = 4; i < 8; i++) expect(sp.getY(i)).toBe(0);
-    // its silt hangs in the water (a ray's cloud 5 mm up is down on the sand in about 0.7 s, the squid's not yet), but a
-    // single grain sinks as fast as ever
-    const hang = (o: ConstructorParameters<typeof SandFX>[1], kill: boolean) => {
-      const fx = new SandFX(new Group(), o);
-      fx.emit(new Vector3(0, 0.005, 0), new Vector3(), 1, 0, 0.002, 10, 0.5, () => 0.5, kill ? 1.1 : undefined, kill);
-      let t = 0;
-      const y = fx.points.geometry.getAttribute('position') as BufferAttribute, a = fx.points.geometry.getAttribute('aPuff') as BufferAttribute;
-      while (t < 5 && a.getY(0) >= 0 && y.getY(0) > 0.0005 + 1e-6) { fx.update(1 / 60, () => 0); t += 1 / 60; if (kill && a.getY(0) === 0 && t > 0.05) break; }
-      fx.dispose();
-      return t;
-    };
-    expect(hang({ floor: 0.0005 }, false)).toBeLessThan(0.9);
-    expect(hang({ ...MimiikaDriver.sandFxOptions(0.56), floor: 0.0005 }, false)).toBeGreaterThan(1.1);
-    expect(hang({ ...MimiikaDriver.sandFxOptions(0.56), floor: 0.0005 }, true)).toBeCloseTo(hang({ floor: 0.0005, killOnFloor: true }, true), 5);
-    // and is the bed's own tone (the ray's a little paler)
-    const tone = (o?: ConstructorParameters<typeof SandFX>[1]) => { const fx = new SandFX(new Group(), o); const v = (fx.points.material as unknown as { uniforms: { uTone: { value: number } } }).uniforms.uTone.value; fx.dispose(); return v; };
-    expect(tone()).toBe(1.7);
-    expect(tone(MimiikaDriver.sandFxOptions(1))).toBe(1.05);
-    const grains = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
-    grains.emit(new Vector3(0, 0.01, 0), new Vector3(0, 0, 0), 1, 0, 0.002, 1, 0.5, () => 0.5, 1.1, true);
-    for (let f = 0; f < 55; f++) grains.update(1 / 60, () => 0);
-    expect((grains.points.geometry.getAttribute('aPuff') as BufferAttribute).getX(0)).toBeLessThan(0.002 * 0.75 * 1.1 + 1e-9);
-    squid.dispose(); grains.dispose();
   });
 
   it('scales the sand on its skin with its size: the fade into the bed 2.2 mm × K, grains ≈ 0.45 mm', () => {

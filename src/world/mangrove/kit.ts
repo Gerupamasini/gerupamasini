@@ -56,7 +56,8 @@ export class HirugiKit {
     this.views.add(g);
     if (!this.owners.has(source)) this.owners.set(source,g);
     const m = new InstancedMesh(g, this.materials[part], capacity); m.name = part; m.customDepthMaterial = this.depth[part];
-    m.instanceMatrix.setUsage(DynamicDrawUsage); m.castShadow = lod < 2; m.receiveShadow = true; m.count = 0;
+    // (the far trees cast only into the far shadow map, FarShadow)
+    m.instanceMatrix.setUsage(DynamicDrawUsage); m.castShadow = lod < 2; m.userData.farShadow = lod >= 2; m.receiveShadow = true; m.count = 0;
     return m;
   }
   /** Release a batch without destroying shared GPU buffers. Views are destroyed together with the kit. */

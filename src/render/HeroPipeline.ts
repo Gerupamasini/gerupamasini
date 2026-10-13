@@ -1,8 +1,9 @@
 import {
-  ACESFilmicToneMapping, Color, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
+  Color, CustomToneMapping, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
   NoToneMapping, PerspectiveCamera, RGBAFormat, Scene, Vector2, Vector3, WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { createPost } from './HeroPost.js';
+import { renderSize } from './RenderSize';
 import type { WaterPass } from '../world/Water';
 
 export const LAYER_FISH = 2;
@@ -21,6 +22,8 @@ export interface SharedUniforms {
   uTime: IUniform<number>;
   uScatter: IUniform<number>;
   uInterior: IUniform<number>;
+  /** the surroundings' light diffused through the body from its far side */
+  uAmbThrough: IUniform<number>;
   uCausticAmt: IUniform<number>;
   uFinDensity: IUniform<number>;
   uDebug: IUniform<number>;
@@ -73,6 +76,7 @@ export class HeroPipeline {
       uTime: { value: 0 },
       uScatter: { value: 1.0 },
       uInterior: { value: 0.45 },
+      uAmbThrough: { value: 5.0 },   // as the field's goby bodies (GOBY_LIGHT.uGbAmbient)
       uCausticAmt: { value: 0.15 },
       uFinDensity: { value: 1.0 },
       uDebug: { value: 0 },
@@ -147,10 +151,14 @@ export class HeroPipeline {
 
   render(scene: Scene, camera: PerspectiveCamera, dt: number, water: WaterPass | null = null): void {
     const r = this.renderer;
-    const size = r.getDrawingBufferSize(new Vector2());
+    const size = renderSize(r, new Vector2());
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
     this.shared.uTime.value += dt;
     this.shared.uCamNearFar.value.set(camera.near, camera.far);
+    // (the home tank's renderer points these at its own buffers while it draws a hero fish)
+    this.shared.uBg.value = this.envRT.texture;
+    this.shared.uBgDepth.value = this.envRT.depthTexture;
+    this.shared.uResolution.value.set(this.width, this.height);
     const prevTone = r.toneMapping;
     const prevBg = scene.background;
     r.toneMapping = NoToneMapping;
@@ -174,7 +182,7 @@ export class HeroPipeline {
     // 3. tone map to the screen
     r.setRenderTarget(null);
     r.render(this.post.scene, this.post.camera);
-    r.toneMapping = prevTone === NoToneMapping ? ACESFilmicToneMapping : prevTone;
+    r.toneMapping = prevTone === NoToneMapping ? CustomToneMapping : prevTone;
     scene.background = prevBg;
     camera.layers.set(0);
   }

@@ -17,7 +17,7 @@ export interface WaveSet {
 }
 
 /** A light breeze from `windDir` (radians, direction of travel) over water of typical depth `depth` (m). */
-export function createWaves({ windDir = 0.7, depth = 0.6, seed = 7 }: { windDir?: number; depth?: number; seed?: number } = {}): WaveSet {
+export function createWaves({ windDir = 0.7, depth = 0.6, seed = 7, peak = 0.35, boost = 0 }: { windDir?: number; depth?: number; seed?: number; peak?: number; boost?: number } = {}): WaveSet {
   let s = seed >>> 0;
   const rnd = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   // wavelengths from a 2.5 m swell to 2 cm capillaries; steepness peaks around 20 cm (a fetch-limited breeze in the bay)
@@ -27,7 +27,9 @@ export function createWaves({ windDir = 0.7, depth = 0.6, seed = 7 }: { windDir?
     const k = (2 * Math.PI) / lambda;
     const ln = Math.log(lambda / 0.2);
     // near-calm: the viewer's pool uses 0.012; a light breeze on the bay is not much steeper (gusts roughen patches)
-    const steep = 0.004 + 0.009 * Math.exp(-(ln * ln) / 0.9);
+    let steep = 0.004 + 0.009 * Math.exp(-(ln * ln) / 0.9);
+    // a breezier water (boost > 0): a wind chop around `peak` on top, the long swell a little lower
+    if (boost > 0) steep *= (1 + boost * Math.exp(-(Math.log(lambda / peak) ** 2) / 0.8)) * (lambda > 1 ? 0.7 : 1);
     const amp = (steep * lambda) / (2 * Math.PI) * (0.8 + 0.4 * rnd()) * (lambda < 0.05 ? 0.55 : 1);
     // the long components come from one side; the short ones spread wider
     const spread = 0.35 + 0.95 * (i / (lambdas.length - 1));
