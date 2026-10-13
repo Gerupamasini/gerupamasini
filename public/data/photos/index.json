@@ -87,6 +87,11 @@
       "id": "euprymna_morsei",
       "name": "ミミイカ",
       "file": "euprymna_morsei.jpg"
+    },
+    {
+      "id": "portunus_trituberculatus",
+      "name": "ガザミ",
+      "file": "portunus_trituberculatus.jpg"
     }
   ]
 }
