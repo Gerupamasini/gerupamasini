@@ -26,13 +26,17 @@ float swbNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(swbHash(i), swbHash(i + vec2(1.0, 0.0)), f.x), mix(swbHash(i + vec2(0.0, 1.0)), swbHash(i + vec2(1.0)), f.x), f.y);
 }
+// the day's 2 % run-up (m over the still level) on a bed of slope beta (Stockdon et al., as the swash reckons it)
+float surfRunup2(float beta) {
+  float Hs = max(uSurf.x, 0.02), L0 = 1.5613 * uSurf.y * uSurf.y, HL = Hs * L0, b = clamp(beta, 0.02, 0.25);
+  return b / sqrt(Hs / L0) < 0.3 ? 0.043 * sqrt(HL) : 1.1 * (0.35 * b * sqrt(HL) + 0.5 * sqrt(HL * (0.563 * b * b + 0.004)));
+}
 // the sand's usual state at q, e metres above the still level on a bed of slope beta, for the day's sea: x: the film
 // (about the still waterline the sand is just drained of a sheet about half the time; below it, less and less often
-// laid bare by the backwash), y: saturation (wet up to about the day's 2 % run-up on this slope, Stockdon et al., as
-// the swash reckons it; its top edge in lobes and tongues)
+// laid bare by the backwash), y: saturation (wet up to about the day's 2 % run-up on this slope; its top edge in lobes
+// and tongues)
 vec2 surfMemUsual(vec2 q, float e, float beta) {
-  float Hs = max(uSurf.x, 0.02), L0 = 1.5613 * uSurf.y * uSurf.y, HL = Hs * L0, b = clamp(beta, 0.02, 0.25);
-  float R2 = b / sqrt(Hs / L0) < 0.3 ? 0.043 * sqrt(HL) : 1.1 * (0.35 * b * sqrt(HL) + 0.5 * sqrt(HL * (0.563 * b * b + 0.004)));
+  float R2 = surfRunup2(beta);
   float h = e + R2 * (0.22 * (swbNoise(q * 0.35 + 3.0) - 0.5) + 0.1 * (swbNoise(q * 1.3 - 1.0) - 0.5));
   float film = 0.55 * (1.0 - smoothstep(0.05 * R2, 0.45 * R2, h)) * (1.0 - smoothstep(0.0, 0.3 * R2 + 0.02, -h));
   return vec2(film, 1.0 - smoothstep(0.55 * R2, 0.95 * R2, h));
