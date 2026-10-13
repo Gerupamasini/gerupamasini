@@ -62,7 +62,7 @@ export interface MmUniforms {
   uGroundY: IUniform<number>;
   /** over what height (world m) the coat fades into the bed: 2.2 mm on the model, scaled with the animal (setScale) */
   uSandFade: IUniform<number>;
-  /** the sand grains' size (model mm): ≈ 0.2 mm in the real animal whatever its size (setScale) */
+  /** the sand grains' size (model mm): ≈ 0.45 mm in the real animal whatever its size (setScale, sandGrain) */
   uGrain: IUniform<number>;
   /** per arm (ARMS order): its radius factor as it is stretched (rig.ts armThin; 1 at rest length) */
   uArmThin: IUniform<Float32Array>;
@@ -539,29 +539,50 @@ float mmFun = 0.0, mmBore = 0.0, mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT
   if (mmBore > 0.5) { mmIr = 0.0; mmCoat = 0.0; mmRough = 0.75; }
   // ---- sand: grains in the mucus of the back, and thrown over the head (not over the eyes)
   {
-    // grains: jittered points at two sizes over a fine noise (no lattice), a few pale quartz and dark grains
+    // single grains on two jittered lattices (coarse, fine); each sticks once the local cover passes its own random
+    // threshold, so the coat thickens grain by grain and the skin shows between them (21, 46); never a solid layer
     vec3 q = p / uGrain + 51.0;
     vec3 id = floor(q), h = mmH3(id);
-    float gd = length(q - id - 0.5 - (h - 0.5) * 0.7);
-    float grain = 1.0 - smoothstep(0.22, 0.42, gd * (0.8 + 0.5 * h.z));
-    float lay = mmN(p * 0.6 + 9.0) * 0.45 + mmN(p * 2.7 + 3.0) * 0.25 + h.x * 0.3;
-    float back = mix(D, 1.0, 0.6 * uHeadCover) * (part < 0.5 ? 1.0 : part < 1.5 ? 0.85 : arm ? mix(0.35, 0.9, uHeadCover) : 0.0);
-    float head = D * (part < 1.5 ? smoothstep(-6.0, 1.0, zn) : arm ? 0.4 * (1.0 - vSkin.y) : 0.0) * smoothstep(0.05, 0.25, lidS);
+    float grain = 1.0 - smoothstep(0.30, 0.44, length(q - id - 0.5 - (h - 0.5) * 0.7) * (0.8 + 0.5 * h.z));
+    vec3 q2 = p / (uGrain * 0.62) + 13.0;
+    vec3 id2 = floor(q2), h2 = mmH3(id2);
+    float grain2 = 1.0 - smoothstep(0.28, 0.42, length(q2 - id2 - 0.5 - (h2 - 0.5) * 0.7) * (0.8 + 0.5 * h2.z));
+    // patches: the coat is laid by strokes, a cap or band of grains on the head first (18)
+    float lay = mmN(p * 0.55 + 9.0) * 0.65 + mmN(p * 2.1 + 3.0) * 0.35;
+    float back = D * (part < 0.5 ? 1.0 : part < 1.5 ? 0.85 : 0.0);
+    float head = D * (part < 1.5 ? smoothstep(-6.0, 1.0, zn) : 0.0) * smoothstep(0.05, 0.25, lidS);
+    // (glue cells only at the arms' bases: none on the outer three quarters of the dorsal arms, Singley 1982)
+    if (arm) { float ab = 1.0 - smoothstep(0.08, 0.25, vSkin.y); back = 0.6 * D * ab; head = 0.5 * D * ab; }
     // (the domes stay almost clear of sand, even buried: 16)
     float clearEye = mix(1.0, 0.25 * smoothstep(0.1, 0.4, lidS), dome);
     float cover = max(back * uSandCoat, head * uHeadCover) * clearEye;
     // (buried, the head between the two domes stays bare copper: 16)
     cover *= 1.0 - 0.75 * float(headP) * smoothstep(-4.0, -1.0, zn) * exp(-pow(p.x / 3.0, 2.0));
-    mmSand = smoothstep(lay - 0.08, lay + 0.08, cover * 1.15) * mix(0.5 + 0.5 * grain, 1.0, smoothstep(0.5, 0.95, cover));
+    float c = cover * (0.55 + 0.9 * lay);
+    float s1 = grain * smoothstep(h.x * 0.9, h.x * 0.9 + 0.1, c);
+    float s2 = grain2 * smoothstep(h2.x * 1.05 + 0.05, h2.x * 1.05 + 0.15, c);
+    // the finest silt between the grains where it lies thickest (the buried back), never opaque: the skin shows (21)
+    float film = 0.22 * smoothstep(0.85, 1.2, c);
+    // (finer than a pixel: the grains' mean cover, not a shimmer)
+    float far = smoothstep(0.35, 0.9, aa / uGrain);
+    float g = max(s1, s2);
+    mmSand = mix(max(g, film), clamp(0.55 * smoothstep(0.1, 0.9, c) + film, 0.0, 0.8), far);
+    // each grain its own colour: grey and tan quartz, a few pale shell bits and dark grains (21, 46)
+    vec3 hc = s1 >= s2 ? h : h2;
     float fineN = mmN(p * 4.3) * 0.6 + mmN(p * 9.1) * 0.4;
-    vec3 sand = uCover * (0.86 + 0.22 * fineN);
-    float odd = step(0.9, h.y) * grain * (1.0 - smoothstep(0.05, 0.2, aa));
-    sand = mix(sand, mix(sand * 0.55, sand * 1.35 + 0.02, step(0.5, h.z)), odd * 0.6);
+    float br = hc.y < 0.12 ? 0.42 : hc.y > 0.86 ? 1.45 : 0.78 + 0.4 * hc.y;
+    vec3 sand = uCover * mix(1.0, br, 1.0 - far) * (0.92 + 0.12 * fineN);
+    sand = mix(sand, sand * vec3(1.1, 0.97, 0.8), step(0.6, hc.z) * (1.0 - far));
+    sand = mix(sand, uCover * 0.8, (1.0 - g) * film / 0.22 * 0.6);
+    // where it meets the bed the sand banks up against it (40-42): solid, the bed's own colour, then faded into it
+    float bank = (1.0 - smoothstep(0.0, 0.6 * uSandFade, vWPos.y - uGroundY)) * smoothstep(0.3, 0.8, uSandCoat) * step(part, 1.5) * (1.0 - dome);
+    sand = mix(sand, uCover * (0.92 + 0.12 * fineN), bank * (1.0 - g));
+    mmSand = max(mmSand, bank);
     alb = mix(alb, sand, mmSand);
     mmRough = mix(mmRough, 0.9, mmSand);
     mmCoat *= 1.0 - mmSand;
     mmIr *= 1.0 - mmSand;
-    mmHgt += 0.035 * mmSand * (grain + fineN * 0.5);
+    mmHgt += 0.06 * g * (1.0 - far) + 0.01 * film * fineN;
   }
   diffuseColor.rgb = alb * uTint;
   // glassy tissue: where no pigment is spread the background shows through (most in the pale, hunting dress)
@@ -1019,8 +1040,12 @@ export interface MmLookSpec {
   dark: number;
 }
 
-/** the sand grains' size on the skin (model mm) for an animal K × the model: ≈ 0.2 mm real, within 0.25 … 0.8 */
-export const sandGrain = (K: number): number => Math.min(0.8, Math.max(0.25, 0.2 / Math.max(K, 1e-3)));
+/**
+ * the sand grains' size on the skin (model mm) for an animal K × the model: ≈ 0.45 mm real (the grains stuck on the
+ * coat of 21 are 2–4 % of the mantle: medium sand, coarser than the silt; finer ones are lost under a pixel), within
+ * 0.45 … 1.2
+ */
+export const sandGrain = (K: number): number => Math.min(1.2, Math.max(0.45, 0.45 / Math.max(K, 1e-3)));
 
 /** One squid's materials (programs shared between animals, uniforms its own). */
 export class MimiikaLook {

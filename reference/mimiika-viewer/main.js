@@ -82,7 +82,7 @@ function poseStudio(dt = 0) {
   for (const e of beh.fx) {
     // (the pit it blows: laid just over the bed, under the buried eyes)
     if (e.kind === 'pit') { if (e.deepen) studioFx.growImprint(e.strength); else studioFx.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007); continue; }
-    (e.kind === 'ink' ? studioInk : studioFx).emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, undefined, e.grow, e.kill);
+    (e.kind === 'ink' ? studioInk : studioFx).emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, undefined, e.grow, e.kill, e.shade);
   }
   beh.fx.length = 0;
   studioFx.update(dt || 1 / 60, () => FLOOR);
@@ -118,8 +118,8 @@ function studio(view) {
   // (the game's sand: clouds settle on the bed, poured grains vanish into it)
   studioFx = new SandFX(scene, MimiikaDriver.sandFxOptions(1));
   studioFx.shadow.visible = false;
-  // (the grains in the water a little darker than the pale, sunlit coral sand: wet, and in their own shade, as in 67)
-  studioFx.setSandColour(new THREE.Vector3(0.55, 0.52, 0.47).multiplyScalar(0.7));
+  // (the floor's sand: the squid's clouds take the bed's own tone, sandFxOptions)
+  studioFx.setSandColour(new THREE.Vector3(0.55, 0.52, 0.47));
   studioInk = new SandFX(scene);
   studioInk.shadow.visible = false;
   studioInk.setSandColour(new THREE.Vector3(0.012, 0.01, 0.011));

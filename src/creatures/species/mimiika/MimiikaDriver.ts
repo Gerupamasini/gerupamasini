@@ -29,10 +29,10 @@ const _v = new Vector3();
 
 /**
  * Sand events the behaviour may give beyond FxEvent's: single grains that swell little (`grow` × their start size) and
- * are gone where they reach the sand (`kill`), and the pit it blows (kind 'pit': centre, heading, half-sizes in m,
- * how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one).
+ * are gone where they reach the sand (`kill`), sand darker than the bed (`shade`), and the pit it blows (kind 'pit':
+ * centre, heading, half-sizes in m, how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one).
  */
-type SandEvent = FxEvent & { grow?: number; kill?: boolean };
+type SandEvent = FxEvent & { grow?: number; kill?: boolean; shade?: number };
 interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number }
 
 /**
@@ -93,10 +93,12 @@ export class MimiikaDriver implements Driver {
 
   /**
    * The sand clouds of an animal K × the model: they settle onto the sand just under it (a fixed 4 mm floor would hold
-   * them over a small squid's buried head), tested every frame (the poured grains are small and fall fast).
+   * them over a small squid's buried head), tested every frame (the poured grains are small and fall fast). The silt a
+   * jet throws hangs in the water a while (sinks at 0.012 m/s², not the ray's 0.05: 5 mm up it would be back on the
+   * bed in 0.7 s, half under it), the bed's own tone (1.05, not 1.7: a ray's cloud is lit far over the sand).
    */
   static sandFxOptions(K: number): SandFXOptions {
-    return { floor: Math.max(0.0003, 0.0008 * K), everyFrame: true };
+    return { floor: Math.max(0.0003, 0.0008 * K), everyFrame: true, tone: 1.05, sink: 0.012 };
   }
 
   /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand, the pit and ink: DriverEntry.keep. */
@@ -261,10 +263,12 @@ export class MimiikaDriver implements Driver {
     const sdt = Math.min(0.1, dt * ctx.simScale);
     this.clock += sdt;
     this.player.copy(ctx.player);
-    if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
     // nothing to dig into (a bare tank, the acrylic case): it does not bury, and one born buried comes out
+    // (known before the first intent, which may have been waiting for the context: else it could start a burial)
     this.canBurrow = ctx.canBurrow !== false;
-    if (!this.canBurrow && s.state.bury > 0.05 && s.state.mode !== 'ESCAPE' && s.state.mode !== 'SWIM') s.hover(6);
+    if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
+    // (once it hangs on its fins the sand lets it go: not asked again every frame, which would restart the rise)
+    if (!this.canBurrow && s.state.bury > 0.05 && s.state.mode !== 'ESCAPE' && s.state.mode !== 'SWIM' && s.state.mode !== 'HOVER') s.hover(6);
     if (!!ctx.locked !== this.locked) {
       this.locked = !!ctx.locked;
       model.lod.autoUpdate = !this.locked;
@@ -321,7 +325,7 @@ export class MimiikaDriver implements Driver {
         continue;
       }
       const fx = ev.kind === 'ink' ? this.inkFx : this.sandFx;
-      fx?.emit(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha, undefined, ev.grow, ev.kill);
+      fx?.emit(ev.pos, ev.vel, ev.count, ev.spread, ev.size, ev.life, ev.alpha, undefined, ev.grow, ev.kill, ev.shade);
     }
     s.fx.length = 0;
     this.sandFx?.update(dt, ground);

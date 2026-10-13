@@ -18,23 +18,28 @@ const MAX = 160;
 
 const PUFF_VERT = /* glsl */ `
 attribute vec4 aPuff;    // x size (m), y alpha, z grain, w peak alpha
+attribute float aShade;  // × the cloud's colour (1: the sand's own)
 uniform float uScale;
 varying float vAlpha;
 varying float vGrain;
+varying float vShade;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = clamp(aPuff.x * uScale / max(0.05, -mv.z), 0.0, 256.0);
   vAlpha = aPuff.y;
   vGrain = aPuff.z;
+  vShade = aShade;
 }`;
 
 const PUFF_FRAG = /* glsl */ `
 #include <common>
 #include <lights_pars_begin>
 uniform vec3 uSand;
+uniform float uTone;
 varying float vAlpha;
 varying float vGrain;
+varying float vShade;
 void main() {
   vec2 c = gl_PointCoord * 2.0 - 1.0;
   float r = dot(c, c);
@@ -51,7 +56,7 @@ void main() {
   for (int i = 0; i < NUM_DIR_LIGHTS; i++) irr += directionalLights[i].color * 0.85;
   #endif
   // fine sediment in suspension scatters light: a cloud reads a little paler than the bed it came from
-  gl_FragColor = vec4(uSand * irr * RECIPROCAL_PI * 1.7, a);
+  gl_FragColor = vec4(uSand * irr * RECIPROCAL_PI * uTone * vShade, a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -144,6 +149,11 @@ export interface SandFXOptions {
   everyFrame?: boolean;
   /** a sprite that reaches the floor is gone (grains that fall back into the sand), unless emit says otherwise */
   killOnFloor?: boolean;
+  /** the cloud's brightness against the light it gets (default 1.7: a little paler than the bed) */
+  tone?: number;
+  /** how fast the cloud's sprites sink (m/s², default 0.05: with the drag at most 0.05 / 2.2 m/s); single grains (kill)
+   * sink at least that fast whatever the cloud does */
+  sink?: number;
 }
 
 export class SandFX {
@@ -163,21 +173,25 @@ export class SandFX {
   private shadowTimer = 0;
   /** per particle: it is gone when it reaches the floor */
   private readonly kill = new Uint8Array(MAX);
+  private readonly shade = new Float32Array(MAX).fill(1);
   private readonly floor: number;
   private readonly everyFrame: boolean;
   private readonly killOnFloor: boolean;
+  private readonly sink: number;
 
   constructor(private readonly parent: Object3D, opts: SandFXOptions = {}) {
     this.floor = opts.floor ?? 0.004;
     this.everyFrame = opts.everyFrame ?? false;
     this.killOnFloor = opts.killOnFloor ?? false;
+    this.sink = opts.sink ?? 0.05;
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(this.pos, 3));
     g.setAttribute('aPuff', new BufferAttribute(this.puff, 4));
+    g.setAttribute('aShade', new BufferAttribute(this.shade, 1));
     g.setDrawRange(0, 0);
     this.puffMat = new ShaderMaterial({
       vertexShader: PUFF_VERT, fragmentShader: PUFF_FRAG, lights: true, transparent: true, depthWrite: false,
-      uniforms: UniformsUtils.merge([UniformsLib.lights, { uScale: { value: 600 }, uSand: { value: new Color(0.26, 0.255, 0.24) } }]),
+      uniforms: UniformsUtils.merge([UniformsLib.lights, { uScale: { value: 600 }, uSand: { value: new Color(0.26, 0.255, 0.24) }, uTone: { value: opts.tone ?? 1.7 } }]),
     });
     this.points = new Points(g, this.puffMat);
     this.points.name = 'AkaeiSandPuffs';
@@ -203,9 +217,11 @@ export class SandFX {
 
   /**
    * a cloud of sediment: count sprites around `at`, thrown with `vel` (m/s) plus a spread. Each sprite swells as the
-   * cloud spreads (1.8–3.2 × its size), or by `grow` × its start size (≈ 1.1 for single grains); `kill`: gone at the floor
+   * cloud spreads (1.8–3.2 × its size), or by `grow` × its start size (≈ 1.1 for single grains); `kill`: gone at the floor;
+   * `shade`: × the sand's colour (a wet clump, darker than the bed)
    */
-  emit(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.5, rnd: () => number = Math.random, grow?: number, kill = this.killOnFloor): void {
+  emit(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.5, rnd: () => number = Math.random, grow?: number, kill = this.killOnFloor, shade = 1): void {
+    let shaded = false;
     for (let k = 0; k < count; k++) {
       const i = this.next;
       this.next = (this.next + 1) % MAX;
@@ -223,10 +239,12 @@ export class SandFX {
       this.life[i * 4 + 2] = size * (0.5 + 0.5 * rnd());
       this.life[i * 4 + 3] = grow === undefined ? size * (1.8 + 1.4 * rnd()) : this.life[i * 4 + 2] * grow;
       this.kill[i] = kill ? 1 : 0;
+      if (this.shade[i] !== shade) { this.shade[i] = shade; shaded = true; }
       this.puff[i * 4 + 1] = 0;
       this.puff[i * 4 + 2] = rnd();
       this.puff[i * 4 + 3] = alpha;
     }
+    if (shaded) this.points.geometry.getAttribute('aShade').needsUpdate = true;
   }
 
   /**
@@ -275,7 +293,7 @@ export class SandFX {
       maxIdx = i + 1;
       const v = this.vel;
       v[i * 3] *= drag; v[i * 3 + 2] *= drag;
-      v[i * 3 + 1] = v[i * 3 + 1] * drag - 0.05 * dt;
+      v[i * 3 + 1] = v[i * 3 + 1] * drag - (this.kill[i] ? Math.max(this.sink, 0.05) : this.sink) * dt;
       this.pos[i * 3] += v[i * 3] * dt;
       this.pos[i * 3 + 1] += v[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += v[i * 3 + 2] * dt;

@@ -9,6 +9,7 @@ import { MimiikaLook, sandGrain } from '../../src/creatures/species/mimiika/mate
 import { MimiikaDriver, lookSpecFor } from '../../src/creatures/species/mimiika/MimiikaDriver';
 import { SandFX } from '../../src/creatures/species/akaei/SandFX';
 import type { Individual } from '../../src/creatures/Individual';
+import type { DriverContext } from '../../src/creatures/drivers/Driver';
 import { Rng } from '../../src/core/Rng';
 
 /** a sandy bottom with low ripples under 30 cm of water */
@@ -336,7 +337,12 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
     fold: number; amp: number; mantle: number; sc: number; hc: number; stroke: { k: number; u: number; dir: string } | null;
     ext: number[]; aimW: number[]; tipL: Vector3; tipR: Vector3; gap: number; J: Vector3[]; tips: Vector3[];
     fx: { pos: Vector3; count: number }[]; pos: Vector3; quat: Quaternion; heading: number;
+    /** each arm's highest joint and the crown's underside over the sand (model mm) */
+    top: number[]; crown: number;
   }
+  /** the crown's underside, root frame (model mm) */
+  const CROWN_UNDER = new Vector3(0, -2.7, 15.4);
+  const _j: Vector3[] = [];
   /** a burial on flat sand (heading 0.4), recorded every frame */
   function burial(seed: number, K = 1, secs = 30, before?: (b: ReturnType<typeof createSquidBehavior>) => void) {
     const r = new Rng(seed);
@@ -355,6 +361,8 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
         tipL: armTip(P, IIL, new Vector3()), tipR: armTip(P, IIR, new Vector3()), gap: P.armAimW[IIL] > 0 ? Math.min(armEyeGap(P, IIL), armEyeGap(P, IIR)) : 9,
         J: armJoints(P, IIL, []).map((v) => v.clone()), tips: ARMS.map((_, i) => armTip(P, i, new Vector3())),
         fx: b.fx.flatMap((e) => (e.kind === 'sand' ? [{ pos: e.pos.clone(), count: e.count }] : [])), pos: st.pos.clone(), quat: P.quat.clone(), heading: st.heading,
+        top: ARMS.map((_, n) => Math.max(...armJoints(P, n, _j).map((v) => v.clone().multiplyScalar(0.001 * K).applyQuaternion(P.quat).add(st.pos).y / (0.001 * K)))),
+        crown: CROWN_UNDER.clone().multiplyScalar(0.001 * K).applyQuaternion(P.quat).add(st.pos).y / (0.001 * K),
       });
       b.fx.length = 0;
     }
@@ -572,6 +580,107 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
     }
   }, 60000);
 
+  it('keeps its arms folded down under the head through the jets and the strokes (no legs), the head coming up only as it goes in', () => {
+    const I = ARMS.flatMap((a, n) => (a.pair === 0 ? [n] : [])), notII = ARMS.flatMap((a, n) => (a.pair !== 1 ? [n] : []));
+    for (const { F, plan } of all()) {
+      for (const f of F) {
+        if ((f.phase === 'blow' && f.t > plan.jetT[0] + 0.4) || f.phase === 'gap') {
+          // braced on the sand in front of the crown (40–42): no tip over the crown's underside, no arm arched up off
+          // the sand, the crown down near the sand
+          expect(Math.max(...f.tips.map((p) => world(f, p, 1).y)) - f.crown, 'a tip raised in the jets').toBeLessThan(1.0);
+          expect(Math.max(...f.top) - f.crown, 'an arm arched up in the jets').toBeLessThan(4.0);
+          expect(f.crown).toBeLessThan(6.5);
+        }
+        // (head-up only as deep as it is: not tipped up on its arms from the first jet)
+        if (f.phase === 'blow' && f.bury < 0.3) expect(f.pitch).toBeLessThan(0.15);
+        if (f.phase === 'sweep') {
+          // arms I do not stand up between the eyes, and the bracing arms stay down
+          expect(Math.max(...I.map((n) => f.top[n]))).toBeLessThan(3.6);
+          expect(Math.max(...notII.map((n) => world(f, f.tips[n], 1).y))).toBeLessThan(1.5);
+        }
+      }
+      // buried, no part of any arm stands up out of the sand in front of the head (16): every joint under it
+      const b = first(F, 'buried');
+      for (const f of F.slice(b + 1.5 * T, b + 3 * T)) expect(Math.max(...f.top)).toBeLessThan(-0.4);
+    }
+  }, 60000);
+
+  it('leaves the sand however deep it is: nothing else keeps it sunk (an escape in the jets, a rise cut short, a night shed)', () => {
+    const sit = (b: ReturnType<typeof createSquidBehavior>) => b.pos.y - b.state.alt - 0.00875;
+    // fled while the jets had it a third in, it lands out of the sand whichever way it lands (or starts a new burial)
+    let landedOut = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = new Rng(seed);
+      const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: 1, start: { x: 0, z: 0 }, autonomous: false });
+      b.burrow(60);
+      let hit = false;
+      for (let i = 0; i < 15 * T && !hit; i++) { b.update(1 / T); hit = b.state.phase === 'blow' && b.state.bury > 0.3 && b.state.bury <= 0.4; }
+      if (!hit) continue;
+      b.escape(new Vector3(0.05, 0, 0));
+      expect(b.state.buryGoal).toBe(0);
+      while (b.state.mode === 'ESCAPE') b.update(1 / T);
+      for (let i = 0; i < 4 * T && b.state.mode !== 'BURROW'; i++) b.update(1 / T);
+      if (b.state.mode !== 'BURROW') { landedOut++; expect(b.state.bury).toBeLessThan(1e-3); expect(Math.abs(sit(b))).toBeLessThan(1e-5); }
+    }
+    expect(landedOut).toBeGreaterThan(0);
+    // cut short as it rises, it is right out of the sand in whatever it does next
+    for (const seed of [5, 7]) for (const cut of ['hunt', 'rest', 'freeze', 'escape'] as const) {
+      const r = new Rng(seed);
+      const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: 1, start: { x: 0, z: 0 }, autonomous: false, startBuried: true });
+      b.update(1 / T);
+      b.hover(10);
+      while (!(b.state.phase === 'emerge' && b.state.bury < 0.26)) b.update(1 / T);
+      if (cut === 'escape') b.escape(new Vector3(0.05, 0, 0)); else b[cut]();
+      for (let i = 0; i < 6 * T && b.state.mode !== 'BURROW'; i++) b.update(1 / T);
+      if (b.state.mode !== 'BURROW') { expect(b.state.bury, `${seed} ${cut}`).toBeLessThan(1e-3); expect(b.state.buryGoal).toBe(0); }
+    }
+    // the night shed: once it is off the bottom, not a trace of the burial left
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const r = new Rng(seed);
+      const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: 1, start: { x: 0, z: 0 }, autonomous: false, startBuried: true });
+      b.setSurroundings(0.3, true);
+      b.hover(8);
+      for (let i = 0; i < 6 * T; i++) b.update(1 / T);
+      expect(b.state.mode).toBe('HOVER');
+      expect(b.state.buryGoal).toBe(0);
+      expect(b.pose.bury).toBeLessThan(1e-6);
+    }
+    // an ambush in the sand cut short by a hover: it rises slowly with its coat (it does not pop out, nor hang sunk)
+    const a = make(9, {}, { startBuried: true });
+    run(a, 0.5);
+    a.hunt();
+    run(a, 1);
+    expect(a.state.phase).toBe('ambush');
+    a.hover(6);
+    expect(a.state.mode).toBe('BURROW');
+    expect(a.state.phase).toBe('emerge');
+    run(a, 4);
+    expect(a.state.mode).toBe('HOVER');
+    expect(a.state.bury).toBeLessThan(1e-3);
+  }, 60000);
+
+  it('stays in the sand when asked to burrow, rest or keep still while it ambushes from it, and lies buried that long after', () => {
+    for (const ask of ['burrow', 'rest', 'freeze'] as const) for (const seed of [11, 12, 13]) {
+      const b = make(seed, {}, { startBuried: true });
+      run(b, 0.5);
+      b.hunt();
+      run(b, 2);
+      expect(b.state.mode).toBe('HUNT');
+      b[ask](60);
+      // (the hunt goes on from the sand: not out and in again)
+      expect(b.state.mode).toBe('HUNT');
+      let minBury = 1, settle = false, t = 0;
+      while (b.state.mode === 'HUNT' && t < 20) { b.update(1 / 60); t += 1 / 60; minBury = Math.min(minBury, b.state.bury); if (b.state.phase === 'settle') settle = true; }
+      expect(settle).toBe(false);
+      expect(minBury, `${ask} ${seed}`).toBeGreaterThan(0.5);
+      expect(b.state.mode).toBe('BURROW');
+      expect(b.state.phase).toBe('buried');
+      // (the request is still running: not settled until it has lain there as long as it was asked)
+      expect(b.state.dur).toBeGreaterThanOrEqual(60);
+      expect(b.settled).toBe(false);
+    }
+  }, 60000);
+
   it('comes out slowly: by day with its coat on, at night dropping it on the bottom before it moves off', () => {
     const buried = (seed: number, night: boolean) => {
       const r = new Rng(seed);
@@ -614,6 +723,11 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
           expect(sheds).toBe(0);
           expect(b.state.shedAt).toBe(-1);
           expect(b.state.sandCoat).toBeGreaterThan(0.8);
+          // it keeps low with its coat on, and the coat (the head's too, as shown) comes off only slowly (Shears 1988)
+          for (let i = 0; i < 5 * T; i++) b.update(1 / T);
+          expect(b.state.alt).toBeLessThan(0.65 * ML);
+          expect(b.state.sandCoat).toBeGreaterThan(0.65);
+          expect(b.pose.headCover).toBeGreaterThan(0.55);
         }
       }
     }
@@ -654,6 +768,40 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
     // the brain asking to burrow every frame does not stretch the phases (only the burial that follows)
     const a = burial(6, 1, 25), b = burial(6, 1, 25, (s) => s.burrow(20));
     for (const p of ['blow', 'sweep', 'buried']) expect(first(b.F, p)).toBe(first(a.F, p));
+  }, 60000);
+
+  it('in a case or tank without sand never starts a burial, even on an intent given before its first frame', () => {
+    const floor = { heightAt: () => 0, waterAt: () => 0.06 };
+    const ctx = { floor, player: new Vector3(0, 1, 0.5), simScale: 1, nowMs: 0, bounds: { minX: -0.1, maxX: 0.1, minZ: -0.05, maxZ: 0.05 }, canBurrow: false } as unknown as DriverContext;
+    let out = 0, born = 0;
+    for (let n = 0; n < 12; n++) {
+      const d = new MimiikaDriver(), holder = MimiikaDriver.makeModel().root;
+      new Group().add(holder);
+      const r = new Rng(n + 1);
+      const ind = { id: `case#${n}`, length_mm: 14, pos: new Vector3(), home: new Vector3(), heading: 0, alert: 0, rng: { next: () => r.next(), chance: (p: number) => r.next() < p } } as unknown as Individual;
+      d.attach(holder, ind);
+      const s = d.behaviour!, wasBuried = s.state.mode === 'BURROW';
+      if (wasBuried) born++; else out++;
+      // (the case gives its first intent before the driver's first update: it waits for the context)
+      d.setIntent({ id: 1, kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
+      let restarts = 0, lastT = -1, intents = 1;
+      for (let f = 0; f < 30 * 60; f++) {
+        if (!d.busy) d.setIntent({ id: 2 + intents++, kind: 'rest', urgency: 0, seconds: 4 });
+        d.update(1 / 60, ctx);
+        const st = s.state;
+        if (!wasBuried) expect(st.mode).not.toBe('BURROW');
+        if (st.mode === 'HOVER' && st.t < lastT - 1e-9) restarts++;
+        lastT = st.mode === 'HOVER' ? st.t : -1;
+        if (f > 5 * 60) expect(st.bury, ind.id).toBeLessThan(0.05);
+      }
+      // (asked again by the case now and then, not every frame)
+      expect(restarts).toBeLessThan(10);
+      // (and done with it in time: the case gets to give it another)
+      expect(intents).toBeGreaterThan(1);
+      d.dispose();
+    }
+    expect(out).toBeGreaterThan(0);
+    expect(born).toBeGreaterThan(0);
   }, 60000);
 
   it('buries the same way at 14 mm and at 40 mm (the sand and the strokes in proportion)', () => {
@@ -1008,7 +1156,7 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
     ray.dispose();
     // the squid's: floor ∝ size (never under 0.3 mm), tested every frame; poured grains (kill) vanish into the sand
     // and barely swell
-    expect(MimiikaDriver.sandFxOptions(0.56)).toEqual({ floor: 0.0008 * 0.56, everyFrame: true });
+    expect(MimiikaDriver.sandFxOptions(0.56)).toEqual({ floor: 0.0008 * 0.56, everyFrame: true, tone: 1.05, sink: 0.012 });
     expect(MimiikaDriver.sandFxOptions(0.2).floor).toBe(0.0003);
     const squid = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
     squid.emit(new Vector3(0, 0.003, 0), new Vector3(0, -0.02, 0), 4, 0, 0.002, 10, 0.5, () => 0.5);
@@ -1017,6 +1165,24 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
     const sy = squid.points.geometry.getAttribute('position') as BufferAttribute, sp = squid.points.geometry.getAttribute('aPuff') as BufferAttribute;
     for (let i = 0; i < 4; i++) { expect(sy.getY(i)).toBeCloseTo(0.0008 * 0.56, 9); expect(sp.getY(i)).toBeGreaterThan(0); }
     for (let i = 4; i < 8; i++) expect(sp.getY(i)).toBe(0);
+    // its silt hangs in the water (a ray's cloud 5 mm up is down on the sand in about 0.7 s, the squid's not yet), but a
+    // single grain sinks as fast as ever
+    const hang = (o: ConstructorParameters<typeof SandFX>[1], kill: boolean) => {
+      const fx = new SandFX(new Group(), o);
+      fx.emit(new Vector3(0, 0.005, 0), new Vector3(), 1, 0, 0.002, 10, 0.5, () => 0.5, kill ? 1.1 : undefined, kill);
+      let t = 0;
+      const y = fx.points.geometry.getAttribute('position') as BufferAttribute, a = fx.points.geometry.getAttribute('aPuff') as BufferAttribute;
+      while (t < 5 && a.getY(0) >= 0 && y.getY(0) > 0.0005 + 1e-6) { fx.update(1 / 60, () => 0); t += 1 / 60; if (kill && a.getY(0) === 0 && t > 0.05) break; }
+      fx.dispose();
+      return t;
+    };
+    expect(hang({ floor: 0.0005 }, false)).toBeLessThan(0.9);
+    expect(hang({ ...MimiikaDriver.sandFxOptions(0.56), floor: 0.0005 }, false)).toBeGreaterThan(1.1);
+    expect(hang({ ...MimiikaDriver.sandFxOptions(0.56), floor: 0.0005 }, true)).toBeCloseTo(hang({ floor: 0.0005, killOnFloor: true }, true), 5);
+    // and is the bed's own tone (the ray's a little paler)
+    const tone = (o?: ConstructorParameters<typeof SandFX>[1]) => { const fx = new SandFX(new Group(), o); const v = (fx.points.material as unknown as { uniforms: { uTone: { value: number } } }).uniforms.uTone.value; fx.dispose(); return v; };
+    expect(tone()).toBe(1.7);
+    expect(tone(MimiikaDriver.sandFxOptions(1))).toBe(1.05);
     const grains = new SandFX(new Group(), MimiikaDriver.sandFxOptions(0.56));
     grains.emit(new Vector3(0, 0.01, 0), new Vector3(0, 0, 0), 1, 0, 0.002, 1, 0.5, () => 0.5, 1.1, true);
     for (let f = 0; f < 55; f++) grains.update(1 / 60, () => 0);
@@ -1024,7 +1190,7 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
     squid.dispose(); grains.dispose();
   });
 
-  it('scales the sand on its skin with its size: the fade into the bed 2.2 mm × K, grains ≈ 0.2 mm', () => {
+  it('scales the sand on its skin with its size: the fade into the bed 2.2 mm × K, grains ≈ 0.45 mm', () => {
     for (const length_mm of [5, 14, 40]) {
       const d = new MimiikaDriver(), holder = MimiikaDriver.makeModel().root;
       new Group().add(holder);
@@ -1032,7 +1198,11 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
       d.attach(holder, ind);
       const K = length_mm / 25, u = d.view!.look.uniforms;
       expect(u.uSandFade.value).toBeCloseTo(0.0022 * K, 12);
-      expect(u.uGrain.value).toBeCloseTo(Math.min(0.8, Math.max(0.25, 0.2 / K)), 12);
+      // (medium sand, as stuck on the coat of 21: 2–4 % of the mantle, coarse enough to read as grains; the model's
+      // grain is never under 0.45 mm nor over 1.2 mm, so that a tiny squid's is not a blur of specks)
+      expect(u.uGrain.value).toBeCloseTo(Math.min(1.2, Math.max(0.45, 0.45 / K)), 12);
+      if (length_mm >= 14) expect((u.uGrain.value * K) / length_mm).toBeGreaterThan(0.015);
+      if (length_mm >= 14) expect((u.uGrain.value * K) / length_mm).toBeLessThan(0.04);
       expect(u.uGrain.value).toBeCloseTo(sandGrain(K), 12);
       // (the stretched arms are not culled at the screen's edge)
       expect((d.view!.parts.Arms as SkinnedMesh).boundingSphere!.radius).toBe(0.05);

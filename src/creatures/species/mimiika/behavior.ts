@@ -65,6 +65,8 @@ export interface FxEvent {
   grow?: number;
   /** … and are gone where they reach the sand */
   kill?: boolean;
+  /** × the sand's colour (the coat's wet, mucus-bound grains: darker than the bed) */
+  shade?: number;
 }
 /** the pit it blows as it buries (m): laid once, then deepened with each jet; gone in `life` s (the arms sweep it in) */
 export interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number }
@@ -149,24 +151,29 @@ const NO_SWING = [0, 0, 0, 0, 0];
 /** raised in front of the eyes (pushed up through the sand just ahead of them): before the first stroke and after each */
 const UP = key(0.5, 0.9, [0, -1, 0], [0, 0.1, 0.15, 0.2, 0.3], NO_SWING, 1.15);
 /** stretched out low over the sand, suckers down, to about twice its length; ψ and the swing along it per direction */
-const REACH_PSI: Record<StrokeDir, number> = { F: 0.2, FL: 0.8, L: 1.5, BL: 1.7 };
+const REACH_PSI: Record<StrokeDir, number> = { F: 0.35, FL: 1.05, L: 1.6, BL: 1.7 };
 const REACH_SWING: Record<StrokeDir, number> = { F: 0, FL: 0, L: 0.1, BL: 0.85 };
+/** the reach's horizontal curve per joint (× side; − bends towards the midline): a slight outward bow, the distal third hooked in */
+const REACH_HOOK: Record<StrokeDir, number[]> = { F: [0, 0.1, -0.1, -0.45, -0.75], FL: [0, 0.1, -0.1, -0.45, -0.75], L: [0, 0.1, -0.05, -0.35, -0.6], BL: [0, 0, 0, 0, 0] };
 /** drawn back over the head bowed up into an arch, the tips in and down (Fig. 1E): onto the head, or the front of the back */
-const ARCH_H = key(1.7, 0.85, [-0.75, -0.3, -0.6], [0, 0.15, 0.6, 1.1, 1.3], NO_SWING, 1.5);
+const ARCH_H = key(1.85, 0.75, [-0.78, -0.3, -0.55], [0, 0.2, 0.6, 1.1, 1.3], NO_SWING, 1.7);
 const ARCH_B = key(1.75, 0.95, [-0.55, -0.3, -0.8], [0, 0.4, 0.55, 0.8, 0.8], NO_SWING, 1.65);
 const headStroke = (d: StrokeDir) => d === 'F' || d === 'FL';
 function reachKey(d: StrokeDir, elev: number, out: ArmKey): ArmKey {
   const s = REACH_SWING[d];
   // (swung back along its length the arm rises a little off the sand: aimed that much lower)
   out.psi = REACH_PSI[d]; out.elev = elev - 0.05 * s; out.bend.set(0, -1, 0); out.ext = 2.0;
-  out.curl = [0, 0.02, 0.04, 0.08, 0.15]; out.swing = [0, 0.26 * s, 0.3 * s, 0.26 * s, 0.18 * s];
+  // (the distal third laid down onto the sand and hooked in: a curved arm along the sand, not a rod, 44)
+  const hk = REACH_HOOK[d];
+  out.curl = d === 'BL' ? [0, 0.02, 0.04, 0.08, 0.15] : [0, 0.02, 0.04, 0.12, 0.28];
+  out.swing = [0, 0.26 * s + hk[1], 0.3 * s + hk[2], 0.26 * s + hk[3], 0.18 * s + hk[4]];
   return out;
 }
 /** at full stretch the distal tip digs in and hooks towards the body, its suckers turned in (the last 15 %: Anderson) */
 function scoopKey(d: StrokeDir, elev: number, out: ArmKey): ArmKey {
   reachKey(d, elev, out);
   out.curl[4] += 0.3;
-  out.swing[4] += (REACH_SWING[d] > 0.05 ? 1 : -1) * 0.5;
+  out.swing[4] += d === 'BL' ? 0.5 : -0.35;
   return out;
 }
 function liftKey(d: StrokeDir, out: ArmKey): ArmKey {
@@ -304,9 +311,9 @@ export function createSquidBehavior(opts: SquidOptions) {
     return out.copy(local).multiplyScalar(MM * K).applyQuaternion(_q).add(st.pos);
   }
 
-  function sand(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.45, grow?: number, kill?: boolean): void {
+  function sand(at: Vector3, vel: Vector3, count: number, spread: number, size: number, life: number, alpha = 0.45, grow?: number, kill?: boolean, shade?: number): void {
     if (!canBurrow()) return;
-    fx.push({ kind: 'sand', pos: at.clone(), vel: vel.clone(), count, spread: spread * K, size: size * K, life, alpha, grow, kill });
+    fx.push({ kind: 'sand', pos: at.clone(), vel: vel.clone(), count, spread: spread * K, size: size * K, life, alpha, grow, kill, shade });
   }
   /** a puff in the heading frame: offset (side: + the animal's left, forward; model mm), height over the sand (mm), velocity (side, up, forward; mm/s) */
   function puff(side: number, ahead: number, up: number, vs: number, vu: number, vf: number, count: number, spread: number, size: number, life: number, alpha: number): void {
@@ -338,12 +345,16 @@ export function createSquidBehavior(opts: SquidOptions) {
   }
 
   function setMode(mode: Mode, phase: string, dur: number): void {
-    const was = st.mode;
+    const was = st.mode, inSand = was === 'BURROW' || (was === 'HUNT' && ambushing);
     st.mode = mode; st.phase = phase; st.t = 0; st.dur = dur; st.settled = false;
     queued = null;
     if (mode === 'BURROW') shedding = false;
-    // (the escape from the sand makes its own burst)
-    if (was === 'BURROW' && mode !== 'BURROW' && mode !== 'ESCAPE' && st.bury > 0.3) emerge();
+    else {
+      // out of the sand, however deep it was: no other mode holds it down (a burst only from deep in, and the escape
+      // from the sand makes its own)
+      if (inSand && mode !== 'ESCAPE' && st.bury > 0.3) emerge();
+      st.buryGoal = 0;
+    }
     if (mode !== 'HUNT' && prey && prey.state !== 'caught') prey = null;
   }
   function phase(p: string, dur: number): void { st.phase = p; st.t = 0; st.dur = dur; }
@@ -364,10 +375,16 @@ export function createSquidBehavior(opts: SquidOptions) {
     coatRamps.length = 0;
     st.shedAt = st.clock;
     shedding = true;
-    // (slid off the back: it falls behind the mantle onto the sand)
-    const c = toWorld(_tv.set(0, 6.5, -17.5), new Vector3());
+    keepCoat = false;
     forward(fwd);
-    sand(c, fwd.clone().multiplyScalar(-0.014 * K).setY(-0.006 * K), 18, 0.004, 0.0045, 2.6, 0.75, 1.4);
+    // (the coat slides off as a unit: one clump off the back that falls behind it onto the sand, and single grains
+    // sprayed off the head and the back, 67; the sprays stay under 12 grains each, only the clump is "the" shed. Wet
+    // and bound in mucus, the coat's grains are darker than the bed: the clump and the grains show against it)
+    const c = toWorld(_tv.set(0, 10.5, -6), new Vector3());
+    sand(c, fwd.clone().multiplyScalar(-0.01 * K).setY(-0.004 * K), 24, 0.009, 0.0035, 2.8, 0.85, 1.25, false, 0.62);
+    for (const [z, y] of [[-12, 10.5], [-4, 11], [3, 9], [10, 7.5]] as const) {
+      sand(toWorld(_tv.set(0, y, z), new Vector3()), new Vector3(0, 0.012 * K, 0), 10, 0.012, 0.0009, 2.6, 0.95, 1.0, true, 0.5);
+    }
   }
 
   /** a calm way out: it rises slowly out of the sand with its coat on, then does what it was asked (`queued`) */
@@ -378,8 +395,11 @@ export function createSquidBehavior(opts: SquidOptions) {
     shedding = false;
     pauseT = -1;
   }
-  /** hover, swim and crawl from the sand wait for it to rise; called again, only the command waiting changes */
+  /** ambushing from the sand: in it all the time (the strike only lifts it to 0.6) */
+  const sandAmbush = () => st.mode === 'HUNT' && ambushing && st.bury > 0.5;
+  /** hover, swim and crawl from the sand (an ambush's too) wait for it to rise; called again, only the command waiting changes */
   function viaEmerge(cmd: () => void): boolean {
+    if (sandAmbush()) { prey = null; toBuried(0); }
     if (st.mode !== 'BURROW' || !(st.phase === 'emerge' || st.bury > 0.6)) return false;
     if (st.phase !== 'emerge') startEmerge();
     queued = cmd;
@@ -411,6 +431,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     /** sit on the sand (or come down to it) */
     rest(seconds = rand(6, 20)) {
       if (st.mode === 'BURROW' && st.phase === 'buried') { st.dur = Math.max(st.dur - st.t, seconds); st.t = 0; return; }
+      if (stayInSand(seconds)) return;
       setMode('REST', st.alt > 0.3 * ML ? 'descend' : 'sit', seconds);
     },
     /** hang over the sand on the fins */
@@ -436,6 +457,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     /** dig in and cover itself (stays buried for `seconds`) */
     burrow(seconds = rand(30, 120)) {
       if (!canBurrow()) { api.rest(seconds); return; }
+      if (stayInSand(seconds)) return;
       if (st.mode === 'BURROW') {
         // buried it stays longer; on the way in, the burial it is heading for does (the phase keeps its own time)
         if (st.phase === 'buried') { st.dur = Math.max(st.dur, st.t + seconds); return; }
@@ -448,7 +470,10 @@ export function createSquidBehavior(opts: SquidOptions) {
     },
     /** hunt a mysid (from the sand when buried: an ambush) */
     hunt() {
+      // (hunting from the sand already: that hunt goes on)
+      if (sandAmbush()) return;
       const ambush = st.mode === 'BURROW' && st.bury > 0.6;
+      afterAmbush = 0;
       spawnPrey(ambush);
       if (ambush) { st.mode = 'HUNT'; st.phase = 'ambush'; st.t = 0; st.dur = rand(6, 14); st.settled = false; }
       else { setMode('HUNT', 'search', rand(0.6, 1.6)); st.altGoal = rand(0.35, 0.7) * ML; st.pulses = 0; }
@@ -469,8 +494,9 @@ export function createSquidBehavior(opts: SquidOptions) {
       // out of the sand at once, the coat dropped, one burst of sand (inferred: threatened in the sand, E. scolopes
       // stays in it and blows sand or ink, Anderson et al. 2002; this is the flight once it is touched)
       if (buried) shedCoat(true);
+      // (setMode lets it out of the sand however deep it was)
       setMode('ESCAPE', 'startle', buried ? 0.12 : 0.09);
-      if (buried) { st.buryGoal = 0; sand(st.pos.clone().setY(ground(st.pos.x, st.pos.z) + 0.003 * K), new Vector3(0, 0.08 * K, 0).addScaledVector(away, 0.05 * K), 30, 0.014, 0.007, 3, 0.6); }
+      if (buried) { sand(st.pos.clone().setY(ground(st.pos.x, st.pos.z) + 0.003 * K), new Vector3(0, 0.08 * K, 0).addScaledVector(away, 0.05 * K), 30, 0.014, 0.007, 3, 0.6); }
       an.chRate = 25;
       an.flash = 1;
     },
@@ -482,6 +508,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         else if (!shedding) { queued = null; toBuried(seconds); }
         return;
       }
+      if (stayInSand(seconds)) return;
       setMode('REST', st.alt > 0.3 * ML ? 'descend' : 'freeze', seconds);
     },
     /** the bottom's brightness under it (0 light … 1 dark), and whether it is night */
@@ -495,6 +522,23 @@ export function createSquidBehavior(opts: SquidOptions) {
   /** emerging: the command it carries out once out, the burial it rose from, the coat dropped and when, the pause after */
   let queued: (() => void) | null = null;
   let emergeFrom = 1, shedding = false, pauseT = -1, pauseFor = 0;
+  /** by day it came out with its coat on and keeps it while it stays near the bottom (Shears 1988: by day, coat on, it
+   * keeps within 2 body lengths of the bottom) */
+  let keepCoat = false;
+  /** asked to stay in the sand (burrow, rest, freeze) while it ambushes from it: how long it lies buried after the hunt */
+  let afterAmbush = 0;
+  function stayInSand(seconds: number): boolean {
+    if (!sandAmbush()) return false;
+    afterAmbush = Math.max(afterAmbush, seconds);
+    return true;
+  }
+  /** the ambush over, it lies buried again (as long as it was asked to meanwhile: that request is still running) */
+  function backToSand(dur: number): void {
+    prey = null;
+    toBuried(Math.max(dur, afterAmbush));
+    st.settled = afterAmbush <= 0;
+    afterAmbush = 0;
+  }
   /** the coat as it went into 'buried' (it is made up from there), and the grains of each backward jet settling onto it */
   const coatFrom = { hc: 0, sc: 0 };
   const coatRamps: { t0: number; dur: number; sc: number; done: number }[] = [];
@@ -706,16 +750,18 @@ export function createSquidBehavior(opts: SquidOptions) {
     const kick = d === 'B' ? (first ? 0.09 : 0.08) : -0.06;
     an.kickRise += kick / KICK_N; an.kickFall += kick / KICK_N;
     if (d === 'B') {
-      // the water runs back under the belly: a cloud out behind and under the mantle and at its flanks
+      // the water runs back under the belly: a cloud out behind and under the mantle and at its flanks, billowing low
+      // along the sand (up about half a mantle length behind it, hardly at all at the flanks)
       const n = first ? 1.4 : 1, v = first ? 1.3 : 1;
-      puff(0, -18, 1.5, 0, 22 * v, -45 * v, Math.round(7 * n), 3.5, 4.2, 2.0, 0.5);
-      for (const sd of [1, -1]) puff(9 * sd, -9, 1.5, 28 * v * sd, 20 * v, -22 * v, Math.round(4 * n), 3, 3.8, 1.9, 0.45);
+      puff(0, -19, 2.5, 0, 22 * v, -60 * v, Math.round(12 * n), 4.5, 5.5, 2.6, 0.7);
+      for (const sd of [1, -1]) puff(11 * sd, -8, 2.0, 42 * v * sd, 10 * v, -22 * v, Math.round(6 * n), 3.5, 4.8, 2.4, 0.55);
       // and falls back, partly onto the back (Boletzky)
       coatRamps.push({ t0: st.clock + 0.35, dur: 0.5, sc: 0.07, done: 0 });
     } else {
-      // forward along the sand: a puff in front of and under the arm crown
-      puff(0, 18, 1.5, 0, 16, 32, 6, 3.5, 3.6, 1.6, 0.4);
-      for (const sd of [1, -1]) puff(6 * sd, 14, 1.5, 0, 16, 32, 2, 3.5, 3.6, 1.6, 0.4);
+      // forward along the sand: a puff out in front of the arm crown (ahead of the arms, not hidden under them),
+      // spreading low to both sides
+      puff(0, 25, 2.5, 0, 18, 50, 10, 4.0, 5.0, 2.2, 0.65);
+      for (const sd of [1, -1]) puff(8 * sd, 22, 2.0, 30 * sd, 10, 35, 4, 3.5, 4.5, 2.0, 0.55);
     }
     // the pit it blows, ringed with thrown-out sand (40–42), darker with each jet; the strokes fill it in again
     if (canBurrow()) fx.push({ kind: 'pit', pos: st.pos.clone().addScaledVector(fwd, -0.15 * ML), heading: st.heading, halfW: 0.62 * ML, halfL: 1.0 * ML, strength: 0.2 + (0.3 * j) / Math.max(1, pl.jets.length - 1), deepen: !first, life: 20 });
@@ -760,7 +806,10 @@ export function createSquidBehavior(opts: SquidOptions) {
     const q = queued;
     queued = null;
     st.phase = 'out';
+    st.buryGoal = 0;
     if (q) q(); else setMode('REST', 'sit', rand(5, 12));
+    // (by day it came out with its coat on: it stays low, and the sand comes off it only slowly)
+    keepCoat = !shedding && st.sandCoat > 0.05;
     if (!st.night && st.mode === 'HOVER') st.altGoal = Math.min(st.altGoal, 0.6 * ML);
   }
 
@@ -775,13 +824,14 @@ export function createSquidBehavior(opts: SquidOptions) {
         if (descend(dt)) phase('settle', rand(1.0, 2.5));
         return;
       case 'settle':
-        // landed, it pauses: the arms laid forward under the head (Boletzky 1970)
+        // landed, it pauses: the arms laid forward under the head (Boletzky 1970), folded down in front of it, the tips
+        // curled in on the sand, the head a little down (40)
         holdStill(dt);
         st.buryGoal = 0;
         finSet(0.1, 1.6, -0.55, 0);
-        arms(0.8, 0.15, 0.05, 0.05);
-        an.tipCurl = damp(an.tipCurl, 0.6, 2, dt);
-        an.headPitch = 0.05;
+        arms(1.0, 0.25, 0.0, 0.04);
+        an.tipCurl = damp(an.tipCurl, 0.7, 2, dt);
+        an.headPitch = -0.08;
         an.funnelPitch = damp(an.funnelPitch, -0.15, 3, dt);
         burrowDress();
         if (st.t > st.dur) { st.plan = makePlan(); st.stroke = null; an.jetsDone = 0; phase('blow', st.plan.blow); }
@@ -797,23 +847,24 @@ export function createSquidBehavior(opts: SquidOptions) {
         // the fins laid against the mantle; a mild beat against J1's push only, before there is a hollow (Boletzky)
         if (j === 0 && since < 0.4) finSet(0.2, 4.0, -0.55, 0.04, -1);
         else finSet(0.02, 1.0, -0.95, 0);
-        // the arms laid forward and fanned on the sand: a brace against the backward jets (Anderson 2002)
-        arms(0.55, 0.0, 0.3, 0.05);
-        an.tipCurl = damp(an.tipCurl, 0.35, 2, dt);
-        // (bent a little belly-down as it dips in: Boletzky)
-        an.headPitch = -0.06;
+        // the arms pressed down and folded under the front of the head, a brace against the backward jets (Anderson
+        // 2002), not fanned up off the sand; the head bent belly-down as it dips in (Boletzky), the crown on the sand (40–42)
+        arms(1.15, 0.3, 0.0, 0.02);
+        an.tipCurl = damp(an.tipCurl, 0.75, 3, dt);
+        an.headPitch = -0.14;
         holdStill(dt);
         burrowDress();
         if (st.t > pl.blow) { if (pl.gap > 0) phase('gap', pl.gap); else startSweep(pl); }
         return;
       }
       case 'gap':
+        // (held as the jets left it: sunk, the arms folded under the head)
         st.buryGoal = BLOW_BURY;
         an.funnelPitch = damp(an.funnelPitch, -0.35, 14, dt);
         finSet(0.02, 1.0, -0.95, 0);
-        arms(0.55, 0.0, 0.3, 0.05);
-        an.tipCurl = damp(an.tipCurl, 0.35, 2, dt);
-        an.headPitch = -0.06;
+        arms(1.15, 0.3, 0.0, 0.02);
+        an.tipCurl = damp(an.tipCurl, 0.75, 3, dt);
+        an.headPitch = -0.14;
         holdStill(dt);
         burrowDress();
         if (st.t > st.dur) startSweep(st.plan ?? (st.plan = makePlan()));
@@ -823,9 +874,10 @@ export function createSquidBehavior(opts: SquidOptions) {
         holdStill(dt);
         finSet(0, 1, -1.0, 0);
         an.funnelPitch = damp(an.funnelPitch, -0.2, 4, dt);
-        // only arm II strokes; the other pairs stay sunk in front of the head, bracing (on sand: Anderson 2002, Boletzky)
-        arms(0.85, 0.1, 0.15, 0.03);
-        an.tipCurl = damp(an.tipCurl, 0.5, 2, dt);
+        // only arm II strokes; the other pairs stay sunk in front of the head, bracing (on sand: Anderson 2002, Boletzky),
+        // folded down so that arms I do not stand up between the eyes (16, Fig. 1E)
+        arms(1.3, 0.35, 0.0, 0.02);
+        an.tipCurl = damp(an.tipCurl, 0.6, 2, dt);
         an.headPitch = 0.05;
         burrowDress();
         an.strokeW = Math.min(1, an.strokeW + dt / LEAD);
@@ -856,8 +908,8 @@ export function createSquidBehavior(opts: SquidOptions) {
         return;
       }
       case 'emerge': {
-        // it comes out very slowly, the coat on (Shears 1988)
-        if (!shedding) st.buryGoal = emergeFrom * (1 - smooth(st.t / st.dur));
+        // it comes out very slowly, the coat on (Shears 1988); (the ramp runs on while it sheds: right out of the sand)
+        st.buryGoal = emergeFrom * (1 - smooth(st.t / st.dur));
         holdStill(dt);
         arms(0.5, 0.05, 0.25, 0.1);
         an.tipCurl = damp(an.tipCurl, 0.6, 2, dt);
@@ -883,7 +935,8 @@ export function createSquidBehavior(opts: SquidOptions) {
         finSet(0.0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
         an.tipCurl = damp(an.tipCurl, 0.5, 2, dt);
-        an.headPitch = 0.05;
+        // (the head bent down a little: the crown and the arms' bases under the sand, the eyes still out: 16)
+        an.headPitch = -0.06;
         chroma(0.7, 0.95, 0.35, 0.45, 0.2, 0, 0.6);
         // the coat made up as the last grains settle: ≥ 0.85 on the head and 0.9 on the back by 1.5 s
         const c = smooth(st.t / 1.5);
@@ -973,7 +1026,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         if (ambushing) { st.buryGoal = 1; st.altGoal = 0; }
         // the mysid flicked away: one more try if it is still in sight
         if (st.t > st.dur) {
-          if (ambushing) { prey = null; toBuried(rand(20, 50)); st.settled = true; }
+          if (ambushing) backToSand(rand(20, 50));
           else if (st.pulses < 1 && dist < 6 * ML) { st.pulses = 1; phase('orient', 1.2); }
           else { prey = null; st.settled = true; if (autonomous) choose(); else setMode('HOVER', 'hang', rand(2, 5)); }
         }
@@ -1001,7 +1054,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
           p.state = 'eaten';
           prey = null;
           st.settled = true;
-          if (st.phase === 'aeating') toBuried(rand(20, 60));
+          if (st.phase === 'aeating') backToSand(rand(20, 60));
           else if (autonomous) choose(); else setMode('HOVER', 'hang', rand(3, 8));
         }
         break;
@@ -1019,7 +1072,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
           p.heading = p.heading + wrap(want - p.heading) * Math.min(1, dt * 1.5);
         }
         if (dist < reach() * 0.85 && Math.abs(wrap(Math.atan2(toP.x, toP.z) - st.heading)) < 0.9) phase('astrike', 0.1);
-        else if (st.t > st.dur) { prey = null; toBuried(rand(20, 50)); st.settled = true; }
+        else if (st.t > st.dur) backToSand(rand(20, 50));
         break;
       }
     }
@@ -1116,7 +1169,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     an.armRaise[1] = damp(an.armRaise[1], 0, 6, dt);
     // arm II's burying stroke: in only while it strokes, otherwise it blends back (whatever cut the burial short)
     if (!(st.mode === 'BURROW' && st.phase === 'sweep')) an.strokeW = damp(an.strokeW, 0, 6, dt);
-    if (!(st.mode === 'BURROW' && st.phase === 'emerge')) an.coverHold = damp(an.coverHold, 0, 2, dt);
+    if (!(st.mode === 'BURROW' && st.phase === 'emerge') && !keepCoat) an.coverHold = damp(an.coverHold, 0, 2, dt);
     an.sync = damp(an.sync, st.mode === 'BURROW' ? 1 : 0, st.mode === 'BURROW' ? 6 : 1, dt);
     // a jet's kick: a quick tip, a slower return
     an.kickRise *= Math.exp(-KICK_RISE * dt);
@@ -1227,10 +1280,12 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     // (each jet a visible step down: 90 % in 0.46 s)
     st.bury = damp(st.bury, st.buryGoal, st.buryGoal < st.bury ? 6 : burrowing && st.phase === 'blow' ? 5 : 1.4, dt);
     // the sand on the skin comes off slowly, faster when it swims (not while it rises out of the sand with it)
+    if (keepCoat && (burrowing || st.sandCoat < 0.01)) keepCoat = false;
     if (st.bury < 0.3 && !(burrowing && st.phase === 'emerge')) {
       const sp = Math.hypot(st.vel.x, st.vel.z) / ML;
-      // (off the bottom the coat soon washes off: hovering animals carry no sand, 17, 24, 34, 62)
-      const k = dt * (st.alt > 0.15 * ML ? 0.35 : 0.02 + 0.06 * sp);
+      // (off the bottom the coat soon washes off: hovering animals carry no sand, 17, 24, 34, 62; one that came out by
+      // day with its coat keeps it as long as it stays within a mantle length of the bottom: keepCoat)
+      const k = dt * (st.alt > (keepCoat ? 1.0 : 0.15) * ML ? 0.35 : 0.02 + 0.06 * sp);
       st.sandCoat = Math.max(0, st.sandCoat - k);
       st.headCover = Math.max(0, st.headCover - k * 2.5);
     }
@@ -1243,9 +1298,8 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     const slopeF = (ground(st.pos.x + fwd.x * e, st.pos.z + fwd.z * e) - ground(st.pos.x - fwd.x * e, st.pos.z - fwd.z * e)) / (2 * e);
     const slopeR = (ground(st.pos.x + right.x * e, st.pos.z + right.z * e) - ground(st.pos.x - right.x * e, st.pos.z - right.z * e)) / (2 * e);
     const lifted = smooth(st.alt / (0.5 * ML));
-    // (while the jets sink it the head-up tilt is held at blow's end, so that each jet's own tip shows)
-    const tilt = burrowing && (st.phase === 'blow' || st.phase === 'gap') ? Math.max(st.bury, BLOW_BURY) : st.bury;
-    let pitchGoal = Math.atan(slopeF) * (1 - lifted) + 0.04 * (1 - lifted) + smooth(tilt) * BURIED_PITCH;
+    // (the head comes up as the body goes in: low and level as the jets start, each jet's tip shown by its kick)
+    let pitchGoal = Math.atan(slopeF) * (1 - lifted) + 0.04 * (1 - lifted) + smooth(st.bury) * BURIED_PITCH;
     if (st.mode === 'HOVER' || (st.mode === 'HUNT' && st.phase !== 'ambush')) pitchGoal = -0.12 * lifted + pitchGoal * (1 - lifted);
     if (st.mode === 'ESCAPE' && st.phase === 'jet') pitchGoal = 0.12;
     st.pitch = damp(st.pitch, pitchGoal, 4, dt);
