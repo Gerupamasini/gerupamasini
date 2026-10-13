@@ -142,6 +142,32 @@ describe('ガザミ: the rig and the legs', () => {
     expect(rig.legs.length).toBe(10);
   });
 
+  it('twists the walking legs along their length: the merus edge-on from above, the propodus and dactylus face-on (61, 47)', () => {
+    const rig = gazamiRig();
+    const g = gazamiGeometry(0).shell;
+    const pos = g.getAttribute('position'), si = g.getAttribute('skinIndex'), sw = g.getAttribute('skinWeight');
+    const v = new Vector3();
+    // each article's cross-section in its own bone's frame (bind pose): height (y, the flexion plane) and breadth (z)
+    const extent = (bone: string) => {
+      const b = rig.byName[bone], inv = rig.defs[b].inverse;
+      let y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        if (si.getX(i) !== b || sw.getX(i) < 0.99) continue;
+        v.fromBufferAttribute(pos, i).applyMatrix4(inv).multiplyScalar(1000);
+        y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z);
+      }
+      return { h: y1 - y0, w: z1 - z0 };
+    };
+    for (const side of ['L', 'R']) {
+      const me = extent(`J_P4${side}_me`), pr = extent(`J_P4${side}_pr`), da = extent(`J_P4${side}_da`);
+      expect(me.h).toBeGreaterThan(me.w * 1.3);
+      expect(pr.w).toBeGreaterThan(pr.h * 1.3);
+      expect(da.w).toBeGreaterThan(da.h);
+      // the last walking leg's propodus a broad blade, wider seen from above than the merus
+      expect(pr.w).toBeGreaterThan(me.w * 1.5);
+    }
+  });
+
   it('reaches every walking foot with the IK, standing low or tall', () => {
     const rig = gazamiRig();
     for (const leg of rig.legs.filter((l) => l.id !== 'P1' && l.id !== 'P5')) {
