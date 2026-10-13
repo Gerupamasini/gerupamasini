@@ -1,7 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Sphere, Uint16BufferAttribute, Vector3 } from 'three';
 import {
-  BONES, D1, EYE, FINS, FIN_ID, GAPE, GILL, JAW, LIPS, MODEL_TL, OPER_BONE, OPER_EDGE, PEC, PREOP_EDGE, SPINE, SPINE_S, S_CAP, S_CAUDAL_BASE, S_HEAD,
-  boneIndex, dorsalY, gapeY, lipInset, lipShift, section, sectionPoint, ventralY, zOf, type BoneName,
+  BONES, FIN_ID, HAKU, MODEL_TL, SPINE, SPINE_S, S_CAUDAL_BASE, S_HEAD, boneIndex, sectionPoint, zOf, type BoneName, type MedianFin, type MulletForm,
 } from './anatomy';
 
 /**
@@ -23,7 +22,7 @@ import {
 
 export type Lod = 0 | 1 | 2;
 
-export interface HakuGeometry {
+export interface MulletGeometry {
   body: BufferGeometry;
   fins: BufferGeometry | null;
 }
@@ -40,18 +39,11 @@ export interface RigRest {
   inverses: Matrix4[];
 }
 
-/** half width of the body at (s, height y) in TL units: where a point on the flank at that height sits */
-export function halfWidthAt(s: number, y: number): number {
-  const c = section(s);
-  const h = y - c.yc;
-  const span = h >= 0 ? c.top : c.bot, n = h >= 0 ? c.nTop : c.nBot;
-  const v = Math.min(1, Math.abs(h) / Math.max(span, 1e-6));
-  return c.hw * Math.pow(Math.max(0, 1 - Math.pow(v, n)), 1 / n);
-}
-
-let rig: RigRest | null = null;
-export function rigRest(): RigRest {
-  if (rig) return rig;
+const rigs = new Map<string, RigRest>();
+/** the rig's rest pose for a form (the bones sit where its fins, jaw and gill covers are) */
+export function rigRest(F: MulletForm = HAKU): RigRest {
+  const hit = rigs.get(F.id);
+  if (hit) return hit;
   const world: Vector3[] = [], parent: number[] = [];
   const at = (s: number, y = 0, x = 0) => new Vector3(x * TL, y * TL, zOf(s) * TL);
   for (const name of BONES) {
@@ -60,24 +52,25 @@ export function rigRest(): RigRest {
     if (si >= 0) { world.push(at(SPINE[si][1])); parent.push(si === 0 ? boneIndex('J_root') : boneIndex(SPINE[si - 1][0] as BoneName)); continue; }
     if (name === 'J_pec_L' || name === 'J_pec_R') {
       const side = name === 'J_pec_L' ? 1 : -1;
-      world.push(at(PEC.s, PEC.y, side * halfWidthAt(PEC.s, PEC.y) * 0.97));
+      world.push(at(F.pec.s, F.pec.y, side * F.halfWidthAt(F.pec.s, F.pec.y) * 0.97));
       parent.push(boneIndex('J_sp1'));
     } else if (name === 'J_d1') {
-      world.push(at(D1.s0, dorsalY(D1.s0) - 0.002));
+      world.push(at(F.d1.s0, F.dorsalY(F.d1.s0) - 0.002));
       parent.push(boneIndex('J_sp3'));
     } else if (name === 'J_oper_L' || name === 'J_oper_R') {
       // the opercle's articulation, high at the front of the gill cover; it rides on the trunk's first segment like the
       // skin beneath it
       const side = name === 'J_oper_L' ? 1 : -1;
-      world.push(at(GILL.hinge.s, GILL.hinge.y, side * halfWidthAt(GILL.hinge.s, GILL.hinge.y)));
+      world.push(at(F.gill.hinge.s, F.gill.hinge.y, side * F.halfWidthAt(F.gill.hinge.s, F.gill.hinge.y)));
       parent.push(boneIndex('J_sp1'));
     } else {
-      world.push(at(JAW.s, JAW.y));
+      world.push(at(F.jaw.s, F.jaw.y));
       parent.push(boneIndex('J_head'));
     }
   }
   const inverses = world.map((p) => new Matrix4().makeTranslation(-p.x, -p.y, -p.z));
-  rig = { parent, world, inverses };
+  const rig = { parent, world, inverses };
+  rigs.set(F.id, rig);
   return rig;
 }
 
@@ -149,8 +142,8 @@ class Builder {
 }
 
 /** jaw influence for a body vertex of a tier without a split mouth: the chin below the gape follows J_jaw */
-function withJaw(s: number, y: number, w: [number, number][]): [number, number][] {
-  const lim = JAW.s + 0.01, g = gapeY(s);
+function withJaw(F: MulletForm, s: number, y: number, w: [number, number][]): [number, number][] {
+  const lim = F.jaw.s + 0.01, g = F.gapeY(s);
   if (s > lim || y > g - 0.001) return w;
   const k = Math.min(1, Math.max(0, (lim - s) / 0.025)) * Math.min(1, Math.max(0, (g - 0.001 - y) / 0.008));
   return blendJaw(w, k);
@@ -163,21 +156,25 @@ function blendJaw(w: [number, number][], k: number): [number, number][] {
 
 const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-/** the skin at (s, φ) before the lips are rolled in: the section's point with the lower lip pushed forward (TL units) */
-function skinPoint(s: number, phi: number, out = new Vector3()): Vector3 {
-  const [x, y] = sectionPoint(section(s), phi);
-  return out.set(x, y, zOf(s) + lipShift(s, y));
+/**
+ * the skin at (s, φ) before the lips are rolled in: the section's point with the lower lip pushed forward and the front
+ * of the mouth raised into its ∧ (TL units)
+ */
+function skinPoint(F: MulletForm, s: number, phi: number, out = new Vector3()): Vector3 {
+  const [x, y0] = sectionPoint(F.section(s), phi);
+  const y = y0 + F.frontLift(s, x, y0);
+  return out.set(x, y, zOf(s) + F.lipShift(s, y0));
 }
 
 /** the skin's outward normal at (s, φ) */
-function skinNormal(s: number, phi: number): Vector3 {
+function skinNormal(F: MulletForm, s: number, phi: number): Vector3 {
   if (s <= 1e-6) return new Vector3(0, 0, 1);
   const ds = Math.min(1e-4, s * 0.5), dp = 2e-3;
-  const Ps = skinPoint(s + ds, phi).sub(skinPoint(s - ds, phi));
-  const Pp = skinPoint(s, phi + dp).sub(skinPoint(s, phi - dp));
+  const Ps = skinPoint(F, s + ds, phi).sub(skinPoint(F, s - ds, phi));
+  const Pp = skinPoint(F, s, phi + dp).sub(skinPoint(F, s, phi - dp));
   const n = new Vector3().crossVectors(Pp, Ps).normalize();
-  const p = skinPoint(s, phi), c = section(s);
-  const out = new Vector3(p.x, p.y - c.yc, s < S_CAP ? 0.02 : 0);
+  const p = skinPoint(F, s, phi), c = F.section(s);
+  const out = new Vector3(p.x, p.y - c.yc, s < F.sCap ? 0.02 : 0);
   if (n.dot(out) < 0) n.negate();
   return n;
 }
@@ -187,12 +184,15 @@ function skinNormal(s: number, phi: number): Vector3 {
  * little before its bony margin to just short of its free edge). Coloured as the gills and shut in; seen only when the
  * gill cover swings open.
  */
-function gillChamber(s: number, y: number): number {
-  const O = GILL.oper;
-  const bone = OPER_BONE(y), edge = OPER_EDGE(y);
+function gillChamber(F: MulletForm, s: number, y: number): number {
+  const O = F.gill.oper;
+  const bone = F.operBone(y), edge = F.operEdge(y);
   // (only where the plate stands fully off the skin: its ends sink in over the last 28 % of its height)
   const H = O.top - O.bottom;
-  return smooth(bone - 0.012, bone - 0.006, s) * (1 - smooth(edge - 0.006, edge - 0.002, s)) * smooth(O.bottom + 0.28 * H, O.bottom + 0.36 * H, y) * (1 - smooth(O.top - 0.36 * H, O.top - 0.28 * H, y));
+  // (a flap lying close on the skin rounds its rim down into the skin short of the edge: the chamber stops short of
+  // that, by the form's pale lining)
+  const k = F.gill.lining - 0.0025;
+  return smooth(bone - 0.012, bone - 0.006, s) * (1 - smooth(edge - 0.006 - k, edge - 0.002 - k, s)) * smooth(O.bottom + 0.28 * H, O.bottom + 0.36 * H, y) * (1 - smooth(O.top - 0.36 * H, O.top - 0.28 * H, y));
 }
 
 interface Loft {
@@ -214,7 +214,8 @@ interface Gape {
   cornerR: number;
 }
 
-function buildBody(b: Builder, L: Loft): Gape | null {
+function buildBody(F: MulletForm, b: Builder, L: Loft): Gape | null {
+  const G = F.gape;
   const { around } = L;
   // ring stations: dense through the rounded lips (s ∝ u², so the front grows like a dome), even along the mouth so a
   // ring lands on its corner, close over the head where the profile turns fastest, even along the trunk
@@ -222,32 +223,32 @@ function buildBody(b: Builder, L: Loft): Gape | null {
   if (L.mouthOpen) {
     // a split mouth starts with the front of the gape itself (the level line the section closes to at s = 0), the
     // rings' heights on the rounded front crowding toward it so the lips' rolls are round where they meet
-    for (let i = 0; i <= L.tip; i++) { const k = Math.pow(i / L.tip, 1.6); ss.push(S_CAP * (1 - Math.sqrt(Math.max(0, 1 - k * k)))); }
-  } else for (let i = 1; i <= L.tip; i++) ss.push(S_CAP * Math.pow(i / L.tip, 2));
-  for (let i = 1; i <= L.mouth; i++) ss.push(S_CAP + (GAPE.s - S_CAP) * (i / L.mouth));
-  const s0 = L.mouth > 0 ? GAPE.s : S_CAP;
+    for (let i = 0; i <= L.tip; i++) { const k = Math.pow(i / L.tip, 1.6); ss.push(F.sCap * (1 - Math.sqrt(Math.max(0, 1 - k * k)))); }
+  } else for (let i = 1; i <= L.tip; i++) ss.push(F.sCap * Math.pow(i / L.tip, 2));
+  for (let i = 1; i <= L.mouth; i++) ss.push(F.sCap + (G.s - F.sCap) * (i / L.mouth));
+  const s0 = L.mouth > 0 ? G.s : F.sCap;
   for (let i = 1; i <= L.head; i++) ss.push(s0 + (S_HEAD - s0) * (i / L.head));
   for (let i = 1; i <= L.trunk; i++) ss.push(S_HEAD + (S_CAUDAL_BASE - S_HEAD) * (i / L.trunk));
   const phiOf = (k: number) => { const psi = (k / around) * Math.PI * 2; return psi + L.squeeze * Math.sin(2 * psi); };
   // the gape lies at the side of every ring (φ = π/2 and 3π/2: each section's widest point is at the gape's height)
   const kL = around / 4, kR = (3 * around) / 4;
-  const split = (s: number) => L.mouthOpen && s < GAPE.s - 1e-9;
+  const split = (s: number) => L.mouthOpen && s < G.s - 1e-9;
   const jaw = boneIndex('J_jaw');
   const lower = (k: number) => k > kL && k < kR;
 
   /** a ring vertex: rolled lips, the sunk gill chamber, the jaw's share */
   const skin = (s: number, phi: number, lowerSide: boolean, a3: [number, number, number], a2: [number, number]): number => {
-    const p = skinPoint(s, phi);
+    const p = skinPoint(F, s, phi);
     // the near tier's skin is marked (aPart 0.01) so its shader knows the gill cover is in the geometry
     let occ = 1, part = L.mouthOpen ? 0.01 : 0;
     const y = p.y;
     if (L.mouthOpen) {
-      const d = lipInset(s, y);
+      const d = F.lipInset(s, y);
       if (d > 0) {
-        p.addScaledVector(skinNormal(s, phi), -d);
-        occ = 1 - 0.8 * Math.min(1, d / LIPS.upper);
+        p.addScaledVector(skinNormal(F, s, phi), -d);
+        occ = 1 - 0.8 * Math.min(1, d / F.lips.upper);
       }
-      const g = gillChamber(s, y);
+      const g = gillChamber(F, s, y);
       if (g > 0) {
         part = 0.01 + 0.15 * g;
         occ = Math.min(occ, 1 - 0.75 * g);
@@ -257,8 +258,8 @@ function buildBody(b: Builder, L: Loft): Gape | null {
     if (L.mouthOpen) {
       // the split mouth: everything below the gape is the lower jaw; behind the corner the chin hands over to the head
       if (split(s)) w = lowerSide ? [[jaw, 1]] : w;
-      else w = blendJaw(w, (1 - smooth(GAPE.s, GAPE.s + 0.014, s)) * smooth(0, 0.008, GAPE.y1 - y));
-    } else w = withJaw(s, y, w);
+      else w = blendJaw(w, (1 - smooth(G.s, G.s + 0.014, s)) * smooth(0, 0.008, G.y1 - y));
+    } else w = withJaw(F, s, y, w);
     return b.vertex([p.x, p.y, p.z], w, a3, a2, part, undefined, occ);
   };
 
@@ -269,7 +270,7 @@ function buildBody(b: Builder, L: Loft): Gape | null {
   const meridian: Vector3[] = [], mlen: number[] = [];
   const gape: Gape | null = L.mouthOpen ? { rings: [], cornerL: 0, cornerR: 0 } : null;
   for (const s of ss) {
-    const sec = section(s);
+    const sec = F.section(s);
     // arc length from the dorsal midline (TL units) along this section, for the patterns
     let arc = 0, prev = sectionPoint(sec, 0);
     const arcs: number[] = [];
@@ -322,7 +323,7 @@ function buildBody(b: Builder, L: Loft): Gape | null {
   // tail cap (inside the caudal fin's base)
   const last = ringStart[ss.length - 1];
   const sEnd = S_CAUDAL_BASE + 0.004;
-  const tail = b.vertex([0, section(S_CAUDAL_BASE).yc, zOf(sEnd)], chainWeights(sEnd), [sEnd, 0, 0], [sEnd, 0], 0, [0, 0, -1]);
+  const tail = b.vertex([0, F.section(S_CAUDAL_BASE).yc, zOf(sEnd)], chainWeights(sEnd), [sEnd, 0, 0], [sEnd, 0], 0, [0, 0, -1]);
   for (let k = 0; k < around; k++) b.idx.push(tail, last + k, last + ((k + 1) % around));
   return gape;
 }
@@ -340,14 +341,15 @@ function faced(b: Builder, a: number, c: number, d: number, want: Vector3): void
  * the lower lip's, the two meeting along a line across the head at the corner of the mouth. Dark and shut in; seen
  * when the jaw drops.
  */
-function buildMouth(b: Builder, g: Gape, across: number): void {
+function buildMouth(F: MulletForm, b: Builder, g: Gape, across: number): void {
+  const G = F.gape;
   const jaw = boneIndex('J_jaw');
   const head = chainWeights(0.02);
   const row = (s: number, iL: number, iR: number, sign: number, w: [number, number][], shared?: number[]): number[] => {
     if (shared) return shared;
     const A = vAt(b, iL), B = vAt(b, iR);
     // the vault rises behind the lips' front edge and falls to nothing at the corner
-    const k = Math.max(0, 1 - s / GAPE.s) * smooth(0, 0.004, s);
+    const k = Math.max(0, 1 - s / G.s) * smooth(0, 0.004, s);
     const arch = Math.min(0.006, 0.5 * Math.abs(A.x)) * Math.sqrt(k), back = 0.004 * k;
     const out: number[] = [];
     for (let t = 0; t <= across; t++) {
@@ -360,7 +362,7 @@ function buildMouth(b: Builder, g: Gape, across: number): void {
     return out;
   };
   // the back of the cavity, shared by palate and floor
-  const cs = GAPE.s;
+  const cs = G.s;
   const corner = row(cs, g.cornerL, g.cornerR, 0, head);
   for (const [sign, want, w] of [[1, new Vector3(0, -1, 0), head], [-1, new Vector3(0, 1, 0), [[jaw, 1]] as [number, number][]]] as const) {
     const rows = g.rings.map((r) => row(r.s, sign > 0 ? r.upL : r.loL, sign > 0 ? r.upR : r.loR, sign, w as [number, number][]));
@@ -375,9 +377,9 @@ function buildMouth(b: Builder, g: Gape, across: number): void {
 }
 
 /** the head's surface and its outward normal at (s, height y) on one side */
-function flank(s: number, y: number, side: 1 | -1): { p: Vector3; n: Vector3 } {
+function flank(F: MulletForm, s: number, y: number, side: 1 | -1): { p: Vector3; n: Vector3 } {
   const e = 0.002;
-  const P = (ss: number, yy: number) => new Vector3(side * halfWidthAt(ss, yy), yy, zOf(ss));
+  const P = (ss: number, yy: number) => new Vector3(side * F.halfWidthAt(ss, yy), yy, zOf(ss));
   const p = P(s, y);
   const ds = P(s + e, y).sub(P(s - e, y)), dy = P(s, y + e).sub(P(s, y - e));
   const n = new Vector3().crossVectors(dy, ds).normalize();
@@ -390,13 +392,14 @@ function flank(s: number, y: number, side: 1 | -1): { p: Vector3; n: Vector3 } {
  * over it exactly at the dark rim, wherever the head curves away) and carried a little past the rim under the skin.
  * aPat = the point on the eye's disc (1 at the visible rim; x toward the snout, y up), aBody.y = 1 − that radius.
  */
-function buildEye(b: Builder, side: 1 | -1, nTheta: number, nPsi: number): void {
+function buildEye(F: MulletForm, b: Builder, side: 1 | -1, nTheta: number, nPsi: number): void {
+  const EYE = F.eye;
   const RHO = 1.04;
   // the dome's height over the skin at disc radius rho: a shallow cap meeting the skin at the rim, then sinking under it
   const lift = (rho: number) => (rho <= 1 ? EYE.bulge * (1 - rho * rho) : -0.003 * (rho - 1) / (RHO - 1));
   const at = (ex: number, ey: number): Vector3 => {
     const rho = Math.hypot(ex, ey);
-    const { p, n } = flank(EYE.s - ex * EYE.r, EYE.y + ey * EYE.r, side);
+    const { p, n } = flank(F, EYE.s - ex * EYE.r, EYE.y + ey * EYE.r, side);
     return p.addScaledVector(n, lift(rho));
   };
   const start = b.count;
@@ -433,11 +436,11 @@ function buildEye(b: Builder, side: 1 | -1, nTheta: number, nPsi: number): void 
 }
 
 /** the loft's pattern attributes for the point of the skin at (s, height y) on one side: aBody and aPat */
-function skinAttrs(s: number, y: number, side: 1 | -1): { a3: [number, number, number]; a2: [number, number] } {
-  const sec = section(s);
+function skinAttrs(F: MulletForm, s: number, y: number, side: 1 | -1): { a3: [number, number, number]; a2: [number, number] } {
+  const sec = F.section(s);
   const dy = y - sec.yc, span = dy >= 0 ? sec.top : sec.bot, n = dy >= 0 ? sec.nTop : sec.nBot;
   const cp = Math.sign(dy) * Math.pow(Math.min(1, Math.abs(dy) / Math.max(span, 1e-6)), n / 2);
-  const sp = Math.pow(Math.min(1, halfWidthAt(s, y) / Math.max(sec.hw, 1e-6)), sec.hw > 0 ? n / 2 : 1);
+  const sp = Math.pow(Math.min(1, F.halfWidthAt(s, y) / Math.max(sec.hw, 1e-6)), sec.hw > 0 ? n / 2 : 1);
   const phi = Math.atan2(sp, cp);
   // arc length from the dorsal midline down to φ
   let arc = 0, prev = sectionPoint(sec, 0);
@@ -470,7 +473,7 @@ interface Plate {
  * standing off the skin behind it and rounded over into its thickness (and, for the opercle, back under itself as the
  * plate's inner face). Rows run front → edge (→ under), columns top → bottom.
  */
-function buildPlate(b: Builder, P: Plate): void {
+function buildPlate(F: MulletForm, b: Builder, P: Plate): void {
   const SUNK = -0.0012, UNDER = -0.0006, RIM = 0.0008;
   const grid: number[][] = [];
   for (let j = 0; j <= P.nv; j++) {
@@ -481,9 +484,9 @@ function buildPlate(b: Builder, P: Plate): void {
     const E = P.edge(y);
     const col: number[] = [];
     const put = (s: number, off: number, part: number, occ: number) => {
-      const { p, n } = flank(s, y, P.side);
+      const { p, n } = flank(F, s, y, P.side);
       p.addScaledVector(n, t(off));
-      const { a3, a2 } = skinAttrs(s, y, P.side);
+      const { a3, a2 } = skinAttrs(F, s, y, P.side);
       col.push(b.vertex([p.x, p.y, p.z], P.weights(s), a3, a2, part, undefined, occ));
     };
     for (const s of P.rows(y)) put(s, P.lift(s, y), P.part(s, y), P.occ(s, y));
@@ -519,12 +522,14 @@ const span = (a: number, b: number, n: number): number[] => Array.from({ length:
  * forward below; under it starts the opercle, rising to its bony margin, then thinning into the membranous flap whose
  * free edge is the gill opening. The opercle swings out on J_oper_* (the skin under it is the gill chamber).
  */
-function buildGillCover(b: Builder, side: 1 | -1, nv: number): void {
-  const R = GILL.preop, O = GILL.oper;
+function buildGillCover(F: MulletForm, b: Builder, side: 1 | -1, nv: number): void {
+  const R = F.gill.preop, O = F.gill.oper;
+  const PREOP_EDGE = F.preopEdge, OPER_BONE = F.operBone, OPER_EDGE = F.operEdge;
   const chain = (s: number) => chainWeights(s);
   // the plates lie just under the skin over most of their area and come up through it toward their free edges, so
-  // nothing but the edges shows: the preopercle's margin, the opercle's bony margin and its membranous flap
-  buildPlate(b, {
+  // nothing but the edges shows: the preopercle's margin, the opercle's bony margin and its membranous flap (a
+  // preopercle all but flush under the scaled skin, as the スバシリ's, is left to the shading)
+  if (R.lift >= 0.0004) buildPlate(F, b, {
     side, top: R.top, bottom: R.bottom, nv: Math.round(nv * 0.8), inner: false,
     rows: (y) => { const E = PREOP_EDGE(y), F = E - R.width; return [...span(F, E - 0.022, 2), ...span(E - 0.022, E - 0.0008, 5)]; },
     edge: PREOP_EDGE,
@@ -532,7 +537,7 @@ function buildGillCover(b: Builder, side: 1 | -1, nv: number): void {
     part: () => 0.3, occ: () => 1, weights: chain,
   });
   const operBone = boneIndex(side > 0 ? 'J_oper_L' : 'J_oper_R'), sp1 = boneIndex('J_sp1');
-  buildPlate(b, {
+  buildPlate(F, b, {
     side, top: O.top, bottom: O.bottom, nv, inner: true,
     rows: (y) => {
       const F = PREOP_EDGE(y) - 0.01, Bn = OPER_BONE(y), E = OPER_EDGE(y);
@@ -579,8 +584,8 @@ const lerpLen = (len: readonly number[], a: number): number => {
   return len[i] * (1 - f) + len[i + 1] * f;
 };
 
-function caudalAt(a: number, t: number): P3 {
-  const C = FINS.caudal;
+function caudalAt(F: MulletForm, a: number, t: number): P3 {
+  const C = F.fins.caudal;
   const v = a * 2 - 1, av = Math.abs(v);
   // a broad, shallowly forked fan: the notch at the middle, pointed lobes, the trailing edge nearly straight
   const edgeS = C.fork + (C.tip - C.fork) * Math.pow(av, 1.1) - 0.012 * Math.pow(Math.max(0, (av - 0.86) / 0.14), 2);
@@ -593,9 +598,9 @@ function caudalAt(a: number, t: number): P3 {
   return [0.0012 * Math.sin(Math.PI * t) * v, y, 0.38 - s];
 }
 
-function medianAt(f: { s0: number; s1: number; len: readonly number[]; rake: readonly number[] }, dorsal: boolean, a: number, t: number): P3 {
+function medianAt(F: MulletForm, f: MedianFin, dorsal: boolean, a: number, t: number): P3 {
   const s = f.s0 + (f.s1 - f.s0) * a;
-  const y0 = dorsal ? dorsalY(s) - 0.002 : ventralY(s) + 0.002;
+  const y0 = dorsal ? F.dorsalY(s) - 0.002 : F.ventralY(s) + 0.002;
   const L = lerpLen(f.len, a);
   // the rays rake back more toward the end of the base (a fan), and curve back slightly at their tips
   const rake = f.rake[0] + (f.rake[1] - f.rake[0]) * a + 0.08 * t;
@@ -603,22 +608,22 @@ function medianAt(f: { s0: number; s1: number; len: readonly number[]; rake: rea
   return [0, y0 + dy, 0.38 - (s + ds)];
 }
 
-function pelvicAt(side: 1 | -1, a: number, t: number): P3 {
-  const P = FINS.pelvic;
+function pelvicAt(F: MulletForm, side: 1 | -1, a: number, t: number): P3 {
+  const P = F.fins.pelvic;
   // close together under the belly, swept back and down
   const s0 = P.s - 0.01 + 0.014 * a;
-  const x0 = side * (0.006 + 0.008 * a), y0 = ventralY(s0) + 0.003;
+  const x0 = side * (0.006 + 0.008 * a), y0 = F.ventralY(s0) + 0.003;
   const L = P.len * (1 - 0.4 * a);
   const rake = P.rake + 0.32 * a;
   const dir = new Vector3(side * (0.1 + 0.08 * a), -Math.cos(rake), -Math.sin(rake)).normalize();
   return [x0 + dir.x * L * t, y0 + dir.y * L * t, 0.38 - s0 + dir.z * L * t];
 }
 
-function pectoralAt(side: 1 | -1, a: number, t: number): P3 {
-  const P = FINS.pectoral;
+function pectoralAt(F: MulletForm, side: 1 | -1, a: number, t: number): P3 {
+  const P = F.fins.pectoral, PEC = F.pec;
   // the base runs obliquely down and back from the axillary spot; a = 0 the upper (longest) ray
   const s0 = PEC.s + 0.022 * a, y0 = PEC.y + 0.008 - 0.034 * a;
-  const x0 = side * halfWidthAt(s0, y0) * 0.97;
+  const x0 = side * F.halfWidthAt(s0, y0) * 0.97;
   const L = P.len * (1 - 0.62 * a);
   // at rest the fin lies back along the upper flank, standing just off it, its rays fanning from level (the upper)
   // to raised (the lower, short ones)
@@ -627,47 +632,48 @@ function pectoralAt(side: 1 | -1, a: number, t: number): P3 {
   return [x0 + side * (dir.x * L * t - bend * 0.08 * L), y0 + dir.y * L * t, 0.38 - s0 + dir.z * L * t];
 }
 
-function buildFins(b: Builder, lod: 0 | 1): void {
-  const hi = lod === 0;
+function buildFins(F: MulletForm, b: Builder, lod: 0 | 1): void {
+  const hi = lod === 0, FINS = F.fins;
   const chain = (_a: number, _t: number, p: P3) => chainWeights(sOf(p));
-  membrane(b, hi ? 24 : 8, hi ? 10 : 4, FIN_ID.caudal, caudalAt, chain);
+  membrane(b, hi ? 24 : 8, hi ? 10 : 4, FIN_ID.caudal, (a, t) => caudalAt(F, a, t), chain);
   const d1Bone = boneIndex('J_d1');
-  membrane(b, hi ? 12 : 4, hi ? 6 : 3, FIN_ID.d1, (a, t) => medianAt(FINS.d1, true, a, t), (a, t, p) => {
+  membrane(b, hi ? 12 : 4, hi ? 6 : 3, FIN_ID.d1, (a, t) => medianAt(F, FINS.d1, true, a, t), (a, t, p) => {
     const k = Math.min(1, t / 0.25);
     return [...chainWeights(sOf(p)).map(([i, w]) => [i, w * (1 - k)] as [number, number]), [d1Bone, k]];
   });
-  membrane(b, hi ? 14 : 5, hi ? 6 : 3, FIN_ID.d2, (a, t) => medianAt(FINS.d2, true, a, t), chain);
-  membrane(b, hi ? 14 : 5, hi ? 6 : 3, FIN_ID.anal, (a, t) => medianAt(FINS.anal, false, a, t), chain);
+  membrane(b, hi ? 14 : 5, hi ? 6 : 3, FIN_ID.d2, (a, t) => medianAt(F, FINS.d2, true, a, t), chain);
+  membrane(b, hi ? 14 : 5, hi ? 6 : 3, FIN_ID.anal, (a, t) => medianAt(F, FINS.anal, false, a, t), chain);
   if (hi) {
-    membrane(b, 6, 6, FIN_ID.pelvic, (a, t) => pelvicAt(1, a, t), chain);
-    membrane(b, 6, 6, FIN_ID.pelvic, (a, t) => pelvicAt(-1, a, t), chain);
+    membrane(b, 6, 6, FIN_ID.pelvic, (a, t) => pelvicAt(F, 1, a, t), chain);
+    membrane(b, 6, 6, FIN_ID.pelvic, (a, t) => pelvicAt(F, -1, a, t), chain);
   }
   const pl = boneIndex('J_pec_L'), pr = boneIndex('J_pec_R');
-  membrane(b, hi ? 12 : 5, hi ? 8 : 4, FIN_ID.pectoral, (a, t) => pectoralAt(1, a, t), () => [[pl, 1]]);
-  membrane(b, hi ? 12 : 5, hi ? 8 : 4, FIN_ID.pectoral, (a, t) => pectoralAt(-1, a, t), () => [[pr, 1]]);
+  membrane(b, hi ? 12 : 5, hi ? 8 : 4, FIN_ID.pectoral, (a, t) => pectoralAt(F, 1, a, t), () => [[pl, 1]]);
+  membrane(b, hi ? 12 : 5, hi ? 8 : 4, FIN_ID.pectoral, (a, t) => pectoralAt(F, -1, a, t), () => [[pr, 1]]);
 }
 
 /** LOD2: the forked tail as an opaque sliver in the body mesh */
-function buildTailSliver(b: Builder): void {
-  membrane(b, 4, 2, 0, caudalAt, (_a, _t, p) => chainWeights(sOf(p)), 2);
+function buildTailSliver(F: MulletForm, b: Builder): void {
+  membrane(b, 4, 2, 0, (a, t) => caudalAt(F, a, t), (_a, _t, p) => chainWeights(sOf(p)), 2);
 }
 
-const cache = new Map<Lod, HakuGeometry>();
+const cache = new Map<string, MulletGeometry>();
 
-/** The shared geometry of a tier (built on first use). */
-export function hakuGeometry(lod: Lod): HakuGeometry {
-  const hit = cache.get(lod);
+/** The shared geometry of a form's tier (built on first use). */
+export function mulletGeometry(lod: Lod, F: MulletForm = HAKU): MulletGeometry {
+  const key = `${F.id}${lod}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   const body = new Builder();
   if (lod === 0) {
-    const gape = buildBody(body, { tip: 10, mouth: 8, head: 28, trunk: 38, around: 48, squeeze: 0.22, mouthOpen: true });
-    buildMouth(body, gape!, 6);
-    buildEye(body, 1, 12, 28); buildEye(body, -1, 12, 28);
-    buildGillCover(body, 1, 18); buildGillCover(body, -1, 18);
+    const gape = buildBody(F, body, { tip: 10, mouth: 8, head: 28, trunk: 38, around: 48, squeeze: 0.22, mouthOpen: true });
+    buildMouth(F, body, gape!, 6);
+    buildEye(F, body, 1, 12, 28); buildEye(F, body, -1, 12, 28);
+    buildGillCover(F, body, 1, 18); buildGillCover(F, body, -1, 18);
   } else if (lod === 1) {
-    buildBody(body, { tip: 3, mouth: 0, head: 9, trunk: 14, around: 16, squeeze: 0, mouthOpen: false });
-    buildEye(body, 1, 4, 12); buildEye(body, -1, 4, 12);
-  } else { buildBody(body, { tip: 2, mouth: 0, head: 3, trunk: 6, around: 8, squeeze: 0, mouthOpen: false }); buildTailSliver(body); }
+    buildBody(F, body, { tip: 3, mouth: 0, head: 9, trunk: 14, around: 16, squeeze: 0, mouthOpen: false });
+    buildEye(F, body, 1, 4, 12); buildEye(F, body, -1, 4, 12);
+  } else { buildBody(F, body, { tip: 2, mouth: 0, head: 3, trunk: 6, around: 8, squeeze: 0, mouthOpen: false }); buildTailSliver(F, body); }
   // body normals: computed over the closed loft, then the eyes' analytic normals are restored
   const g = body.build('body', false);
   const eyeNormals = body.nrm.slice();
@@ -679,14 +685,14 @@ export function hakuGeometry(lod: Lod): HakuGeometry {
   if (lod > 0) n.setXYZ(0, 0, -0.1, 1);   // vertex 0 is the closed snout's tip
   n.needsUpdate = true;
   let fins: BufferGeometry | null = null;
-  if (lod < 2) { const fb = new Builder(); buildFins(fb, lod as 0 | 1); fins = fb.build('fins', true); }
+  if (lod < 2) { const fb = new Builder(); buildFins(F, fb, lod as 0 | 1); fins = fb.build('fins', true); }
   const out = { body: g, fins };
-  cache.set(lod, out);
+  cache.set(key, out);
   return out;
 }
 
 /** triangle counts per tier (docs / tests) */
-export function triangleCount(lod: Lod): number {
-  const g = hakuGeometry(lod);
+export function triangleCount(lod: Lod, F: MulletForm = HAKU): number {
+  const g = mulletGeometry(lod, F);
   return (g.body.index!.count + (g.fins?.index?.count ?? 0)) / 3;
 }

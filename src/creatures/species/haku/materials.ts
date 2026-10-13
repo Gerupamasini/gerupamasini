@@ -1,17 +1,7 @@
 import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
-import { EYE, GAPE, MODEL_TL, OPER_BONE_PTS, OPER_EDGE_PTS, PEC, PREOP_EDGE_PTS } from './anatomy';
-
-const f = (x: number): string => x.toFixed(5);
-
-/** a GLSL function through a table of (x, y) points, linear between them, clamped at the ends */
-function glslTable(name: string, pts: readonly (readonly [number, number])[]): string {
-  let body = `float y = ${f(pts[0][1])};\n`;
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-    body += `  y = mix(y, ${f(y0)} + (${f(y1 - y0)}) * clamp((x - ${f(x0)}) / ${f(x1 - x0)}, 0.0, 1.0), step(${f(x0)}, x));\n`;
-  }
-  return `float ${name}(float x) {\n  ${body}  return y;\n}\n`;
-}
+import { HAKU, MODEL_TL, type MulletForm } from './anatomy';
+import { GILLS_GLSL, eyeGLSL, f, farGLSL, glslTable, lipsGLSL, structureGLSL } from './glsl';
+import { SUBASHIRI_FINS, SUBASHIRI_VARIANTS, subashiriSurface } from './subashiriSurface';
 
 /**
  * Shared materials of the ハク: standard PBR (MeshPhysicalMaterial: metalness/roughness, clearcoat for the mucus and
@@ -205,7 +195,8 @@ clearcoatRadiance *= hkOcc;
 #endif
 `;
 
-const BODY_FRAG_PARS = /* glsl */ `
+function bodyFragPars(F: MulletForm): string {
+  return /* glsl */ `
 varying vec3 vBody;
 varying vec2 vPat;
 varying float vPart;
@@ -215,10 +206,11 @@ uniform vec3 uBack;
 uniform float uPigment;
 uniform float uSilver;
 uniform float uIri;
-${glslTable('hkPreopEdge', PREOP_EDGE_PTS)}
-${glslTable('hkOperEdge', OPER_EDGE_PTS)}
-${glslTable('hkOperBone', OPER_BONE_PTS)}
+${glslTable('hkPreopEdge', F.preopEdgePts)}
+${glslTable('hkOperEdge', F.operEdgePts)}
+${glslTable('hkOperBone', F.operBonePts)}
 `;
+}
 
 /**
  * The body's surface, laid out after a lateral photograph of a live ハク (and measured against it in the reference
@@ -236,7 +228,8 @@ ${glslTable('hkOperBone', OPER_BONE_PTS)}
  * stages. vRest is the rest-pose position in TL units (y = height above the snout–tail axis, z = forward); hkTilt
  * leans the reflector toward the head (x) and the back (y), applied in the body's own frame.
  */
-const BODY_SURFACE = /* glsl */ `
+function hakuSurface(F: MulletForm): string {
+  return /* glsl */ `
 float hkMetal = 0.0, hkRough = 0.5, hkCoat = 0.15, hkIriAmt = 0.0, hkIriThick = 380.0, hkThin = 0.0;
 // ambient occlusion from the geometry (the gape between the lips, the mouth, under the gill cover's edges)
 float hkOcc = vOcc;
@@ -246,35 +239,7 @@ vec2 hkTilt = vec2(0.0);
   float part = vPart;
   float h = vRest.y;
   vec3 col;
-  if (part > 0.5 && part < 1.5) {
-    // ---- the eye: a silver iris, brightest round the black pupil and greyer to the thin dark rim; pale yellow low and
-    // forward; the cornea glossy over it
-    vec2 e = vPat;
-    float r = length(e);
-    vec2 pc = e + vec2(0.0, 0.05);
-    float pupil = 1.0 - smoothstep(${f(EYE.pupil - 0.015)}, ${f(EYE.pupil + 0.012)}, length(pc * vec2(1.0, 1.04)));
-    float rp = length(pc);
-    float ang = atan(e.y, e.x);
-    float mott = 0.95 + 0.05 * hkNoise(vec2(ang * 9.0, r * 5.0)) + 0.03 * hkNoise(vec2(ang * 30.0, r * 4.0));
-    // bright silver round the pupil, light grey toward the rim, a brighter crescent just inside the rim high and forward
-    vec3 iris = mix(vec3(0.82, 0.82, 0.81), vec3(0.6, 0.61, 0.62), smoothstep(0.4, 0.62, r));
-    iris = mix(iris, vec3(0.4, 0.41, 0.43), smoothstep(0.74, 0.9, r)) * mott;
-    iris = mix(iris, vec3(0.9, 0.9, 0.89), 0.5 * smoothstep(0.72, 0.88, r) * (1.0 - smoothstep(0.9, 0.95, r)) * smoothstep(-0.1, 0.6, e.y + 0.6 * e.x));
-    iris = mix(iris, vec3(0.86, 0.85, 0.62), 0.5 * smoothstep(0.0, -0.5, e.y) * smoothstep(-0.3, 0.35, e.x) * smoothstep(0.75, 0.45, rp));
-    iris *= 1.0 - 0.2 * (1.0 - smoothstep(${f(EYE.pupil)}, ${f(EYE.pupil + 0.07)}, rp));
-    iris *= 1.0 - 0.22 * smoothstep(0.8, 0.94, r) * smoothstep(0.1, 0.8, e.y - 0.4 * e.x);
-    // the thin dark rim, and past it the skin closing over the eye
-    float aa = max(fwidth(r), 0.004);
-    float rim = smoothstep(0.915 - aa, 0.915 + aa, r) * (1.0 - smoothstep(0.995, 1.03, r));
-    vec3 skin = vec3(0.86, 0.86, 0.86);
-    col = mix(iris, skin, smoothstep(0.985, 1.02, r));
-    col = mix(col, vec3(0.06, 0.06, 0.065), rim);
-    col = mix(col, vec3(0.0), pupil);
-    hkMetal = mix(mix(0.6, 0.05, rim), 0.0, pupil);
-    hkMetal = mix(hkMetal, 0.8, smoothstep(1.0, 1.04, r));
-    hkRough = mix(0.26, 0.1, pupil);
-    hkCoat = 1.0 - smoothstep(0.985, 1.02, r);
-  } else if (part > 1.5 && part < 2.5) {
+${eyeGLSL(F)}  } else if (part > 1.5 && part < 2.5) {
     // ---- LOD2's tail sliver: a faint grey fan
     col = vec3(0.3, 0.31, 0.3);
     hkMetal = 0.1; hkRough = 0.6; hkCoat = 0.0;
@@ -302,11 +267,7 @@ vec2 hkTilt = vec2(0.0);
     float band = smoothstep(edge - 0.04, edge + 0.05, cd);
     float belly = smoothstep(-0.25, -0.75, cd);
     // ---- the snout and lips
-    // the lips: the rolls either side of the gape (geometry), pale and translucent
-    float gapeH = ${f(GAPE.y0)} + (${f(GAPE.y1)} - ${f(GAPE.y0)}) * clamp(s / ${f(GAPE.s)}, 0.0, 1.0);
-    float lips = (1.0 - smoothstep(${f(GAPE.s - 0.004)}, ${f(GAPE.s + 0.006)}, s))
-      * (h > gapeH ? 1.0 - smoothstep(0.011, 0.016, h - gapeH) : 1.0 - smoothstep(0.02, 0.027, gapeH - h));
-    float snoutPatch = (1.0 - smoothstep(0.3, 1.0, length(vec2((s - 0.046) / 0.04, (h - 0.03) / 0.022)))) * (0.55 + 0.45 * hkNoise(vec2(s * 120.0, h * 120.0)));
+${lipsGLSL(F)}    float snoutPatch = (1.0 - smoothstep(0.3, 1.0, length(vec2((s - 0.046) / 0.04, (h - 0.03) / 0.022)))) * (0.55 + 0.45 * hkNoise(vec2(s * 120.0, h * 120.0)));
     // forward of the nape the crown is not tan but a pale silver-gold, finely dotted
     float headTop = 1.0 - smoothstep(0.15, 0.2, s);
     float crown = headK * band;
@@ -427,41 +388,8 @@ vec2 hkTilt = vec2(0.0);
     streak = max(streak, streakUp);
     float shoulder = smoothstep(edge - 0.2, edge - 0.08, cd) * (1.0 - smoothstep(edge - 0.06, edge + 0.01, cd)) * trunk * smoothstep(0.82, 0.74, s);
     hkTilt.y += 0.16 * shoulder;
-    // ---- the gill cover is in the geometry: plates (aPart 0.3 the preopercle, 0.35 → 0.39 the opercle's bone → its
-    // membranous flap) over the gill chamber (aPart up to 0.15 on the skin beneath), which shows its red gills when the
-    // cover swings open
-    float near = step(0.005, part) * step(part, 0.2);
-    float preopP = step(0.25, part) * step(part, 0.32);
-    float operP = step(0.33, part) * step(part, 0.45);
-    float membrane = operP * clamp((part - 0.35) / 0.04, 0.0, 1.0);
-    float gills = smoothstep(0.03, 0.12, part) * step(part, 0.2) * (1.0 - smoothstep(-0.006, -0.0025, s - hkOperEdge(h)));
-    float gillPink = operP * smoothstep(-0.02, -0.06, h) * smoothstep(0.2, 0.25, s);
-    // the cheek and gill cover are one mirror sheet of skin over the bones (its edges are geometry)
-    float oper = smoothstep(0.13, 0.17, s) * (1.0 - smoothstep(-0.003, 0.003, s - hkOperEdge(h))) * (1.0 - band);
-    // the skin in the lee of each free edge: behind the opercle's (on the shoulder) and behind the preopercle's (on the
-    // opercle), on the near tier where the edges are real
-    float behindOp = near * smoothstep(-0.0005, 0.001, s - hkOperEdge(h)) * (1.0 - smoothstep(0.0, 0.007, s - hkOperEdge(h)))
-      * smoothstep(-0.09, -0.08, h) * (1.0 - smoothstep(0.04, 0.05, h));
-    float behindPre = operP * (1.0 - smoothstep(0.0, 0.011, s - hkPreopEdge(h))) * smoothstep(-0.075, -0.06, h) * (1.0 - smoothstep(0.035, 0.05, h));
-    // the step down from the opercle's bone to its membranous flap: a crease in the plate's own shadow
-    float behindBone = operP * smoothstep(-0.001, 0.0005, s - hkOperBone(h)) * (1.0 - smoothstep(0.001, 0.006, s - hkOperBone(h)))
-      * smoothstep(-0.08, -0.065, h) * (1.0 - smoothstep(0.035, 0.045, h));
-    hkOcc *= 1.0 - 0.25 * behindOp - 0.35 * behindPre - 0.4 * behindBone;
-    // the cheek and gill cover are crumpled foil: broad, soft undulations of the mirror
-    float cheek = (1.0 - smoothstep(0.26, 0.3, s)) * smoothstep(0.07, 0.11, s) * (1.0 - band);
-    float satin = (1.0 - smoothstep(0.16, 0.26, s)) * smoothstep(0.1, 0.5, cd) * (1.0 - band);
-    vec2 foil = vec2(hkNoise(vec2(s * 32.0, h * 26.0)), hkNoise(vec2(s * 28.0 + 9.0, h * 34.0 + 3.0))) - 0.5;
-    hkTilt += foil * 0.3 * cheek;
-    // ---- the eye's orbit: a narrow pale ring of skin round the dark rim
-    float de = length(vec2(s - ${f(EYE.s)}, h - ${f(EYE.y)})) / ${f(EYE.r)};
-    float orbit = smoothstep(0.98, 1.04, de) * (1.0 - smoothstep(1.04, 1.2, de));
-    float orbitShade = (1.0 - smoothstep(0.99, 1.1, de)) * smoothstep(0.95, 1.0, de) * smoothstep(-0.3, 0.6, (h - ${f(EYE.y)}) / ${f(EYE.r)});
-    // the orbit's bony upper edge: a dark arc just above the eye
-    float orbitTop = (1.0 - smoothstep(0.015, 0.04, abs(de - 1.12))) * smoothstep(0.45, 0.85, (h - ${f(EYE.y)}) / ${f(EYE.r)} / max(de, 0.01));
-    // ---- the axillary spot: a small brown blotch at the pectoral base
-    float axil = 1.0 - smoothstep(0.5, 1.0, length(vec2((s - ${f(PEC.s)}) / 0.008, (h - ${f(PEC.y)}) / 0.007)));
-    // ---- the nostrils before the eye
-    float nostril = 1.0 - smoothstep(0.5, 1.0, length(vec2((s - 0.056) / 0.004, (h - 0.04) / 0.003)));
+${structureGLSL(F)}    // ---- the axillary spot: a small brown blotch at the pectoral base
+    float axil = 1.0 - smoothstep(0.5, 1.0, length(vec2((s - ${f(F.pec.s)}) / 0.008, (h - ${f(F.pec.y)}) / 0.007)));
     // a pink blush on the upper jaw below the front of the eye
     float blush = 1.0 - smoothstep(0.3, 1.0, length(vec2((s - 0.058) / 0.02, (h + 0.016) / 0.011)));
 #ifdef HAKU_LOW
@@ -486,15 +414,7 @@ vec2 hkTilt = vec2(0.0);
     col *= 1.0 + 0.04 * streak;
     col = mix(col, vec3(0.34, 0.24, 0.15), axil * 0.75);
     col = mix(col, vec3(0.08, 0.07, 0.07), nostril * 0.55);
-    // the tiers further off have no gill cover or split mouth in their geometry: the edges' shadows and the gape stand
-    // in for them, soft, at the size they are seen there
-    float far = 1.0 - step(0.005, part);
-    float dPre = abs(s - hkPreopEdge(h) - 0.004), dOp = abs(s - hkOperEdge(h) - 0.003);
-    float edgeLines = max((1.0 - smoothstep(0.0, 0.006, dPre)) * smoothstep(-0.07, -0.05, h) * (1.0 - smoothstep(0.035, 0.05, h)),
-      0.7 * (1.0 - smoothstep(0.0, 0.006, dOp)) * smoothstep(-0.09, -0.07, h) * (1.0 - smoothstep(0.035, 0.05, h)));
-    float farGape = (1.0 - smoothstep(0.001, 0.003, abs(h - gapeH))) * (1.0 - smoothstep(${f(GAPE.s - 0.004)}, ${f(GAPE.s)}, s));
-    col *= 1.0 - far * max(0.3 * edgeLines, 0.6 * farGape);
-    // the membranous flap: thinner, a little milky over the silver
+${farGLSL(F)}    // the membranous flap: thinner, a little milky over the silver
     col = mix(col, col * 0.9 + vec3(0.06, 0.06, 0.07), membrane * 0.6);
     col = mix(col, vec3(0.8, 0.8, 0.79), orbit * 0.25);
     col *= 1.0 - 0.35 * orbitShade;
@@ -519,30 +439,50 @@ vec2 hkTilt = vec2(0.0);
     hkCoat = 0.12 + 0.08 * band + 0.2 * lips;
     hkIriAmt = uIri * (0.08 * silverAmt * smoothstep(-0.2, 0.5, cd) + 0.18 * gillPink + 0.12 * crown * (1.0 - headTop));
     hkIriThick = 300.0 + 220.0 * hkNoise(pat * 9.0 + 2.0) + 120.0 * oper;
-    if (gills > 0.0) {
-      // gill arches running down the chamber, each fringed with fine blood-red filaments lying back across it; the
-      // clefts between the arches dark
-      float ga = fract(s * 150.0 + h * 25.0);
-      float ridge = smoothstep(0.0, 0.25, ga) * (1.0 - smoothstep(0.75, 1.0, ga));
-      float fil = 0.6 + 0.4 * sin(h * 2300.0 + 3.0 * ga);
-      vec3 gc = mix(vec3(0.16, 0.02, 0.03), vec3(0.72, 0.15, 0.14) * fil, ridge);
-      col = mix(col, gc, gills);
-      hkMetal = mix(hkMetal, 0.0, gills); hkRough = mix(hkRough, 0.35, gills); hkCoat = mix(hkCoat, 0.6, gills);
-      hkIriAmt *= 1.0 - gills; hkTilt *= 1.0 - gills; hkThin *= 1.0 - gills;
-    }
-  }
+${GILLS_GLSL}  }
   diffuseColor.rgb = col;
 }
 `;
+}
 
 const FIN_FRAG_PARS = /* glsl */ `
 varying vec3 vFin;
 `;
 
-const FIN_SURFACE = /* glsl */ `
+/** How a form's fins look: rays per fin, the membranes' tint and opacity, the caudal's margin, the melanophores. */
+export interface FinLook {
+  /** rays per fin: caudal, first dorsal, second dorsal, anal, pelvic, pectoral */
+  rays: readonly [number, number, number, number, number, number];
+  /** membrane colour of the median and pelvic fins, of the pectoral, and the rays' colour */
+  membrane: readonly [number, number, number];
+  pectoral: readonly [number, number, number];
+  ray: readonly [number, number, number];
+  /** membrane opacity: caudal, spiny dorsal, the other median fins and the pelvics, pectoral */
+  opacity: readonly [number, number, number, number];
+  /** a darker, dusky trailing margin on the caudal (0 none) and a dusky tinge toward the median fins' edges */
+  caudalMargin: number;
+  dusky: number;
+  /** share of the caudal's grid cells near its base holding a melanophore */
+  melanophores: number;
+  /** how plainly the pectoral's rays show in its pale membrane */
+  pectoralRays: number;
+}
+
+/** the ハク's fins: clear milky membranes, white rays, a few melanophores at the base of the tail */
+export const HAKU_FINS: FinLook = {
+  rays: [24, 4, 9, 10, 6, 14],
+  membrane: [0.82, 0.83, 0.84], pectoral: [0.68, 0.69, 0.71], ray: [0.97, 0.97, 0.95],
+  opacity: [0.45, 0.42, 0.38, 0.42],
+  caudalMargin: 0, dusky: 0, melanophores: 0.025, pectoralRays: 0.35,
+};
+
+function finSurface(L: FinLook): string {
+  const [rC, rD1, rD2, rA, rP, rPc] = L.rays.map((n) => f(n));
+  const v3 = (c: readonly number[]) => `vec3(${c.map(f).join(', ')})`;
+  return /* glsl */ `
 {
   float a = vFin.x, t = vFin.y, id = vFin.z;
-  float nR = id < 0.5 ? 24.0 : id < 1.5 ? 4.0 : id < 2.5 ? 9.0 : id < 3.5 ? 10.0 : id < 4.5 ? 6.0 : 14.0;
+  float nR = id < 0.5 ? ${rC} : id < 1.5 ? ${rD1} : id < 2.5 ? ${rD2} : id < 3.5 ? ${rA} : id < 4.5 ? ${rP} : ${rPc};
   float x = a * (nR - 1.0);
   float w = max(fwidth(x), 0.04);
   float ray = 1.0 - smoothstep(0.08, 0.15 + w, abs(fract(x + 0.5) - 0.5));
@@ -555,43 +495,54 @@ const FIN_SURFACE = /* glsl */ `
   // the spiny dorsal's membrane is notched between the spines
   if (spiny > 0.5 && t > 1.0 - 0.16 * (1.0 - ray) - 0.03) discard;
   // a milky membrane, thicker toward the base; the pectoral lies pale against the flank
-  float base = id > 4.5 ? 0.42 : id < 0.5 ? 0.45 : spiny > 0.5 ? 0.42 : 0.38;
-  float alpha = (base * (1.0 - 0.3 * t) + (id < 0.5 ? 0.18 : id > 4.5 ? 0.12 : 0.55) * r + spiny * ray * 0.3) * (1.0 - smoothstep(0.92, 1.0, t)) * smoothstep(0.0, 0.05, t + 0.02);
-  vec3 col = mix(id > 4.5 ? vec3(0.68, 0.69, 0.71) : vec3(0.82, 0.83, 0.84), vec3(0.97, 0.97, 0.95), r * (id < 0.5 ? 0.4 : id > 4.5 ? 0.35 : 1.0));
+  float base = id > 4.5 ? ${f(L.opacity[3])} : id < 0.5 ? ${f(L.opacity[0])} : spiny > 0.5 ? ${f(L.opacity[1])} : ${f(L.opacity[2])};
+  float alpha = (base * (1.0 - 0.3 * t) + (id < 0.5 ? 0.18 : id > 4.5 ? ${f((0.12 * L.pectoralRays) / 0.35)} : 0.55) * r + spiny * ray * 0.3) * (1.0 - smoothstep(0.92, 1.0, t)) * smoothstep(0.0, 0.05, t + 0.02);
+  vec3 col = mix(id > 4.5 ? ${v3(L.pectoral)} : ${v3(L.membrane)}, ${v3(L.ray)}, r * (id < 0.5 ? 0.4 : id > 4.5 ? ${f(L.pectoralRays)} : 1.0));
+  // the median fins darken toward their edges; the caudal's trailing margin is dusky
+  float dusk = ${f(L.dusky)} * smoothstep(0.35, 0.95, t) * step(id, 3.5) + ${f(L.caudalMargin)} * step(id, 0.5) * smoothstep(0.7, 0.97, t);
+  col *= 1.0 - 0.55 * dusk;
+  alpha = min(1.0, alpha + 0.35 * dusk);
   // a few melanophores where the tail meets the body, and along the caudal rays
   float mel = 0.0;
   if (id < 0.5) {
     vec2 mp = vec2(a * 46.0, t * 14.0);
     vec3 h = hkHash3(floor(mp));
     float d = length(fract(mp) - 0.25 - 0.5 * h.xy);
-    mel = (1.0 - smoothstep(0.12, 0.25, d)) * step(h.z, 0.025 * smoothstep(0.3, 0.0, t));
+    mel = (1.0 - smoothstep(0.12, 0.25, d)) * step(h.z, ${f(L.melanophores)} * smoothstep(0.3, 0.0, t));
   }
   col = mix(col, vec3(0.04, 0.04, 0.045), mel);
   alpha = max(alpha, mel * 0.75);
   diffuseColor = vec4(col, alpha);
 }
 `;
+}
 
 // ------------------------------------------------------------------ materials
 
-interface Variant { back: Color; pigment: number; silver: number; iri: number }
+export interface Variant { back: Color; pigment: number; silver: number; iri: number }
 
-/** A few individual looks, shared: darker-backed, bronzer, bluer, paler. */
-const VARIANTS: Variant[] = [
+/** A few individual looks of the ハク, shared: darker-backed, bronzer, bluer, paler. */
+const HAKU_VARIANTS: Variant[] = [
   { back: new Color(0.3, 0.29, 0.16), pigment: 1.0, silver: 1.0, iri: 1.0 },
   { back: new Color(0.34, 0.29, 0.15), pigment: 0.85, silver: 0.96, iri: 1.15 },
   { back: new Color(0.27, 0.27, 0.2), pigment: 1.15, silver: 1.02, iri: 0.9 },
   { back: new Color(0.36, 0.33, 0.22), pigment: 0.75, silver: 0.94, iri: 1.0 },
 ];
 
-function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
+/** the surface, the fins and the individual looks of each form */
+const LOOKS: Record<MulletForm['id'], { surface: (F: MulletForm) => string; variants: Variant[]; fins: FinLook }> = {
+  haku: { surface: hakuSurface, variants: HAKU_VARIANTS, fins: HAKU_FINS },
+  subashiri: { surface: subashiriSurface, variants: SUBASHIRI_VARIANTS, fins: SUBASHIRI_FINS },
+};
+
+function bodyMaterial(F: MulletForm, v: Variant, low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0.9, roughness: 0.25,
     clearcoat: low ? 0 : 0.15, clearcoatRoughness: 0.2,
     iridescence: low ? 0 : 0.3, iridescenceIOR: 1.6, iridescenceThicknessRange: [250, 650],
     side: low ? DoubleSide : FrontSide,
   });
-  m.name = low ? 'HakuBodyLOD2' : 'HakuBody';
+  m.name = `${F.id === 'haku' ? 'Haku' : 'Subashiri'}Body${low ? 'LOD2' : ''}`;
   // the sky cube enters only through Snell's window (in the shader); the material's own IBL share stays faint
   m.envMapIntensity = 0.25;
   const own = { uBack: { value: v.back }, uPigment: { value: v.pigment }, uSilver: { value: v.silver }, uIri: { value: v.iri } };
@@ -604,9 +555,9 @@ function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvBody = aBody; vPat = aPat; vPart = aPart; vOcc = aOcc; vRest = position / ${f(MODEL_TL)};`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${BODY_FRAG_PARS}`)
+      .replace('#include <common>', `#include <common>\n${bodyFragPars(F)}`)
       .replace('void main() {', `${HELPERS}\nvoid main() {`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${BODY_SURFACE}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${LOOKS[F.id].surface(F)}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(hkRough, 0.06, 1.0);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = hkMetal;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -641,16 +592,16 @@ function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
   totalEmissiveRadiance += hkThin * (through * vec3(0.8, 0.78, 0.66) * 0.45 + hkSunCol() * back * 0.08);
 }`);
   };
-  m.customProgramCacheKey = () => (low ? 'haku-body-lod2-v33' : 'haku-body-v33');
+  m.customProgramCacheKey = () => `${F.id}-body${low ? '-lod2' : ''}-v34`;
   return m;
 }
 
-function finMaterial(): MeshPhysicalMaterial {
+function finMaterial(F: MulletForm): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.32, transparent: true, depthWrite: false, side: DoubleSide,
     iridescence: 0.3, iridescenceIOR: 1.5, iridescenceThicknessRange: [300, 500],
   });
-  m.name = 'HakuFin';
+  m.name = F.id === 'haku' ? 'HakuFin' : 'SubashiriFin';
   m.envMapIntensity = 0.25;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, HAKU_UNIFORMS);
@@ -661,7 +612,7 @@ function finMaterial(): MeshPhysicalMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FIN_FRAG_PARS}`)
       .replace('void main() {', `${HELPERS}\nvoid main() {`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${FIN_SURFACE}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${finSurface(LOOKS[F.id].fins)}`)
       .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT)
       .replace('#include <lights_fragment_maps>', ENV_INJECT)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -672,11 +623,11 @@ function finMaterial(): MeshPhysicalMaterial {
   totalEmissiveRadiance += diffuseColor.rgb * (hkUnderwater(nW, 1.0) + hkUnderwater(-nW, 1.0)) * 0.2;
 }`);
   };
-  m.customProgramCacheKey = () => 'haku-fin-v11';
+  m.customProgramCacheKey = () => `${F.id}-fin-v12`;
   return m;
 }
 
-export interface HakuMaterials {
+export interface MulletMaterials {
   /** LOD0/LOD1 body, one per individual look */
   body: MeshPhysicalMaterial[];
   /** LOD2 body (no scale, pigment or clearcoat detail; double-sided for the tail sliver) */
@@ -684,17 +635,21 @@ export interface HakuMaterials {
   fins: MeshPhysicalMaterial;
 }
 
-let shared: HakuMaterials | null = null;
+const shared = new Map<string, MulletMaterials>();
 
-/** The shared materials (created on first use, never disposed: they live as long as the page). */
-export function hakuMaterials(): HakuMaterials {
-  if (!shared) {
-    shared = { body: VARIANTS.map((v) => bodyMaterial(v, false)), bodyLow: VARIANTS.map((v) => bodyMaterial(v, true)), fins: finMaterial() };
+/** A form's shared materials (created on first use, never disposed: they live as long as the page). */
+export function mulletMaterials(F: MulletForm = HAKU): MulletMaterials {
+  let m = shared.get(F.id);
+  if (!m) {
+    const vs = LOOKS[F.id].variants;
+    m = { body: vs.map((v) => bodyMaterial(F, v, false)), bodyLow: vs.map((v) => bodyMaterial(F, v, true)), fins: finMaterial(F) };
+    shared.set(F.id, m);
   }
-  return shared;
+  return m;
 }
 
-export const VARIANT_COUNT = VARIANTS.length;
+/** how many individual looks a form has */
+export const variantCount = (F: MulletForm): number => LOOKS[F.id].variants.length;
 
 let lastTick = -1;
 /** Advance the materials' clock (call every frame; repeated calls with the same time are free). */
