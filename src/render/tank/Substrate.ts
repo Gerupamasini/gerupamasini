@@ -100,7 +100,30 @@ vec3 sbGrains(vec2 g, out float crev, out vec2 id) {
   float lit = 0.78 + 0.32 * dome + 0.12 * clamp(r1.y, -1.0, 1.0);
   return sbGrainCol(sbHash12(id)) * (0.85 + 0.3 * sbHash12(id + 17.0)) * lit;
 }
+// the top of the bed at p (tank-local xz, m) with silt settled there: grains up close (faded out as they shrink below
+// a pixel), patches of slightly different sand and a fine mottle, silt; and the grain's glint
+vec3 sbBedColor(vec2 p, float silt, out float glint, out vec3 glintW) {
+  glint = 0.0;
+  glintW = vec3(0.0, 1.0, 0.0);
+  vec2 g = p * uGrainScale;
+  float fw = length(fwidth(g));
+  float near = (1.0 - smoothstep(0.3, 1.0, fw)) * (1.0 - uMud * 0.85);
+  vec3 col = uSandMean;
+  if (near > 0.0) {
+    float crev; vec2 id;
+    vec3 gc = sbGrains(g, crev, id);
+    col = mix(uSandMean, gc * (1.0 - 0.5 * crev), near);
+    glint = step(1.0 - uGlintAmt, sbHash12(id + 3.7)) * near * (1.0 - crev);
+    glintW = normalize(vec3(sbHash12(id + 5.1) - 0.5, 1.2, sbHash12(id + 9.3) - 0.5));
+  }
+  float patchN = sbNoise(p * 24.0) * 0.55 + sbNoise(p * 90.0) * 0.45;
+  col *= 0.86 + 0.28 * patchN;
+  return mix(col, uSiltCol, clamp(silt, 0.0, 1.0) * 0.55);
+}
 `;
+
+/** The bed's sand shading (uniforms and `sbBedColor`), for what is drawn as the bed: sand thrown over a buried animal. */
+export const BED_SAND_GLSL = GRAIN_COMMON;
 
 /** The top of the bed: grains up close (faded out as they shrink below a pixel), patches and silt from afar, glints. */
 function topShader(U: Record<string, IUniform>) {
@@ -112,26 +135,10 @@ function topShader(U: Record<string, IUniform>) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying float vSilt;\n${GRAIN_COMMON}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-float sbGlint = 0.0;
-vec3 sbGlintW = vec3(0.0, 1.0, 0.0);
-{
-  vec2 g = vTankP.xz * uGrainScale;
-  float fw = length(fwidth(g));
-  float near = (1.0 - smoothstep(0.3, 1.0, fw)) * (1.0 - uMud * 0.85);
-  vec3 col = uSandMean;
-  if (near > 0.0) {
-    float crev; vec2 id;
-    vec3 gc = sbGrains(g, crev, id);
-    col = mix(uSandMean, gc * (1.0 - 0.5 * crev), near);
-    sbGlint = step(1.0 - uGlintAmt, sbHash12(id + 3.7)) * near * (1.0 - crev);
-    sbGlintW = normalize(vec3(sbHash12(id + 5.1) - 0.5, 1.2, sbHash12(id + 9.3) - 0.5));
-  }
-  // patches of slightly different sand, a fine mottle, silt in the hollows and the troughs of the ripples
-  float patchN = sbNoise(vTankP.xz * 24.0) * 0.55 + sbNoise(vTankP.xz * 90.0) * 0.45;
-  col *= 0.86 + 0.28 * patchN;
-  col = mix(col, uSiltCol, clamp(vSilt, 0.0, 1.0) * 0.55);
-  diffuseColor.rgb = col;
-}`)
+float sbGlint;
+vec3 sbGlintW;
+// (silt in the hollows and the troughs of the ripples)
+diffuseColor.rgb = sbBedColor(vTankP.xz, vSilt, sbGlint, sbGlintW);`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.16, sbGlint);')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (sbGlint > 0.0) normal = normalize(mix(normal, (viewMatrix * vec4(sbGlintW, 0.0)).xyz, 0.75));');
   };
@@ -203,13 +210,15 @@ export class Substrate {
   private readonly shells: InstancedMesh;
   private readonly topMat: MeshStandardMaterial;
   private readonly sideMat: MeshStandardMaterial;
-  private readonly U: Record<string, IUniform>;
+  /** the bed's sand shading (BED_SAND_GLSL's uniforms) */
+  readonly U: Record<string, IUniform>;
   private kind: SubstrateKind = 'sand';
   private w = 0.6;
   private d = 0.3;
   private nx = 1;
   private nz = 1;
   private heights = new Float32Array(4);
+  private silt = new Float32Array(4);
 
   constructor(tankU: Record<string, IUniform>) {
     this.U = {
@@ -274,6 +283,23 @@ export class Substrate {
     return BED_H + (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + e * u) * v;
   }
 
+  /** The bed's colour as the top shader draws it at (x, z) (linear albedo; the grains and the mottle average out to
+   *  the mean, silt settled in the hollows); null on a bare bottom. */
+  colorAt(x: number, z: number, out: Color): Color | null {
+    if (this.kind === 'none') return null;
+    return out.copy(this.U.uSandMean.value as Color).lerp(this.U.uSiltCol.value as Color, this.siltAt(x, z) * 0.55);
+  }
+
+  /** How much fine silt has settled at (x, z) (0..1, as the top shader takes it); 0 on a bare bottom. */
+  siltAt(x: number, z: number): number {
+    if (this.kind === 'none') return 0;
+    const fx = Math.min(this.nx, Math.max(0, (x / this.w + 0.5) * this.nx)), fz = Math.min(this.nz, Math.max(0, (z / this.d + 0.5) * this.nz));
+    const ix = Math.min(this.nx - 1, Math.floor(fx)), iz = Math.min(this.nz - 1, Math.floor(fz)), u = fx - ix, v = fz - iz;
+    const r = this.nx + 1, S = this.silt;
+    const silt = (S[iz * r + ix] * (1 - u) + S[iz * r + ix + 1] * u) * (1 - v) + (S[(iz + 1) * r + ix] * (1 - u) + S[(iz + 1) * r + ix + 1] * u) * v;
+    return Math.min(1, Math.max(0, silt));
+  }
+
   get mean(): number { return this.kind === 'none' ? 0 : BED_H; }
 
   setKind(kind: SubstrateKind): void {
@@ -305,7 +331,7 @@ export class Substrate {
       const r = kind === 'mud' ? 0.0025 + rnd() * 0.002 : 0.018 + rnd() * 0.02;
       pits.push([(rnd() - 0.5) * (w - 0.06), (rnd() - 0.5) * (d - 0.06), r, kind === 'mud' ? 0.002 + rnd() * 0.002 : 0.003 + rnd() * 0.004]);
     }
-    const r = nx + 1, H = this.heights = new Float32Array((nx + 1) * (nz + 1)), S = new Float32Array((nx + 1) * (nz + 1));
+    const r = nx + 1, H = this.heights = new Float32Array((nx + 1) * (nz + 1)), S = this.silt = new Float32Array((nx + 1) * (nz + 1));
     for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
       const [h, s] = relief(kind, (i / nx - 0.5) * w, (j / nz - 0.5) * d, w, d, pits);
       H[j * r + i] = h; S[j * r + i] = s;

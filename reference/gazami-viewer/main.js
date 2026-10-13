@@ -14,6 +14,7 @@ import { createCrabBehavior } from '../../src/creatures/species/gazami/behavior.
 import { applyPose } from '../../src/creatures/species/gazami/rig.ts';
 import { stillPose as stillPoseOf } from '../../src/creatures/species/gazami/poses.ts';
 import { SandFX } from '../../src/creatures/species/akaei/SandFX.ts';
+import { sandDustFor } from '../../src/creatures/fx/SandDust.ts';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../../src/creatures/species/amimehagi/materials.ts';
 import { WaterPass, makeSpillTexture } from '../../src/world/Water.ts';
 import { createWaves } from '../../src/world/Waves.ts';
@@ -42,13 +43,14 @@ const S = {
   view: 'top', lod: 0, sex: 0, clay: false, morph: 0, juvenile: 0, seed: 1, cw: 100,
   pose: 'stand', legs: {}, hideLegs: false, ortho: 0, floor: true, behave: false,
 };
-let scene = null, crab = null, P = null, beh = null, studioFx = null, floorMesh = null, crabs = [], mode = 'studio', simT = 0;
+let scene = null, crab = null, P = null, beh = null, studioFx = null, studioDust = null, floorMesh = null, crabs = [], mode = 'studio', simT = 0;
 const FLOOR = 0;
 
 function clear() {
   if (crab) disposeModel(crab);
   crab = null; beh = null;
   studioFx?.dispose(); studioFx = null;
+  studioDust?.release(); studioDust = null;
   for (const f of crabs) f.driver.dispose();
   crabs.length = 0;
   scene = new THREE.Scene();
@@ -95,6 +97,8 @@ float nS(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
 
 // ---------------------------------------------------------------- studio: one crab
 const studioWorld = { ground: () => FLOOR, waterY: () => 0.4, canBurrow: () => true };
+/** the studio's bed for the shared dust (the game's sediment in the water) */
+const studioFloor = { heightAt: () => FLOOR, waterAt: () => 0.4 };
 const SCALE = () => S.cw / 100;
 
 function poseStudio(dt = 0) {
@@ -107,13 +111,15 @@ function poseStudio(dt = 0) {
     const u = crab.look.uniforms;
     u.uSandCoat.value = P.sandCoat; u.uGroundY.value = FLOOR; u.uMmScale.value = 0.001 * SCALE();
   }
+  // the sand: the game's shared dust (the driver's own mapping)
+  studioDust.tick(dt || 1 / 60, { floor: studioFloor });
   for (const e of beh.fx) {
-    if (e.kind === 'sand') studioFx.emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
+    if (e.kind === 'sand') studioDust.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 2);
     else if (e.kind === 'imprint') studioFx.imprint(e.pos.x, e.pos.z, e.heading ?? 0, 0.055 * SCALE(), 0.032 * SCALE(), () => FLOOR, e.strength ?? 0.2, e.life);
     else if (e.kind === 'grow') studioFx.growImprint(e.strength ?? 0.5);
   }
   beh.fx.length = 0;
-  studioFx.update(dt || 1 / 60, () => FLOOR);
+  studioFx.update(dt || 1 / 60);
   const st = beh.state, k = st.alt / (0.05 * SCALE());
   studioFx.updateShadow(dt || 1 / 60, st.pos.x, st.pos.z, st.heading, 0.05 * SCALE() * (1 + 0.4 * k), 0.03 * SCALE() * (1 + 0.4 * k), (1 - st.bury) * Math.max(0.15, 1 - 0.3 * k), () => FLOOR, true);
 }
@@ -144,7 +150,8 @@ function studio(v) {
   if (S.behave) {
     beh = createCrabBehavior({ world: studioWorld, rng: mulberry(S.seed * 977 + 3), rig, scale: S.cw / 1000, start: { x: 0, z: 0, heading: 0 }, autonomous: false });
     studioFx = new SandFX(scene);
-    studioFx.setSandColour(new THREE.Vector3(0.55, 0.52, 0.47));
+    studioDust = sandDustFor(scene).source(mulberry(S.seed * 131 + 7));
+    studioDust.setColour(new THREE.Vector3(0.55, 0.52, 0.47));
     if (!S.clay) crab.look.setCover(0.55, 0.52, 0.47);
     poseStudio(1 / 60);
   } else {

@@ -6,6 +6,7 @@
 //   * background transmission: refracted twice (water→tissue→water), attenuated per channel,
 //     blurred by forward scattering (split into an unscattered and a scattered part)
 //   * back-light diffusion: diffusion transmittance along the light path through the body
+//   * the surroundings' light diffused through from the far side (seen from the key light's side as well)
 //   * interior structures (vertebral column, neural/haemal spines, myosepta, viscera + peritoneum,
 //     gill filaments, skull) modulate scattering/absorption inside the volume
 //   * skin chromatophores (melanin / iridophores / xanthophores) filter light at entry and exit
@@ -88,6 +89,7 @@ uniform float uInterior;        // interior structure visibility
 uniform float uIor;             // tissue / water relative IOR
 uniform float uNormalStrength;
 uniform float uBackStrength;
+uniform float uAmbThrough;      // strength of the surroundings' light diffused through from the far side
 uniform float uCausticAmt;
 uniform int uDebug;
 
@@ -464,7 +466,14 @@ void main() {
     back = Lc * exp(-tauL) * skinIn * skinL * ph * backW * uBackStrength * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
   }
 
-  // ---- surface diffuse (sub-surface softened) + interior tint near the surface
+  // ---- the surroundings' light (the water's glow, the sand's bounce) reaches the far side from every direction and
+  // diffuses through the tissue: whichever side the key light is on, the thin parts are lit faintly from behind and
+  // the column and the viscera show in them as shadows (diffusion attenuation of the whole path, slanted paths 1.6×)
+  vec3 tauFar = sqrt(3.0 * tauA * (tauA + vec3(tauS * (1.0 - G_TIS)))) * 1.6;
+  // (the sunlit bed below, albedo ~0.25, throws its light up into a body seen from above)
+  vec3 farIrr = ambientIrr(dOutW) + uLightColor * max(normalize(uLightDir).y, 0.0) * 0.25 * INV_PI * smoothstep(0.1, -0.5, dOutW.y);
+  vec3 farLight = farIrr * exp(-tauFar) * skinIn * skinOut * uAmbThrough * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
+
   // diffuse reflectance of a finite milky slab grows with its reduced optical depth
   vec3 tint = exp(-tauNear * 0.8);
   float tauR = tauS * (1.0 - G_TIS);
@@ -494,7 +503,7 @@ void main() {
   float specOcc = sat(pow(NoV + ao, 1.5) - 1.0 + ao);
   float Fv = F_Schlick(0.028, NoV);
 
-  vec3 col = (1.0 - Fv) * (diffuse + amb + back + inner + bgT + irid) + (Lc * spec + envSpec) * specOcc;
+  vec3 col = (1.0 - Fv) * (diffuse + amb + back + farLight + inner + bgT + irid) + (Lc * spec + envSpec) * specOcc;
   // the caudal blade thins to a translucent film over the fin-ray bases: dissolve it into what lies behind
   float endFade = smoothstep(uFrame.w - 1.6, uFrame.w - 0.15, pF.x) * 0.92;
   col = mix(col, textureLod(uBg, suv, 0.0).rgb * mix(vec3(1.0), skinIn, 0.6) + back * 0.35, endFade);
@@ -527,6 +536,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uIor: { value: 1.04 },
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
+    uAmbThrough: shared.uAmbThrough ?? { value: 5.0 },
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',

@@ -2,6 +2,7 @@ import {
   HalfFloatType, LinearFilter, Matrix4, Object3D, PerspectiveCamera, Plane, RGBAFormat, Vector2, Vector3, Vector4, WebGLRenderTarget,
   type Scene, type WebGLRenderer,
 } from 'three';
+import { renderSize } from './RenderSize';
 
 /** Objects on this layer show in the sea's mirror (the sky, the land, the far skyline, the seawall). */
 export const LAYER_MIRROR = 4;
@@ -46,7 +47,7 @@ export class MirrorView {
     if (this.scale <= 0) return;
     const eye = this.eye.setFromMatrixPosition(camera.matrixWorld);
     if (eye.y <= level + 0.02) return;
-    gl.getDrawingBufferSize(this.size);
+    renderSize(gl, this.size);
     const w = Math.max(1, Math.round(this.size.x * this.scale)), h = Math.max(1, Math.round(this.size.y * this.scale));
     if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
 

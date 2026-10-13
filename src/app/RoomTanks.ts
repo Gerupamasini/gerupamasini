@@ -46,7 +46,8 @@ export class RoomTanks extends Group {
           const [x, z] = animalSlotPosition(slot, tank.individuals.length, d.width, d.depth);
           ind.pos.set(x, floor, z); ind.home.copy(ind.pos);
           const driver = entry.create(); driver.attach(object, ind, model?.extras ?? {}, model?.bones ?? {}, model?.meshes ?? []); this.drivers.push(driver); root.add(object); object.userData.roomOccupantId = record.id;
-          driver.update(0, { floor: { heightAt: () => floor, waterAt: () => d.waterHeight }, player: new Vector3(0, 1, 2), simScale: 1, nowMs: Date.now(), bounds: { minX: -d.width / 2 + 0.02, maxX: d.width / 2 - 0.02, minZ: -d.depth / 2 + 0.02, maxZ: d.depth / 2 - 0.02 }, canBurrow: floor > 0 });
+          const bedMat = !floor ? null : tank.layout.substrate === 'mud' ? this.mud : this.sand;
+          driver.update(0, { floor: { heightAt: () => floor, waterAt: () => d.waterHeight, colorAt: (_x, _z, out) => (bedMat ? out.copy(bedMat.color) : null) }, player: new Vector3(0, 1, 2), simScale: 1, nowMs: Date.now(), bounds: { minX: -d.width / 2 + 0.02, maxX: d.width / 2 - 0.02, minZ: -d.depth / 2 + 0.02, maxZ: d.depth / 2 - 0.02 }, canBurrow: floor > 0 });
           this.onChanged?.();
         })().catch(error => console.warn('[room] background model unavailable', error));
       }

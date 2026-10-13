@@ -10,6 +10,7 @@ import { GazamiLook, SUBSTRATE_TINT, type GzLookSpec } from './materials';
 import { buildModel, disposeModel, gazamiRig, LOD1_AT, LOD2_AT, MODEL_CW, syncLevel, type GazamiModel } from './model';
 import { DIMORPHISM } from './anatomy';
 import { SandFX } from '../akaei/SandFX';
+import { keepSandDust, sandDustFor, type DustSource } from '../../fx/SandDust';
 import { CONTACT_SHADOWS, sunOf, underwaterSun } from '../haku/ContactShadows';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../amimehagi/materials';
 
@@ -40,7 +41,7 @@ export function chelaScaleFor(id: string, sex: 'm' | 'f' | 'unknown', cw_mm: num
   return r.next() < 0.5 ? [base * big, base] : [base, base * big];
 }
 
-const _v = new Vector3(), _s = new Vector3();
+const _s = new Vector3();
 
 /**
  * ガザミ (Portunus trituberculatus): the swimming crab of the sandy shallows. It rests on the sand with its claws
@@ -48,7 +49,8 @@ const _v = new Vector3(), _s = new Vector3();
  * its eyes out, rears up with its claws spread at a threat, runs off sideways and swims away on its paddles
  * (behavior.ts: IDLE, WALK, FORAGE, BURROW, DEFEND, ESCAPE, SWIM). The brain's intents choose what it does; the
  * behaviour carries each one out. It draws itself through three tiers of shared geometry with its own shell materials,
- * throws sand (the アカエイ's SandFX: puffs, the pit it digs) and lays a soft contact shadow on the bottom.
+ * throws sand into the water (the shared dust, fx/SandDust), leaves the pit it digs and lays a soft contact shadow on
+ * the bottom (the アカエイ's SandFX).
  */
 export class GazamiDriver implements Driver {
   private root: Object3D | null = null;
@@ -56,6 +58,7 @@ export class GazamiDriver implements Driver {
   private model: GazamiModel<GazamiLook> | null = null;
   private crab: CrabApi | null = null;
   private sandFx: SandFX | null = null;
+  private dust: DustSource | null = null;
   private chela: [number, number] = [1, 1];
   private locked = false;
   private listeners = new Set<(e: BehaviorEvent) => void>();
@@ -98,10 +101,11 @@ export class GazamiDriver implements Driver {
     for (const lv of m.lod.levels) lv.object.visible = true;
     parent.add(m.root);
     const fx = new SandFX(parent);
+    const dust = keepSandDust(parent);
     // (the pit it digs: its material too)
     fx.imprint(0, 0, 0, 0.05, 0.03, () => 0);
     return {
-      dispose: () => { m.root.removeFromParent(); disposeModel(m); fx.dispose(); },
+      dispose: () => { m.root.removeFromParent(); disposeModel(m); fx.dispose(); dust.dispose(); },
     };
   }
 
@@ -130,11 +134,14 @@ export class GazamiDriver implements Driver {
     }
     const parent = root.parent ?? root;
     this.sandFx = new SandFX(parent);
+    const dustRng = new Rng(hashInts(strHash(individual.id), 0xd057));
+    this.dust = sandDustFor(parent).source(() => dustRng.next());
     root.visible = false;
   }
 
   detach(): void {
     this.sandFx?.dispose(); this.sandFx = null;
+    this.dust?.release(); this.dust = null;
     if (this.model) disposeModel(this.model);
     this.model = null;
     this.root = null;
@@ -228,7 +235,7 @@ export class GazamiDriver implements Driver {
       const smp = ctx.floor.sampleAt?.(st.pos.x, st.pos.z);
       const col = SUBSTRATE_TINT[smp?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
       model.look.setCover(col[0], col[1], col[2]);
-      this.sandFx?.setSandColour(_v.set(col[0], col[1], col[2]));
+      this.dust?.setBed(smp?.substrate);
     }
     const level = this.locked ? 0 : model.lod.getCurrentLevel();
     // (steps of at most 1/40 s: the gait's feet and the paddles' strokes stay smooth at a low frame rate)
@@ -258,18 +265,20 @@ export class GazamiDriver implements Driver {
 
   /** sand: only near enough to be seen (the far tier skips the puffs) */
   private effects(dt: number, ctx: DriverContext, level: number): void {
-    const c = this.crab!, fx = this.sandFx;
+    const c = this.crab!, fx = this.sandFx, dust = this.dust;
     const ground = (x: number, z: number) => ctx.floor.heightAt(x, z);
     const near = level <= 1 || this.locked;
     const cw = (this.ind?.length_mm ?? 60) / 1000;
+    if (dust) { dust.near = near; if (near) dust.tick(dt, ctx); }
     for (const e of c.fx) {
-      if (!fx) continue;
-      if (e.kind === 'sand') { if (near) fx.emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha); }
+      // (the silt, and a couple of grains in each puff)
+      if (e.kind === 'sand') { if (near) dust?.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 2); }
+      else if (!fx) continue;
       else if (e.kind === 'imprint') fx.imprint(e.pos.x, e.pos.z, e.heading ?? 0, cw * 0.55, cw * 0.32, ground, e.strength ?? 0.2, e.life);
       else if (e.kind === 'grow') fx.growImprint(e.strength ?? 0.5);
     }
     c.fx.length = 0;
-    fx?.update(dt, ground);
+    fx?.update(dt);
   }
 
   /** a soft shadow under the crab: dark on the sand, wide and faint while it swims above it, cast along the sun */

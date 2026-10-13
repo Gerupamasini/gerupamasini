@@ -22,7 +22,8 @@ try {
   page.setDefaultTimeout(60000);
   await page.goto(url); await page.waitForFunction(() => !!window.__higata);
   await page.locator('button.primary').first().click(); await page.waitForFunction(() => window.__higata.mode === 'home');
-  await page.evaluate(async () => { const a = window.__higata; await a.updateSettings({ heroMaterials: true }); a.openTankEdit(); });
+  // (the hero rigs need a tier with hero models: SwiftShader counts as a weak GPU and starts on 低)
+  await page.evaluate(async () => { const a = window.__higata; await a.updateSettings({ heroMaterials: true, homeQuality: 'mid' }); a.openTankEdit(); });
   const samples = [];
   for (const length of [50, 100, 180]) {
     const sample = await page.evaluate(async (length) => {

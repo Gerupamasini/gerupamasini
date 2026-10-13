@@ -347,9 +347,9 @@ describe('the waves', () => {
 
   it('has no surf on a sheltered flat, and leaves the beach above the swash dry', () => {
     expect(surfEta(surfUniforms(null), 0, 0, 0.3, 5)).toBe(0);
-    // 10 m up a 1:20 beach the surface is the sand's, 50 cm over the still level (2 mm under the sand: no water)
+    // 10 m up a 1:20 beach, 50 cm over the still level, the surface lies under the sand (2 cm: no water)
     const { surf } = surfBeach();
-    for (let t = 0; t < 10; t += 0.5) expect(surfEta(surf, -10, 0, 0, t)).toBeCloseTo(0.498, 3);
+    for (let t = 0; t < 10; t += 0.5) expect(surfEta(surf, -10, 0, 0, t)).toBeCloseTo(0.48, 3);
   });
 
   it('carries nothing where the backwash has drained the sand to a film (走水)', () => {

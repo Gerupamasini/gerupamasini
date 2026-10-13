@@ -122,6 +122,7 @@
   "toast.slowHint": "動作が重いようです。メニュー（Esc）の画質で「超軽量」を試してください",
   "toast.reloadHint": "画面のふちのなめらかさの変更は、次にページを開き直したときから反映されます",
   "toast.autoQuality": "この PC の GPU に合わせて画質「低」で始めます。メニュー（Esc）の画質で変更できます",
+  "toast.autoMeasured": "この PC で測って、干潟の画質を「{q}」にしました。メニュー（Esc）の画質で変更できます",
   "toast.newSpecies": "新種を発見",
   "toast.captured": "採集",
   "toast.behavior": "行動を記録",

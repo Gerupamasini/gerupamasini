@@ -9,6 +9,7 @@ import { akaeiGeometries, triangleCount, type Lod } from '../../src/creatures/sp
 import type { Individual } from '../../src/creatures/Individual';
 import type { DriverContext, Intent } from '../../src/creatures/drivers/Driver';
 import { Rng } from '../../src/core/Rng';
+import { sandDustFor } from '../../src/creatures/fx/SandDust';
 
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
@@ -127,6 +128,8 @@ function intentFor(b: AkaeiState): Intent {
 }
 
 function clear(): void {
+  // (the dust the last ray threw goes with it: each shot starts from clean water)
+  sandDustFor(world).clear();
   driver?.dispose();
   holder?.removeFromParent();
   specimen?.dispose();

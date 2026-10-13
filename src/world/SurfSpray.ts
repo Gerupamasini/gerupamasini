@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, Points, Scene, ShaderMaterial, Vector2, Vector4, type IUniform, type PerspectiveCamera, type Texture, type WebGLRenderer } from 'three';
+import { TONE_MAP_GLSL } from '../render/ToneMapGlsl';
 import { SURF_GLSL, type SurfUniforms } from './Surf';
 import type { LipLight } from './SurfLip';
 
@@ -21,6 +22,9 @@ export class SurfSpray {
   private readonly uRes = { value: new Vector2(1, 1) };
   private readonly uNearFar = { value: new Vector2(0.05, 1000) };
   private readonly tDepth: IUniform<Texture | null> = { value: null };
+  // (1: drawn into the upscaler's picture, finished as on the screen: the shader tone maps and encodes it itself)
+  private readonly uLdrOut = { value: 0 };
+  private readonly uExposure = { value: 1 };
 
   constructor(surf: SurfUniforms, light: LipLight, count: number) {
     const seeds = new Float32Array(count * 4);
@@ -32,7 +36,7 @@ export class SurfSpray {
     geo.setAttribute('seed', new BufferAttribute(seeds, 4));
     this.material = new ShaderMaterial({
       uniforms: {
-        ...light, uSpray: this.uSpray, uLevel: this.uLevel, uRes: this.uRes, tDepth: this.tDepth, uNearFar: this.uNearFar,
+        ...light, uSpray: this.uSpray, uLevel: this.uLevel, uRes: this.uRes, tDepth: this.tDepth, uNearFar: this.uNearFar, uLdrOut: this.uLdrOut, uExposure: this.uExposure,
         uSurf: surf.uSurf, uSurfDir: surf.uSurfDir, tSurfZone: surf.tSurfZone, tSurfAux: surf.tSurfAux, uSurfLv: surf.uSurfLv, uSurfGrid: surf.uSurfGrid,
       },
       transparent: true,
@@ -133,6 +137,8 @@ export class SurfSpray {
         varying float vA, vMist, vDepth;
         varying vec3 vWorld;
         uniform vec2 uNearFar;
+        uniform float uLdrOut, uExposure;
+        ${TONE_MAP_GLSL}
         // (the scene's depth back to a view distance)
         float linearDepth(float z) { float n = uNearFar.x, f = uNearFar.y; return n * f / (f - z * (f - n)); }
         void main() {
@@ -151,7 +157,9 @@ export class SurfSpray {
           float a = vA * disc * vis;
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = higataToneMap(gl_FragColor.rgb, uExposure);
           #include <colorspace_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = srgbEncode(gl_FragColor.rgb);
           gl_FragColor = vec4(gl_FragColor.rgb * a, a);
         }`,
     });
@@ -169,9 +177,14 @@ export class SurfSpray {
     this.uLevel.value = level;
   }
 
-  /** Draw over what the water composited (into the target bound now), against the scene's depth. */
-  render(gl: WebGLRenderer, camera: PerspectiveCamera, depth: Texture | null, width: number, height: number): void {
+  /**
+   * Draw over what the water composited (into the target bound now), against the scene's depth. `ldr`: the target is
+   * the upscaler's (the finished picture, as the water writes it).
+   */
+  render(gl: WebGLRenderer, camera: PerspectiveCamera, depth: Texture | null, width: number, height: number, ldr = false): void {
     this.tDepth.value = depth;
+    this.uLdrOut.value = ldr ? 1 : 0;
+    this.uExposure.value = gl.toneMappingExposure;
     this.uRes.value.set(width, height);
     this.uNearFar.value.set(camera.near, camera.far);
     const auto = gl.autoClear;
