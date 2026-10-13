@@ -66,6 +66,10 @@ export interface Individual {
   pitId?: number;
   /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
   strandedSince: number;
+  /** placed and removed by a world system (e.g. 'colony'), not by the spawner */
+  managed?: string;
+  /** the world system's own index for this animal */
+  colonyRef?: number;
 }
 
 /** The least water an aquatic animal is placed in or will stay in: about 15 % of its length (or the species' own share), never under 1.5 cm. */

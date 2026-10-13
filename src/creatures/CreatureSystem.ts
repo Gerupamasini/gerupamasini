@@ -277,7 +277,7 @@ export class CreatureSystem {
       }
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
-        const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
+        const every = ind.lod <= 1 || e.driver.everyFrame ? 1 : ind.lod === 2 ? 2 : 4;
         if (this.frameIndex % every === 0) {
           e.driver.update(f.dt * every, {
             floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId,
@@ -428,7 +428,7 @@ export class CreatureSystem {
   private keepInWater(f: CreatureFrame): void {
     for (const e of this.entries.values()) {
       const ind = e.ind;
-      if (!isAquatic(ind.species) || ind.id === f.lockedId) continue;
+      if (!isAquatic(ind.species) || ind.managed || ind.id === f.lockedId) continue;
       // every animal in view every frame (a dart is fast); the unseen ones at a few hertz
       if (ind.lod > 2 && (this.frameIndex & 7) !== 0) continue;
       const need = minDepthFor(ind.species, ind.length_mm);
@@ -516,21 +516,29 @@ export class CreatureSystem {
     this.despawn(id);
   }
 
-  /** Nearest individual under the screen centre within `maxDist` metres. */
+  /**
+   * The individual under the screen centre within `maxDist` metres: of those whose pick sphere the view ray
+   * passes through, the one closest to the ray (relative to its sphere), then the nearer. Animals out of sight
+   * (down a burrow) are skipped.
+   */
   pickTarget(camera: Camera, maxDist = 8, coneDeg = 0): Individual | null {
     camera.getWorldDirection(this.tmp);
     this.ray.set(camera.position, this.tmp);
     const cone = Math.tan(coneDeg * Math.PI / 180);
-    let best: Individual | null = null, bestD = Infinity;
+    let best: Individual | null = null, bestScore = Infinity;
     for (const e of this.entries.values()) {
-      if (!e.view) continue;
+      if (!e.view || e.driver.hidden) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
       // (through the binoculars a small bird far off still counts when it is within a degree or so of the centre)
       const r = Math.max(0.12, e.view.radius * scale * 1.6, cone * e.ind.pos.distanceTo(camera.position));
-      this.sphere.set(e.driver.anchor(), r);
+      const a = e.driver.anchor();
+      this.sphere.set(a, r);
       const d = e.ind.pos.distanceTo(camera.position);
       if (d > maxDist) continue;
-      if (this.ray.intersectsSphere(this.sphere) && d < bestD) { bestD = d; best = e.ind; }
+      if (!this.ray.intersectsSphere(this.sphere)) continue;
+      const off = Math.sqrt(this.ray.distanceSqToPoint(a)) / r;
+      const score = off + d / maxDist * 0.25;
+      if (score < bestScore) { bestScore = score; best = e.ind; }
     }
     return best;
   }
@@ -551,6 +559,8 @@ export class CreatureSystem {
   canNetCapture(id: string): boolean {
     const e = this.entries.get(id);
     if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
+    // (an animal out of sight, a コメツキガニ down its burrow, is dug out, not netted)
+    if (e.driver.hidden) return false;
     // (a swimmer that can hide in the sand, the flounder, answers for itself too)
     if (e.ind.species.locomotion !== 'burrow' && !e.driver.canNetCapture) return true;
     // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.

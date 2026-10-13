@@ -32,6 +32,8 @@ export const SpeciesSchema = z.object({
   digDepth_cm: z.number().positive().optional(),
   /** lives in the water and is kept in it (default: swimmers and crustaceans); a crawling snail sets it */
   aquatic: z.boolean().optional(),
+  /** who puts individuals on the flat: the spawner (default) or a world system (clam beds, crab colonies) */
+  placement: z.enum(['spawner', 'world']).default('spawner'),
   collectable: z.boolean(),
   protected: z.boolean().default(false),
   model: z.object({
@@ -42,6 +44,8 @@ export const SpeciesSchema = z.object({
     modelLength_mm: z.number().positive(),
     /** beyond this distance from the player the animal has no view (default from its size) */
     viewDistance_m: z.number().positive().optional(),
+    /** observation: the camera's starting distance (default from the animal's length) */
+    observeDistance_m: z.number().positive().optional(),
     /** beyond this distance the driver's placeholder stands in for the GLB tiers (a species whose only GLB is dense) */
     placeholderBeyond_m: z.number().positive().optional(),
     driver: z.string().optional(),

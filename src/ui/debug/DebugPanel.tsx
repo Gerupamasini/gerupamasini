@@ -83,7 +83,18 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('oysters')}>牡蠣礁</button>
         <button onClick={() => app.teleport('amamo')}>アマモ場</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
+        <button onClick={() => app.teleport('crabs')}>カニの群れ</button>
       </div>
+      {app.crabs && (() => {
+        const cs = app.crabs.stats();
+        return (
+          <div class="debug-row seg">
+            <span>コメツキガニ</span>
+            <span class="dim small">巣穴 {cs.burrows} / 個体 {cs.live}（地表 {cs.out}） / 砂団子 {cs.pellets}</span>
+            <label><input type="checkbox" checked={app.crabs.seasonOverride !== null} onChange={(e) => app.setCrabSeason((e.target as HTMLInputElement).checked ? 190 : null)} /> 繁殖期にする</label>
+          </div>
+        );
+      })()}
       <div class="debug-row seg">
         <span>出す生物</span>
         <button onClick={() => app.setAllSpeciesShown(true)}>全部</button>
