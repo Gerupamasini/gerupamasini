@@ -16,6 +16,29 @@ export function rippleMapTexel(n: number, level: 0 | 1): number {
 }
 
 /**
+ * The storage rectangles (x, y, width, height) a window `n` texels across uncovers when its first texel moves from
+ * (`ox`, `oz`) to (`tx`, `tz`) (global texel indices, less than `n` apart): the columns and the rows that come into it,
+ * each band split where it wraps round the texture's edge.
+ */
+export function uncoveredStrips(ox: number, oz: number, tx: number, tz: number, n: number): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [];
+  const mod = (v: number) => ((v % n) + n) % n;
+  const band = (from: number, to: number, cols: boolean) => {
+    let a = mod(from);
+    let left = to - from;
+    while (left > 0) {
+      const w = Math.min(left, n - a);
+      out.push(cols ? [a, 0, w, n] : [0, a, n, w]);
+      left -= w;
+      a = 0;
+    }
+  };
+  if (tx > ox) band(ox + n, tx + n, true); else if (tx < ox) band(tx, ox, true);
+  if (tz > oz) band(oz + n, tz + n, false); else if (tz < oz) band(tz, oz, false);
+  return out;
+}
+
+/**
  * GLSL to read the ripple map's two levels: `rippleAt(xz)` gives the relief (x: -1 in a trough … +1 on a crest, scaled
  * by how well formed the ripples are there) and the slope the shading tilts the normal by (yz, world x and z), the near
  * level blending into the far one and the far one fading out toward its edge (w: 1 inside, 0 beyond). Read at the top
@@ -142,20 +165,7 @@ export class RippleMap {
       this.queue = [[0, 0, n, n]];
       full = true;
     } else if (Math.abs(tx - o.x) >= STEP || Math.abs(tz - o.y) >= STEP) {
-      // the columns and rows the move uncovers, as storage rectangles (each band split where it wraps)
-      const mod = (v: number) => ((v % n) + n) % n;
-      const band = (from: number, to: number, cols: boolean) => {
-        let a = mod(from);
-        let left = to - from;
-        while (left > 0) {
-          const w = Math.min(left, n - a);
-          this.queue.push(cols ? [a, 0, w, n] : [0, a, n, w]);
-          left -= w;
-          a = 0;
-        }
-      };
-      if (tx > o.x) band(o.x + n, tx + n, true); else if (tx < o.x) band(tx, o.x, true);
-      if (tz > o.y) band(o.y + n, tz + n, false); else if (tz < o.y) band(tz, o.y, false);
+      this.queue.push(...uncoveredStrips(o.x, o.y, tx, tz, n));
       o.set(tx, tz);
     }
     // (a whole new window, on entering the flat or after a jump, is baked at once)

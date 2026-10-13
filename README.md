@@ -58,6 +58,8 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
 - [ホームの水槽の水・光・底床の描画](docs/models/aquarium/water.md) 専用 HDR パイプライン（屈折・水面の裏の全反射・側面ガラスの鏡・吸収と散乱・影の入る光の筋・コースティクス・ブルーム）、起伏と断面のある底床、作り直した飾り、画質設定ごとの負荷と動的解像度。確認は `node tests/smoke/aquarium-water.mjs`
 - [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
+- [作業の基本方針](CLAUDE.md) 決まっていることと、生きもののモデルの容量予算の要約。
+- [生きもののモデルの容量予算](docs/quality/model-budget.md) 体の大きさの区分 × LOD ごとの上限（三角形、テクスチャ、ダウンロード、GPU メモリ、マテリアル）、その理由、全種の現状と直す順番。`npm run models:budget` で照合
 - [グラフィックの土台](docs/quality/graphics.md) モデルの圧縮（KTX2 + meshopt）、FSR 1 での拡大、動的解像度と GPU 時間、画質の自動設定
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査、[Steam・スマホ版の障害の洗い出し](docs/planning/09_steam_readiness_audit.md)、[エンジン選定の判断記録と画質の方針](docs/planning/10_engine_decision.md)
