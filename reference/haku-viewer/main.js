@@ -9,6 +9,7 @@ import { HakuDriver } from '../../src/creatures/species/haku/HakuDriver.ts';
 import { liveSchools } from '../../src/creatures/species/haku/School.ts';
 import { HAKU_UNIFORMS } from '../../src/creatures/species/haku/materials.ts';
 import { applyPose } from '../../src/creatures/species/haku/swim.ts';
+import { MODEL_TL } from '../../src/creatures/species/haku/anatomy.ts';
 import { Rng } from '../../src/core/Rng.ts';
 import { AmamoKit, AmamoPatch, ShootGrid } from '../../src/world/amamo/index.ts';
 import { seagrass } from '../../src/creatures/species/amimehagi/seagrass.ts';
@@ -214,7 +215,8 @@ function meadow(n = 9) {
     const root = new THREE.Group();
     group.add(root);
     const d = new HakuDriver();
-    const ind = individual(i, 0.1 + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 60 + Math.random() * 30);
+    // (from the fourth id on: the first fish is in the wild colours, not the pale look of the tank photo)
+    const ind = individual(i + 3, 0.1 + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 60 + Math.random() * 30);
     d.attach(root, ind);
     fishes.push({ driver: d, ind, root });
   }
@@ -323,8 +325,9 @@ function holdMatch() {
   const v = matchOpts.view;
   if (v) {
     f.root.updateMatrixWorld(true);
+    // (the point in the model's own frame, which the root scales up to the fish's length; the distance in its length)
     const TL = (matchOpts.len ?? 30) / 1000, side = v.side ?? -1;
-    const at = f.root.localToWorld(new THREE.Vector3(side * (v.x ?? 0.05) * TL, v.at[1] * TL, (0.38 - v.at[0]) * TL));
+    const at = f.root.localToWorld(new THREE.Vector3(side * (v.x ?? 0.05) * MODEL_TL, v.at[1] * MODEL_TL, (0.38 - v.at[0]) * MODEL_TL));
     const dir = new THREE.Vector3(...v.from).normalize().applyQuaternion(f.root.getWorldQuaternion(new THREE.Quaternion()));
     camera.fov = v.fov ?? 20; camera.near = 0.0003; camera.updateProjectionMatrix();
     camera.position.copy(at).addScaledVector(dir, (v.dist ?? 0.4) * TL);

@@ -65,6 +65,8 @@ function goldRing(F: MulletForm, gold: number): string {
     {
       float ring = smoothstep(0.52, 0.66, r) * (1.0 - smoothstep(0.86, 0.94, r)) * (0.55 + 0.45 * smoothstep(-0.7, 0.5, e.y));
       vec3 g = vec3(0.92, 0.74, 0.22) * (0.85 + 0.15 * mott);
+      // (the iris under the gold a warm cream, not the ハク's grey)
+      col = mix(col, col * vec3(1.06, 1.0, 0.84), ${f(gold)} * (1.0 - pupil) * (1.0 - rim) * smoothstep(1.0, 0.9, r));
       col = mix(col, g, ${f(gold)} * ring * (1.0 - pupil));
       float lid = (1.0 - smoothstep(0.0, 0.035, abs(rp - ${f(F.eye.pupil + 0.025)}))) * (1.0 - pupil);
       col = mix(col, vec3(0.95, 0.93, 0.85), 0.5 * lid);

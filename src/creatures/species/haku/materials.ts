@@ -466,6 +466,8 @@ export interface FinLook {
   melanophores: number;
   /** how plainly the pectoral's rays show in its pale membrane */
   pectoralRays: number;
+  /** how much opacity the rays of the median fins add to their membranes */
+  rayAlpha: number;
 }
 
 /** the ハク's fins: clear milky membranes, white rays, a few melanophores at the base of the tail */
@@ -473,7 +475,7 @@ export const HAKU_FINS: FinLook = {
   rays: [24, 4, 9, 10, 6, 14],
   membrane: [0.82, 0.83, 0.84], pectoral: [0.68, 0.69, 0.71], ray: [0.97, 0.97, 0.95],
   opacity: [0.45, 0.42, 0.38, 0.42],
-  caudalMargin: 0, dusky: 0, melanophores: 0.025, pectoralRays: 0.35,
+  caudalMargin: 0, dusky: 0, melanophores: 0.025, pectoralRays: 0.35, rayAlpha: 0.55,
 };
 
 function finSurface(L: FinLook): string {
@@ -496,7 +498,7 @@ function finSurface(L: FinLook): string {
   if (spiny > 0.5 && t > 1.0 - 0.16 * (1.0 - ray) - 0.03) discard;
   // a milky membrane, thicker toward the base; the pectoral lies pale against the flank
   float base = id > 4.5 ? ${f(L.opacity[3])} : id < 0.5 ? ${f(L.opacity[0])} : spiny > 0.5 ? ${f(L.opacity[1])} : ${f(L.opacity[2])};
-  float alpha = (base * (1.0 - 0.3 * t) + (id < 0.5 ? 0.18 : id > 4.5 ? ${f((0.12 * L.pectoralRays) / 0.35)} : 0.55) * r + spiny * ray * 0.3) * (1.0 - smoothstep(0.92, 1.0, t)) * smoothstep(0.0, 0.05, t + 0.02);
+  float alpha = (base * (1.0 - 0.3 * t) + (id < 0.5 ? 0.18 : id > 4.5 ? ${f((0.12 * L.pectoralRays) / 0.35)} : ${f(L.rayAlpha)}) * r + spiny * ray * 0.3) * (1.0 - smoothstep(0.92, 1.0, t)) * smoothstep(0.0, 0.05, t + 0.02);
   vec3 col = mix(id > 4.5 ? ${v3(L.pectoral)} : ${v3(L.membrane)}, ${v3(L.ray)}, r * (id < 0.5 ? 0.4 : id > 4.5 ? ${f(L.pectoralRays)} : 1.0));
   // the median fins darken toward their edges; the caudal's trailing margin is dusky
   float dusk = ${f(L.dusky)} * smoothstep(0.35, 0.95, t) * step(id, 3.5) + ${f(L.caudalMargin)} * step(id, 0.5) * smoothstep(0.7, 0.97, t);
