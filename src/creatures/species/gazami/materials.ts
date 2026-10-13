@@ -101,7 +101,7 @@ vPart = aPart; vSeg = aSeg; vAux = aAux; vMm = aMm;
 vRest = position * 1000.0;
 vRestN = normal;
 // the other sex's abdomen folds away to nothing
-if (aAux.y > 0.5 && aAux.y < 2.5 && abs(aAux.y - (uSex + 1.0)) > 0.5) transformed = vec3(0.0);
+if (aPart > 1.5 && aPart < 2.5 && aAux.y > 0.5 && aAux.y < 2.5 && abs(aAux.y - (uSex + 1.0)) > 0.5) transformed = vec3(0.0);
 `;
 
 const FRAG_PARS = /* glsl */ `
@@ -178,8 +178,10 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
   float cav = vAux.x;
 
   if (part == 0) {
-    // ---- the dorsum
-    vec2 X = P.xz;
+    // ---- the dorsum (on the steep faces of the free margin and the teeth, the pattern's coordinates move out with
+    // the height, so that it runs on over the edge instead of streaking down it)
+    vec3 nR = normalize(vRestN);
+    vec2 X = P.xz + nR.xz * (P.y - 13.0) * (1.0 - abs(nR.y));
     float ax = abs(X.x);
     float lowf = gzFbm(X * 0.07 + sd * 13.0);
     gzCol = uBase * (0.85 + 0.32 * lowf);
@@ -231,6 +233,11 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       float dd = length(X - c0) - rr * (0.8 + 0.4 * amNoise((X - c0) * 1.2 + sd * 9.0 + float(k)));
       sp = max(sp, (1.0 - smoothstep(-0.25, 0.25, dd)) * step(0.12, amHash(sd * 4.1 + float(k) * 7.0)));
     }
+    // (the pale spots are made of white-tipped granules, not paint: up close the spot breaks up into its granules,
+    // the hollows between them keep some of the ground colour; 36, 61)
+    float gn = gzGranules(X, 0.42, fw, sd.x * 7.0) / (0.42 * 0.22);
+    float nearG = 1.0 - smoothstep(0.18, 0.45, fw / 0.42);
+    sp *= mix(1.0, 0.35 + 0.75 * smoothstep(0.05, 0.5, gn), nearG);
     gzCol = mix(gzCol, mix(uSpot, uBand * 1.5, 0.3) * (0.82 + 0.15 * lowf), sp * 0.8);
     // the teeth: paler and a little translucent towards their tips; the lateral spines' tips dark
     float spine = smoothstep(37.0, 42.0, ax) * step(-9.0, X.y) * step(X.y, 1.5);
@@ -251,7 +258,11 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
     // grey-brown in the margin's shade, the white mouthparts standing out against it (66)
     float face = smoothstep(13.0, 19.5, P.z) * smoothstep(2.5, 6.0, P.y);
     gzCol = mix(gzCol, mix(uVentral * 0.5, uBase * 1.2, 0.6), face * 0.85);
-    gzHgt = 0.6 * gzGranules(P.xz, 0.5, fw, sd.y);
+    // the buccal frame behind the third maxillipeds: a dark cavity, seen as a gap round the plates and between them
+    float bucc = smoothstep(9.4, 8.5, abs(P.x)) * smoothstep(2.4, 3.4, P.y) * smoothstep(11.6, 10.6, P.y) * smoothstep(17.5, 19.0, P.z);
+    gzCol *= 1.0 - 0.6 * bucc;
+    vec3 an1 = abs(vRestN);
+    gzHgt = 0.3 * gzGranules(an1.y > max(an1.x, an1.z) ? P.xz : an1.x > an1.z ? P.zy : P.xy, 0.36, fw, sd.y);
     gzRough = 0.34;
     if (tooth > 0.0) gzCol = mix(gzCol, uBand * 1.3, 0.5);
   } else if (part == 2) {
@@ -262,6 +273,11 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       // the abdomen's somites
       float k = fract(vSeg.x * 6.5);
       suture = (1.0 - smoothstep(0.0, 0.06, min(k, 1.0 - k))) * step(0.04, vSeg.x);
+    } else if (vAux.y > 2.5 && vAux.y < 3.5) {
+      // the third maxillipeds' palps and exopods: white, a brownish band at each joint, the tips darker (66)
+      gzCol = uVentral * 1.1;
+      gzCol = mix(gzCol, mix(uVentral, uClaw * 2.0, 0.5), (1.0 - smoothstep(0.0, 0.12, t)) * 0.7 + smoothstep(0.8, 1.0, t) * 0.4);
+      suture = 1.0 - smoothstep(0.0, 0.05, t);
     } else if (P.y < 2.0) {
       for (int k = 0; k < 4; k++) {
         float zc = 9.5 - 6.5 * float(k);
@@ -269,13 +285,21 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       }
       suture = max(suture, (1.0 - smoothstep(0.1, 0.35, abs(P.x))) * step(P.z, 2.0));
     } else {
-      // the third maxillipeds: white with a violet inner edge and a brownish rim (66)
+      // the third maxillipeds: white with a violet inner edge and a brownish rim (66); the suture between the merus
+      // (above) and the ischium, the ischium's groove near its inner edge, the inner edge finely toothed
+      float u = vSeg.x, v = vSeg.y;
       gzCol = uVentral * 1.15;
-      gzCol = mix(gzCol, mix(uVentral, uFinger * 4.0, 0.6), smoothstep(0.9, 1.0, vSeg.x) * 0.8);
-      gzCol = mix(gzCol, mix(uVentral, uClaw * 2.0, 0.6), (smoothstep(0.9, 1.0, vSeg.y) + smoothstep(0.08, 0.0, vSeg.x)) * 0.6);
+      gzCol = mix(gzCol, mix(uVentral, uFinger * 4.0, 0.6), smoothstep(0.9, 1.0, u) * 0.8);
+      gzCol = mix(gzCol, mix(uVentral, uClaw * 2.0, 0.6), (smoothstep(0.9, 1.0, v) + smoothstep(0.08, 0.0, u)) * 0.6);
+      float mer = 1.0 - smoothstep(0.0, 0.03, abs(v - 0.38 - 0.06 * u));
+      float sul = (1.0 - smoothstep(0.0, 0.035, abs(u - 0.66 - 0.04 * v))) * smoothstep(0.42, 0.5, v) * (1.0 - smoothstep(0.88, 0.96, v));
+      float saw = smoothstep(0.93, 0.99, u) * step(0.5, fract(v * 26.0));
+      suture = max(max(mer, sul * 0.7), saw * 0.6);
+      gzHgt = -0.25 * (mer + sul * 0.6);
     }
     gzCol *= 1.0 - 0.28 * suture;
-    gzRough = 0.26;
+    // (glossy, but not a mirror: the mouthparts a little duller than the sternum)
+    gzRough = P.y < 2.0 || (vAux.y > 0.5 && vAux.y < 2.5) ? 0.3 : 0.42;
   } else if (part == 3 || part == 4 || part == 5 || part == 12) {
     // ---- the cheliped
     vec3 base = uClaw;
@@ -335,17 +359,50 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
     gzCol = mix(uVentral, vec3(0.5, 0.36, 0.38), 0.3);
     gzRough = 0.55; gzThin = 0.6;
   } else if (part == 10) {
-    // ---- the cornea: near black, the facets catching the light
-    vec2 id;
-    vec3 c = amCells(vec2(vSeg.y * 60.0, vSeg.x * 22.0), id);
-    gzHgt = (1.0 - smoothstep(0.2, 0.5, c.x)) * 0.012 * (1.0 - smoothstep(0.05, 0.2, fw));
-    // (grey-brown, a dark pseudopupil where it looks straight at the viewer: 66, 61)
-    gzCol = mix(vec3(0.035, 0.03, 0.026), vec3(0.11, 0.09, 0.07), smoothstep(0.6, 0.35, vSeg.x));
-    gzRough = 0.12; gzEye = 1.0;
+    // ---- the eye (one surface, stalk to tip; vSeg.x > 0 on the cornea)
+    float sc = vSeg.x;
+    float cm = smoothstep(-0.025, 0.025, sc);
+    float facing = clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0);
+    // the cornea: grey-green with darker screening pigment (65, 66) to a glossy near black (61), each crab its own;
+    // flecked (the pigment of groups of ommatidia), a paler band near its edge
+    float tone = amHash(sd + 5.5);
+    vec3 an = abs(normalize(vRestN));
+    vec3 Pe = P * 3.2;
+    float fleck = (amNoise(Pe.yz + sd) * an.x + amNoise(Pe.xz - sd) * an.y + amNoise(Pe.xy + sd.yx) * an.z) / (an.x + an.y + an.z);
+    vec3 corn = mix(vec3(0.09, 0.1, 0.078), vec3(0.028, 0.026, 0.024), tone) * (0.7 + 0.6 * smoothstep(0.3, 0.7, fleck));
+    corn = mix(corn, corn * 1.6 + vec3(0.01, 0.012, 0.008), (1.0 - smoothstep(0.02, 0.16, sc)) * 0.6);
+    // the pseudopupil: the facets that look straight at the viewer show the dark pigment at their depths, a black spot
+    // that follows the viewer round the eye (65, 66)
+    float pp = smoothstep(0.84, 0.975, facing);
+    corn = mix(corn, vec3(0.006, 0.005, 0.005), pp * 0.92);
+    // the facets: a hexagonal lattice (≈ 0.06 mm, a little coarse so that it reads up close) catching the light
+    vec2 fid;
+    vec3 fc = amCells(vec2(vSeg.y * 150.0, sc * 46.0), fid);
+    float facet = (1.0 - smoothstep(0.25, 0.55, fc.x)) * (1.0 - smoothstep(0.03, 0.09, fw));
+    // the stalk's cuticle: amber and translucent at the base, maroon towards the eye (61, 66; amber in 64, 65), a pale
+    // rim round the cornea
+    // (on the inner side of the stalk, 66; all round in some crabs, 61)
+    float medial = smoothstep(0.15, -0.55, normalize(vRestN).x * sign(P.x));
+    float red = mix(medial, 1.0, 0.6 * amHash(sd + 6.6)) * (0.6 + 0.4 * amNoise(Pe.xy * 0.5 + Pe.z * 0.3 + sd * 3.0));
+    vec3 stalk = mix(uBand * 0.75, vec3(0.19, 0.05, 0.045), smoothstep(-1.1, -0.25, sc) * red);
+    stalk = mix(stalk, uBand * 1.3, (1.0 - smoothstep(0.0, 0.05, -sc)) * 0.7);
+    gzCol = mix(stalk, corn, cm);
+    gzHgt = facet * 0.0025 * cm;
+    gzRough = mix(0.38, 0.2, cm);
+    gzThin = (1.0 - cm) * 0.45;
+    gzEye = cm;
   } else if (part == 11) {
-    // ---- eyestalks, antennae, antennules: the dorsum's pale olive, a reddish base to the eyestalk (19)
-    gzCol = mix(uBand * 0.75, vec3(0.2, 0.08, 0.05), smoothstep(0.5, 0.0, t) * 0.5);
-    gzRough = 0.4; gzThin = 0.3;
+    // ---- antennae, antennules: translucent, pale amber (66); the peduncles' joints darker, the flagella annulated
+    // (≈ 0.22 mm annuli at CW 100), the antennules' outer flagellum a darker brush of aesthetascs
+    float flag = vAux.y;
+    gzCol = mix(uBand * 0.95, vec3(0.42, 0.33, 0.22), 0.4);
+    gzCol = mix(gzCol, vec3(0.2, 0.08, 0.05), (1.0 - smoothstep(0.0, 0.1, t)) * 0.45);
+    float ann = fract(vMm.x / 0.22);
+    float ring = (1.0 - smoothstep(0.0, 0.18, min(ann, 1.0 - ann))) * step(0.5, flag) * (1.0 - smoothstep(0.15, 0.4, fw / 0.22));
+    gzCol *= 1.0 - 0.35 * ring;
+    if (flag > 1.5 && flag < 2.5) gzCol = mix(gzCol, vec3(0.16, 0.12, 0.08), 0.55 * smoothstep(0.1, 0.4, t));
+    gzHgt = -0.03 * ring;
+    gzRough = 0.42; gzThin = 0.5;
   }
   // a juvenile's shell lets the light through
   gzThin += uJuv * 0.35;
@@ -355,15 +412,19 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
   gzSand = clamp(smoothstep(0.45, 0.95, cav) * 0.55 * smoothstep(0.35, 0.75, grit) + uSandCoat * smoothstep(0.0, 0.6, nW.y + 0.25) * smoothstep(0.25, 0.65, grit + 0.25 * uSandCoat), 0.0, 1.0);
   // the sand where the crab sits in it (its own grains, its own light)
   float nearBed = 1.0 - smoothstep(0.0, 0.0025 * uMmScale * 1000.0, vWPos.y - uGroundY);
-  gzSand = max(gzSand, nearBed * 0.8 * smoothstep(0.2, 0.6, amNoise(P.xz * 5.3 + P.y * 4.1 + sd * 2.0)));
+  gzSand = max(gzSand, nearBed * 0.8 * smoothstep(0.2, 0.6, amNoise(P.xz * 5.3 + P.y * 4.1 + sd * 2.0)) * (part == 2 ? 0.0 : 1.0));
+  // (the eyes are kept clean: wiped in the orbits)
+  if (part == 10) gzSand *= 1.0 - gzEye;
   gzAO = 1.0 - 0.45 * cav;
   gzCol *= gzAO;
   gzCol = mix(gzCol, uCover * (0.75 + 0.5 * grit), gzSand);
   gzRough = mix(gzRough, 0.92, gzSand);
   // wet: a film of water over the shell; drying out in the air it dulls
-  gzCoat = uWet * (1.0 - gzSand) * (part == 9 ? 0.2 : part == 0 ? 0.2 : part == 10 ? 0.35 : 0.12);
+  gzCoat = uWet * (1.0 - gzSand) * (part == 9 ? 0.2 : part == 0 ? 0.2 : part == 10 ? mix(0.15, 0.7, gzEye) : 0.12);
   // the limbs' cuticle reflects less than the dorsum's, or a glossy sheen washes their colour out from above (19, 61)
   gzSpec = (part >= 3 && part <= 8) || part >= 12 ? 0.45 : part == 0 ? 0.7 : 1.0;
+  // the cornea under its film of water: a small, crisp highlight (what makes the eye look alive)
+  if (part == 10) gzCoatRough = mix(0.25, 0.03, gzEye);
   gzRough = mix(gzRough + 0.18, gzRough, uWet);
   diffuseColor.rgb = gzCol;
 }
@@ -434,7 +495,7 @@ material.specularF90 *= gzSpec;
   radiance *= mix(1.0, 0.2, gzSand);`)
       .replace('#include <emissivemap_fragment>', THIN);
   };
-  m.customProgramCacheKey = () => (low ? 'gazami-shell-low-v1' : 'gazami-shell-v1');
+  m.customProgramCacheKey = () => (low ? 'gazami-shell-low-v2' : 'gazami-shell-v2');
   return m;
 }
 

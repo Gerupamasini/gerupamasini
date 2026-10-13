@@ -29,8 +29,8 @@ export interface Lod {
 }
 
 export const LODS: Lod[] = [
-  { tier: 0, envStep: 1.1, toothCols: 8, toothRows: 6, dome: [0.06, 0.12, 0.19, 0.26, 0.33, 0.4, 0.47, 0.54, 0.6, 0.66, 0.72, 0.77, 0.82, 0.86, 0.9, 0.93, 0.955, 0.975, 0.99, 1], under: 1, legRadial: 18, legStep: 1.1, spines: true, spineSides: 8, fingerTeeth: true, setae: true, eyeSeg: 14, antennae: true },
-  { tier: 1, envStep: 2.6, toothCols: 4, toothRows: 3, dome: [0.14, 0.3, 0.46, 0.6, 0.72, 0.82, 0.9, 0.96, 1], under: 0.6, legRadial: 9, legStep: 3.2, spines: true, spineSides: 4, fingerTeeth: false, setae: false, eyeSeg: 8, antennae: true },
+  { tier: 0, envStep: 1.1, toothCols: 8, toothRows: 6, dome: [0.06, 0.12, 0.19, 0.26, 0.33, 0.4, 0.47, 0.54, 0.6, 0.66, 0.72, 0.77, 0.82, 0.86, 0.9, 0.93, 0.955, 0.975, 0.99, 1], under: 1, legRadial: 18, legStep: 1.1, spines: true, spineSides: 8, fingerTeeth: true, setae: true, eyeSeg: 22, antennae: true },
+  { tier: 1, envStep: 2.6, toothCols: 4, toothRows: 3, dome: [0.14, 0.3, 0.46, 0.6, 0.72, 0.82, 0.9, 0.96, 1], under: 0.6, legRadial: 9, legStep: 3.2, spines: true, spineSides: 4, fingerTeeth: false, setae: false, eyeSeg: 10, antennae: true },
   { tier: 2, envStep: 7.5, toothCols: 2, toothRows: 1, dome: [0.35, 0.7, 0.92, 1], under: 0.3, legRadial: 5, legStep: 9, spines: false, spineSides: 3, fingerTeeth: false, setae: false, eyeSeg: 5, antennae: false },
 ];
 
@@ -794,57 +794,106 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
 
 // ------------------------------------------------------------------ eyes, antennae, mouthparts, abdomen
 
-/** a tube along x from 0 to len, radius r0 → r1, optionally a sphere at its end */
-function tube(gb: GeoBuilder, len: number, r0: number, r1: number, sides: number, steps: number, bone: number, part: number, bendY = 0, bendZ = 0): number[] {
-  const rows: number[][] = [];
+/**
+ * A slender rod along a bent axis (start + dir·len·t + bend·t²), radius r0 → r1, the rings closed on twins and the
+ * tip on its own pole vertices: the mouthparts' palps and exopods, the antennae's segments and flagella. `aSeg` is
+ * (t, the angle round), `aMm` (mm along it, mm round) for the annuli the shader draws.
+ */
+function rod(gb: GeoBuilder, start: Vector3, dir: Vector3, len: number, r0: number, r1: number, sides: number, steps: number, bone: number, part: number, flag = 0, bend: Vector3 | null = null, cav0 = 0.5): void {
+  const d = dir.clone().normalize();
+  const at = (t: number) => start.clone().addScaledVector(d, len * t).addScaledVector(bend ?? ZERO3, t * t);
+  const tan = (t: number) => at(Math.min(1, t + 0.01)).sub(at(Math.max(0, t - 0.01))).normalize();
+  let prev: number[] | null = null;
   for (let s = 0; s <= steps; s++) {
-    const f = s / steps;
-    const r = r0 + (r1 - r0) * f;
-    const cx = f * len, cy = bendY * f * f, cz = bendZ * f * f;
+    const t = s / steps;
+    const c = at(t), tg = tan(t);
+    const u = new Vector3().crossVectors(tg, Math.abs(tg.y) < 0.9 ? AY : AX).normalize();
+    const w = new Vector3().crossVectors(tg, u);
+    const r = r0 + (r1 - r0) * t;
     const row: number[] = [];
-    for (let j = 0; j < sides; j++) {
+    for (let j = 0; j <= sides; j++) {
       const a = (j / sides) * Math.PI * 2;
-      row.push(gb.v(cx, cy + Math.cos(a) * r, cz + Math.sin(a) * r, bone, 1, bone, part, f, j / sides, s === 0 ? 0.6 : 0));
+      const p = c.clone().addScaledVector(u, Math.cos(a) * r).addScaledVector(w, Math.sin(a) * r);
+      const vi = gb.v(p.x, p.y, p.z, bone, 1, bone, part, t, j / sides, s === 0 ? cav0 : 0, flag);
+      gb.setMm(vi, t * len, a * r);
+      row.push(vi);
     }
-    rows.push(row);
+    gb.twin(row[0], row[sides]);
+    if (prev) for (let j = 0; j < sides; j++) gb.quad(prev[j], prev[j + 1], row[j + 1], row[j]);
+    prev = row;
   }
-  for (let s = 0; s < steps; s++) for (let j = 0; j < sides; j++) {
-    const k = (j + 1) % sides;
-    gb.quad(rows[s][j], rows[s][k], rows[s + 1][k], rows[s + 1][j]);
+  const tip = at(1).addScaledVector(tan(1), r1 * 0.7), tn = tan(1);
+  for (let j = 0; j < sides; j++) {
+    const vi = gb.vn(tip.x, tip.y, tip.z, tn.x, tn.y, tn.z, bone, 1, bone, part, 1, (j + 0.5) / sides, 0, flag);
+    gb.setMm(vi, len + r1 * 0.7, 0);
+    gb.tri(prev![j], prev![j + 1], vi);
   }
-  const e = rows[steps];
-  const tip = gb.v(len + r1 * 0.6, bendY, bendZ, bone, 1, bone, part, 1, 0, 0);
-  for (let j = 0; j < sides; j++) gb.tri(e[j], e[(j + 1) % sides], tip);
-  return rows[0];
 }
+const ZERO3 = new Vector3();
 
-/** the eyestalk and its dark cornea (the cornea's facets are the shader's), in the eye bone's frame */
-function buildEye(gb: GeoBuilder, lod: Lod, bone: number): void {
+/**
+ * The eye in its bone's frame (x out along the stalk, y up, z medial on the left and lateral on the right, so that the
+ * lateral side is −sg·z): one surface from the stalk's base in the orbit to the tip of the eye. The stalk is short and
+ * a little club-shaped, swelling into the eye, an ellipsoid a little wider than high (61, 64, 65, 66). The cornea is
+ * not a separate globe: it is an oblique cap over the eye's tip, reaching further back underneath and on the outer
+ * side than on top, where the stalk's cuticle hoods it (61, 66). Each vertex carries its signed distance from the
+ * cornea's edge (`aSeg.x`, > 0 on the cornea) so that the shader draws the edge smooth whatever the tessellation, and
+ * the angle round (`aSeg.y`, 0 … 1, the ring closed on a twin) for the facets.
+ */
+function buildEye(gb: GeoBuilder, lod: Lod, bone: number, sg: number): void {
   const sides = lod.eyeSeg;
-  tube(gb, EYE.stalk, EYE.stalkR * 1.1, EYE.stalkR, sides, lod.tier === 0 ? 3 : 1, bone, PART.STALK);
-  // the globe: a sphere a little wider than the stalk, the cornea over its distal two thirds
-  const R = EYE.r, cx = EYE.stalk + R * 0.55;
-  const nLat = Math.max(4, Math.round(sides * 0.75));
-  const rows: number[][] = [];
-  for (let i = 0; i <= nLat; i++) {
-    const th = (i / nLat) * Math.PI;          // 0 at the stalk's side, π at the front
-    const x = cx - Math.cos(th) * R, rr = Math.sin(th) * R;
-    const row: number[] = [];
-    for (let j = 0; j < sides; j++) {
+  const R = EYE.r, Rv = R * 0.92, ax = R * 0.95;
+  const cx = EYE.stalk + R * 0.45;
+  // where the eye's surface is as wide as the stalk: the stalk runs up to there
+  const th0 = Math.asin(Math.min(0.95, EYE.stalkR / R));
+  const xJoin = cx - ax * Math.cos(th0);
+  // the cornea's axis: out along the stalk, tipped down and to the outer side
+  const lat = -sg;
+  const c = new Vector3(1, -0.35, 0.45 * lat).normalize();
+  const capCos = 0.28;
+  const d = new Vector3();
+  const rows: { x: number; ry: number; rz: number; eye: boolean; cav: number }[] = [];
+  const nStalk = lod.tier === 0 ? 5 : lod.tier === 1 ? 2 : 1;
+  for (let i = 0; i <= nStalk; i++) {
+    const f = i / nStalk;
+    // a waist a third of the way up, swelling towards the eye
+    const r = EYE.stalkR * (1.06 - 0.1 * Math.sin(Math.PI * Math.min(1, f * 1.4)) + 0.04 * f);
+    rows.push({ x: f * xJoin, ry: r * 0.96, rz: r, eye: false, cav: i === 0 ? 0.6 : 0 });
+  }
+  const nEye = lod.tier === 0 ? 14 : lod.tier === 1 ? 6 : 3;
+  for (let i = 1; i <= nEye; i++) {
+    // denser towards the tip, where the highlight and the pseudopupil are
+    const f = i / nEye;
+    if (i === nEye) break;
+    const th = th0 + (Math.PI - th0) * (1 - Math.pow(1 - f, 1.5));
+    rows.push({ x: cx - ax * Math.cos(th), ry: Rv * Math.sin(th), rz: R * Math.sin(th), eye: true, cav: 0 });
+  }
+  const ring = (k: number): number[] => {
+    const rw = rows[k];
+    const out: number[] = [];
+    for (let j = 0; j <= sides; j++) {
       const a = (j / sides) * Math.PI * 2;
-      const corneal = th > 0.85;
-      row.push(gb.v(x, Math.cos(a) * rr, Math.sin(a) * rr, bone, 1, bone, corneal ? PART.CORNEA : PART.STALK, th / Math.PI, j / sides, 0));
+      const y = Math.cos(a) * rw.ry, z = Math.sin(a) * rw.rz;
+      d.set((rw.x - cx) / ax, y / Rv, z / R).normalize();
+      const sc = d.dot(c) - capCos;
+      out.push(gb.v(rw.x, y, z, bone, 1, bone, PART.CORNEA, sc, j / sides, rw.cav, 3));
     }
-    rows.push(row);
+    gb.twin(out[0], out[sides]);
+    return out;
+  };
+  let prev = ring(0);
+  for (let k = 1; k < rows.length; k++) {
+    const row = ring(k);
+    for (let j = 0; j < sides; j++) gb.quad(prev[j], prev[j + 1], row[j + 1], row[j]);
+    prev = row;
   }
-  for (let i = 0; i < nLat; i++) for (let j = 0; j < sides; j++) {
-    const k = (j + 1) % sides;
-    gb.quad(rows[i][j], rows[i][k], rows[i + 1][k], rows[i + 1][j]);
-  }
+  // the tip: a pole vertex for each triangle (the cornea's centre, its normal straight out)
+  const tipSc = new Vector3(1, 0, 0).dot(c) - capCos;
+  for (let j = 0; j < sides; j++) gb.tri(prev[j], prev[j + 1], gb.vn(cx + ax, 0, 0, 1, 0, 0, bone, 1, bone, PART.CORNEA, tipSc, (j + 0.5) / sides, 0, 3));
 }
 
 /** the third maxillipeds: two rounded plates (ischium and merus) over the buccal frame, hinged at their outer edges */
-function buildMxp(gb: GeoBuilder, lod: Lod, bone: number, sg: number, m: Matrix4): void {
+function buildMxp(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, bone: number, sg: number, m: Matrix4): void {
   const start = gb.count;
   const nx = lod.tier === 0 ? 6 : 3, nz = lod.tier === 0 ? 10 : 4;
   const W = MXP3.halfWidth - 0.4, Z0 = 0, Z1 = MXP3.z1 - MXP3.z0;
@@ -857,8 +906,8 @@ function buildMxp(gb: GeoBuilder, lod: Lod, bone: number, sg: number, m: Matrix4
       const v = k / nz;
       const z = Z0 + (Z1 - Z0) * v;
       // the merus (the upper third, under the epistome) narrower, rounded at its inner corner; the ischium below
-      // meets its fellow at the midline
-      const w = W * (1 - 0.15 * (1 - smooth(0, 0.35, v)) * smooth(0.3, 1, u));
+      // meets its fellow at the midline, its lower inner corner rounded too
+      const w = W * (1 - 0.15 * (1 - smooth(0, 0.35, v)) * smooth(0.3, 1, u)) * (1 - 0.12 * smooth(0.8, 1, v) * smooth(0.5, 1, u));
       const x = -sg * w * u;
       const bulge = 1.2 * Math.sin(Math.PI * u) * Math.sin(Math.PI * Math.min(1, v * 1.05));
       row.push(gb.v(x, -0.5 - bulge, z, bone, 1, bone, PART.STERNUM, u, v, 0.15, 0));
@@ -881,7 +930,36 @@ function buildMxp(gb: GeoBuilder, lod: Lod, bone: number, sg: number, m: Matrix4
   rim(grid[nx], under[nx], f);
   rim(grid.map((r) => r[0]), under.map((r) => r[0]), !f);
   rim(grid.map((r) => r[nz]), under.map((r) => r[nz]), f);
+  if (lod.tier < 2) {
+    const sides = lod.tier === 0 ? 7 : 4, steps = lod.tier === 0 ? 4 : 2;
+    const L = -Z1;
+    // the palp (carpus, propodus, dactylus) folded down along the merus's inner edge, in front of the plate (66)
+    const px = -sg * (W * 0.86 - 0.35);
+    rod(gb, new Vector3(px, -1.0, -0.06 * L), new Vector3(sg * 0.12, -0.05, -1), 1.5, 0.5, 0.42, sides, steps, bone, PART.STERNUM, 3, null, 0.4);
+    rod(gb, new Vector3(px + sg * 0.18, -1.05, -0.06 * L - 1.55), new Vector3(sg * 0.1, -0.08, -1), 1.35, 0.4, 0.32, sides, steps, bone, PART.STERNUM, 3, null, 0.4);
+    rod(gb, new Vector3(px + sg * 0.32, -1.15, -0.06 * L - 2.95), new Vector3(sg * 0.05, -0.1, -1), 1.1, 0.3, 0.12, sides, steps, bone, PART.STERNUM, 3, new Vector3(-sg * 0.15, -0.1, 0), 0.4);
+    // the exopod along the outer edge, its flagellum curling in over the merus
+    rod(gb, new Vector3(-sg * 0.45, -0.75, -0.92 * L), new Vector3(0, -0.05, 1), 0.72 * L, 0.42, 0.34, sides, steps + 2, bone, PART.STERNUM, 3, new Vector3(0, -0.25, 0), 0.5);
+    rod(gb, new Vector3(-sg * 0.45, -1.0, -0.2 * L), new Vector3(-sg * 0.8, -0.2, 0.55), 1.8, 0.2, 0.06, sides - 1, steps, bone, PART.STERNUM, 3, new Vector3(-sg * 0.1, 0, -0.5), 0.3);
+  }
   gb.transform(start, m);
+  // setae along the inner edge (pale, a short fringe meeting its fellow's at the midline)
+  if (hb) {
+    const hs = hb.count;
+    const n = 14;
+    const rows: [number, number][] = [];
+    for (let k = 0; k <= n; k++) {
+      const v = 0.04 + 0.92 * (k / n);
+      const w = W * (1 - 0.15 * (1 - smooth(0, 0.35, v)));
+      const p = new Vector3(-sg * w, -0.5, Z1 * v);
+      const dir = new Vector3(-sg, -0.55, -0.15).normalize();
+      const q = p.clone().addScaledVector(dir, 0.75 + 0.25 * Math.sin(k * 2.3));
+      const card = new Vector3().crossVectors(new Vector3(0, 0, 1), dir).normalize();
+      rows.push([hb.vn(p.x, p.y, p.z, card.x, card.y, card.z, bone, 1, bone, 2, v * -Z1, 0), hb.vn(q.x, q.y, q.z, card.x, card.y, card.z, bone, 1, bone, 2, v * -Z1, 1)]);
+    }
+    for (let k = 0; k < n; k++) hb.quad(rows[k][0], rows[k][1], rows[k + 1][1], rows[k + 1][0]);
+    hb.transform(hs, m);
+  }
 }
 
 /** the abdomen folded under the sternum: both the male's and the female's (the material keeps the individual's) */
@@ -917,13 +995,28 @@ function buildAbdomen(gb: GeoBuilder, lod: Lod, body: number): void {
   }
 }
 
-/** the antenna (a thin flagellum) and the antennule (folded in its fossa) */
-function buildAntennae(gb: GeoBuilder, lod: Lod, a2: number, a1: number, ma2: Matrix4, ma1: Matrix4): void {
+/**
+ * The antenna and the antennule in their bones' frames (x along each). The antenna: two short peduncle segments in the
+ * orbital hiatus and a long, thin, annulated flagellum curving out and down (66). The antennule, folded transversely
+ * in its fossa under the front: three peduncle segments, then the thick outer flagellum with its brush of aesthetascs
+ * and a thin inner one (66: the little "Y" between the eyes); the shader draws the annuli.
+ */
+function buildAntennae(gb: GeoBuilder, lod: Lod, a2: number, a1: number, ma2: Matrix4, ma1: Matrix4, sg: number): void {
+  const sides = lod.tier === 0 ? 6 : 4, st = lod.tier === 0 ? 3 : 1;
+  const A = ANTENNA.length, R = ANTENNA.r;
   let s = gb.count;
-  tube(gb, ANTENNA.length, ANTENNA.r * 1.6, ANTENNA.r * 0.35, lod.tier === 0 ? 6 : 4, lod.tier === 0 ? 8 : 3, a2, PART.STALK, -0.8, 0.6);
+  rod(gb, new Vector3(0, 0, 0), AX, 0.9, R * 1.9, R * 1.7, sides, 1, a2, PART.STALK, 0, null, 0.6);
+  rod(gb, new Vector3(0.9, 0, 0), new Vector3(1, -0.05, 0.02), 0.8, R * 1.6, R * 1.3, sides, 1, a2, PART.STALK, 0, null, 0.4);
+  rod(gb, new Vector3(1.7, -0.04, 0.02), new Vector3(1, -0.1, 0.05), A, R * 1.0, R * 0.3, Math.max(4, sides - 2), lod.tier === 0 ? 10 : 3, a2, PART.STALK, 1, new Vector3(0, -0.9 * A * 0.25, 0.5 * A * 0.15), 0.3);
   gb.transform(s, ma2);
   s = gb.count;
-  tube(gb, ANTENNULE.length, ANTENNULE.r * 1.3, ANTENNULE.r * 0.6, lod.tier === 0 ? 6 : 4, lod.tier === 0 ? 4 : 2, a1, PART.STALK, -0.5, 0);
+  const r = ANTENNULE.r;
+  rod(gb, new Vector3(0, 0, 0), AX, 1.2, r * 1.35, r * 1.15, sides, st, a1, PART.STALK, 0, null, 0.7);
+  rod(gb, new Vector3(1.2, 0, 0), new Vector3(1, 0.25, 0), 0.9, r * 1.0, r * 0.85, sides, 1, a1, PART.STALK, 0, null, 0.4);
+  rod(gb, new Vector3(2.07, 0.22, 0), new Vector3(0.8, 0.6, 0), 0.75, r * 0.8, r * 0.7, sides, 1, a1, PART.STALK, 0, null, 0.4);
+  // the outer flagellum (thick, the aesthetascs' brush) and the inner (thin)
+  rod(gb, new Vector3(2.5, 0.68, 0), new Vector3(0.45, 0.9, -0.1 * sg), 1.7, r * 0.62, r * 0.25, sides, lod.tier === 0 ? 5 : 2, a1, PART.STALK, 2, new Vector3(0.3, -0.1, 0), 0.3);
+  if (lod.tier === 0) rod(gb, new Vector3(2.5, 0.62, 0), new Vector3(0.9, 0.35, 0.1 * sg), 1.3, r * 0.3, r * 0.12, 4, 3, a1, PART.STALK, 1, null, 0.3);
   gb.transform(s, ma1);
 }
 
@@ -948,10 +1041,10 @@ export function buildTier(rig: RigDef, lod: Lod): TierGeometry {
     const sg = side === 'L' ? 1 : -1;
     const eye = rig.byName[`J_eye_${side}`];
     const s = gb.count;
-    buildEye(gb, lod, eye);
+    buildEye(gb, lod, eye, sg);
     gb.transform(s, m.copy(rig.defs[eye].matrix));
-    buildMxp(gb, lod, rig.byName[`J_mxp_${side}`], sg, m.copy(rig.defs[rig.byName[`J_mxp_${side}`]].matrix));
-    if (lod.antennae) buildAntennae(gb, lod, rig.byName[`J_a2_${side}`], rig.byName[`J_a1_${side}`], rig.defs[rig.byName[`J_a2_${side}`]].matrix.clone(), rig.defs[rig.byName[`J_a1_${side}`]].matrix.clone());
+    buildMxp(gb, hb, lod, rig.byName[`J_mxp_${side}`], sg, m.copy(rig.defs[rig.byName[`J_mxp_${side}`]].matrix));
+    if (lod.antennae) buildAntennae(gb, lod, rig.byName[`J_a2_${side}`], rig.byName[`J_a1_${side}`], rig.defs[rig.byName[`J_a2_${side}`]].matrix.clone(), rig.defs[rig.byName[`J_a1_${side}`]].matrix.clone(), sg);
   }
   // the setae of the carapace's anterolateral margin (short, beneath the teeth: 6) are part of the shell's shader
   const shell = gb.build();

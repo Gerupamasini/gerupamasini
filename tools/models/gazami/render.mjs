@@ -32,6 +32,8 @@ const DEFAULT_SHOTS = [
   { name: 'macro_carapace', set: { view: 'macro', pose: 'rest', fov: 30, cam: [0.0, 0.07, 0.065], target: [0.0, 0.016, 0.0] } },
   { name: 'macro_chela', set: { view: 'macro', pose: 'stand', fov: 28, cam: [0.07, 0.035, 0.11], target: [0.03, 0.006, 0.045] } },
   { name: 'macro_paddle', set: { view: 'macro', pose: 'stand', fov: 30, cam: [0.1, 0.08, -0.1], target: [0.035, 0.012, -0.035] } },
+  { name: 'macro_eye', set: { view: 'macro', pose: 'rest', legs: {}, floor: true, fov: 10, cam: [0.046, 0.037, 0.062], target: [0.0125, 0.0188, 0.0235] } },
+  { name: 'macro_face', set: { view: 'front', pose: 'stand', legs: {}, floor: true, ortho: 0, fov: 22, cam: [0.02, 0.024, 0.12], target: [0.0, 0.012, 0.02] } },
   { name: 'under', set: { view: 'under', pose: 'stand', ortho: 0.07, cam: [0, -0.4, 0.0001], target: [0, 0.05, 0.0], up: [0, 0, 1] } },
   { name: 'under_female', set: { view: 'under', sex: 1, pose: 'stand', ortho: 0.07, cam: [0, -0.4, 0.0001], target: [0, 0.05, 0.0], up: [0, 0, 1] } },
   // the tiers
@@ -55,6 +57,8 @@ const DEFAULT_SHOTS = [
   { name: 'b_swim', set: { view: 'side', behave: true, seed: 6 }, call: { fn: 'mode', args: ['SWIM'] }, advance: 1.4, follow: { offset: [0.02, 0.03, 0.3], dt: [0, 0, 0] } },
   { name: 'b_swim_stroke2', advance: 0.08, follow: { offset: [0.02, 0.03, 0.3], dt: [0, 0, 0] } },
   { name: 'b_swim_oblique', advance: 0.08, follow: { offset: [0.2, 0.12, 0.2] } },
+  // the swimming crab from above, as in photograph 6
+  { name: 'photo6_view', advance: 0.1, follow: { offset: [0.0, 0.32, 0.001] } },
   // the views of the photographs used for the comparison (no photograph is reproduced here)
   { name: 'photo19_view', set: { view: 'top', floor: false, behave: false, sex: 1, pose: 'rest', morph: 0, seed: 4, ortho: 0.075, bg: 9419972, ...TOP } },
   { name: 'photo61_view', set: { view: 'top', floor: false, sex: 0, pose: 'stand', morph: 1, seed: 6, ortho: 0.075, bg: 15461355, ...TOP } },

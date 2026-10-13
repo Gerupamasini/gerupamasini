@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import type { LegId } from './anatomy';
 import type { LegRig, RigDef } from './geometry';
 import {
-  CHELA_DEFEND, CHELA_FOLDED, CHELA_MOUTH, CHELA_PICK, CHELA_READY, CHELA_SWIM, DACTYL_ANGLE, LEG_TUCK, PADDLE_CARRY, PADDLE_REST, blendLeg,
+  CHELA_DEFEND, CHELA_FOLDED, CHELA_MOUTH, CHELA_PICK, CHELA_READY, CHELA_SWIM, DACTYL_ANGLE, LEG_SWIM, PADDLE_CARRY, PADDLE_REST, blendLeg,
   isWalking, neutralFoot,
 } from './poses';
 import { bindLeg, copyLeg, emptyPose, legKey, planarOf, solveLeg, type LegPose, type PlanarLeg, type Pose } from './rig';
@@ -154,7 +154,10 @@ export function createCrabBehavior(o: CrabOptions) {
   }));
   // per-crab quirks: how it holds itself, how quick it is (never two alike)
   const quirk = { spread: 0.95 + 0.12 * rng(), lift: 0.9 + 0.2 * rng(), pace: 0.9 + 0.2 * rng(), flick: 0.7 + 0.6 * rng() };
-  let flickT = 0, eyeT = 0, eyeGoal = [0, 0], shuffleT = 4 + 6 * rng(), snapT = 0, lungeT = 0, pickT = 0, pickSide = 0, puffT = 0, breathT = 2;
+  let flickT = 0, shuffleT = 4 + 6 * rng(), snapT = 0, lungeT = 0, pickT = 0, pickSide = 0, puffT = 0, breathT = 2;
+  // the eyes: each holds a gaze, then jumps to the next; ducks into the orbit at a sudden danger; now and then wiped
+  const eyeHold = [0.3, 0.9], eyeGoal = [0, 0], eyeTilt = [0, 0], eyeWipe = [0, 0];
+  let duckT = 0, hadThreat = false;
   const tmp = new Vector3(), tmp2 = new Vector3(), tmp3 = new Vector3();
 
   // ------------------------------------------------------------ frames
@@ -192,6 +195,8 @@ export function createCrabBehavior(o: CrabOptions) {
   const canSwim = (x: number, z: number) => depthAt(x, z) > CW * 0.75;
 
   function enter(mode: Mode, phase: string, dur: number): void {
+    // (startled into a display or a run: the eyes duck into their orbits first)
+    if ((mode === 'DEFEND' || mode === 'ESCAPE') && st.mode !== mode) duckT = Math.max(duckT, 0.25 + 0.15 * rng());
     st.mode = mode; st.phase = phase; st.t = 0; st.pt = 0; st.dur = dur;
     settled = false;
   }
@@ -328,6 +333,9 @@ export function createCrabBehavior(o: CrabOptions) {
     st.t += dt; st.pt += dt;
     const threat = W.threat?.()?.pos ?? null;
     if (threat) st.threat = threat.clone();
+    // a danger newly seen: the eyes duck
+    if (threat && !hadThreat) duckT = Math.max(duckT, 0.3 + 0.25 * rng());
+    hadThreat = !!threat;
     switch (st.mode) {
       case 'IDLE': modeIdle(dt); break;
       case 'WALK': modeWalk(dt); break;
@@ -617,9 +625,10 @@ export function createCrabBehavior(o: CrabOptions) {
       if (isWalking(leg.id)) {
         if (!onBottom) {
           copyLeg(cur, G);
-          blendLeg(G, LEG_TUCK[leg.id], 1, G);
-          // a passive flutter with the strokes
-          G.mc += 0.06 * Math.sin(st.stroke + (leg.id === 'P3' ? 1 : 0));
+          blendLeg(G, LEG_SWIM[leg.id], 1, G);
+          // held out level as planes; a passive flutter with the strokes, the bundle trimming with the body's roll
+          G.lev += 0.05 * Math.sin(st.stroke + (leg.id === 'P3' ? 1 : leg.id === 'P4' ? 2 : 0)) - 0.15 * st.roll * leg.sg;
+          G.pd += 0.08 * Math.sin(st.stroke * 1.0 + 0.7);
         } else if (buried) {
           // folded under, pressed into the sand
           copyLeg(cur, G);
@@ -663,7 +672,8 @@ export function createCrabBehavior(o: CrabOptions) {
       // quarter cycle ahead, so it pushes water on both strokes; left and right half a cycle apart (alternating)
       const ph = st.stroke + (sg > 0 ? 0 : Math.PI);
       const amp = st.phase === 'land' ? 0.6 : 1;
-      G.promo = -0.15 + 0.62 * amp * Math.sin(ph);
+      // (swinging between out to the side and back, over the rear corners: 6)
+      G.promo = 0.15 + 0.5 * amp * Math.sin(ph);
       G.lev = 0.62 + 0.22 * amp * Math.cos(ph);
       G.mc = -0.25 + 0.18 * Math.sin(ph + 0.6);
       G.cp = -0.1 + 0.15 * Math.cos(ph);
@@ -692,7 +702,8 @@ export function createCrabBehavior(o: CrabOptions) {
       case 'IDLE': blendLeg(G, CHELA_FOLDED, 1, G); break;
       case 'WALK': blendLeg(G, st.phase === 'run' ? CHELA_SWIM : CHELA_READY, 1, G); break;
       case 'ESCAPE': blendLeg(G, CHELA_SWIM, 1, G); G.lev += 0.15; break;
-      case 'SWIM': blendLeg(G, CHELA_SWIM, 1, G); break;
+      // (the left claw a little over the right, so that the fingertips lie one on the other)
+      case 'SWIM': blendLeg(G, CHELA_SWIM, 1, G); G.lev += i === 0 ? 0.07 : -0.07; break;
       case 'BURROW': blendLeg(G, CHELA_FOLDED, 1, G); G.lev -= 0.1 * smooth(st.bury); break;
       case 'DEFEND': {
         blendLeg(G, CHELA_DEFEND, 1, G);
@@ -745,18 +756,33 @@ export function createCrabBehavior(o: CrabOptions) {
     // the bob of the gait (the body rises a little as each group takes the weight)
     if (st.mode === 'WALK' || st.mode === 'ESCAPE' || (st.mode === 'FORAGE' && st.phase === 'move')) P.lift += 0.6 * Math.cos(st.gait * TAU * 2);
     if (st.mode === 'SWIM') P.lift += 0.8 * Math.sin(st.stroke * 2);
-    // eyes: up and looking about, at the danger when there is one; drawn into the orbits while digging in
-    eyeT -= dt;
-    if (eyeT <= 0) { eyeT = 0.8 + 2.5 * rng(); eyeGoal = [(rng() - 0.5) * 0.5, (rng() - 0.5) * 0.5]; }
-    const raise = st.mode === 'BURROW' && st.phase === 'dig' ? 0.35 : st.mode === 'ESCAPE' && st.phase === 'burst' ? 0.2 : 1;
+    // eyes: up and looking about in quick jumps between held gazes (an eyestalk does not glide), each eye its own, at
+    // the danger when there is one; at a sudden danger both duck into the orbits for a moment and come up again
+    // slowly; now and then one is drawn down into its orbit, whose setae wipe the cornea; folded while digging in
+    duckT = Math.max(0, duckT - dt);
+    const alert = st.threat ? 1 : 0;
+    const base = st.mode === 'BURROW' && st.phase === 'dig' ? 0.35 : st.mode === 'ESCAPE' && st.phase === 'burst' ? 0.2 : 1;
     for (let i = 0; i < 2; i++) {
-      P.eyeRaise[i] = ease(P.eyeRaise[i], raise, dt, 6);
+      eyeHold[i] -= dt;
+      if (eyeHold[i] <= 0) {
+        eyeHold[i] = (0.35 + 2.2 * rng()) * (alert ? 0.5 : 1);
+        eyeGoal[i] = (rng() - 0.5) * 0.7;
+        eyeTilt[i] = (rng() - 0.5) * 0.14;
+        // (the two often jump together)
+        if (i === 0 && rng() < 0.45) { eyeHold[1] = eyeHold[0]; eyeGoal[1] = -eyeGoal[0] + (rng() - 0.5) * 0.15; eyeTilt[1] = eyeTilt[0]; }
+      }
+      const calm = st.mode === 'IDLE' || st.mode === 'FORAGE' || (st.mode === 'BURROW' && st.phase === 'buried');
+      if (eyeWipe[i] <= 0 && calm && duckT <= 0 && rng() < dt / 28) eyeWipe[i] = 0.5 + 0.3 * rng();
+      eyeWipe[i] = Math.max(0, eyeWipe[i] - dt);
+      const raise = (duckT > 0 || eyeWipe[i] > 0.2 ? 0.04 : base) + (base > 0.9 ? eyeTilt[i] * 0.5 : 0);
+      // down fast, up slowly
+      P.eyeRaise[i] = ease(P.eyeRaise[i], raise, dt, raise < P.eyeRaise[i] ? 30 : 4.5);
       let yaw = eyeGoal[i];
       if (st.threat && (st.mode === 'DEFEND' || st.mode === 'IDLE')) {
         const h = Math.atan2(st.threat.x - st.pos.x, st.threat.z - st.pos.z);
-        yaw = clamp(wrap(h - st.heading) * 0.5, -0.5, 0.5) * (i === 0 ? 1 : -1);
+        yaw = clamp(wrap(h - st.heading) * 0.5, -0.5, 0.5) * (i === 0 ? 1 : -1) + eyeGoal[i] * 0.15;
       }
-      P.eyeYaw[i] = ease(P.eyeYaw[i], yaw, dt, 5);
+      P.eyeYaw[i] = ease(P.eyeYaw[i], yaw, dt, 24);
     }
     // antennules: bursts of flicking (sampling the water's scent) at rest, foraging and buried
     flickT -= dt;

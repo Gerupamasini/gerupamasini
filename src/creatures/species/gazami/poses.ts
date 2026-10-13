@@ -20,14 +20,22 @@ export const CHELA_DEFEND: Partial4 = { promo: 0.2, pitch: -0.1, lev: 0.25, roll
 export const CHELA_PICK: Partial4 = { promo: 0.55, pitch: -0.1, lev: -0.05, roll: 0.1, meYaw: 0.8, mcYaw: -1.7, mc: -0.45, cp: -0.35, cpRoll: 0.4, cpYaw: -0.1, pd: 0.2 };
 /** to the mouth (the third maxillipeds take the food) */
 export const CHELA_MOUTH: Partial4 = { promo: 0.75, pitch: -0.1, lev: 0.15, roll: 0.3, meYaw: 1.35, mcYaw: -2.75, mc: 0.05, cp: 0.15, cpRoll: 1.1, cpYaw: -0.75, pd: 0.05 };
-/** swimming: folded close in front, streamlined (the walking legs tucked) */
-export const CHELA_SWIM: Partial4 = { promo: 0.7, pitch: -0.1, lev: 0.2, roll: 0.0, meYaw: 1.25, mcYaw: -2.7, mc: 0.05, cp: 0.05, cpRoll: 0.8, cpYaw: -0.45, pd: 0.0 };
+/**
+ * swimming (and running): folded tight and low, the palms under the front below the body's plane, the fingertips
+ * meeting at the front margin, hidden from above (6: nothing of the claws shows in front of the swimming crab); FK
+ * fitted: the palm's middle at (23, −1, 18) mm, the fingertip at the front margin (z 25)
+ */
+export const CHELA_SWIM: Partial4 = { promo: -0.75, pitch: -0.1, lev: -0.05, roll: 0.0, meYaw: 0.15, mcYaw: -2.8, mc: 0.0, cp: -0.2, cpRoll: 0.9, cpYaw: -0.3, pd: 0.0 };
 
-/** the walking legs tucked up against the body while swimming (the paddles row) */
-export const LEG_TUCK: Record<string, Partial4> = {
-  P2: { promo: 0.15, lev: 0.45, mc: -1.55, cp: -0.55, pd: -0.6 },
-  P3: { promo: 0.0, lev: 0.5, mc: -1.6, cp: -0.55, pd: -0.6 },
-  P4: { promo: -0.2, lev: 0.55, mc: -1.5, cp: -0.5, pd: -0.55 },
+/**
+ * The walking legs while swimming (6: from above, the legs of each side held straight out to the side in a close
+ * bundle, level with the carapace and swept a little back, the dactyli in line; never hanging as if standing): FK
+ * fitted, the tips at the coxae's height ±3 mm, 80 mm out, P2 to P4 swept 0 – 40 mm back.
+ */
+export const LEG_SWIM: Record<string, Partial4> = {
+  P2: { promo: -0.7, lev: 0.1, mc: -0.15, cp: -0.08, pd: 0.15 },
+  P3: { promo: -0.45, lev: 0.1, mc: -0.15, cp: -0.08, pd: 0.15 },
+  P4: { promo: -0.2, lev: 0.12, mc: -0.15, cp: -0.08, pd: 0.15 },
 };
 /** the paddles held up and back over the posterior margin while the crab walks (66) */
 export const PADDLE_CARRY: Partial4 = { promo: -0.25, lev: 0.35, mc: -0.3, cp: -0.1, cpRoll: 0.0, pd: -0.15 };

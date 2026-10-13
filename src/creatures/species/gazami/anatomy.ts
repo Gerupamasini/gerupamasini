@@ -193,14 +193,14 @@ export const EYE = {
   /** the eyestalk's base deep in the orbit, its rest direction (forward, out and up), length and radius */
   base: [10.9, 13.6, 19.6] as V3,
   dir: [0.34, 0.12, 0.93] as V3,
-  stalk: 3.6,
-  stalkR: 1.15,
+  stalk: 2.8,
+  stalkR: 1.35,
   /** the cornea: a dark, glossy, faceted globe at the tip (66: ≈ 0.14 of the eyes' spacing, 3.3 mm across at CW 100) */
   r: 1.65,
 };
 
 /** antennae: short flagella out of the inner orbital hiatus (61, 66); antennules folded in their fossae */
-export const ANTENNA = { base: [6.6, 11.2, 20.4] as V3, dir: [0.6, -0.2, 0.77] as V3, length: 4.2, r: 0.26 };
+export const ANTENNA = { base: [6.6, 11.6, 20.4] as V3, dir: [0.6, -0.15, 0.77] as V3, length: 6.0, r: 0.17 };
 export const ANTENNULE = { base: [2.4, 11.4, 21.0] as V3, length: 3.0, r: 0.4 };
 
 /**

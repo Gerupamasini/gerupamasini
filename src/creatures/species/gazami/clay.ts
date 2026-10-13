@@ -17,12 +17,12 @@ export class ClayLook implements GazamiLookLike {
     m.onBeforeCompile = (s: WebGLProgramParametersWithUniforms) => {
       s.uniforms.uSex = this.uSex;
       s.vertexShader = s.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 aAux;\nuniform float uSex;')
+        .replace('#include <common>', '#include <common>\nattribute vec2 aAux;\nattribute float aPart;\nuniform float uSex;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
   // the other sex's abdomen folds away to nothing
-  if (aAux.y > 0.5 && aAux.y < 2.5 && abs(aAux.y - (uSex + 1.0)) > 0.5) transformed = vec3(0.0);`);
+  if (aPart > 1.5 && aPart < 2.5 && aAux.y > 0.5 && aAux.y < 2.5 && abs(aAux.y - (uSex + 1.0)) > 0.5) transformed = vec3(0.0);`);
     };
-    m.customProgramCacheKey = () => 'gazami-clay-v1';
+    m.customProgramCacheKey = () => 'gazami-clay-v2';
     this.shell = m;
     this.setae = new MeshBasicMaterial({ color: 0x2a2620, side: DoubleSide, visible: false });
   }

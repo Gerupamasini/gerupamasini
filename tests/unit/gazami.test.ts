@@ -221,8 +221,9 @@ describe('ガザミ: the seven behaviours', () => {
     expect(slips / stances).toBeLessThan(0.15);
   });
 
-  it('swims on its paddles with the walking legs tucked, between the bottom and the surface', () => {
+  it('swims on its paddles with the walking legs held out level (never hanging), between the bottom and the surface', () => {
     const b = make(9);
+    const rig = gazamiRig();
     b.swim({ x: -1.2, z: 0.2 });
     run(b, 1);
     const promos: number[] = [];
@@ -232,7 +233,13 @@ describe('ガザミ: the seven behaviours', () => {
       minAlt = Math.min(minAlt, b.state.alt);
       maxY = Math.max(maxY, b.state.pos.y);
       if (b.state.mode === 'SWIM' && b.state.phase === 'cruise') {
-        for (const k of ['P2L', 'P3L', 'P4R']) expect(b.pose.legs[k].mc).toBeLessThan(-1.1);
+        // (6: straight out to the side, level with the coxae: not the walking stance, the tips not below the body)
+        for (const k of ['P2L', 'P3L', 'P4R']) {
+          const leg = rig.legs.find((l) => l.id + l.side === k)!;
+          const tip = legTip(leg, planarOf(leg), b.pose.legs[k]);
+          expect(Math.abs(tip.y - leg.coxa.y)).toBeLessThan(8);
+          expect(Math.hypot(tip.x - leg.coxa.x, tip.z - leg.coxa.z)).toBeGreaterThan(50);
+        }
       }
     });
     expect(b.state.mode).toBe('SWIM');
