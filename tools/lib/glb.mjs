@@ -211,3 +211,35 @@ export class GLBBuilder {
     return Buffer.concat([header, jh, jsonBuf, bh, binChunk]);
   }
 }
+
+/** Splits a GLB into its JSON and its binary chunk (a view into `buf`; empty when the file has none). */
+export function readGLB(buf) {
+  if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error('not a GLB');
+  const jsonLen = buf.readUInt32LE(12);
+  if (buf.readUInt32LE(16) !== 0x4e4f534a) throw new Error('GLB: the first chunk is not JSON');
+  const json = JSON.parse(buf.subarray(20, 20 + jsonLen).toString('utf8'));
+  const at = 20 + jsonLen;
+  const bin = at + 8 <= buf.length && buf.readUInt32LE(at + 4) === 0x004e4942 ? buf.subarray(at + 8, at + 8 + buf.readUInt32LE(at)) : Buffer.alloc(0);
+  return { json, bin };
+}
+
+/** Joins a glTF JSON and its binary chunk into a GLB (buffers[0].byteLength is set to the padded chunk). */
+export function writeGLB(json, bin) {
+  const binPad = (4 - (bin.length % 4)) % 4;
+  const binChunk = Buffer.concat([bin, Buffer.alloc(binPad)]);
+  if (json.buffers?.length) json.buffers[0].byteLength = binChunk.length;
+  let jsonBuf = Buffer.from(JSON.stringify(json), 'utf8');
+  jsonBuf = Buffer.concat([jsonBuf, Buffer.alloc((4 - (jsonBuf.length % 4)) % 4, 0x20)]);
+  const header = Buffer.alloc(12);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(12 + 8 + jsonBuf.length + (binChunk.length ? 8 + binChunk.length : 0), 8);
+  const jh = Buffer.alloc(8);
+  jh.writeUInt32LE(jsonBuf.length, 0);
+  jh.writeUInt32LE(0x4e4f534a, 4);
+  if (!binChunk.length) return Buffer.concat([header, jh, jsonBuf]);
+  const bh = Buffer.alloc(8);
+  bh.writeUInt32LE(binChunk.length, 0);
+  bh.writeUInt32LE(0x004e4942, 4);
+  return Buffer.concat([header, jh, jsonBuf, bh, binChunk]);
+}

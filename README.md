@@ -7,12 +7,16 @@
 ```bash
 npm install
 npm run dev          # http://localhost:5173/gerupamasini/
-npm run check        # 型検査 + 単体テスト + データ検証
+npm run check        # 型検査 + 単体テスト + データ検証 + 圧縮済みモデルが最新か
 npm run build        # dist/ を生成（GitHub Pages 用のベースパス /gerupamasini/）
 npm run smoke:progression # ビルド後、水槽・ろ過装置のショップ、飼育上限、導入クエストをブラウザで検証
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
+node tests/smoke/upscale.mjs         # 干潟を等倍・67 %・50 %（FSR 1 と単純な拡大）で撮り比べる（tests/smoke/out/upscale-*.png）
+node tests/smoke/auto-quality.mjs    # 干潟の画質の自動設定（測定・保存・手動での解除）
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+npm run models:pack  # モデルの元（src/assets/models）を圧縮版（src/assets/models-packed: KTX2 テクスチャ + meshopt 形状）にする。変わったものだけ。モデルを作り直したら必ず実行
+node tools/models/pack/compare.mjs [mahaze ...]  # 元と圧縮版を同じ条件で描いて比べる（tests/smoke/out/pack-compare/）
 node tests/smoke/goby-translucency.mjs  # ハゼ 3 種の体の透け（観察の体積シェーダーと、干潟・水槽の全段階の透け）を順光・逆光で撮影
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium-water.mjs # 水槽の水の描画（4 つの画質・底床・水中視点）
 node tests/smoke/physics.mjs         # 生きものの物理（重ならない・接地・波の揺れ）をゲーム内で確認（tests/smoke/out/physics-*.png）
@@ -45,6 +49,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
+- Steam 版もこの Three.js 版を Electron で包んで出す（2026-10-12 の決定。[判断記録](docs/planning/10_engine_decision.md)）。いったん始めた UE5 版 [Gerupamasini/UE5HigataZukan](https://github.com/Gerupamasini/UE5HigataZukan) は参考として残し、開発を止めている
 - [水槽・ろ過装置のショップと導入クエスト](docs/aquarium-progression/README.md) CRでの解放・Lv.5までの強化、最大20匹の飼育、9件のクエストとスマホ画面写真。
 - [生きものの物理](docs/creatures/physics.md) 全種共通の物理層（`src/creatures/physics/`）。生きもの同士が重ならないように押し分ける接触、体の足場の面に沿って寝かせる接地（ハゼ類・アサリ類）、うねりと寄せ波で小さな魚を前後に運んで揺らす水の動き。
 - [砂煙](docs/creatures/sand-dust.md) 魚やエイが舞い上げる砂（`src/creatures/fx/SandDust.ts`）。全種共通の 1 回の描画で、膨らんでゆっくり沈みうねりで揺れる泥の雲・すぐ落ちる砂粒・漂う墨。底質で色と量が変わり、画質で間引く。いまはアカエイ・イシガレイ・ミミイカ。
@@ -52,8 +57,9 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
 - [ホームの水槽の水・光・底床の描画](docs/models/aquarium/water.md) 専用 HDR パイプライン（屈折・水面の裏の全反射・側面ガラスの鏡・吸収と散乱・影の入る光の筋・コースティクス・ブルーム）、起伏と断面のある底床、作り直した飾り、画質設定ごとの負荷と動的解像度。確認は `node tests/smoke/aquarium-water.mjs`
 - [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
+- [グラフィックの土台](docs/quality/graphics.md) モデルの圧縮（KTX2 + meshopt）、FSR 1 での拡大、動的解像度と GPU 時間、画質の自動設定
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
-- `docs/planning/` 設計質問と回答、マハゼモデル監査
+- `docs/planning/` 設計質問と回答、マハゼモデル監査、[Steam・スマホ版の障害の洗い出し](docs/planning/09_steam_readiness_audit.md)、[エンジン選定の判断記録と画質の方針](docs/planning/10_engine_decision.md)
 - `docs/TESTING.md` 身内テスト手順
 - `docs/models/` マハゼモデルの説明、`docs/models/nets/` タモ網 6 種の調査・設計・使い方（ゲームでは `NetView` と `ToolShelf` がこの GLB を使う）
 - `docs/models/oyster/` マガキの調査・設計（個体差の seed、殻の層、LOD、群生と牡蠣礁の大量配置、行動、ゲームへの統合）

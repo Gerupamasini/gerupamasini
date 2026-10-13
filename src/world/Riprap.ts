@@ -441,6 +441,8 @@ export class Riprap {
           im.name = 'riprap';
         }
         hi.castShadow = true;
+        // (the far stones cast only into the far shadow map, FarShadow)
+        lo.userData.farShadow = true;
         lo.visible = false;
         this.group.push(hi, lo);
         this.chunks.push({ meshes: [hi, lo], centre, radius, lod: 0 });

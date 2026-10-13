@@ -1,14 +1,22 @@
-import { Bone, Box3, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, SkinnedMesh, Vector3, type AnimationClip, type Material } from 'three';
+import { Bone, Box3, LoadingManager, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, SkinnedMesh, Vector3, type AnimationClip, type Material, type WebGLRenderer } from 'three';
 import { GLTFLoader, type GLTF, type GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
+import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
+import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
-/** Asset URLs keyed by path relative to src/assets/models (e.g. "mahaze/mahaze_juvenile.lod2.glb", "nets/net_small.hero.glb"). */
+/**
+ * Asset URLs keyed by path relative to src/assets/models (e.g. "mahaze/mahaze_juvenile.lod2.glb", "nets/net_small.hero.glb").
+ * The game loads the packed copies (src/assets/models-packed: KTX2 textures, meshopt geometry), made from the masters
+ * the model builders write by `npm run models:pack`.
+ */
 const MODEL_URLS: Record<string, string> = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/models/**/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
-    .map(([k, v]) => [k.replace(/^.*\/assets\/models\//, ''), v]),
+  Object.entries(import.meta.glob('../../assets/models-packed/**/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
+    .map(([k, v]) => [k.replace(/^.*\/assets\/models-packed\//, ''), v]),
 );
 
 export function modelUrl(rel: string): string {
@@ -30,13 +38,29 @@ export interface LoadedModel {
   parser: GLTFParser;
 }
 
-const loader = new GLTFLoader();
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const cache = new Map<string, Promise<GLTF>>();
 const loaded = new Set<string>();
+let ktx2: KTX2Loader | null = null;
+
+/**
+ * Readies the loader for a renderer: the KTX2 textures are transcoded, on worker threads, to a compressed format the
+ * GPU samples (BC7 on PCs and the Steam Deck, ASTC or ETC2 on phones, RGBA where there is none). Called once, before
+ * the first model loads; the format chosen serves every renderer of the page (they share the GPU).
+ */
+export function configureModelLoader(renderer: WebGLRenderer): void {
+  if (ktx2) return;
+  // (the transcoder's two files are looked up by name: pointed at the URLs the bundler gave them)
+  const manager = new LoadingManager();
+  manager.setURLModifier((url) => url.endsWith('/basis_transcoder.js') ? basisTranscoderJs : url.endsWith('/basis_transcoder.wasm') ? basisTranscoderWasm : url);
+  ktx2 = new KTX2Loader(manager).setTranscoderPath('basis/').detectSupport(renderer);
+  loader.setKTX2Loader(ktx2);
+}
 
 export function preloadModel(rel: string): Promise<GLTF> {
   let p = cache.get(rel);
   if (!p) {
+    if (!ktx2) return Promise.reject(new Error('configureModelLoader(renderer) must run before a model loads'));
     p = loader.loadAsync(modelUrl(rel)).then((gltf) => {
       prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
       loaded.add(rel);
