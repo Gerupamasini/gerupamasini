@@ -1,0 +1,211 @@
+{
+  "id": "rudarius_ercodes",
+  "names": {
+    "ja": "アミメハギ",
+    "sci": "Rudarius ercodes",
+    "en": "Whitespotted pygmy filefish"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Monacanthidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "amimehagi",
+    "modelLength_mm": 40,
+    "viewDistance_m": 12,
+    "driver": "amimehagi",
+    "clips": {
+      "idle": "Hover",
+      "move": "SlowSwim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 14,
+      "max": 65,
+      "mean": 36,
+      "sd": 9
+    },
+    "weightCoef": {
+      "a": 1.9e-05,
+      "b": 3.0
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "幼魚",
+      "maxLength_mm": 25
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "eelgrass"
+      ],
+      "depth_m": [
+        0.15,
+        1.6
+      ],
+      "season": [
+        "spring",
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 6,
+      "group": [
+        1,
+        4
+      ],
+      "maxPopulation": 26,
+      "length_mm": [
+        18,
+        60
+      ]
+    },
+    {
+      "tags": [
+        "eelgrass_edge"
+      ],
+      "depth_m": [
+        0.15,
+        1.4
+      ],
+      "season": [
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 3,
+      "group": [
+        1,
+        2
+      ],
+      "maxPopulation": 12,
+      "length_mm": [
+        14,
+        32
+      ]
+    },
+    {
+      "tags": [
+        "eelgrass"
+      ],
+      "depth_m": [
+        0.2,
+        1.6
+      ],
+      "season": [
+        "winter"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 2,
+      "group": [
+        1,
+        2
+      ],
+      "maxPopulation": 8,
+      "length_mm": [
+        35,
+        62
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_seagrass",
+    "params": {
+      "fleeDistance_m": 0.75,
+      "restMean_s": 9,
+      "wanderDistance_m": [
+        0.3,
+        0.9
+      ]
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_fine",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.42,
+    "alertPenalty": 0.45
+  },
+  "encyclopedia": {
+    "description": "アマモ場や藻場にすむ全長 3〜6 cm ほどの小さなカワハギの仲間。体は菱形で著しく平たく、眼の後ろの上に後ろ向きの鉤のある太い第一背鰭棘を立てる。体色は橙・黄褐・オリーブ・灰褐と個体ごとに違い、淡い丸い斑点が暗い網目に囲まれて並ぶ（網目模様が名の由来）。皮膚は細かなざらざらした鱗でおおわれ、白い小さな皮弁が散る。尾鰭を折りたたんだまま、長い背鰭と臀鰭を波打たせ、胸鰭を細かく動かして、ほとんど同じ場所に浮かぶように定位し、ゆっくりと葉の間を移る。葉の表面の小さな生き物をついばみ、驚くと尾鰭で一気に逃げてアマモの茂みに入り、葉に沿って頭を下げて隠れる。夜は葉をくわえて眠る。",
+    "habitatHint": "春から秋、沖のアマモ場の葉の間。胴長で入り、しゃがんで静かに見ると葉のそばで止まっている。",
+    "behaviors": [
+      {
+        "id": "hover",
+        "ja": "定位",
+        "hint": "葉のそばで鰭だけを動かして止まる"
+      },
+      {
+        "id": "slow_swim",
+        "ja": "ゆっくり泳ぐ",
+        "hint": "背鰭と臀鰭を波打たせて葉から葉へ移る"
+      },
+      {
+        "id": "forage",
+        "ja": "ついばむ",
+        "hint": "葉や砂の上の小さな生き物をつつく"
+      },
+      {
+        "id": "seagrass_hide",
+        "ja": "葉に隠れる",
+        "hint": "アマモの葉に沿って頭を下げ、棘を立てて隠れる"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "尾鰭で一気に逃げて茂みに入る"
+      },
+      {
+        "id": "sleep",
+        "ja": "葉をくわえて眠る",
+        "hint": "夜、葉をくわえて体を沈める"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

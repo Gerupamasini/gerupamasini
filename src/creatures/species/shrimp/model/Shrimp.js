@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { ANATOMY as A } from './anatomy.js';
-import { MORPH } from './morphology.js';
+import { ANATOMY } from './anatomy.js';
 import { ShrimpModel } from './ShrimpModel.js';
 import { Brain } from './Brain.js';
 
@@ -62,6 +61,8 @@ export class Shrimp {
     this.seed = this.id * 13.37;
     // the game builds the model ahead of time (and owns the root in its scene graph); the viewer builds it here
     this.model = opts.model ?? new ShrimpModel(opts);
+    // kinematics of the model's species (シラタエビ by default; isosuji.js for イソスジエビ)
+    this.A = this.model.species?.anatomy ?? ANATOMY;
     this.root = this.model.root;
     this.scale = this.model.scale;
     this.name = opts.name ?? `#${this.id}`;
@@ -79,8 +80,8 @@ export class Shrimp {
     this.time = Math.random() * 10;
     this.speed = 0;
     this.socialPush = new THREE.Vector3();
-    this.walkSpeed = A.walk.speed * this.scale;
-    this.swimSpeed = A.swim.speed * this.scale;
+    this.walkSpeed = this.A.walk.speed * this.scale;
+    this.swimSpeed = this.A.swim.speed * this.scale;
     this.standH = -this.model.groundY * this.scale; // from the photo-matched stance (ShrimpModel.poseStanding)
     this.bodyY = new Spring(0, 3);
     this.bodyPitch = new Spring(0, 2.5);
@@ -92,13 +93,13 @@ export class Shrimp {
     this.pleoPhase = Math.random() * TAU;
     this.gaitClock = 0;
     this.lastFlipEnd = -10;
-    this.abdSprings = this.model.abd.map((_, i) => new Spring(A.abdomen.rest[i], 6));
+    this.abdSprings = this.model.abd.map((_, i) => new Spring(this.A.abdomen.rest[i], 6));
     this.uroSpread = new Spring(0, 10);
     this.flickT = 0;
     this.flickAmt = 0;
 
     // the game drives the shrimp with its own intents through a stub brain
-    this.brain = opts.brain ?? new Brain(this);
+    this.brain = opts.brain ?? new (opts.Brain ?? Brain)(this);
     this.initLegs();
     this.position.y = world.heightAt(this.position.x, this.position.z) + this.standH;
     this.bodyY.v = this.position.y;
@@ -115,7 +116,7 @@ export class Shrimp {
     // Metachronal wave back-to-front; left/right in antiphase; per-leg jitter.
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
     // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
-    const TLm = A.totalLength;
+    const TLm = this.A.totalLength;
     const fwd = { P3: -0.005 * TLm, P4: -0.02 * TLm, P5: -0.04 * TLm };
     const lat = { P3: 0.14 * TLm, P4: 0.15 * TLm, P5: 0.15 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
@@ -129,7 +130,7 @@ export class Shrimp {
         from: new THREE.Vector3(),
         to: new THREE.Vector3(),
         swingT: 1,
-        swingDur: A.walk.stepDuration,
+        swingDur: this.A.walk.stepDuration,
         swinging: false,
         phase: (offsets[n] + (leg.side > 0 ? 0 : 0.5) + (Math.random() - 0.5) * 0.08) % 1,
         lastPhase: 0,
@@ -142,7 +143,8 @@ export class Shrimp {
   /** World position of a body-frame (yaw-only) foot point, dropped onto the substrate. */
   footWorld(local, out) {
     out.copy(local).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw).add(this.position);
-    out.y = this.world.groundY(out.x, out.z, this.position.y + 0.02);
+    // probe from above the body so a foot can find a ledge higher than the body (rock-walking species)
+    out.y = this.world.groundY(out.x, out.z, this.position.y + (this.A.footProbe ? this.A.footProbe * this.scale : 0.02));
     return out;
   }
 
@@ -162,7 +164,7 @@ export class Shrimp {
    * low and carried forward to land ahead of their rest position (metachronal wave P5->P3).
    */
   walkLegs(dt, vCmd, wCmd) {
-    const stepLen = A.walk.stepLength * this.scale;
+    const stepLen = this.A.walk.stepLength * this.scale;
     const duty = 0.65;
     const moving = vCmd > 0.0015 || Math.abs(wCmd) > 0.04;
     const freq = moving ? clamp(Math.max(vCmd / stepLen, Math.abs(wCmd) / 0.45), 0.5, 2.2) : 0;
@@ -272,11 +274,12 @@ export class Shrimp {
   }
 
   startTailFlip(point, strength) {
+    if (this.mode === 'cling') this.endCling();
     const away = new THREE.Vector3().subVectors(this.position, point);
     away.y = Math.max(away.y, 0) + 0.25 * away.length();
     away.normalize();
     this.flip = {
-      count: clamp(1 + Math.floor(strength * 4 + Math.random()), 1, A.tailFlip.maxFlips),
+      count: clamp(1 + Math.floor(strength * 4 + Math.random()), 1, this.A.tailFlip.maxFlips),
       i: 0,
       phase: 'latency',
       t: 0,
@@ -288,7 +291,7 @@ export class Shrimp {
 
   updateTailFlip(dt) {
     const F = this.flip;
-    const T = A.tailFlip;
+    const T = this.A.tailFlip;
     const sizeK = Math.sqrt(this.scale); // larger animals flex slower [R]
     F.t += dt;
     if (F.phase === 'latency') {
@@ -356,6 +359,19 @@ export class Shrimp {
     const it = this.brain.intent;
 
     if (this.flip) this.updateTailFlip(dt);
+
+    // ---- holding on to an eelgrass blade (イソスジエビ in the アマモ場)
+    if (it.cling && !this.flip && W.bladeFrame) {
+      if (this.mode !== 'cling') this.startCling(it.cling);
+      this.updateCling(dt, it.cling);
+      this.animate(dt, this.forward(_k5));
+      this.root.updateMatrixWorld(true);
+      for (const leg of this.legs) this.solveLegIK(leg, leg.foot);
+      this.root.updateMatrixWorld(true);
+      if (!this.world.cheap) this.updateFlagella(dt);
+      return;
+    }
+    if (this.mode === 'cling') this.endCling();
 
     // ---- mode transitions
     const ground = W.groundY(this.position.x, this.position.z, this.position.y + 0.01);
@@ -445,7 +461,7 @@ export class Shrimp {
       const crouch = clamp(flowMag * 0.08, 0, 0.002) + (this.brain.s.fear > 0.3 ? 0.0015 : 0) + (it.arms === 'forage' ? 0.0012 : 0);
       this.position.y = this.bodyY.step(avg + this.standH - crouch, dt, 1.2);
       const span = 0.01 * this.scale;
-      const pTarget = Math.atan2((front - back) / 2, span) + (it.arms === 'forage' ? -0.12 : 0) + (this.brain.behavior === 'hide' ? -0.05 : 0.03);
+      const pTarget = Math.atan2((front - back) / 2, span) + (it.arms === 'forage' ? -0.12 : 0) + (this.brain.behavior.toLowerCase() === 'hide' ? -0.05 : 0.03);
       this.pitch = this.bodyPitch.step(pTarget, dt, 1);
       this.roll = this.bodyRoll.step(Math.atan2((right - left) / 3, 0.024 * this.scale), dt, 1);
       this.pitchRate = 0;
@@ -509,6 +525,75 @@ export class Shrimp {
     if (!this.world.cheap) this.updateFlagella(dt);
   }
 
+  // ------------------------------------------------------------------ clinging to eelgrass
+  /** Grip a blade (world.bladeFrame) low down; the brain then sets the height to climb to. */
+  startCling(c) {
+    this.mode = 'cling';
+    this.clingH = Math.max(0.006, c.startH ?? 0.01);
+    this.clingClock = 0;
+    this.vel.set(0, 0, 0);
+    for (const leg of this.legs) {
+      leg.free = true; // feet may close in under the body around the blade
+      leg.swinging = false;
+    }
+  }
+
+  endCling() {
+    // push off the blade into open water
+    const f = this.clingFrame;
+    this.mode = 'water';
+    if (f) this.vel.copy(f.n).multiplyScalar(f.sideSign * 0.02);
+    for (const leg of this.legs) leg.free = false;
+    this.clingFrame = null;
+  }
+
+  updateCling(dt, c) {
+    const W = this.world;
+    const sc = this.scale;
+    const climb = c.h - this.clingH;
+    const dir = Math.abs(climb) > 0.001 ? Math.sign(climb) : 0;
+    const stepLen = 0.006 * sc;
+    const freq = 1.4;
+    const duty = 0.7;
+    const v = dir * Math.min(Math.abs(climb) / dt, (stepLen * freq) / duty);
+    this.clingH += v * dt;
+    if (dir) this.clingClock += dt * freq;
+    const f = (this.clingFrame ??= { p: new THREE.Vector3(), t: new THREE.Vector3(), n: new THREE.Vector3(), e: new THREE.Vector3(), sideSign: 1 });
+    f.sideSign = c.side;
+    W.bladeFrame(c.blade, this.clingH, f);
+    // body axis along the blade (head up or down), ventral side against the leaf
+    const fwd = _k.copy(f.t).multiplyScalar(c.headUp ? 1 : -1);
+    const up = _k2.copy(f.n).multiplyScalar(c.side);
+    up.addScaledVector(fwd, -up.dot(fwd)).normalize();
+    const lat = _k3.crossVectors(fwd, up);
+    const m4 = new THREE.Matrix4().makeBasis(fwd, up, lat);
+    this.root.quaternion.setFromRotationMatrix(m4);
+    this.position.copy(f.p).addScaledVector(up, this.standH * 0.55);
+    this.root.position.copy(this.position);
+    this.yaw = Math.atan2(-fwd.z, fwd.x);
+    this.pitch = Math.asin(clamp(fwd.y, -1, 1));
+    this.roll = 0;
+    this.speed = Math.abs(v);
+    // feet on the two edges of the leaf, P3 ahead, P5 behind; climbing walks them along it
+    const halfW = (W.bladeHalfWidth ?? 0.0025) * 0.9;
+    const along = { P3: 0.0045, P4: 0.0005, P5: -0.0035 };
+    for (const leg of this.legs) {
+      const edge = Math.sign(lat.dot(f.e)) * leg.side; // which leaf edge this side's legs hold
+      let a = along[leg.P.name] * sc;
+      let lift = 0;
+      if (dir) {
+        const ph = (this.clingClock + leg.phase) % 1;
+        if (ph < duty) a += dir * stepLen * (0.5 - ph / duty);
+        else {
+          const u = (ph - duty) / (1 - duty);
+          a += dir * stepLen * (-0.5 + u);
+          lift = Math.sin(Math.PI * u) * 0.0012 * sc;
+        }
+      }
+      leg.foot.copy(f.p).addScaledVector(fwd, a).addScaledVector(f.e, edge * halfW).addScaledVector(up, lift + 0.0003);
+    }
+  }
+
   applyRootTransform() {
     this.root.position.copy(this.position);
     this.root.rotation.set(this.roll, this.yaw, this.pitch, 'YZX');
@@ -519,13 +604,13 @@ export class Shrimp {
     const m = this.model;
     const t = this.time;
     const it = this.brain.intent;
-    const beh = this.brain.behavior;
+    const beh = this.brain.behavior.toLowerCase(); // the イソスジエビ brain names its states in capitals
     const sd = this.seed;
     this.startleT += dt;
     const startle = this.startleT < 0.4 ? Math.sin(Math.PI * Math.min(1, this.startleT / 0.4)) * this.startleStrength : 0;
 
     // ---- Abdomen: rest curvature + swim undulation + flip flexion + startle twitch
-    const Ab = A.abdomen;
+    const Ab = this.A.abdomen;
     const swimming = this.mode === 'water' && !this.flip;
     const beat = swimming ? this.thrust : 0;
     for (let i = 0; i < 6; i++) {
@@ -549,7 +634,7 @@ export class Shrimp {
       m.abd[i].rotation.y = this.flip ? (this.flip.yawKick ?? 0) * 0.04 * this.flip.flex : -this.yawRate * 0.01;
     }
     // Telson follows with slight extra flex
-    m.telson.rotation.z = MORPH.rest.telson + (this.abdSprings[5].v - Ab.rest[5]) * 0.4;
+    m.telson.rotation.z = this.model.M.rest.telson + (this.abdSprings[5].v - Ab.rest[5]) * 0.4;
 
     // ---- Tail fan spread (open during flips / hover steering)
     const spreadTarget = this.flip ? 1 : swimming ? 0.35 + 0.2 * Math.abs(this.yawRate) : 0.05 + startle * 0.5;
@@ -558,7 +643,7 @@ export class Shrimp {
       const s = u.userData.side;
       u.rotation.y = -s * (0.1 + spread * 0.6) + this.yawRate * 0.05;
       // Closed fan is rolled lateral-edge-down; spreading flattens it into a horizontal fan.
-      u.rotation.x = s * MORPH.rest.fanRoll * (1 - spread);
+      u.rotation.x = s * this.model.M.rest.fanRoll * (1 - spread);
       for (const k of ['exo', 'endo']) {
         const r = u.userData[k];
         r.rotation.y = r.userData.base * (1 + spread * 0.8);
@@ -566,7 +651,7 @@ export class Shrimp {
     }
 
     // ---- Pleopods: metachronal beating, posterior leads; rami open on power stroke
-    const hz = this.mode === 'water' ? lerp(1.2, A.swim.pleopodHz, beat) : 0.35;
+    const hz = this.mode === 'water' ? lerp(1.2, this.A.swim.pleopodHz, beat) : 0.35;
     this.pleoPhase += dt * TAU * (this.flip ? 0 : hz);
     const amp = this.flip ? 0 : this.mode === 'water' ? lerp(0.25, 0.8, beat) : beh === 'idle' || beh === 'hide' ? 0.08 : 0.12;
     m.pleopods.forEach((pairs, i) => {
@@ -583,7 +668,7 @@ export class Shrimp {
     });
 
     // ---- Walking legs: FK when not supported
-    if (this.mode !== 'ground') for (const leg of this.legs) this.poseLegFK(leg, dt, !!this.flip);
+    if (this.mode === 'water') for (const leg of this.legs) this.poseLegFK(leg, dt, !!this.flip);
 
     // ---- Chelipeds (P1 & P2)
     for (const c of m.chelipeds) {
@@ -687,17 +772,37 @@ export class Shrimp {
       this.flickAmt = 1;
     }
     this.flickAmt = Math.max(0, this.flickAmt - dt * 8);
+    const AN = this.A.antennae;
     for (const j of m.antennules) {
       const s = j.userData.side;
       const b = j.userData.base;
-      j.rotation.z = b.z - this.flickAmt * 0.16 + noise1(t * 0.5, sd + s) * 0.02;
-      j.rotation.y = b.y + noise1(t * 0.3, sd + s * 3) * 0.04;
+      let flick = this.flickAmt;
+      if (AN?.independentFlicks) {
+        // each antennule samples on its own clock (faster when food is smelled), a quick down-flick and slower return
+        const u = j.userData;
+        u.flickT = (u.flickT ?? Math.random()) - dt;
+        if (u.flickT <= 0) {
+          const [lo, hi] = AN.flickEvery;
+          u.flickT = lo + Math.random() * (hi - lo) * (it.antenna === 'forward' || beh === 'investigate' ? 0.5 : 1);
+          u.flickAmt = 0.7 + Math.random() * 0.5;
+        }
+        u.flickAmt = Math.max(0, (u.flickAmt ?? 0) - dt * 6);
+        flick = u.flickAmt;
+      }
+      j.rotation.z = b.z - flick * 0.16 + noise1(t * 0.5, sd + s) * 0.02;
+      j.rotation.y = b.y + noise1(t * 0.3, sd + s * 3) * 0.04 + (AN ? flick * s * 0.05 : 0);
     }
     for (const j of m.antennae) {
       const s = j.userData.side;
       const b = j.userData.base;
       let yaw = b.y + noise1(t * 0.15, sd + s * 11) * 0.06;
       let pitch = b.z + noise1(t * 0.12, sd + s * 13) * 0.03;
+      if (AN && it.antenna === 'rest') {
+        // resting: a slow, low sweep, left and right out of phase, with a fine tremor carried by the water
+        const ph = t * Math.PI * 2 * AN.idleSweepHz + (s > 0 ? 0 : 2.4) + sd;
+        yaw -= s * AN.idleSweep * (0.5 + 0.5 * Math.sin(ph)) + noise1(t * 3.1, sd + s * 17) * AN.tremor;
+        pitch += 0.04 * Math.sin(ph * 0.7 + 1.1) + noise1(t * 2.7, sd + s * 19) * AN.tremor;
+      }
       switch (it.antenna) {
         case 'sweep':
           // Asymmetric sweeping, one antenna forward while the other scans laterally.

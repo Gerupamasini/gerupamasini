@@ -293,7 +293,8 @@ export class ScopimeraDriver {
   get hidden() { return this.crab ? this.crab.hidden : false; }
 
   /** debug marker text */
-  get debugText() { return this.crab ? this.crab.behavior.debug : ''; }
+  /** the behaviour state for the debug markers */
+  debugLabel() { return this.crab ? this.crab.behavior.debug : ''; }
 
   anchor() {
     if (!this.crab) return this.tmp.set(0, 0, 0);

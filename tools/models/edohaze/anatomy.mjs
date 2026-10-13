@@ -72,6 +72,18 @@ export function monotone(xs, ys) {
   };
 }
 
+// gravid female variant (GOBY_GRAVID=1): the belly swells from s≈0.30 to 0.65 SL and ends abruptly at
+// ≈0.67 (photos 011, 016, 023, 028, 044, 045, 048, 061: max depth 0.178 SL, dorsal half-width ≈0.10 SL)
+export const GRAVID = typeof process !== 'undefined' && process.env.GOBY_GRAVID === '1';
+if (GRAVID) {
+  // a smooth egg-shaped swelling: gentle rise from the pectoral region, fullest at s≈0.48, rounding off
+  // behind into the anus (no flat sides or kinks); rounder belly cross-section (lower superellipse exponent)
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  KS.forEach((s, i) => {
+    const g = ss(0.24 * SL, 0.47 * SL, s) * ss(0.7 * SL, 0.55 * SL, s);
+    KBOT[i] -= 0.95 * g; KW[i] += 0.9 * g; KTOP[i] += 0.15 * g; KNB[i] -= 0.35 * g;
+  });
+}
 const fTop = monotone(KS, KTOP);
 const fBot = monotone(KS, KBOT);
 const fW = monotone(KS, KW);
@@ -199,19 +211,22 @@ export function surfaceAt(s, y) {
 export const EYE = {
   center: [3.58, 3.81, 1.28],
   axis: norm3([-0.16, 0.37, 0.92]),
-  radius: 0.86,
-  skin: 0.05,
-  aperture: 68 * (Math.PI / 180),
+  radius: 0.95,
+  skin: 0.09,
+  aperture: 60 * (Math.PI / 180),
 };
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
+// the skin covers the top of the eye (ref photos): no dorsal window
+export const EYE_DORSAL_OPEN = false;
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
-const EYE_DORSAL_APERTURE = 55 * (Math.PI / 180);
+const EYE_DORSAL_APERTURE = 50 * (Math.PI / 180);
 
 // Gape: from the snout tip (h = −0.011 SL) straight down and back at ~25° to the rictus at s 0.081,
 // h −0.042 SL (under the front of the eye; 008 traces s 0.083, h −0.046; 034 s 0.079). The maxilla runs on
 // to ~0.095 SL (below the eye centre/rear) — the large jaw of "macrognathos"; the lower jaw is level with
 // or slightly ahead of the upper.
-export const MOUTH = [[0.0, 2.17], [0.3, 2.06], [0.8, 1.83], [1.4, 1.56], [2.0, 1.29], [2.45, 1.08], [2.7, 0.97], [2.85, 0.9]];
+// steep oblique gape (user ref photo: ~40° down-back from a high snout tip to a low rictus)
+export const MOUTH = [[0.0, 2.45], [0.25, 2.27], [0.65, 1.96], [1.1, 1.62], [1.6, 1.3], [2.1, 1.05], [2.5, 0.9], [2.85, 0.82]];
 export const RICTUS_S = 2.85;
 export const MAXILLA_END = [3.6, 0.95];
 // Free margin of the gill cover (operculum + subopercle), top → bottom: head length 0.269 SL (s 10.05 mm; spec
@@ -354,8 +369,11 @@ function buildFeatures() {
   // second, dorsal corneal window: from above the eyes show as large dark domes whose medial edges are only
   // 0.038 SL apart (dorsal photos 025, 029, 043); the lateral window alone leaves 0.067 SL of skin between them
   const rho2 = Math.sqrt(Rs * Rs + cutOff * cutOff - 2 * Rs * cutOff * Math.cos(EYE_DORSAL_APERTURE));
-  const at = (ax, D) => [E.center[0] + ax[0] * D, E.center[1] + ax[1] * D, E.center[2] + ax[2] * D];
-  const eyeL = { c: E.center, cut: at(E.axis, cutOffL), cut2: at(EYE_DORSAL_AXIS, cutOff) };
+  // the eyeball sits 0.42 mm proud along its axis (eye.mjs EYE_PROTRUDE): mound and windows move with it so
+  // the skin meets the ball without a socket ring
+  const P0 = E.center.map((v, k) => v + E.axis[k] * 0.42);
+  const at = (ax, D) => [P0[0] + ax[0] * D, P0[1] + ax[1] * D, P0[2] + ax[2] * D];
+  const eyeL = { c: P0, cut: at(E.axis, cutOffL), cut2: at(EYE_DORSAL_AXIS, cutOff) };
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], cut: [eyeL.cut[0], eyeL.cut[1], -eyeL.cut[2]], cut2: [eyeL.cut2[0], eyeL.cut2[1], -eyeL.cut2[2]] };
 
   return {
@@ -382,7 +400,16 @@ export function field(s, y, z, eyeCut = true) {
   const L = z >= 0;
   let d = baseDist(s, y, z);
   // eye mounds: a tight blend, so the skin does not climb onto the cornea (only a thin rim over its upper edge)
-  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.12);
+  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.3); // a smooth turret, no groove round the eye
+  // fleshy eyelid-like dermal ring round the corneal window (ref photos: a pale rim framing the dome)
+  if (s < 6.5) for (const e of F.eyes) {
+    const ax = e.cut[2] >= 0 ? EYE.axis : [EYE.axis[0], EYE.axis[1], -EYE.axis[2]];
+    const R = EYE.radius + EYE.skin, ap = EYE.aperture;
+    const v = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
+    const h = v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2] - R * Math.cos(ap);
+    const rr = Math.sqrt(Math.max(0, v[0] * v[0] + v[1] * v[1] + v[2] * v[2] - (h + R * Math.cos(ap)) ** 2)) - R * Math.sin(ap);
+    d = smin(d, Math.hypot(h, rr) - 0.1, 0.12);
+  }
   // cheeks (adductor muscles) and the gill-cover plate
   // (a swelling that follows the loft, so the cheek rises smoothly out of the narrow snout behind the eye)
   if (s > 1.8 && s < 10.4) d -= 0.4 * Math.exp(-(((s - 5.6) / 1.75) ** 2)) * Math.exp(-(((y - 2.1) / 1.35) ** 2));
@@ -394,8 +421,8 @@ export function field(s, y, z, eyeCut = true) {
   }
   // fleshy lips
   if (s < 4.6 && y < 3.0) {
-    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.15);
-    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.15);
+    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.24);
+    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.24);
   }
   // pectoral fin base (fleshy lobe)
   if (s > 9.6 && s < 13.0) d = smin(d, ellipsoidDist(pm, F.pecLobe, [0.68, 1.4, 0.42]), 0.28);
@@ -408,12 +435,12 @@ export function field(s, y, z, eyeCut = true) {
 
   // --- subtractions
   if (eyeCut && s < 6.5) for (const e of F.eyes) {
-    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07);
-    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
+    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07); // rounded eyelid-like dermal rim (ref photos)
+    if (EYE_DORSAL_OPEN) d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
   }
   if (s < 4.6 && y < 3.0) {
-    d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.04);
-    d = smax(d, -capsuleChainDist(p, L ? F.gU : F.gUR), 0.06);
+    // a clean gape line only; the premaxillary groove read as a second, scratchy line
+    d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.05);
   }
   if (s > 7.5 && s < 11.2 && y > 0.25) d += (smax(d, -capsuleChainDist(p, L ? F.operc : F.opercR), 0.03) - d) * smoothstep(0.25, 0.9, y);
   if (s > 4.8 && s < 8.0) d = smax(d, -capsuleChainDist(p, L ? F.preop : F.preopR), 0.04);
@@ -477,7 +504,7 @@ function sinkEyeWindow(p) {
   const e = FEAT.eyes[p[2] >= 0 ? 0 : 1];
   const side = (ax) => (p[2] >= 0 ? ax : [ax[0], ax[1], -ax[2]]);
   p = sinkInto(p, e.cut, FEAT.rho, side(EYE.axis));
-  return sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS));
+  return EYE_DORSAL_OPEN ? sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS)) : p;
 }
 function sinkInto(p, c, rho, a) {
   const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];

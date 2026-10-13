@@ -1,0 +1,24 @@
+{
+  "id": "flatfish_sand",
+  "tickHz": { "near": 4, "mid": 1, "far": 0.4 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 1.0, "urgency": 1 }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_below", "args": { "m": 0.03 } },
+      { "type": "action", "name": "move_to_deeper", "args": { "minDepth_m": 0.12 } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.45 } },
+      { "type": "action", "name": "display", "args": { "param": "freeze", "seconds": [4, 10] } }
+    ]},
+    { "type": "random", "weights": [0.46, 0.26, 0.14, 0.14], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "burrow", "args": { "seconds": [30, 120] } },
+      { "type": "action", "name": "wander", "args": { "distance_m": "$wanderDistance_m", "stayNearHome_m": 3 } },
+      { "type": "action", "name": "forage", "args": { "seconds": [3, 8] } }
+    ]}
+  ]}
+}

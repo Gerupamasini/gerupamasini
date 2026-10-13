@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { makeBaseImage, WaterLayer, SUB_COLORS } from './mapImages';
+import { reedMapColour } from '../../world/ReedBed';
 import { CardHead } from '../common/Icons';
 
 const PX = 720;
@@ -30,11 +31,23 @@ export function MapOverlay({ app }: { app: App }) {
       // tide pools: label the larger ones
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
-      for (const pool of world.habitat.pools.slice(0, 8)) {
-        if (pool.area < 20) continue;
+      let labelled = 0;
+      for (const pool of world.habitat.pools) {
+        // only pools standing above the tide (a drowned hollow is just sea), the eight largest
+        if (pool.area < 20 || pool.level < world.tideLevel + 0.02) continue;
+        if (++labelled > 8) break;
         const [x, z] = toPx(pool.cx, pool.cz);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillText(t('map.legend.pool'), x, z - 6);
+      }
+      // clam beds (debug): rings on the sand where the siphon holes are
+      if (ui.debug.value && app.clams) {
+        ctx.strokeStyle = 'rgba(232,207,154,0.9)';
+        ctx.lineWidth = 1;
+        for (const b of app.clams.beds) {
+          const [x, z] = toPx(b.x, b.z);
+          ctx.beginPath(); ctx.arc(x, z, Math.max(2, b.r * scale), 0, Math.PI * 2); ctx.stroke();
+        }
       }
       // creatures (debug)
       if (ui.debug.value && ui.debugState.value.markers && app.creatures) {
@@ -75,6 +88,9 @@ export function MapOverlay({ app }: { app: App }) {
     [SUB_COLORS[0], t('map.legend.sand')], [SUB_COLORS[1], t('map.legend.muddy')], [SUB_COLORS[2], t('map.legend.mud')],
     ['rgb(40,120,150)', t('map.legend.water')], ['rgb(70,150,165)', t('map.legend.pool')],
   ];
+  // the levee and its reeds, where the flat has them
+  if (app.world?.riprap) legend.push([SUB_COLORS[5], t('map.legend.rock')]);
+  if (app.world?.reeds) legend.push([`rgb(${reedMapColour(app.world.season).map((c) => c | 0).join(',')})`, t('map.legend.reeds')]);
   return (
     <div class="map-overlay" onClick={(e) => { if (e.target === e.currentTarget) app.toggleMap(); }}>
       <div class="map-card glass">

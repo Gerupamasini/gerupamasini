@@ -1,8 +1,9 @@
 import {
-  ACESFilmicToneMapping, Color, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
+  Color, CustomToneMapping, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
   NoToneMapping, PerspectiveCamera, RGBAFormat, Scene, Vector2, Vector3, WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { createPost } from './HeroPost.js';
+import { renderSize } from './RenderSize';
 import type { WaterPass } from '../world/Water';
 
 export const LAYER_FISH = 2;
@@ -21,6 +22,8 @@ export interface SharedUniforms {
   uTime: IUniform<number>;
   uScatter: IUniform<number>;
   uInterior: IUniform<number>;
+  /** the surroundings' light diffused through the body from its far side */
+  uAmbThrough: IUniform<number>;
   uCausticAmt: IUniform<number>;
   uFinDensity: IUniform<number>;
   uDebug: IUniform<number>;
@@ -51,7 +54,8 @@ export interface HeroLighting {
 export class HeroPipeline {
   readonly shared: SharedUniforms;
   private readonly envRT: WebGLRenderTarget;
-  private readonly mainRT: WebGLRenderTarget;
+  private mainRT: WebGLRenderTarget;
+  private readonly rtOpts: { type: typeof HalfFloatType; format: typeof RGBAFormat; generateMipmaps: boolean; minFilter: typeof LinearMipmapLinearFilter; magFilter: typeof LinearFilter; depthBuffer: boolean };
   private readonly compRT: WebGLRenderTarget;
   private readonly post = createPost();
   private width = 1;
@@ -72,6 +76,7 @@ export class HeroPipeline {
       uTime: { value: 0 },
       uScatter: { value: 1.0 },
       uInterior: { value: 0.45 },
+      uAmbThrough: { value: 5.0 },   // as the field's goby bodies (GOBY_LIGHT.uGbAmbient)
       uCausticAmt: { value: 0.15 },
       uFinDensity: { value: 1.0 },
       uDebug: { value: 0 },
@@ -82,6 +87,7 @@ export class HeroPipeline {
       uResolution: { value: new Vector2(1, 1) },
     };
     const rtOpts = { type: HalfFloatType, format: RGBAFormat, generateMipmaps: true, minFilter: LinearMipmapLinearFilter, magFilter: LinearFilter, depthBuffer: true };
+    this.rtOpts = rtOpts;
     this.envRT = new WebGLRenderTarget(4, 4, rtOpts);
     const depth = new DepthTexture(4, 4, FloatType);
     depth.minFilter = NearestFilter;
@@ -98,6 +104,20 @@ export class HeroPipeline {
     this.post.material.uniforms.uTex.value = this.mainRT.texture;
     this.post.material.uniforms.uBloom.value = 0.18;
     this.post.material.uniforms.uExposure.value = 1.0;
+  }
+
+  /** Multisampling of the main buffer (the field's tier, 0: none): the buffer is rebuilt on a change. */
+  setSamples(n: number): void {
+    if (this.mainRT.samples === n) return;
+    const old = this.mainRT;
+    const rt = new WebGLRenderTarget(this.width, this.height, { ...this.rtOpts, samples: n });
+    const depth = new DepthTexture(this.width, this.height, FloatType);
+    depth.minFilter = NearestFilter;
+    depth.magFilter = NearestFilter;
+    rt.depthTexture = depth;
+    this.mainRT = rt;
+    this.post.material.uniforms.uTex.value = rt.texture;
+    old.dispose();
   }
 
   resize(width: number, height: number): void {
@@ -131,13 +151,19 @@ export class HeroPipeline {
 
   render(scene: Scene, camera: PerspectiveCamera, dt: number, water: WaterPass | null = null): void {
     const r = this.renderer;
-    const size = r.getDrawingBufferSize(new Vector2());
+    const size = renderSize(r, new Vector2());
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
     this.shared.uTime.value += dt;
     this.shared.uCamNearFar.value.set(camera.near, camera.far);
+    // (the home tank's renderer points these at its own buffers while it draws a hero fish)
+    this.shared.uBg.value = this.envRT.texture;
+    this.shared.uBgDepth.value = this.envRT.depthTexture;
+    this.shared.uResolution.value.set(this.width, this.height);
     const prevTone = r.toneMapping;
     const prevBg = scene.background;
     r.toneMapping = NoToneMapping;
+    // 0. what the water mirrors (the land and the sky)
+    if (water) { camera.updateMatrixWorld(); water.prepare(r, scene, camera); }
     // 1. opaque scene plus the fins that must show through the thin body
     camera.layers.set(0);
     camera.layers.enable(LAYER_BEHIND);
@@ -156,7 +182,7 @@ export class HeroPipeline {
     // 3. tone map to the screen
     r.setRenderTarget(null);
     r.render(this.post.scene, this.post.camera);
-    r.toneMapping = prevTone === NoToneMapping ? ACESFilmicToneMapping : prevTone;
+    r.toneMapping = prevTone === NoToneMapping ? CustomToneMapping : prevTone;
     scene.background = prevBg;
     camera.layers.set(0);
   }

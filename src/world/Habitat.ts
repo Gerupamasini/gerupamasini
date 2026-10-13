@@ -73,7 +73,21 @@ const WET_TAU_MS: Record<Substrate, number> = {
   mud: 120 * 60 * 1000,
   gravel: 30 * 60 * 1000,
   channel: 180 * 60 * 1000,
+  rock: 15 * 60 * 1000,
 };
+
+/**
+ * A coarse cell's feature tags from its eelgrass cover `c`, the lowest and highest cover of its four neighbours and
+ * how suitable for eelgrass it is (`zone`). A bed is 'eelgrass'; its thin margin, a dense cell against open sand and
+ * an open cell against a bed are all 'eelgrass_edge'; open sand where eelgrass could grow is 'bare'.
+ */
+export function featureTagsOf(c: number, lo: number, hi: number, zone: number): HabitatTag[] {
+  const tags: HabitatTag[] = [];
+  if (c >= 0.4) tags.push('eelgrass');
+  if ((c > 0.06 && c < 0.4) || (c >= 0.4 && lo < 0.1) || (c <= 0.06 && hi >= 0.4)) tags.push('eelgrass_edge');
+  if (zone > 0.3 && c <= 0.06) tags.push('bare');
+  return tags;
+}
 
 /**
  * Habitat state derived from the terrain and the tide: depth, exposure, tide pools (depressions keep water at their
@@ -97,6 +111,8 @@ export class Habitat {
   readonly coarseDist: Float32Array;
   /** per coarse cell: the level of the small pool or feeding pit in it (else -1e3) */
   readonly coarseSmallPool: Float32Array;
+  /** per coarse cell: the standing features (eelgrass, its edge, bare sand among it), whatever the tide */
+  readonly featureTags: HabitatTag[][];
   tideLevel = 0;
   /** running high-water mark that decays toward the tide level (drives the wet band) */
   wetLevel = 0;
@@ -110,6 +126,7 @@ export class Habitat {
     this.cn = Math.max(2, Math.round(terrain.size / coarseCell));
     const cn2 = this.cn * this.cn;
     this.tags = Array.from({ length: cn2 }, () => []);
+    this.featureTags = Array.from({ length: cn2 }, () => []);
     this.lastWet = new Float64Array(cn2);
     this.coarseHeight = new Float32Array(cn2);
     this.coarseSubstrate = new Uint8Array(cn2);
@@ -186,22 +203,84 @@ export class Habitat {
     this.pools.sort((a, b) => b.area - a.area);
   }
 
-  private buildPoolLevels(): Float32Array {
-    const n = this.terrain.n, out = new Float32Array(n * n).fill(-1e3);
-    for (const p of this.pools) for (const k of p.cells) out[k] = p.level;
-    // grow each pool by two cells so its shallow fringe (less than 3 cm deep) is covered too
+  /**
+   * Running water the tide does not explain: the trickle in a creek's bed at low water, whose surface falls with the
+   * bed to the sea (`levelAt`: its height at a point, or -1e3 off the creeks). Written into the pool levels the
+   * shaders and the map read, grown two cells like the pools, so the waterline is the ground's own contour; the
+   * player's wading depth is the tide's (a few centimetres of trickle are not water to wade).
+   */
+  addStreams(levelAt: (x: number, z: number) => number): void {
+    const t = this.terrain, n = t.n, h = t.heights, out = this.poolLevels, mark = new Uint8Array(n * n);
+    for (let k = 0; k < n * n; k++) {
+      const i = k % n, j = (k - i) / n;
+      if (i === 0 || j === 0 || i === n - 1 || j === n - 1) continue;
+      const level = levelAt(-t.half + i * t.cell, -t.half + j * t.cell);
+      // (a trickle is centimetres deep: never a slab of water standing over a deeper bed)
+      if (level > h[k] + 0.003 && level < h[k] + 0.25 && level > out[k]) { out[k] = level; mark[k] = 1; }
+    }
     for (let pass = 0; pass < 2; pass++) {
-      const src = out.slice();
+      const src = out.slice(), was = mark.slice();
       for (let k = 0; k < n * n; k++) {
         if (src[k] > -1e2) continue;
         const i = k % n, j = (k - i) / n;
         let best = -1e3;
         for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
           const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n || !was[jj * n + ii]) continue;
+          best = Math.max(best, src[jj * n + ii]);
+        }
+        // (onto the dry side of the waterline only, and never onto the border)
+        if (best > -1e2 && h[k] >= best - 0.003 && i > 0 && j > 0 && i < n - 1 && j < n - 1) { out[k] = best; mark[k] = 1; }
+      }
+    }
+  }
+
+  /**
+   * Fill each pool's whole shallow fringe (see buildPoolLevels), for a map whose gentle mud slopes make that fringe
+   * metres wide: its waterline then follows the ground, not the outline of the cells. (Opt-in per map, so the
+   * other flats keep their tuned pools.)
+   */
+  fillPoolFringes(): void {
+    this.poolLevels.set(this.buildPoolLevels(true));
+  }
+
+  private buildPoolLevels(fringe = false): Float32Array {
+    const n = this.terrain.n, out = new Float32Array(n * n).fill(-1e3);
+    for (const p of this.pools) for (const k of p.cells) out[k] = p.level;
+    // the shallow fringe (less than 3 cm deep) is part of the same hollow: follow it out to where the ground meets
+    // the level, so the waterline is the ground's own contour and not the outline of the cells (on a gentle mud
+    // slope that fringe is metres wide)
+    const h = this.terrain.heights, spill = this.spill;
+    if (fringe) for (const p of this.pools) {
+      const stack = p.cells.slice();
+      while (stack.length) {
+        const c = stack.pop()!;
+        const i = c % n, j = (c - i) / n;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+          const kk = jj * n + ii;
+          if (out[kk] >= p.level || spill[kk] <= h[kk] || Math.abs(spill[kk] - p.level) > 1e-4) continue;
+          out[kk] = p.level;
+          stack.push(kk);
+        }
+      }
+    }
+    // and grow each pool by two cells, so the cells the waterline crosses carry its level on both sides (with the
+    // fringe filled, only onto the dry side of it: never over a rim onto lower ground, nor onto the map's border)
+    for (let pass = 0; pass < 2; pass++) {
+      const src = out.slice();
+      for (let k = 0; k < n * n; k++) {
+        if (src[k] > -1e2) continue;
+        const i = k % n, j = (k - i) / n;
+        if (fringe && (i === 0 || j === 0 || i === n - 1 || j === n - 1)) continue;
+        let best = -1e3;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const ii = i + di, jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
           best = Math.max(best, src[jj * n + ii]);
         }
-        if (best > -1e2) out[k] = best;
+        if (best > -1e2 && (!fringe || h[k] >= best - 0.003)) out[k] = best;
       }
     }
     // stingray pits: too small for the pool search. Each holds water up to just under the foot of its rim (the
@@ -229,6 +308,35 @@ export class Habitat {
       }
     }
     return out;
+  }
+
+  /**
+   * The standing features of the ground, sampled per coarse cell: eelgrass cover (0..1) and whether eelgrass could grow
+   * there at all (0..1). Cells become 'eelgrass' (a bed), 'eelgrass_edge' (the bed's margin and the sand right against
+   * it: where the animals of both meet) and 'bare' (open sand inside the eelgrass zone).
+   */
+  setFeatures(sample: (x: number, z: number) => { eelgrass: number; zone: number }): void {
+    const cn = this.cn, cs = this.coarse, cover = new Float32Array(cn * cn), zone = new Float32Array(cn * cn);
+    for (let j = 0; j < cn; j++) for (let i = 0; i < cn; i++) {
+      const [cx, cz] = this.coarseCenter(i, j);
+      let c = 0, zn = 0;
+      for (const [u, v] of [[0, 0], [-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]] as const) {
+        const f = sample(cx + u * cs, cz + v * cs);
+        c += f.eelgrass; zn += f.zone;
+      }
+      const k = j * cn + i;
+      cover[k] = c / 5; zone[k] = zn / 5;
+    }
+    for (let j = 0; j < cn; j++) for (let i = 0; i < cn; i++) {
+      const k = j * cn + i, c = cover[k];
+      let lo = 1, hi = 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= cn || jj >= cn) continue;
+        lo = Math.min(lo, cover[jj * cn + ii]); hi = Math.max(hi, cover[jj * cn + ii]);
+      }
+      this.featureTags[k] = featureTagsOf(c, lo, hi, zone[k]);
+    }
   }
 
   /** A random point inside a tide pool or feeding pit within a coarse cell (water above the tide), or null. */
@@ -303,7 +411,8 @@ export class Habitat {
     this.lastUpdateMs = nowMs;
     // high-water mark decays 0.25 m per hour toward the tide; capped so a tide jump
     // (ticket, debug override) does not leave the whole flat looking freshly wetted
-    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.25 * dtH), tideLevel + 0.18);
+    // the damp mark follows the ebb down slowly: at low water most of the flat still carries the sheen of the last tide
+    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.05 * dtH), tideLevel + 1.4);
     const cn = this.cn, cn2 = cn * cn;
     const wet = new Uint8Array(cn2);
     for (let k = 0; k < cn2; k++) {
@@ -336,7 +445,7 @@ export class Habitat {
       const depth = water - ground;
       const sub = palette[this.coarseSubstrate[k]] ?? 'mud';
       if (depth <= 0) {
-        tags.push(sub === 'sand' || sub === 'gravel' ? 'exposed_sand' : 'exposed_mud');
+        tags.push(sub === 'sand' || sub === 'gravel' || sub === 'rock' ? 'exposed_sand' : 'exposed_mud');
         if (dist[k] <= this.coarse * 1.01) tags.push('waterline');
       } else {
         if (inPool) tags.push('pool');
@@ -346,6 +455,7 @@ export class Habitat {
       }
       // a small pool or a feeding pit in this cell still holds water above the tide: a nursery for small animals
       if (this.coarseSmallPool[k] > tideLevel + 0.01) tags.push('small_pool');
+      for (const f of this.featureTags[k]) tags.push(f);
       this.tags[k] = tags;
     }
   }

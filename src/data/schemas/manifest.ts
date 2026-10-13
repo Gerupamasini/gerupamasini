@@ -9,6 +9,8 @@ export const ManifestSchema = z.object({
   items: z.string(),
   strings: z.string(),
   defaultMap: z.string(),
+  /** the places on the coast the player picks from (optional: one spot per map when missing) */
+  spots: z.string().optional(),
 });
 export type Manifest = z.infer<typeof ManifestSchema>;
 

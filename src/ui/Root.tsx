@@ -1,3 +1,4 @@
+import { skillKeyOf } from '../systems/Encyclopedia';
 import { h, Fragment } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { App } from '../app/App';
@@ -7,19 +8,26 @@ import { Minimap } from './hud/Minimap';
 import { MapOverlay } from './hud/MapOverlay';
 import { Toasts } from './hud/Toasts';
 import { Menu } from './menu/Menu';
-import { TicketDialog } from './ticket/TicketDialog';
 import { TideTable } from './tide/TideTable';
 import { Zukan } from './zukan/Zukan';
 import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { TankPanel } from './tank/TankPanel';
+import { RoomPlacement } from './tank/RoomPlacement';
+import { CaseOverlay } from './field/CaseOverlay';
+import { SpotSelect } from './home/SpotSelect';
+import { ShopScreen } from './home/ShopScreen';
+import { GachaScreen } from './home/GachaScreen';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
+import { TouchControls } from './TouchControls';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
 import { tideName } from '../core/Moon';
 import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
+import './mobile.css';
+import './tank/room.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;
@@ -28,7 +36,7 @@ export function Root({ app }: { app: App }) {
     app.canvas.addEventListener('click', onClick);
     return () => app.canvas.removeEventListener('click', onClick);
   }, [app]);
-  const inField = screen === 'field' || screen === 'capture' || screen === 'observe';
+  const inField = screen === 'field' || screen === 'capture' || screen === 'observe' || screen === 'caseView';
   return (
     <Fragment>
       {screen === 'boot' && <Loading />}
@@ -36,18 +44,25 @@ export function Root({ app }: { app: App }) {
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
-      {ui.transition.value && <Transition label={ui.transition.value} />}
+      {screen === 'roomPlacement' && <RoomPlacement app={app} />}
+      {ui.transition.value && <Transition label={ui.transition.value} touch={app.input.touchDevice} />}
+      {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
+      {screen === 'caseView' && <CaseOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
-      {inField && <CreatureMarkers />}
+      {inField && !app.input.touchDevice && <CreatureMarkers />}
       {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
-      {screen === 'ticket' && <TicketDialog app={app} />}
+      {screen === 'spots' && <SpotSelect app={app} />}
+      {screen === 'shop' && <ShopScreen app={app} />}
+      {screen === 'gacha' && <GachaScreen app={app} />}
+      {screen === 'ticket' && <TideTable app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
-      {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
-      <Toasts />
+      {!app.input.touchDevice && ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
+      {app.input.touchDevice && <TouchControls key={screen} app={app} />}
+      <Toasts app={app} />
     </Fragment>
   );
 }
@@ -55,18 +70,19 @@ export function Root({ app }: { app: App }) {
 /** The tank's edit screen: the drawer, a badge saying time stands still, and a way back. */
 function TankEdit({ app }: { app: App }) {
   return (
-    <Fragment>
+    <div class="tank-edit">
       <div class="edit-badge rise">
         <span class="eyebrow">{t('tank.editing')}</span>
         <button class="btn ghost sm" onClick={() => app.closeTankEdit()}>{t('home.back')} <Key k="Esc" /></button>
       </div>
       <TankPanel app={app} />
-    </Fragment>
+    </div>
   );
 }
 
 /** The curtain between screens. */
-function Transition({ label }: { label: string }) {
+function Transition({ label, touch }: { label: string; touch: boolean }) {
+  if (touch) return <div class="screen loading transition mobile-transition"><span role="status">{label}</span></div>;
   return (
     <div class="screen loading transition">
       <h1 class="wordmark">{t('app.title')}</h1>
@@ -117,10 +133,18 @@ function Title({ app }: { app: App }) {
           <span>{t('hud.tide')} <span class="num">{level >= 0 ? '+' : ''}{(level * 100).toFixed(0)} cm</span></span>
         </div>
         <div class="title-actions rise d4">
-          <button class="btn primary lg" onClick={() => void app.startNewGame()}>{t('title.start')} <ArrowIcon /></button>
-          {ui.hasSave.value && <button class="btn lg" onClick={() => void app.continueGame()}>{t('title.continue')}</button>}
+          {ui.hasSave.value && <button class="btn primary lg" onClick={() => void app.continueGame()}>{t('title.continue')} <ArrowIcon /></button>}
+          <button class={`btn lg ${ui.hasSave.value ? 'ghost' : 'primary'}`} onClick={() => void app.startNewGame().catch(() => {})}>{ui.hasSave.value ? '新しくはじめる' : t('title.start')}</button>
           <button class="btn ghost lg" onClick={() => app.openOverlay('menu')}>{t('title.settings')}</button>
         </div>
+        {ui.saveRecovery.value && <div class="save-recovery" role="alert">
+          <p>{ui.saveRecovery.value.message}</p>
+          <div class="buttons">
+            {ui.saveRecovery.value.backup && <button class="btn" onClick={() => void app.restoreBackup()}>バックアップを復元</button>}
+            <button class="btn" onClick={() => void app.downloadSave(true)}>元データを保存</button>
+            <button class="btn" onClick={() => void app.continueGame()}>読み込みを再試行</button>
+          </div>
+        </div>}
       </div>
       <div class="title-foot rise d5">
         <span class="build" title={BUILD.builtAt ? `ビルド ${BUILD.builtAt}` : undefined}>
@@ -134,15 +158,27 @@ function Title({ app }: { app: App }) {
 
 const KEY_HINTS: [string[], string][] = [
   [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '視点'], [['E'], '採集'], [['F'], '観察'],
-  [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
+  [['Space'], 'ジャンプ'], [['G'], 'サングラス'], [['Q'], 'ケース'], [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
 ];
 
 function Hud({ app }: { app: App }) {
   const hud = ui.hud.value;
   const screen = ui.screen.value;
+  if (app.input.touchDevice) return <Fragment>
+    <div class="mobile-field-status">
+      <span class="num">{hud.timeText}</span>
+      <span>潮位 {(hud.tideLevel * 100).toFixed(0)} cm</span>
+      <span>ケース {hud.caseCount}/{hud.caseMax}</span>
+      {hud.tooDeep && <span class="mobile-depth-warning">水深注意</span>}
+      {hud.ticket && <span class="mobile-ticket">潮時 {Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span>}
+    </div>
+    <div class="mobile-field-tide"><TideGauge /></div>
+    <button class="btn mobile-minimap" aria-label="地図を開く" onClick={() => app.toggleMap()}><Minimap app={app} /></button>
+    <div class="reticle" />
+  </Fragment>;
   return (
     <Fragment>
-      {!hud.pointerLocked && screen === 'field' && (
+      {!app.input.touchDevice && !hud.pointerLocked && screen === 'field' && (
         <div class="screen center transparent" onClick={() => app.focusGame()}>
           <div class="ready">
             <div class="ready-pill">{t('hud.ready')} <Key k="Enter" /></div>
@@ -157,6 +193,7 @@ function Hud({ app }: { app: App }) {
           <span class="meta">{t(`tod.${hud.tod}`)} ・ {t(`season.${hud.season}`)}</span>
         </div>
         <TideGauge />
+        {ui.settings.value.sunglasses && <div class="glasses-badge">{t('hud.sunglasses')} <span class="key">G</span></div>}
         {hud.ticket && (
           <div class={`ticket-badge ${hud.ticket.phase}`}>
             {t('hud.ticket')} ・ {hud.ticket.phase === 'ending' ? t('ticket.ending') : <span><span class="num">{hud.ticket.targetText}</span> {t('ticket.remaining')} <span class="num">{Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span></span>}
@@ -170,10 +207,13 @@ function Hud({ app }: { app: App }) {
           <div>{t('hud.case')}<b>{hud.caseCount}<span class="dim">/{hud.caseMax}</span></b></div>
           <div class="fps">{hud.fps} fps</div>
         </div>
-        <div class="hud-tools">
-          {(['hand_net', 'shovel'] as const).map((id, i) => (
-            <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{app.data.tools.get(id)?.ja ?? id}</button>
-          ))}
+        <div class="hud-tools" data-skills={Object.values(app.encyclopedia.skills.value).join(',')}>
+          {app.encyclopedia.loadout.value.map((id, i) => {
+            const tool = app.data.tools.get(id);
+            const lv = tool ? app.encyclopedia.skillLevel(skillKeyOf(tool)) : 0;
+            const on = ui.tool.value === id;
+            return <button key={id} class={`tool-chip ${on ? 'on' : ''}`} onClick={() => app.setTool(id)} aria-pressed={on}><Key k={String(i + 1)} />{tool?.ja ?? id}{lv > 0 && <span class="lv">Lv{lv}</span>}{on && <span class="use">{t('hud.inUse')}</span>}</button>;
+          })}
         </div>
       </div>
       <div class="reticle" />

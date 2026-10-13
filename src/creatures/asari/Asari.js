@@ -1,7 +1,8 @@
 import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3 } from 'three';
-import { AsariModel, ANATOMY, makeAsariPreview, sharedGeometry } from './AsariModel.js';
+import { AsariModel, FORMS, makeAsariPreview, sharedGeometry } from './AsariModel.js';
 import { AsariBehavior, STATE } from './AsariBehavior.js';
 import { makeShellOuterMaterial } from './AsariMaterial.js';
+import { bedPlane, bedTilt, fitBed } from '../physics/bed';
 
 export { STATE };
 
@@ -13,8 +14,8 @@ const THREAT_NEAR = 0.45;
 const THREAT_FAST_DIST = 2.2;
 const THREAT_FAST_SPEED = 0.9;
 
-const X = new Vector3(1, 0, 0), Z = new Vector3(0, 0, 1);
-const qLie = new Quaternion(), qUp = new Quaternion(), qTmp = new Quaternion(), qRock = new Quaternion();
+const X = new Vector3(1, 0, 0), Y = new Vector3(0, 1, 0), Z = new Vector3(0, 0, 1);
+const qLie = new Quaternion(), qUp = new Quaternion(), qTmp = new Quaternion(), qRock = new Quaternion(), qYaw = new Quaternion();
 const v1 = new Vector3(), v2 = new Vector3(), v3 = new Vector3();
 
 function hashString(s) {
@@ -29,11 +30,13 @@ function mulberry(seed) {
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /**
- * アサリ driver: builds the procedural model in attach(), runs AsariBehavior, and poses the rig against the
- * terrain every frame (burial depth, rocking, siphon length to reach the surface, sand clipping and decal).
+ * Burrowing-clam driver (アサリ, ハマグリ — the shell form decides which): builds the procedural model in
+ * attach(), runs AsariBehavior, and poses the rig against the terrain every frame (burial depth, rocking,
+ * siphon length to reach the surface, sand clipping and decal).
  */
 export class AsariDriver {
-  constructor() {
+  constructor(form = FORMS.asari) {
+    this.form = form;
     this.root = null;
     this.ind = null;
     this.model = null;
@@ -45,6 +48,9 @@ export class AsariDriver {
     this.lastPlayer = new Vector3();
     this.playerSpeed = 0;
     this.drift = new Vector3();
+    /** the plane of the sand under the shell (it lies, and digs in, square to the slope) */
+    this.plane = bedPlane();
+    this.bodyState = { mode: 'bed', heading: 0, y: 0 };
   }
 
   /** an empty holder; the clam is built once the individual (seeds, size) is known */
@@ -54,8 +60,8 @@ export class AsariDriver {
     return { root, parts: {}, length: 0.035 };
   }
 
-  static makePreview() {
-    const m = makeAsariPreview();
+  static makePreview(form = FORMS.asari, seed = 0.42) {
+    const m = makeAsariPreview(seed, form);
     m.root.rotation.set(0, 0.6, 0);
     return m.root;
   }
@@ -66,16 +72,17 @@ export class AsariDriver {
     const h = hashString(individual.id);
     const rand = mulberry(h);
     this.scale = individual.length_mm / 1000;
-    this.model = new AsariModel({ shellPatternSeed: rand(), shellColorSeed: rand() });
+    this.model = new AsariModel({ shellPatternSeed: rand(), shellColorSeed: rand(), form: this.form });
     this.model.root.scale.setScalar(this.scale);
     root.position.set(individual.pos.x, individual.pos.y, individual.pos.z);
     root.rotation.set(0, individual.heading, 0);
     root.add(this.model.root, this.model.decal);
     this.model.decal.scale.setScalar(this.scale * 0.8);
-    // most are found buried; a few lie on the sand (washed out / dropped) and dig in
-    const onSurface = rand() < 0.2;
+    // most are found buried; a few lie on the sand (washed out / dropped) and dig in; one set down in a case or a
+    // tank is seen whole first
+    const onSurface = rand() < 0.2 || root.userData.startOnSurface === true;
     this.lieSide = rand() < 0.5 ? 1 : -1;
-    this.uprightTilt = -1.05 + (rand() - 0.5) * 0.25;
+    this.uprightTilt = this.form.rest.tilt + (rand() - 0.5) * 0.25;
     this.beh = new AsariBehavior(rand, onSurface);
     this.beh.onEvent((id) => this.emit(id));
     this.drift.set(0, 0, 0);
@@ -113,7 +120,7 @@ export class AsariDriver {
     this.lastPlayer.copy(ctx.player);
     const threat = dist < THREAT_NEAR || (dist < THREAT_FAST_DIST && this.playerSpeed > THREAT_FAST_SPEED) || ind.alert > 0.7;
 
-    b.update(sdt, { threat, submerged });
+    b.update(sdt, { threat, submerged, canBurrow: ctx.canBurrow ?? true });
 
     // ---- LOD
     const lod = ctx.locked || dist < LOD0_DIST ? 0 : dist < LOD1_DIST ? 1 : 2;
@@ -131,13 +138,19 @@ export class AsariDriver {
     qTmp.multiply(qRock);
     m.root.quaternion.copy(qTmp);
     // lying on a valve, the foot probes obliquely down into the sand rather than along it
-    m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, ANATOMY.footDir);
-    const centreY = 0.16 + (-0.69 - 0.16) * smooth(0.12, 1, b.burial);
+    m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, m.anatomy.footDir);
+    // lying on a valve: half-width 0.26 L, sunk ~0.06 L into the sand; buried upright the shell top (~0.46 L above
+    // its centre at this tilt) sits ~0.23 L under the surface
+    const rest = this.form.rest, A = m.anatomy;
+    const centreY = rest.lying + (rest.buried - rest.lying) * smooth(0.12, 1, b.burial);
     // pulled toward the foot during each stroke (a small lasting drift too)
-    v1.set(Math.cos(ANATOMY.footDir), Math.sin(ANATOMY.footDir), 0).applyQuaternion(qTmp);
+    v1.set(Math.cos(A.footDir), Math.sin(A.footDir), 0).applyQuaternion(qTmp);
     v1.y = 0;
     if (b.pull > 0) this.drift.addScaledVector(v1, b.pull * sdt * 0.4).clampLength(0, 0.25);
     root.position.set(ind.pos.x, ground, ind.pos.z);
+    // square to the sand it lies on or is dug into (a slope, the side of a ripple)
+    fitBed(ctx.floor, ind.pos.x, ind.pos.z, ind.heading, 0.5 * L, 0.4 * L, this.plane);
+    bedTilt(this.plane, 1, root.quaternion).multiply(qYaw.setFromAxisAngle(Y, ind.heading));
     m.root.position.set((this.drift.x + v1.x * b.pull) * L, centreY * L, (this.drift.z + v1.z * b.pull) * L);
 
     // ---- siphons long enough to just break the surface
@@ -150,15 +163,15 @@ export class AsariDriver {
       // the openings sit just proud of the sand (reference 049: two fringed holes almost flush)
       return Math.min(0.9, Math.max(0.12, below / up + 0.012));
     };
-    const reach = b.burial > 0.5 ? siphonLen(ANATOMY.siphonIn, m.siphonIn.grp) : 0.16;
-    const reachOut = b.burial > 0.5 ? siphonLen(ANATOMY.siphonOut, m.siphonOut.grp) : 0.13;
+    const reach = b.burial > 0.5 ? siphonLen(A.siphonIn, m.siphonIn.grp) : 0.16;
+    const reachOut = b.burial > 0.5 ? siphonLen(A.siphonOut, m.siphonOut.grp) : 0.13;
     const ext = b.extOut, open = b.openOut;
     const sIn = { len: 0.03 + ext * reach, open, swayY: b.swayY, swayZ: b.swayZ };
     const sOut = { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY, swayZ: b.swayZ * 1.08 };   // fused: they move together
     m.pose(b.gapeOut, b.foot, sIn, sOut, b.breath * b.gapeOut);
     // fully under the sand: skip the shell draws altogether
     const buriedDeep = b.burial > 0.97;
-    m.left.pivot.visible = m.right.pivot.visible = !buriedDeep;
+    m.left.pivot.visible = m.right.pivot.visible = m.left.mantlePivot.visible = m.right.mantlePivot.visible = !buriedDeep;
     m.softBody.visible = !buriedDeep && lod < 2;
     m.setSand(ground, 0.06, submerged ? 1 : 0.8, true);
 
@@ -169,8 +182,9 @@ export class AsariDriver {
     du.uDecal.value.set(b.disturb * 0.75, holes, 0, (1 - smooth(0.4, 0.9, b.burial)) * 0.6);
     if (holes > 0) {
       // the holes sit under the deformed siphon tips (same bend as the vertex shader: offset = sway · L at t = 1)
-      const tip = (out, s, grp) => out.set(s.len, s.swayY * s.len, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
-      tip(v2, sIn, m.siphonIn.grp); tip(v3, sOut, m.siphonOut.grp);
+      // (plus the Y fork baked into the geometry: the inhalant tip parts ventrally, the exhalant dorsally)
+      const tip = (out, s, grp, fork) => out.set(s.len, s.swayY * s.len + fork, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
+      tip(v2, sIn, m.siphonIn.grp, A.siphonFork); tip(v3, sOut, m.siphonOut.grp, -A.siphonFork);
       root.worldToLocal(v2); root.worldToLocal(v3);
       const half = this.scale * 0.8;
       const mx = (v2.x + v3.x) / (2 * half), mz = (v2.z + v3.z) / (2 * half);
@@ -198,6 +212,29 @@ export class AsariDriver {
 
   get state() { return this.beh?.state; }
 
+  /** the shell on the sand is in the others' way (but never moved by them); dug in, it is out of it */
+  body() {
+    const st = this.bodyState, ind = this.ind;
+    st.mode = this.beh && this.beh.burial > 0.5 ? 'away' : 'bed';
+    if (ind) { st.heading = ind.heading; st.y = ind.pos.y; }
+    return st;
+  }
+
+  /** Check the posed valves, not the brain intent or the siphons protruding from the sand. */
+  canNetCapture() {
+    if (!this.root || !this.model || !this.ind) return false;
+    this.root.updateWorldMatrix(true, true);
+    for (const shell of [this.model.left, this.model.right]) {
+      if (!shell.pivot.visible) continue;
+      const mesh = shell.valve, positions = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < positions.count; i++) {
+        this.tmp.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+        if (this.tmp.y > this.ind.pos.y + 0.001) return true;
+      }
+    }
+    return false;
+  }
+
   dispose() {
     this.detach();
     this.listeners.clear();
@@ -211,9 +248,9 @@ export class AsariDriver {
  *
  * @param {{ x: number, y: number, z: number, length_m: number, yaw?: number }[]} items
  */
-export function createAsariBed(items, lod = 2) {
-  const geo = sharedGeometry().valve[lod].clone();
-  const mat = makeShellOuterMaterial({ instanced: true });
+export function createAsariBed(items, lod = 2, form = FORMS.asari) {
+  const geo = sharedGeometry(form).valve[lod].clone();
+  const mat = makeShellOuterMaterial({ instanced: true, style: form.style });
   mat.userData.uniforms.uSand.value.set(-1e9, 0.04, 0, 0.8);
   const mesh = new InstancedMesh(geo, mat, items.length);
   const seeds = new Float32Array(items.length * 4);
@@ -222,7 +259,7 @@ export function createAsariBed(items, lod = 2) {
   items.forEach((it, i) => {
     const r = mulberry(i * 7919 + 17);
     // valves lie convex side up, half-sunk
-    o.position.set(it.x, it.y + it.length_m * 0.05, it.z);
+    o.position.set(it.x, it.y - it.length_m * 0.01, it.z);   // the margin rests on (just in) the sand
     o.rotation.set(-Math.PI / 2 + (r() - 0.5) * 0.3, it.yaw ?? r() * Math.PI * 2, (r() - 0.5) * 0.3, 'YXZ');
     o.scale.setScalar(it.length_m);
     o.updateMatrix();

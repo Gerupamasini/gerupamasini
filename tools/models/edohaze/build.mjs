@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Builds the エドハゼ GLB tiers (geometry + baked textures) procedurally, with the マハゼ pipeline.
-//   node tools/build-model.mjs [--fast] [--dump-textures <dir>]
+//   node tools/models/edohaze/build.mjs [--tier hero|lod1|lod2] [--fast] [--dump-textures <dir>]
+//   GOBY_GRAVID=1 node tools/models/edohaze/build.mjs --tier hero   (the gravid female)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } from './anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, GRAVID, profileTable, toObject, botY } from './anatomy.mjs';
 import { buildBody } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
@@ -31,7 +32,8 @@ const tier = TIERS[tierName];
 if (!tier) { console.error(`unknown tier ${tierName}`); process.exit(1); }
 const dumpIdx = args.indexOf('--dump-textures');
 const dumpDir = dumpIdx >= 0 ? args[dumpIdx + 1] : null;
-const outFile = path.join(root, 'src', 'assets', 'models', 'edohaze', `edohaze.${tierName}.glb`);
+// GOBY_GRAVID=1 builds the gravid female (egg-swollen belly) as its own set of tiers
+const outFile = path.join(root, 'src', 'assets', 'models', 'edohaze', `edohaze${GRAVID ? '_gravid' : ''}.${tierName}.glb`);
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
@@ -69,7 +71,7 @@ function image(gb, name, w, h, ch, data, fmt = 'png', quality = 92) {
   return gb.addImage(buf, fmt === 'jpeg' ? 'image/jpeg' : 'image/png', name);
 }
 
-const gb = new GLBBuilder();
+const gb = new GLBBuilder(SPECIES.generator);
 for (const e of ['KHR_materials_transmission', 'KHR_materials_volume', 'KHR_materials_ior', 'KHR_materials_clearcoat']) gb.useExtension(e);
 
 const LINEAR = 9729, MIPMAP = 9987, CLAMP = 33071, REPEAT = 10497;
@@ -170,7 +172,7 @@ const eye = buildEyeMesh(tier.eyeNT, tier.eyeNP);
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
 for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]) {
   const tr = eyeTransform(side);
-  const node = gb.addNode({ name, mesh: meshEye, rotation: tr.rotation });
+  const node = gb.addNode({ name, mesh: meshEye, rotation: tr.rotation, ...(tr.offset ? { translation: tr.offset } : {}) });
   gb.json.nodes[jointNodes[J[jn]]].children.push(node);
 }
 

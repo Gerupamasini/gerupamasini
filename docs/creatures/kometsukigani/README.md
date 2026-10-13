@@ -148,11 +148,13 @@ CrabRoot
 
 ## ゲームへの統合
 
+- 導入先は葛西（`kasai_west`）だけ。種データの出現規則に `maps: ["kasai_west"]` を書き、`App` は種の出現規則がその地図を許すとき（`Spawner.spawnsOnMap`）だけ群れを作る。走水・漫湖には出ない。別の干潟へ移るときは群れを片づける（`App.leaveWorld`）。
 - 種データ `public/data/species/scopimera_globosa.json`（`placement: "world"`、`aquatic: false`、`observeDistance_m: 0.05`（観察は甲幅の約 6 倍の距離から始まる。Z で望遠）、行動 10 種）。行動ツリー `crab_burrow`（何もしない。判断は個体の状態機械）。
 - `ScopimeraColony` を `App.enterField` で作り、毎フレーム `CreatureSystem.update` の前に更新する。近くの個体は `Individual`（`managed: 'colony'`）として CreatureSystem に入り、観察・図鑑・タモ・マーカーがそのまま使える。巣穴の奥の個体は狙えず、網にも入らない。
 - 観察カメラはカニの体の中心を追うが、巣穴に入っている間は口の上に留まる（カメラが砂の下へ潜らない）。
-- スコップで巣穴を掘ると、中にいる個体を捕まえられる（外にいた個体は家を失って走る）。
+- 掘る道具（移植ごて・ミニスコップ・熊手・シャベル）で巣穴を掘ると、中にいる個体を捕まえられる（外にいた個体は家を失って走る）。タモはどれでもよい（`net_*`）。巣穴の奥の個体は網に入らない（`CreatureSystem.canNetCapture` が `hidden` を断る）。
 - 時刻・潮位の飛び（チケット、デバッグ）では個体群を記録に戻して置き直す。
+- 図鑑の静止画像は `public/data/photos/scopimera_globosa.jpg`（`tools/photos/studio.html` で撮影、ほかの種の画像はそのまま）。
 - 自宅の水槽では個体が自分で歩き、水中なので摂食・ウェービングはしない。
 - デバッグ（F3）: 「カニの群れ」へ移動、統計（巣穴・個体・地表・砂団子）、「繁殖期にする」、マーカーに各個体の状態と内部状態。
 

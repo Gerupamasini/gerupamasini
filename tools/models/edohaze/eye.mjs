@@ -70,6 +70,8 @@ export function buildEyeMesh(NT = 64, NP = 96) {
   return { position, normal, uv, indices: new Uint32Array(tris) };
 }
 
+const EYE_PROTRUDE = 0.42; // mm
+
 /** Node transform (object space) for the left (+1) or right (-1) eye. */
 export function eyeTransform(side) {
   const c = [EYE.center[0], EYE.center[1], EYE.center[2] * side];
@@ -95,7 +97,10 @@ export function eyeTransform(side) {
     const S = Math.sqrt(1 + m22 - m00 - m11) * 2;
     qw = (m10 - m01) / S; qx = (m02 + m20) / S; qy = (m12 + m21) / S; qz = 0.25 * S;
   }
-  return { translation: toObject(c), rotation: [qx, qy, qz, qw] };
+  // the eyeball stands proud of the head skin (photos 028, 058, user refs: domed eyes, no socket ring):
+  // shifted out along its axis relative to the eye joint
+  const off = dirToObject(ax).map((v) => v * EYE_PROTRUDE * 0.001);
+  return { translation: toObject(c), rotation: [qx, qy, qz, qw], offset: off };
 }
 
 /** Iris / pupil texture (azimuthal-equidistant projection around the optical axis). */

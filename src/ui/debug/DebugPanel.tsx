@@ -47,6 +47,27 @@ export function DebugPanel({ app }: { app: App }) {
         <input type="range" min="0" max="1" step="0.05" value={d.overcast} onInput={(e) => app.setOvercast(Number((e.target as HTMLInputElement).value))} />
         <b>{Math.round(d.overcast * 100)}%</b>
       </div>
+      {app.world?.sea && (() => {
+        const sea = app.world.sea, p = app.player?.position;
+        const kinds = { land: '陸', swash: '遡上帯', breaker: '砕波帯', shallow: '浅い海', deep: '深い海' } as const;
+        const kind = p && app.world.surfZone ? kinds[app.world.surfZone.kindAt(p.x, p.z, app.world.tideLevel)] : '-';
+        return (
+          <div class="debug-row wrap">
+            <b>寄せ波</b>
+            <span>波高</span>
+            <input type="range" min="0.05" max="1.4" step="0.01" value={sea.height} onInput={(e) => app.setSea({ height: Number((e.target as HTMLInputElement).value) })} />
+            <b>{sea.height.toFixed(2)} m</b>
+            <span>周期</span>
+            <input type="range" min="2.5" max="12" step="0.1" value={sea.period} onInput={(e) => app.setSea({ period: Number((e.target as HTMLInputElement).value) })} />
+            <b>{sea.period.toFixed(1)} s</b>
+            <button onClick={() => app.setSea(null)}>この日の海</button>
+            <select value={String(d.surfView ?? 0)} onChange={(e) => app.setSurfDebug(Number((e.target as HTMLSelectElement).value))}>
+              <option value="0">そのまま</option><option value="1">区分</option><option value="2">泡の種類</option><option value="3">位相・砕波・水膜</option>
+            </select>
+            <span class="dim small">足もと: {kind}</span>
+          </div>
+        );
+      })()}
       <div class="debug-row">
         <label><input type="checkbox" checked={d.markers} onChange={(e) => app.setMarkers((e.target as HTMLInputElement).checked)} /> 生物マーカー</label>
         <label><input type="checkbox" checked={app.settings.heroMaterials} onChange={(e) => void app.updateSettings({ heroMaterials: (e.target as HTMLInputElement).checked })} /> ヒーロー材質</label>
@@ -58,6 +79,9 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('runnel')}>澪</button>
         <button onClick={() => app.teleport('creek')}>水路</button>
         <button onClick={() => app.teleport('pool')}>潮だまり</button>
+        <button onClick={() => app.teleport('clams')}>貝床</button>
+        <button onClick={() => app.teleport('oysters')}>牡蠣礁</button>
+        <button onClick={() => app.teleport('amamo')}>アマモ場</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
         <button onClick={() => app.teleport('crabs')}>カニの群れ</button>
       </div>
@@ -71,8 +95,33 @@ export function DebugPanel({ app }: { app: App }) {
           </div>
         );
       })()}
+      <div class="debug-row seg">
+        <span>出す生物</span>
+        <button onClick={() => app.setAllSpeciesShown(true)}>全部</button>
+        <button onClick={() => app.setAllSpeciesShown(false)}>なし</button>
+      </div>
+      <div class="debug-row wrap">
+        {[...app.data.species.values()].map((sp) => (
+          <label key={sp.id}><input type="checkbox" checked={!d.hidden.includes(sp.id)} onChange={(e) => app.setSpeciesShown(sp.id, (e.target as HTMLInputElement).checked)} /> {sp.names.ja}</label>
+        ))}
+      </div>
+      <div class="debug-row seg">
+        <span>習熟</span>
+        <button onClick={() => app.addMoney(500)}>+500 CR</button>
+        {(['hand_net', 'shovel'] as const).map((id) => {
+          const n = app.encyclopedia.skillCount(id), lv = app.encyclopedia.skillLevel(id);
+          return (
+            <span key={id} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+              <b>{app.data.tools.get(id)?.ja ?? id} Lv{lv}</b><span class="dim small">({n})</span>
+              <button onClick={() => app.setSkill(id, 0)}>0</button>
+              <button onClick={() => app.setSkill(id, n + 5)}>+5</button>
+              <button onClick={() => app.setSkill(id, 40)}>最大</button>
+            </span>
+          );
+        })}
+      </div>
       <div class="debug-row dim small">
-        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
+        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / マガキ 描画 {d.stats.oysters ?? '-'}（全 {d.stats.oystersTotal ?? 0}） / アマモ {d.stats.amamo ?? '-'}{d.stats.tank ? ` / 水槽 ${d.stats.tank}` : ''} / {hud.fps} fps / GPU {d.stats.gpuMs == null ? '-' : `${d.stats.gpuMs.toFixed(1)} ms`} / 描画 {d.stats.view ?? '-'} / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>
     </div>
   );

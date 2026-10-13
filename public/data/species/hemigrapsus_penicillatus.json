@@ -1,0 +1,42 @@
+{
+  "id": "hemigrapsus_penicillatus",
+  "names": { "ja": "ケフサイソガニ", "sci": "Hemigrapsus penicillatus", "en": "Hairy-handed shore crab" },
+  "taxon": { "group": "crustacean", "family": "Varunidae" },
+  "locomotion": "walk",
+  "collectable": true,
+  "protected": false,
+  "model": { "placeholder": "crab", "modelLength_mm": 25, "viewDistance_m": 12, "driver": "crab" },
+  "size": {
+    "length_mm": { "min": 8, "max": 32, "mean": 19, "sd": 5 },
+    "weightCoef": { "a": 0.00045, "b": 2.9 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": true },
+  "stages": [
+    { "id": "juvenile", "ja": "稚ガニ", "maxLength_mm": 11 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    { "tags": ["eelgrass_edge", "eelgrass"], "depth_m": [0.03, 1.0], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 3, "group": [1, 2], "maxPopulation": 30 },
+    { "tags": ["small_pool", "pool", "waterline"], "depth_m": [0.015, 0.4], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 1.5, "group": [1, 2], "maxPopulation": 30 }
+  ],
+  "brain": { "tree": "crab_shore", "params": { "fleeDistance_m": 1.1, "runDistance_m": 0.9, "restMean_s": 7 } },
+  "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.45, "alertPenalty": 0.5 },
+  "encyclopedia": {
+    "description": "潮間帯の石の下や牡蠣殻のすき間、アマモ場などにすむ小型のカニ。甲は四角く幅 2〜3cm、暗い緑褐色の地に紫がかった小さな斑点が散る。オスのはさみの付け根には褐色の毛の房（毛房）があり、名前の由来になっている。危険を感じるとはさみを振り上げて威嚇し、さらに近づくと横歩きで素早く逃げ、物陰や底に身を伏せる。",
+    "habitatHint": "アマモ場の縁や株の間、潮だまりや水際。近づくとはさみを振り上げる。",
+    "behaviors": [
+      { "id": "rest", "ja": "静止", "hint": "底でじっとしている" },
+      { "id": "walk", "ja": "横歩き", "hint": "脚を交互に運んで横へ歩く" },
+      { "id": "forage", "ja": "摂餌", "hint": "左右のはさみで交互に底の餌をつまむ" },
+      { "id": "claw_display", "ja": "威嚇", "hint": "はさみを振り上げて開く" },
+      { "id": "scuttle", "ja": "逃走", "hint": "横歩きで素早く走る" },
+      { "id": "hide", "ja": "身を伏せる", "hint": "脚を縮めて底に張りつく" }
+    ],
+    "placeholderModel": false
+  }
+}

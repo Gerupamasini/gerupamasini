@@ -5,6 +5,8 @@ export const MapSchema = z.object({
   id: z.string(),
   names: z.object({ ja: z.string(), en: z.string().optional() }),
   station: z.string(),
+  /** Environment-only maps can disable every animal spawn, including buried shellfish. */
+  animals: z.boolean().default(true),
   origin: z.object({ lat: z.number(), lon: z.number() }),
   size_m: z.number().positive(),
   resolution: z.number().int().positive(),
@@ -16,6 +18,35 @@ export const MapSchema = z.object({
     noEntry: z.array(z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])])).default([]),
   }),
   props: z.array(z.object({ type: z.string(), x: z.number(), z: z.number(), rot: z.number().default(0), scale: z.number().default(1) })).default([]),
+  /** the map's own shore features (src/world/maps/<layout>); absent: the 葛西 features */
+  layout: z.string().optional(),
+  /**
+   * A stone levee's centre line (x, z in m, from one drowned tip round to the other), its crest height (T.P. m), crest
+   * half-width, face slope (rise per run) and how far from each tip the crest sinks under: the terrain bake builds
+   * it and the riprap and the reeds follow it.
+   */
+  levee: z.object({
+    path: z.array(z.tuple([z.number(), z.number()])).min(2),
+    crest_tp_m: z.number(), crest_half_m: z.number().positive(), slope: z.number().positive(), tip_m: z.number().nonnegative(),
+  }).optional(),
+  /** a row of old bamboo stakes (竹杭) standing in the shallows, from one end to the other */
+  stakes: z.object({ from: z.tuple([z.number(), z.number()]), to: z.tuple([z.number(), z.number()]), count: z.number().int().positive().max(200) }).optional(),
+  /** Opt-in Rhizophora stylosa forest; heights are in the map's terrain datum. Existing temperate shores are unchanged. */
+  mangroves: z.object({
+    seed: z.number().int(),
+    clusters: z.array(z.object({ x: z.number(), z: z.number(), radius: z.number().positive(), count: z.number().int().nonnegative().max(1000),
+      /** overrides the layout's fraction: 1 scatters seedlings over open mud */
+      juvenileFraction: z.number().min(0).max(1).optional(),
+      /** deep forest rows: mid/high quality only */
+      deep: z.boolean().optional() })).max(1024),
+    juvenileFraction: z.number().min(0).max(1).optional(),
+    minGround: z.number().optional(), maxGround: z.number().optional(), minSpacing: z.number().positive().optional(),
+    scale: z.tuple([z.number().positive(), z.number().positive()]).optional(),
+  }).optional(),
+  /** how deep the player can wade: boots (the default, 35 cm) or chest waders */
+  wading: z.object({ gear: z.enum(['boots', 'waders']), maxDepth_m: z.number().positive() }).optional(),
+  /** habitat grid (coarse cell size) and how close to the player animals may appear */
+  habitat: z.object({ coarse_m: z.number().positive().default(5), minSpawnDist_m: z.number().nonnegative().default(10) }).optional(),
 });
 
 export type MapDef = z.infer<typeof MapSchema>;

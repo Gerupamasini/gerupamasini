@@ -89,10 +89,16 @@ flat varying vec4 vAsSeed;
 #endif
 
 vec3 asPalette(float k){
-  // ground colours seen in the reference set: tan-brown, grey, cream, charcoal-black, purplish brown, olive
   k = fract(k) * 6.0;
+#ifdef AS_SMOOTH
+  // ハマグリ: chestnut, dark brown-black, honey-tan, cream-white, lilac grey, olive tan (reference 001–036)
+  vec3 c0 = vec3(0.44, 0.32, 0.25), c1 = vec3(0.22, 0.16, 0.14), c2 = vec3(0.68, 0.58, 0.42);
+  vec3 c3 = vec3(0.80, 0.77, 0.70), c4 = vec3(0.47, 0.42, 0.44), c5 = vec3(0.56, 0.50, 0.38);
+#else
+  // ground colours seen in the reference set: tan-brown, grey, cream, charcoal-black, purplish brown, olive
   vec3 c0 = vec3(0.56, 0.44, 0.31), c1 = vec3(0.55, 0.54, 0.50), c2 = vec3(0.82, 0.77, 0.67);
   vec3 c3 = vec3(0.17, 0.17, 0.17), c4 = vec3(0.44, 0.33, 0.33), c5 = vec3(0.50, 0.49, 0.37);
+#endif
   vec3 a = k < 1.0 ? c0 : k < 2.0 ? c1 : k < 3.0 ? c2 : k < 4.0 ? c3 : k < 5.0 ? c4 : c5;
   vec3 b = k < 1.0 ? c1 : k < 2.0 ? c2 : k < 3.0 ? c0 : k < 4.0 ? c1 : k < 5.0 ? c0 : c1;
   return mix(a, b, smoothstep(0.55, 1.0, fract(k)) * 0.6);
@@ -109,22 +115,24 @@ float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out
   float post = smoothstep(0.45, 0.75, u) * (1.0 - smoothstep(0.9, 1.0, u));
   // radial ribs: ~100 fine flat-topped ribs, stronger on the posterior slope
   // ribs wander a little and vary in strength, as on a real shell
-  float ribC = u * 76.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.4;
-  float aR = 1.0 - smoothstep(0.12, 0.35, fwidth(ribC));
-  float ribW = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * mix(0.55, 1.2, asH(vec2(floor(ribC + 0.5), seed*3.0)));
+  // ~110 narrow ribs (reference shells): a fine texture, never broad stripes. Each layer is faded out well
+  // before it reaches the pixel size, otherwise it beats against the pixel grid into radial bands.
+  float ribC = u * 110.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.6;
+  float aR = pow(clamp(1.0 - 2.4*fwidth(ribC), 0.0, 1.0), 2.0);
+  float ribW = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * mix(0.8, 1.1, asH(vec2(floor(ribC + 0.5), seed*3.0)));
   float ribA = mix(0.45, 1.0, post) * smoothstep(0.03, 0.5, s);
   // commarginal threads with irregular spacing (growth rate varies)
   float g = s*s*34.0 + s*30.0 + asFbmU(u, s*9.0 + seed*7.0, 3.0) * 1.8;
-  float aG = 1.0 - smoothstep(0.12, 0.35, fwidth(g));
+  float aG = pow(clamp(1.0 - 2.4*fwidth(g), 0.0, 1.0), 2.0);
   float lamW = pow(0.5 + 0.5*cos(6.2831853*g), 3.0) * mix(0.5, 1.3, asH(vec2(floor(g + 0.5), seed*7.0)));
   float lamA = mix(0.5, 1.0, smoothstep(0.2, 0.9, s)) * mix(0.8, 1.25, 1.0 - post);
   // finer threads between them (about two per lamella)
   float g2 = g * 3.0 + 0.25;
-  float aT = 1.0 - smoothstep(0.08, 0.25, fwidth(g2));
+  float aT = pow(clamp(1.0 - 2.6*fwidth(g2), 0.0, 1.0), 2.0);
   float thrW = pow(0.5 + 0.5*cos(6.2831853*g2), 2.0);
   // beads where ribs and threads cross
-  asRibVis = mix(0.45, ribW, aR) * ribA;
-  asLamVis = mix(0.3, lamW, aG) * lamA;
+  asRibVis = mix(0.42, ribW, aR) * ribA;
+  asLamVis = mix(0.33, lamW, aG) * lamA;
   float bead = ribW * max(lamW, thrW*0.7) * (0.6 + 0.8*asN(vec2(ribC*1.7, g*1.3)));
   float aB = aR * min(aG, aT);
   // granules: isotropic noise on the shell's own surface (shell-length units), ~260 grains per length
@@ -154,6 +162,13 @@ float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out
   lost = ribA * 0.4 * (1.0 - aR) + lamA * 0.38 * (1.0 - aG) + 0.12 * (1.0 - aT)
        + ribA * 0.45 * (1.0 - aB) + 0.6 * grit * (1.0 - aM);
   extra = vec3((gran - 0.4) * aM * grit, bead * ribA * aB, grit);
+#ifdef AS_SMOOTH
+  // ハマグリ: smooth and glossy — fine growth lines and a few growth checks only, no radial sculpture
+  h = lamW * lamA * 0.1 * aG + thrW * 0.035 * aT - checks * 0.35 + (gran - 0.4) * 0.04 * aM;
+  lost = 0.1 * (1.0 - aG) + 0.035 * (1.0 - aT);
+  extra = vec3(0.0, 0.0, 0.05);
+  asRibVis = 0.5; asLamVis = mix(0.33, lamW, aG) * 0.4;
+#endif
   return h;
 }
 
@@ -174,8 +189,15 @@ vec3 asShellColor(vec2 uv, vec4 seed, float checks, float h, out float worn){
   // warp so nothing is perfectly regular
   float warp = (asFbmU(u, s*4.0 + ps*11.0, 4.0) - 0.5);
   // A: 網目 — two families of oblique lines crossing into a net of tents
+#ifdef AS_SMOOTH
+  // ハマグリ tent markings are finer, sharper zigzags; rays broader and commoner
+  w.y = max(w.y, step(0.4, hp2));
+  float K = mix(50.0, 90.0, asH(vec2(ps, 3.3)));
+  float M = mix(9.0, 16.0, asH(vec2(ps, 5.5)));
+#else
   float K = mix(26.0, 46.0, asH(vec2(ps, 3.3)));
   float M = mix(5.0, 9.0, asH(vec2(ps, 5.5)));
+#endif
   float warp2 = asFbmU(u, s*9.0 + ps*5.0, 10.0) - 0.5;
   float l1 = abs(fract(u*K + s*M + warp*3.0 + warp2*0.8) - 0.5);
   float l2 = abs(fract(u*K - s*M*1.2 + warp*2.4 - warp2*0.8 + 0.25) - 0.5);
@@ -184,11 +206,21 @@ vec3 asShellColor(vec2 uv, vec4 seed, float checks, float h, out float worn){
   float net = (1.0 - smoothstep(lw, lw + 0.08, tri)) * smoothstep(0.3, 0.55, asFbmU(u, s*3.0 + ps*13.0, 5.0));
   float tent = smoothstep(0.18, 0.3, max(l1, l2)) * smoothstep(0.35, 0.65, asFbmU(u, s*6.0 + ps*3.0, 9.0));
   float A = max(net*0.85, tent);
+#ifdef AS_SMOOTH
+  // ハマグリ: fine zigzag (W) lines running out from the umbo, broken and patchy — not a mesh
+  float zz = abs(fract(s*M*0.5) * 2.0 - 1.0);
+  float lz = abs(fract(u*K*0.5 + zz*0.9 + warp*2.0 + warp2*0.6) - 0.5);
+  A = (1.0 - smoothstep(0.035, 0.09, lz)) * smoothstep(0.4, 0.62, asFbmU(u, s*3.0 + ps*13.0, 5.0)) * 0.6;
+#endif
   // B: 帯状 radial rays (2–3) from the umbo, light or dark
   float B = 0.0;
   for (int i = 0; i < 3; i++) {
     float c = 0.2 + 0.6*asH(vec2(ps*7.0, float(i)*2.3));
+#ifdef AS_SMOOTH
+    float wid = 0.03 + 0.07*asH(vec2(float(i), ps*3.7));
+#else
     float wid = 0.015 + 0.05*asH(vec2(float(i), ps*3.7));
+#endif
     B = max(B, 1.0 - smoothstep(wid*0.5, wid, abs(u - c + warp*0.04)));
   }
   B *= smoothstep(0.05, 0.25, s);
@@ -201,16 +233,26 @@ vec3 asShellColor(vec2 uv, vec4 seed, float checks, float h, out float worn){
   vec3 col = ground * (0.85 + 0.3*asFbmU(u, s*3.0 + cs*5.0, 6.0));
   float fade = smoothstep(0.15, 0.6, asFbmU(u, s*2.0 + ps, 3.0) + 0.25);    // patterns fade in and out
   col = mix(col, dark, A * w.x * fade * 0.8);
+#ifdef AS_SMOOTH
+  col = mix(col, mix(dark, light, rayLight), B * w.y * 0.6);
+#else
   col = mix(col, mix(dark, light, rayLight), B * w.y * 0.85);
+#endif
   col = mix(col, mix(col*0.55, col*1.25, step(0.5, hp)), C * w.z * 0.7);
   col = mix(col, dark, D * w.w * 0.8 * fade);
   // growth checks show as darker lines
   col *= 1.0 - checks*0.22;
   // worn umbo: periostracum gone, chalky
   worn = (1.0 - smoothstep(0.0, 0.14, s + (asN(vec2(u*40.0, ps)) - 0.5)*0.05));
+#ifdef AS_SMOOTH
+  // worn ハマグリ beaks show the lilac-pink shell beneath; a pale band often runs inside the margin
+  col = mix(col, vec3(0.66, 0.50, 0.55), worn * 0.7);
+  col = mix(col, vec3(0.86, 0.80, 0.66), smoothstep(0.86, 0.9, s) * (1.0 - smoothstep(0.93, 0.96, s)) * step(0.55, asH(vec2(cs, 17.0))) * 0.6);
+#else
   col = mix(col, vec3(0.74, 0.71, 0.66), worn * 0.55);
   // dirt sits in the grooves
   col *= mix(0.72, 1.0, clamp(h*1.3 + 0.2, 0.0, 1.0));
+#endif
   return clamp(col, 0.0, 1.0);
 }
 `;
@@ -259,7 +301,7 @@ ${SAND_CLIP}
   vec3 asCol = asShellColor(vAsUv, AS_SEED, asChecks, asHt, asWorn);
   // grit in the colour: grain pits hold dirt, bead crests are abraded paler; sub-pixel grit greys the surface slightly
   asCol *= 1.0 + asX.x * 0.45;
-  asCol *= mix(0.74, 1.08, clamp(asRibVis*0.8 + asLamVis*0.35, 0.0, 1.0));
+  asCol *= mix(0.84, 1.05, clamp(asRibVis*0.8 + asLamVis*0.35, 0.0, 1.0));
   asCol = mix(asCol, asCol * 1.18 + 0.03, clamp(asX.y, 0.0, 1.0) * 0.35);
   asCol = mix(asCol, asCol * 0.93 + 0.03, clamp(asLost, 0.0, 1.0) * 0.25);
   float asWet = uSand.w;
@@ -270,16 +312,27 @@ ${SAND_TINT}`)
   roughnessFactor = 0.58 + (0.4 - asHt)*0.25 + asWorn*0.15 - asX.y*0.12 - asX.x*0.3 + asLost*0.35 + asX.z*0.08;
   roughnessFactor = clamp(roughnessFactor, 0.4, 0.97);
   roughnessFactor = mix(roughnessFactor, roughnessFactor*0.8, asWet);
+#ifdef AS_SMOOTH
+  // varnish-like periostracum: glossy whether wet or dry, duller only where worn
+  roughnessFactor = clamp(0.34 + asWorn*0.25 + asLost*0.2 + (asN(vAsUv*vec2(60.0, 30.0)) - 0.5)*0.08, 0.22, 0.7);
+#endif
   roughnessFactor = mix(roughnessFactor, 0.9, asBand);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   // sculpture relief ~0.35 % of the shell length (≈0.12 mm on a 35 mm clam)
-  normal = asBump(-vViewPosition, normal, asHt * 0.0035 * vAsScale * mix(0.6, 1.0, asDetail), faceDirection);`)
+  normal = asBump(-vViewPosition, normal, asHt * 0.0045 * vAsScale * mix(0.6, 1.0, asDetail), faceDirection);`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
   // the water film is broken up by the grit: only the smoother patches keep a wet sheen
-  material.clearcoat *= asWet * (1.0 - asBand) * (1.0 - clamp(asX.z * 0.6 + asLost * 0.5, 0.0, 0.85));`);
+  material.clearcoat *= asWet * (1.0 - asBand) * (1.0 - clamp(asX.z * 0.6 + asLost * 0.5, 0.0, 0.85));
+#ifdef AS_SMOOTH
+  // a soft lustre, stronger when wet — never a mirror
+  material.clearcoat = (0.3 + 0.25 * asWet) * (1.0 - asBand) * (1.0 - asWorn * 0.6);
+  material.clearcoatRoughness = 0.22;
+#endif`);
   };
-  if (o.instanced) mat.defines = { AS_INSTANCED: '' };
-  mat.customProgramCacheKey = () => 'asari-shell-out-v3' + (o.instanced ? 'i' : '');
+  mat.defines = {};
+  if (o.instanced) mat.defines.AS_INSTANCED = '';
+  if (o.style === 'smooth') mat.defines.AS_SMOOTH = '';
+  mat.customProgramCacheKey = () => 'asari-shell-out-v5' + (o.instanced ? 'i' : '') + (o.style ?? '');
   mat.userData.uniforms = uniforms;
   return mat;
 }
@@ -292,7 +345,7 @@ varying vec2 vAsUv;
 varying vec3 vAsLocal;
 `;
 
-export function makeShellInnerMaterial() {
+export function makeShellInnerMaterial(o = {}) {
   const uniforms = { uSeed: { value: new Vector4(0.37, 0.61, 1, 1) }, ...sandUniforms() };
   const mat = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.22, metalness: 0,
@@ -315,13 +368,21 @@ ${SAND_CLIP}
   vec3 col = vec3(0.90, 0.88, 0.84) * (0.94 + 0.08*asN(p*9.0 + cs*20.0));
   // warm yellow-orange centre in some individuals
   col = mix(col, vec3(0.93, 0.80, 0.55), smoothstep(0.55, 0.1, length(p - vec2(0.0, 0.05))) * step(0.55, asH(vec2(cs, 8.8))) * 0.55);
+#ifdef AS_SMOOTH
+  // ハマグリ: porcelain white, a violet-brown band inside the posterior and ventral margin (reference: 殻の内側)
+  col = vec3(0.93, 0.92, 0.90) * (0.96 + 0.05*asN(p*9.0 + cs*20.0));
+  float post = smoothstep(0.1, -0.4, p.x);
+  float stain = smoothstep(0.84, 0.985, s + (asN(p*7.0 + cs) - 0.5)*0.05) * (0.45 + 0.55*post) + post * smoothstep(-0.05, 0.3, p.y) * 0.35;
+  col = mix(col, vec3(0.28, 0.18, 0.26), clamp(stain * (0.6 + 0.4*asH(vec2(cs, 3.1))), 0.0, 0.9));
+#else
   // posterior / marginal violet stain, very common in アサリ
   float purp = asH(vec2(cs, 3.1));
   float stain = smoothstep(0.05, -0.35, p.x + (asN(p*5.0 + cs) - 0.5)*0.25) * 0.85 + smoothstep(0.82, 0.98, s) * 0.6;
   col = mix(col, vec3(0.30, 0.17, 0.34), clamp(stain * purp * 1.3, 0.0, 0.92));
+#endif
   // adductor scars: slightly glossier and tinted
-  float scarA = 1.0 - smoothstep(0.8, 1.0, length((p - vec2(0.33, 0.06)) / vec2(0.075, 0.11)));
-  float scarP = 1.0 - smoothstep(0.8, 1.0, length((p - vec2(-0.33, 0.05)) / vec2(0.085, 0.12)));
+  float scarA = 1.0 - smoothstep(0.8, 1.0, length((p - vec2(0.34, 0.08)) / vec2(0.075, 0.11)));
+  float scarP = 1.0 - smoothstep(0.8, 1.0, length((p - vec2(-0.34, 0.07)) / vec2(0.085, 0.12)));
   float scar = max(scarA, scarP);
   col *= mix(1.0, 0.86, scar);
   // pallial line with the pallial sinus reaching in from the posterior
@@ -342,7 +403,7 @@ ${SAND_TINT}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   {
     // hinge teeth: a few ridges fanning from the umbo; faint growth undulation elsewhere
-    float ang = atan(vAsLocal.y - 0.33, vAsLocal.x - 0.2);
+    float ang = atan(vAsLocal.y - 0.35, vAsLocal.x - 0.13);
     float teeth = pow(0.5 + 0.5*cos(ang*9.0), 4.0) * asHinge;
     float und = sin(vAsUv.y*60.0 + asN(vAsUv*vec2(20.0, 6.0))*3.0) * 0.08;
     normal = asBump(-vViewPosition, normal, (teeth + und) * 0.006 * vAsScale, faceDirection);
@@ -350,7 +411,8 @@ ${SAND_TINT}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
   material.iridescence *= 1.0 - asHinge;`);
   };
-  mat.customProgramCacheKey = () => 'asari-shell-in-v1';
+  if (o.style === 'smooth') mat.defines = { AS_SMOOTH: '' };
+  mat.customProgramCacheKey = () => 'asari-shell-in-v2' + (o.style ?? '');
   mat.userData.uniforms = uniforms;
   return mat;
 }
@@ -370,6 +432,7 @@ uniform vec4 uDeform;
 uniform float uKind;
 varying vec2 vAsUv;
 attribute float aTent;
+attribute vec3 aDir;
 varying float vAsTent;
 vec3 asDeform(vec3 p){
   if (uKind > 0.5 && uKind < 1.5) {
@@ -402,13 +465,17 @@ vec3 asDeform(vec3 p){
     p.y += uDeform.z * t * t * L;
     p.z += uDeform.w * t * t * L;
   } else {
-    p *= 1.0 + uDeform.x * 0.04 * smoothstep(0.2, 0.0, abs(p.z));
+    // mantle lips (aDir = outward in the commissure plane): drawn in when the valves close, pushed out past the
+    // shell edge when the clam relaxes, swelling slightly with each breath. aDir is zero on the body and ligament.
+    p += aDir * (mix(-0.02, 0.02, uDeform.y) + uDeform.x * 0.004);
+    // relaxed lips also roll in toward the midline until the two sides press together and fill the gape
+    p.z -= length(aDir) * uDeform.y * 0.024;
   }
   return p;
 }
 `;
 
-export function makeSoftMaterial(kind) {
+export function makeSoftMaterial(kind, style) {
   const uniforms = { uDeform: { value: new Vector4(0, 0, 0, 1) }, uKind: { value: kind }, ...sandUniforms() };
   const mat = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.42, metalness: 0,
@@ -431,10 +498,16 @@ ${SAND_CLIP}
   if (uKind > 1.5) {
     // cream-white translucent sheath; the last fifth tan-orange with dark brown speckles and a dark band at the rim
     float ang = vAsUv.y*6.2831853;
-    col = mix(vec3(0.90, 0.87, 0.79), vec3(0.80, 0.64, 0.44), smoothstep(0.8, 0.97, t));
+    col = mix(vec3(0.92, 0.88, 0.76), vec3(0.62, 0.50, 0.36), smoothstep(0.8, 0.96, t));
     col *= 0.94 + 0.06*sin(ang*9.0);    // faint longitudinal muscle lines
-    float spk = smoothstep(0.6, 0.72, asFbm(vec2(t*26.0, sin(ang)*3.5 + cos(ang)*3.5))) * smoothstep(0.82, 0.95, t);
-    col = mix(col, vec3(0.32, 0.22, 0.14), spk*0.7);
+    float spk = smoothstep(0.5, 0.68, asFbm(vec2(t*30.0, sin(ang)*3.5 + cos(ang)*3.5))) * smoothstep(0.8, 0.95, t);
+    col = mix(col, vec3(0.20, 0.15, 0.11), spk*0.85);
+#ifdef AS_SMOOTH
+    // ハマグリ siphons: tan with brown mottling over most of their short length, paler at the base
+    float mot = smoothstep(0.45, 0.7, asFbm(vec2(t*9.0, sin(ang)*2.5 + cos(ang)*2.5)));
+    col = mix(vec3(0.86, 0.80, 0.68), vec3(0.70, 0.56, 0.40), smoothstep(0.15, 0.6, t));
+    col = mix(col, vec3(0.32, 0.22, 0.14), mot * smoothstep(0.2, 0.6, t) * 0.8);
+#endif
     col = mix(col, vec3(0.42, 0.30, 0.19), smoothstep(0.94, 0.975, t) * (1.0 - smoothstep(0.99, 1.0, t)) * 0.5);
     // tentacles: brown with darker tips (photos 043, 050)
     col = mix(col, mix(vec3(0.72, 0.58, 0.40), vec3(0.45, 0.32, 0.20), smoothstep(0.4, 1.0, vAsTent)), step(0.01, vAsTent));
@@ -443,9 +516,13 @@ ${SAND_CLIP}
     col = vec3(0.93, 0.88, 0.80) * (0.92 + 0.1*asN(vAsUv*vec2(14.0, 6.0)));
     col = mix(col, vec3(0.95, 0.78, 0.68), smoothstep(0.6, 1.0, t) * 0.35);
   } else {
-    col = vec3(0.86, 0.80, 0.68) * (0.9 + 0.15*asN(vAsUv*vec2(60.0, 8.0)));
-    col = mix(col, vec3(0.36, 0.26, 0.18), smoothstep(0.75, 1.0, vAsUv.y) * (0.5 + 0.5*asN(vAsUv*vec2(140.0, 3.0))));
-    col = mix(col, vec3(0.22, 0.15, 0.09), vAsTent);   // external ligament
+    // mantle: cream yellow, brown pigment streaks on the outward face of the lip, papillae tipped brown
+    col = vec3(0.92, 0.83, 0.60) * (0.9 + 0.15*asN(vAsUv*vec2(60.0, 8.0)));
+    float outward = 0.5 + 0.5*cos(vAsUv.y*6.2831853);
+    float pig = smoothstep(0.55, 0.92, outward) * smoothstep(0.45, 0.8, asFbm(vec2(vAsUv.x*70.0, vAsUv.y*3.0)));
+    col = mix(col, vec3(0.40, 0.29, 0.18), pig * 0.6);
+    if (vAsTent > 0.01 && vAsTent < 1.5) col = mix(vec3(0.92, 0.82, 0.60), vec3(0.50, 0.37, 0.24), smoothstep(0.55, 1.0, vAsTent) * 0.8);
+    if (vAsTent > 1.5) col = vec3(0.22, 0.15, 0.09);   // external ligament
   }
   diffuseColor.rgb = asLin(col);
 ${SAND_TINT}`)
@@ -468,7 +545,8 @@ ${SAND_TINT}`)
     totalEmissiveRadiance += diffuseColor.rgb * (0.03 + thin * pow(1.0 - ndv, 2.0));
   }`);
   };
-  mat.customProgramCacheKey = () => 'asari-soft-v3-' + kind;
+  if (style === 'smooth') mat.defines = { AS_SMOOTH: '' };
+  mat.customProgramCacheKey = () => 'asari-soft-v5-' + kind + (style ?? '');
   mat.userData.uniforms = uniforms;
   return mat;
 }

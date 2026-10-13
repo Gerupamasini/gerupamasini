@@ -1,9 +1,10 @@
 import { Group, MathUtils, Object3D, Vector3, type Material, type Mesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { WaterMotion, WaterSample } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { hashInts } from '../../../core/Rng';
-import { ShrimpModel } from './model/ShrimpModel.js';
+import { ShrimpModel, SHIRATA } from './model/ShrimpModel.js';
 import { Shrimp } from './model/Shrimp.js';
 
 /** the procedural model is built at this total length (metres); individuals scale it */
@@ -24,19 +25,42 @@ class ShrimpWorld {
   heightAt(x: number, z: number): number { return this.floor ? this.floor.heightAt(x, z) : this.fallbackY; }
   groundY(x: number, z: number): number { return this.heightAt(x, z); }
   onSediment(p: Vector3): boolean { return p.y - this.heightAt(p.x, p.z) < 0.001; }
-  flowAt(_p: Vector3, out: Vector3): Vector3 { return out.set(0, 0, 0); }
+  /** the water's motion (the swell, the surf; absent in the tank) and its velocity at the shrimp this step */
+  water: WaterMotion | null = null;
+  private readonly flow = new Vector3();
+  private readonly sample: WaterSample = { ux: 0, uy: 0, uz: 0, bed: 0, surface: 0 };
+  /** read the water once a step where the shrimp is (the flow is smooth over its antennae's reach) */
+  sampleFlow(p: Vector3): void {
+    if (!this.water || !this.floor) { this.flow.set(0, 0, 0); return; }
+    const s = this.water.sample(this.floor, p.x, p.y, p.z, this.sample);
+    this.flow.set(s.ux, s.uy, s.uz);
+  }
+  /** the water moving past: the swimming shrimp is dragged along with it, the standing one crouches against it, the antennae trail in it */
+  flowAt(_p: Vector3, out: Vector3): Vector3 { return out.copy(this.flow); }
   upstreamness(): number { return 0; }
   steer(): void {}
   puff(): void {}
   wake(): void {}
   stimulus(): void {}
+  /** the depth the shrimp must keep under it (0 = no water fence, e.g. the tank) */
+  minDepth = 0;
+  private readonly lastWet = new Vector3();
+  private hasWet = false;
+  /** forget the last wet spot (the shrimp was moved by hand) */
+  resetWet(): void { this.hasWet = false; }
   constrain(p: Vector3, _onGround: boolean, vel?: Vector3): void {
     const b = this.bounds;
-    if (!b) return;
-    if (p.x > b.maxX) { p.x = b.maxX; if (vel && vel.x > 0) vel.x *= -0.3; }
-    if (p.x < b.minX) { p.x = b.minX; if (vel && vel.x < 0) vel.x *= -0.3; }
-    if (p.z > b.maxZ) { p.z = b.maxZ; if (vel && vel.z > 0) vel.z *= -0.3; }
-    if (p.z < b.minZ) { p.z = b.minZ; if (vel && vel.z < 0) vel.z *= -0.3; }
+    if (b) {
+      if (p.x > b.maxX) { p.x = b.maxX; if (vel && vel.x > 0) vel.x *= -0.3; }
+      if (p.x < b.minX) { p.x = b.minX; if (vel && vel.x < 0) vel.x *= -0.3; }
+      if (p.z > b.maxZ) { p.z = b.maxZ; if (vel && vel.z > 0) vel.z *= -0.3; }
+      if (p.z < b.minZ) { p.z = b.minZ; if (vel && vel.z < 0) vel.z *= -0.3; }
+    }
+    // the water's edge: every step that would leave the water is undone, so a tail flip stops at the shallows
+    if (this.minDepth > 0 && this.floor) {
+      if (this.floor.waterAt(p.x, p.z) - this.floor.heightAt(p.x, p.z) >= this.minDepth) { this.lastWet.set(p.x, p.y, p.z); this.hasWet = true; }
+      else if (this.hasWet) { p.x = this.lastWet.x; p.z = this.lastWet.z; if (vel) { vel.x *= -0.2; vel.z *= -0.2; } }
+    }
   }
 }
 
@@ -51,13 +75,20 @@ class StubBrain {
   stimulus(): void {}
 }
 
+/** a species profile for the shared shrimp model (SHIRATA, or ISOSUJI from model/isosuji.js) */
+type ShrimpSpecies = typeof SHIRATA;
+
 type Mode = 'idle' | 'walk' | 'swim' | 'forage' | 'flee';
 
 // our heading: forward = (sin h, 0, cos h); the shrimp's yaw: forward = (cos yaw, 0, -sin yaw)
 const headingToYaw = (h: number) => Math.atan2(-Math.cos(h), Math.sin(h));
 const yawToHeading = (yaw: number) => Math.atan2(Math.cos(yaw), -Math.sin(yaw));
 
-/** シラタエビ: the photo-traced procedural model with leg-driven walking, swimming and the tail-flip escape. */
+/**
+ * シラタエビ: the photo-traced procedural model with leg-driven walking, swimming and the tail-flip escape.
+ * Other palaemonids reuse it with their species profile (イソスジエビ: model/isosuji.js), which changes the
+ * morphology, colours, stripe pattern and kinematics only.
+ */
 export class ShrimpDriver implements Driver {
   private root: Object3D | null = null;
   private ind: Individual | null = null;
@@ -79,7 +110,11 @@ export class ShrimpDriver implements Driver {
   private appendageMeshes: Mesh[] = [];
   private detailLevel = -1;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
+
+  /** the species profile the model is built from (SHIRATA or e.g. ISOSUJI) */
+  constructor(private readonly species: ShrimpSpecies = SHIRATA) {}
 
   /** The real model is built in attach(), once the individual (sex, size) is known; this is only the holder. */
   static makeModel(): PlaceholderModel {
@@ -89,8 +124,8 @@ export class ShrimpDriver implements Driver {
   }
 
   /** A female at the model size, standing, for the 図鑑. */
-  static makePreview(): Object3D {
-    const model = new ShrimpModel({ sex: 'female', berried: false, scale: 1 });
+  static makePreview(species: ShrimpSpecies = SHIRATA): Object3D {
+    const model = new ShrimpModel({ sex: 'female', berried: false, scale: 1, species });
     model.root.name = 'ShrimpPreview';
     model.root.userData.disposable = true;
     return model.root;
@@ -102,7 +137,7 @@ export class ShrimpDriver implements Driver {
     this.scale = individual.length_mm / 1000 / MODEL_TL;
     const sex = individual.sex === 'f' ? 'female' : 'male';
     const berried = sex === 'female' && individual.stage === 'adult' && hashInts(individual.length_mm * 10, 17) % 100 < 35;
-    this.model = new ShrimpModel({ sex, berried, scale: this.scale });
+    this.model = new ShrimpModel({ sex, berried, scale: this.scale, species: this.species });
     root.position.set(0, 0, 0);
     root.rotation.set(0, 0, 0);
     root.add(this.model.root);
@@ -208,6 +243,7 @@ export class ShrimpDriver implements Driver {
     if (!ind || !sh || !w) return;
     w.floor = ctx.floor;
     w.bounds = ctx.bounds;
+    w.minDepth = ctx.minDepth ?? 0;
     const dist = ctx.player.distanceTo(sh.position);
     w.cheap = dist > 12 && !ctx.locked;
     const level = ctx.locked || ctx.bounds ? 0 : dist < 3 ? 0 : dist < 6 ? 1 : 2;
@@ -239,6 +275,8 @@ export class ShrimpDriver implements Driver {
         } else it.target = null;
       }
     }
+    w.water = ctx.water ?? null;
+    w.sampleFlow(sh.position);
     sh.update(sdt);
     if (sh.mode === 'water' && !this.swimSent) { this.swimSent = true; this.emit('swim'); }
     if (sh.mode === 'ground') this.swimSent = false;
@@ -256,6 +294,43 @@ export class ShrimpDriver implements Driver {
       this.idleFor += sdt;
       if (this.idleFor > 10 && !this.restSent) { this.restSent = true; this.emit('rest'); }
     }
+  }
+
+  holdAt(x: number, z: number, heading?: number): void {
+    const ind = this.ind, sh = this.shrimp, w = this.world, it = this.brain.intent;
+    if (!ind || !sh || !w) return;
+    sh.position.set(x, w.heightAt(x, z) + sh.standH, z);
+    sh.vel.set(0, 0, 0);
+    sh.flip = null;
+    sh.mode = 'ground';
+    if (heading !== undefined) sh.yaw = headingToYaw(heading);
+    sh.plantAllFeet();
+    w.resetWet();
+    ind.pos.copy(sh.position);
+    ind.heading = yawToHeading(sh.yaw);
+    it.target = null; it.speed = 0; it.mode = 'ground'; it.arms = 'rest';
+    this.mode = 'idle';
+    this.busy = false;
+  }
+
+  /** walking on the bed, swimming free, or clinging to a blade (where it is not to be moved) */
+  body(): BodyState {
+    const b = this.bodyState, sh = this.shrimp;
+    if (sh) {
+      b.mode = sh.mode === 'water' ? 'water' : sh.mode === 'cling' ? 'fixed' : 'bed';
+      b.heading = yawToHeading(sh.yaw);
+      b.y = sh.mode === 'ground' ? sh.position.y - sh.standH : sh.position.y - 0.004 * this.scale;
+    }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const sh = this.shrimp, ind = this.ind;
+    if (!sh || sh.mode === 'cling') return;
+    sh.position.x += dx; sh.position.z += dz;
+    // standing, its body is solved from its planted feet each step: the feet go with it
+    if (sh.mode === 'ground') for (const leg of sh.legs) { leg.foot.x += dx; leg.foot.z += dz; leg.from.x += dx; leg.from.z += dz; }
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

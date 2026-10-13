@@ -1,11 +1,14 @@
+import { DEFAULT_SETTINGS, type SettingsData } from '../core/Settings';
 import { signal } from '@preact/signals';
 import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
+import type { GachaResult } from '../aquarium/catalog';
 
 /** the tool in the player's hands on the flat */
-export type ToolId = 'hand_net' | 'shovel';
+/** a tool id from items/tools.json */
+export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'roomPlacement' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -39,8 +42,12 @@ export interface DebugState {
   timeOverride: boolean;
   tideOverride: number | null;
   overcast: number;
+  /** the surf's debug view (0 off) */
+  surfView?: number;
   markers: boolean;
-  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number };
+  /** species kept out of the world for now (ids) */
+  hidden: string[];
+  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string; tank?: string; gpuMs?: number | null; view?: string };
 }
 
 export interface Toast {
@@ -50,7 +57,15 @@ export interface Toast {
 }
 
 export const ui = {
+  /** the live settings (the menu's sliders and buttons read this) */
+  settings: signal<SettingsData>({ ...DEFAULT_SETTINGS }),
+  /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
+  shopSelected: signal<string | null>(null),
+  shopTab: signal<'tools' | 'tanks' | 'filters' | 'quests'>('tools'),
   screen: signal<Screen>('boot'),
+  saveError: signal<string | null>(null),
+  saveRecovery: signal<{ message: string; backup: boolean } | null>(null),
+  guideDismissed: signal(false),
   overlayFrom: signal<Screen>('field'),
   loading: signal({ frac: 0, label: '' }),
   error: signal<string | null>(null),
@@ -61,25 +76,30 @@ export const ui = {
     caseCount: 0, caseMax: 6, prompt: null, tooDeep: false, research: 0, money: 0, tod: 'day', season: 'autumn', fps: 0, pointerLocked: false,
   }),
   toasts: signal<Toast[]>([]),
-  tool: signal<ToolId>('hand_net'),
+  tool: signal<ToolId>('net_small'),
   /** a short dark curtain with a word on it while screens change (null = none) */
   transition: signal<string | null>(null),
   /** a newer deploy than the one running (see Build.checkForNewBuild) */
   newBuild: signal<import('../core/Build').BuildInfo | null>(null),
   /** debug mode on (F3 or ?debug=1) */
   debug: signal(false),
-  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0 } }),
+  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, hidden: [], stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0 } }),
   markers: signal<Marker[]>([]),
   /** side panel shown on the home screen */
-  homePanel: signal<'none' | 'tank'>('none'),
+  homePanel: signal<'none' | 'tank' | 'tools'>('none'),
+  /** the spot picked on the map (its id) */
+  spot: signal<string | null>(null),
   /** creature info card on the home screen */
   homeInfo: signal<IndividualRecord | null>(null),
   /** full-map overview on the flat (M) */
   mapOpen: signal(false),
   /** tank panel tab */
-  tankTab: signal<'fish' | 'layout'>('fish'),
+  tankTab: signal<'fish' | 'layout' | 'equipment'>('fish'),
   /** selected decoration in the tank layout editor */
   tankSelected: signal<string | null>(null),
+  equipmentSelected: signal<string | null>(null),
+  equipmentPreview: signal<string | null>(null),
+  gachaResults: signal<GachaResult[]>([]),
   /** bumped whenever the tank layout changes, so the editor re-renders */
   tankLayoutVersion: signal(0),
 };

@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { SpeciesSchema } from '../../src/data/schemas';
+import { spawnsOnMap } from '../../src/creatures/Spawner';
 import { Matrix4, Vector3 } from 'three';
 import { ScopimeraGlobosa, flatProbe, makeEnv, seasonFor } from '../../src/creatures/kometsukigani/ScopimeraGlobosa.js';
 import { breedingFactor, seasonalActivity, STATE } from '../../src/creatures/kometsukigani/ScopimeraGlobosaBehavior.js';
@@ -220,5 +223,20 @@ describe('コメツキガニ: behaviour', () => {
     expect(seasonalActivity(200)).toBe(1);
     expect(seasonalActivity(20)).toBe(0);
     expect(STANCE.bodyHeight.feed).toBeLessThan(STANCE.bodyHeight.calm);
+  });
+});
+
+describe('コメツキガニ: where it lives', () => {
+  const root = new URL('../../', import.meta.url).pathname;
+  const species = SpeciesSchema.parse(JSON.parse(readFileSync(root + 'public/data/species/scopimera_globosa.json', 'utf8')));
+  const manifest = JSON.parse(readFileSync(root + 'public/data/manifest.json', 'utf8')) as { maps: string[] };
+
+  it('is introduced on the 葛西 flat only', () => {
+    for (const rule of species.spawn) expect(rule.maps).toEqual(['kasai_west']);
+    for (const map of manifest.maps) expect(spawnsOnMap(species, map)).toBe(map === 'kasai_west');
+  });
+
+  it('is placed by its colony, not by the spawner', () => {
+    expect(species.placement).toBe('world');
   });
 });

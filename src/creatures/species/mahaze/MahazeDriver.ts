@@ -1,6 +1,6 @@
 import { Object3D, Sphere, SkinnedMesh, Vector3, type Mesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent, Floor } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent, Floor } from '../../drivers/Driver';
 import { createBehavior } from './Behavior.js';
 
 type Behavior = ReturnType<typeof createBehavior>;
@@ -29,6 +29,7 @@ export class MahazeDriver implements Driver {
   private alertUntil = 0;
   private waitingForPerch = false;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
 
   attach(root: Object3D, individual: Individual, _extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void {
@@ -44,12 +45,11 @@ export class MahazeDriver implements Driver {
     const bodyGeom: BodyGeometry | null = rig.axes.body ?? null;
     const viewer = rigNode?.userData.viewer as { contacts?: [string, number, string | number][] } | undefined;
     const bx = (body.userData.mahaze as MahazeExtras | undefined) ?? (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
-    // rest-pose bone positions with the root at the origin and unit scale
+    // Contact definitions use model metres, independently of the root's parent transform.
     root.position.set(0, 0, 0);
     root.quaternion.identity();
     root.scale.setScalar(1);
-    root.updateMatrixWorld(true);
-    for (const b of Object.values(bones)) b.userData.restObj = b.getWorldPosition(new Vector3());
+    root.updateWorldMatrix(true, true);
     const F = bx.fishFrame, P = bx.profile;
     const botY = (s: number) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
     const rimY = rig.contactY * 1000 + F.Y0;
@@ -62,19 +62,34 @@ export class MahazeDriver implements Driver {
         ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
         ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, tailY],
       ];
-    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => ({ bone: bones[bone], p: new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(bones[bone].userData.restObj as Vector3) }));
+    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => {
+      const p = new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001);
+      return { bone: bones[bone], p: bones[bone].worldToLocal(root.localToWorld(p)) };
+    });
     const finMeshes: Record<string, Mesh> = {};
+    const cullCentre = new Vector3(0, 0.002, 0.012);
     for (const m of meshes) {
       const mesh = m as Mesh;
       if (roleOf(mesh) === 'fin') finMeshes[mesh.name] = mesh;
-      if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).boundingSphere = new Sphere(new Vector3(0, 0.002, 0.012), 0.04);
+      if ((mesh as SkinnedMesh).isSkinnedMesh) {
+        // a generous sphere for the culling (the skinned bounds move with the animation), centred on the part itself:
+        // the translucent body and the fins sort by these centres, so a fin on the far side is drawn before the body
+        // (and seen through it) and one on the near side after it
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const c = mesh.geometry.boundingBox!.getCenter(new Vector3());
+        (mesh as SkinnedMesh).boundingSphere = new Sphere(c, 0.04 + c.distanceTo(cullCentre));
+      }
     }
     root.scale.setScalar(scale);
+    // the footprint it lies on: snout to the tail's base, its flanks with the pectorals spread
+    const tl = (bodyGeom?.tlMM ?? 50.5) * 0.001;
+    const foot = { ahead: (F.S0 - (bodyGeom?.tlMM ?? 50.5) / 2) * 0.001, halfL: 0.42 * tl, halfW: 0.1 * tl };
     this.beh = createBehavior({
       root, bones, finMeshes, axes: rig.axes, contacts, scale,
       floorY: (x: number, z: number) => (this.floor ? this.floor.heightAt(x, z) : 0),
       onEvent: (name: string) => this.emit(name),
       body: bodyGeom,
+      foot,
     });
     const st = this.beh.state;
     st.pos.set(individual.pos.x, 0, individual.pos.z);
@@ -168,6 +183,33 @@ export class MahazeDriver implements Driver {
         if (this.intent?.kind === 'display') beh.setAlert(0);
       }
     }
+  }
+
+  holdAt(x: number, z: number, heading?: number): void {
+    const beh = this.beh, ind = this.ind;
+    if (!beh || !ind) return;
+    const st = beh.state;
+    st.pos.x = x; st.pos.z = z;
+    if (heading !== undefined) beh.setHeading(heading);
+    // a short rest gives up the dart or glide that carried it out
+    beh.setRestFor(0.6);
+    if (this.root) this.root.position.set(x, this.root.position.y, z);
+    ind.pos.x = x; ind.pos.z = z;
+    this.busy = false;
+    this.waitingForPerch = false;
+  }
+
+  /** a goby is always on the bed (a dart lifts it a few millimetres) */
+  body(): BodyState {
+    const st = this.beh?.state, b = this.bodyState;
+    if (st) { b.heading = st.heading; b.y = st.bedY ?? (this.ind?.pos.y ?? 0); }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const st = this.beh?.state;
+    if (st) { st.pos.x += dx; st.pos.z += dz; }
+    if (this.ind) { this.ind.pos.x += dx; this.ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

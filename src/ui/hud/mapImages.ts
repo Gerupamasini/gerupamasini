@@ -1,6 +1,10 @@
 import type { World } from '../../app/World';
+import { reedMapColour } from '../../world/ReedBed';
 
-export const SUB_COLORS = ['#b8a67e', '#8c7d62', '#5c5346', '#9a948a', '#4a443a'];
+// the map is drawn to be read at a glance, brighter than the flat itself (an aerial photo on a fine day): pale sand,
+// olive-brown mud, the levee's stone, the reeds in their season's colour
+export const SUB_COLORS = ['#d6c59c', '#b49f78', '#857558', '#cbbd9c', '#6e6250', '#b3ab9a'];
+const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xe4, 0xd6, 0xb0], ALGAE = [0x7d, 0x8a, 0x4e];
 
 /** Substrate colours shaded by height, one pixel per terrain cell. */
 export function makeBaseImage(world: World): HTMLCanvasElement {
@@ -11,11 +15,28 @@ export function makeBaseImage(world: World): HTMLCanvasElement {
   const img = ctx.createImageData(n, n);
   for (let k = 0; k < n * n; k++) {
     const hex = SUB_COLORS[t.substrate[k]] ?? '#777';
-    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-    const shade = 0.8 + 0.25 * Math.max(-1, Math.min(1, t.heights[k] / 2));
+    let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    const h = t.heights[k];
+    // the shore: dry beach, then the green of the embankment
+    if (h > 1.0 && t.substrate[k] !== 3) { const u = Math.min(1, (h - 1.0) / 0.5); r = r + (BEACH[0] - r) * u; g = g + (BEACH[1] - g) * u; b = b + (BEACH[2] - b) * u; }
+    if (h > 3.1) { const u = Math.min(1, (h - 3.1) / 0.8); r = r + (SHORE[0] - r) * u; g = g + (SHORE[1] - g) * u; b = b + (SHORE[2] - b) * u; }
+    // an algal film on the low mud
+    if (t.substrate[k] === 2 && h < 0.1) { const u = Math.min(1, (0.1 - h) / 0.6) * 0.5; r = r + (ALGAE[0] - r) * u; g = g + (ALGAE[1] - g) * u; b = b + (ALGAE[2] - b) * u; }
+    const shade = 0.82 + 0.22 * Math.max(-1, Math.min(1, h / 1.5)) - 0.12 * Math.max(0, Math.min(1, (h - 2) / 3));
     img.data[k * 4] = r * shade; img.data[k * 4 + 1] = g * shade; img.data[k * 4 + 2] = b * shade; img.data[k * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  // the reed fringe: a soft dab of the season's colour round each clump
+  const reeds = world.reeds;
+  if (reeds) {
+    const [r, g, b] = reedMapColour(world.season);
+    ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},0.85)`;
+    for (const [x, z] of reeds.positions()) {
+      ctx.beginPath();
+      ctx.arc((x + t.half) / t.cell, (z + t.half) / t.cell, 1.1 / t.cell, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   return base;
 }
 
@@ -42,8 +63,10 @@ export class WaterLayer {
       const depth = level - ground;
       const o = k * 4;
       if (depth > 0) {
-        const a = Math.min(0.85, 0.35 + depth * 0.5);
-        if (pooled) { d[o] = 70; d[o + 1] = 150; d[o + 2] = 165; } else { d[o] = 40; d[o + 1] = 120; d[o + 2] = 150; }
+        const a = Math.min(0.9, 0.3 + depth * 0.7);
+        // shallow water is pale turquoise, the creeks deepen to teal and the open bay to a deep blue
+        const u = Math.min(1, depth / 0.8), v = Math.min(1, Math.max(0, (depth - 0.8) / 1.4));
+        if (pooled) { d[o] = 92; d[o + 1] = 178; d[o + 2] = 186; } else { d[o] = 96 - 50 * u - 18 * v; d[o + 1] = 196 - 70 * u - 34 * v; d[o + 2] = 205 - 60 * u - 5 * v; }
         d[o + 3] = Math.round(a * 255);
       } else d[o + 3] = 0;
     }

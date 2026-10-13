@@ -17,10 +17,14 @@ export interface CaptureState {
   revealed: boolean;
   /** what came up: "マハゼ 6.9 cm ・ シラタエビ 3.1 cm" */
   catchText: string;
+  /** seconds the swing takes: longer in deep water, where the net is slow */
+  swingSec: number;
 }
 
 /** seconds each phase takes */
 export const CAPTURE_PHASE_SEC: Record<CapturePhase, number> = { swing: 0.42, lift: 0.8, check: 2.3, done: 0.3 };
+/** an empty net or scoop comes straight back: no looking, no words */
+export const EMPTY_PHASE_SEC: Record<CapturePhase, number> = { swing: 0.42, lift: 0.35, check: 0.2, done: 0.2 };
 /** seconds into `check` at which what came up can be seen */
 export const REVEAL_SEC = 0.55;
 
@@ -53,20 +57,27 @@ export class Capture {
     return this.caught;
   }
 
-  start(tool: ToolDef, caught: Individual[]): void {
+  start(tool: ToolDef, caught: Individual[], swingSec = CAPTURE_PHASE_SEC.swing): void {
     this.caught = caught;
     this.running = true;
     this.state.value = {
       toolId: tool.id as ToolId, toolName: tool.ja, result: caught.length ? 'success' : 'fail', phase: 'swing', elapsed: 0, revealed: false,
-      catchText: catchLabel(caught),
+      catchText: catchLabel(caught), swingSec,
     };
+  }
+
+  /** Seen enough: lower the tool now (while looking at what came up). */
+  skip(): void {
+    const st = this.state.value;
+    if (!st || st.phase !== 'check') return;
+    this.state.value = { ...st, phase: 'done', elapsed: 0, revealed: true };
   }
 
   update(dt: number): void {
     const st = this.state.value;
     if (!st || !this.running) return;
     const elapsed = st.elapsed + dt;
-    const limit = CAPTURE_PHASE_SEC[st.phase];
+    const limit = st.phase === 'swing' ? st.swingSec : (st.result === 'fail' ? EMPTY_PHASE_SEC : CAPTURE_PHASE_SEC)[st.phase];
     if (elapsed < limit) {
       const revealed = st.revealed || (st.phase === 'check' && elapsed >= REVEAL_SEC);
       this.state.value = { ...st, elapsed, revealed };
