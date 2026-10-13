@@ -57,6 +57,8 @@ export interface Floor {
   heightAt(x: number, z: number): number;
   waterAt(x: number, z: number): number;
   sampleAt?(x: number, z: number): HabitatSample | null;
+  /** the map's tint on its sand and muddy sand (Terrain.setSandTint; absent: none, the plain substrate colours) */
+  sandTint?: Readonly<Vector3>;
   /** the eelgrass meadow, on a flat that has one */
   meadow?: MeadowProbe | null;
   /** the carrion lying about, for the scavengers */

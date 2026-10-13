@@ -8,7 +8,7 @@ import { applyPose, armExtOf, armThin } from './rig';
 import { MimiikaLook, SUBSTRATE_TINT, type MmLookSpec } from './materials';
 import { buildModel, disposeModel, syncLevel, LOD1_AT, LOD2_AT, MODEL_ML, type MimiikaModel } from './model';
 import { makeMysidModel, poseMysid } from './prey';
-import { SandFX, type SandFXOptions } from '../akaei/SandFX';
+import { SandFX, type ImprintLook, type SandFXOptions } from '../akaei/SandFX';
 import { CONTACT_SHADOWS, shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../amimehagi/materials';
 
@@ -30,10 +30,11 @@ const _v = new Vector3();
 /**
  * Sand events the behaviour may give beyond FxEvent's: single grains that swell little (`grow` × their start size) and
  * are gone where they reach the sand (`kill`), sand darker than the bed (`shade`), and the pit it blows (kind 'pit':
- * centre, heading, half-sizes in m, how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one).
+ * centre, heading, half-sizes in m, how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one, `fill`
+ * fills it in over that many seconds).
  */
 type SandEvent = FxEvent & { grow?: number; kill?: boolean; shade?: number };
-interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number }
+interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number; fill?: number }
 
 /**
  * ミミイカ (Euprymna morsei): the small bobtail squid of the sandy shallows. By day it lies buried with only its eyes
@@ -101,6 +102,12 @@ export class MimiikaDriver implements Driver {
     return { floor: Math.max(0.0003, 0.0008 * K), everyFrame: true, tone: 1.05, sink: 0.012 };
   }
 
+  /**
+   * The hollow the jets blow round it (42, 44–46): a crater darkest round the sinking body, its wall shading off into
+   * a faint rim of thrown-out sand (the ray's resting oval is a shallow, even darkening).
+   */
+  static readonly PIT_LOOK: ImprintLook = { dark: 0.5, centre: 0.12, bowl: [0.64, 0.78], rim: 0.25, wobble: 0.08 };
+
   /** The species' materials in every tier (skin, far skin, fins, eyes), the mysid, the sand, the pit and ink: DriverEntry.keep. */
   static keep(parent: Object3D): { dispose(): void } {
     const m = buildModel(new MimiikaLook(lookSpecFor('keep')));
@@ -113,7 +120,7 @@ export class MimiikaDriver implements Driver {
     parent.add(prey);
     const fx = new SandFX(parent, MimiikaDriver.sandFxOptions(1));
     // (the pit it blows as it buries)
-    fx.imprint(0, 0, 0, 0.01, 0.015, () => 0, 0.5, 150, 0.0007);
+    fx.imprint(0, 0, 0, 0.01, 0.015, () => 0, 0.5, 150, 0.0007, MimiikaDriver.PIT_LOOK);
     return {
       dispose: () => {
         m.root.removeFromParent(); disposeModel(m);
@@ -281,11 +288,11 @@ export class MimiikaDriver implements Driver {
     if (this.substrateT <= 0) {
       this.substrateT = 0.8;
       const smp = ctx.floor.sampleAt?.(s.state.pos.x, s.state.pos.z);
-      const c = SUBSTRATE_TINT[smp?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
-      model.look.setCover(c[0], c[1], c[2]);
-      this.sandFx?.setSandColour(_v.set(c[0], c[1], c[2]));
+      const c = sandColour(smp?.substrate, ctx.floor.sandTint, _v);
+      model.look.setCover(c.x, c.y, c.z);
+      this.sandFx?.setSandColour(c);
       // background matching: the darker the bottom, the more the brown set spreads
-      const lum = (c[0] + c[1] + c[2]) / 3;
+      const lum = (c.x + c.y + c.z) / 3;
       s.setSurroundings((0.37 - lum) / 0.2, this.night);
     }
     const steps = Math.max(1, Math.ceil(sdt * 60 - 1e-6));
@@ -320,8 +327,9 @@ export class MimiikaDriver implements Driver {
       if (ev.kind === 'pit') {
         // (laid just over the bed: under a small squid's buried eyes)
         const K = this.root?.scale.x ?? 1;
-        if (ev.deepen) this.sandFx?.growImprint(ev.strength);
-        else this.sandFx?.imprint(ev.pos.x, ev.pos.z, ev.heading, ev.halfW, ev.halfL, ground, ev.strength, ev.life ?? 150, Math.min(0.0015, 0.0003 + 0.0004 * K));
+        if (ev.fill) this.sandFx?.fillImprint(ev.fill);
+        else if (ev.deepen) this.sandFx?.growImprint(ev.strength);
+        else this.sandFx?.imprint(ev.pos.x, ev.pos.z, ev.heading, ev.halfW, ev.halfL, ground, ev.strength, ev.life ?? 150, Math.min(0.0015, 0.0003 + 0.0004 * K), MimiikaDriver.PIT_LOOK);
         continue;
       }
       const fx = ev.kind === 'ink' ? this.inkFx : this.sandFx;
@@ -407,6 +415,13 @@ export class MimiikaDriver implements Driver {
     this.squid = null;
     this.listeners.clear();
   }
+}
+
+/** the bed's colour as the terrain draws it: the substrate's grey, the map's tint on the sand and muddy sand (走水's warm sand) */
+export function sandColour(sub: string | undefined, tint: Readonly<Vector3> | undefined, out: Vector3): Vector3 {
+  const s = sub ?? 'sand', c = SUBSTRATE_TINT[s] ?? SUBSTRATE_TINT.sand;
+  out.set(c[0], c[1], c[2]);
+  return tint && (s === 'sand' || s === 'muddy_sand') ? out.multiply(tint) : out;
 }
 
 /** the sand's colour as a Color (for a viewer's bed) */

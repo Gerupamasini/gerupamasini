@@ -68,8 +68,11 @@ export interface FxEvent {
   /** × the sand's colour (the coat's wet, mucus-bound grains: darker than the bed) */
   shade?: number;
 }
-/** the pit it blows as it buries (m): laid once, then deepened with each jet; gone in `life` s (the arms sweep it in) */
-export interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number }
+/**
+ * the pit it blows as it buries (m): laid once, then deepened with each jet; gone in `life` s, or filled in `fill` s
+ * from now (the strokes have swept it in once it lies buried)
+ */
+export interface PitEvent { kind: 'pit'; pos: Vector3; heading: number; halfW: number; halfL: number; strength: number; deepen?: boolean; life?: number; fill?: number }
 
 export type JetDir = 'B' | 'F';
 /** arm II's strokes, from the crown: forward, 45° out, sideways, back and out (Sepiola: Drerup 2019) */
@@ -144,25 +147,31 @@ const KICK_RISE = 18, KICK_FALL = 3, KICK_N = 0.582;
  * side it bends to and its suckers face, each joint's curl and swing (× side), its length × rest. Directions in the
  * level frame: x the arm's own side out, y up, z the heading (writePose turns them into the head's frame).
  */
-interface ArmKey { psi: number; elev: number; bend: Vector3; curl: number[]; swing: number[]; ext: number }
+export interface ArmKey { psi: number; elev: number; bend: Vector3; curl: number[]; swing: number[]; ext: number }
 const key = (psi: number, elev: number, bend: [number, number, number], curl: number[], swing: number[], ext: number): ArmKey =>
   ({ psi, elev, bend: new Vector3(...bend).normalize(), curl, swing, ext });
 const NO_SWING = [0, 0, 0, 0, 0];
-/** raised in front of the eyes (pushed up through the sand just ahead of them): before the first stroke and after each */
-const UP = key(0.5, 0.9, [0, -1, 0], [0, 0.1, 0.15, 0.2, 0.3], NO_SWING, 1.15);
+/** standing up beside its eye, out of the sand just outside it (Fig. 13D): before the first stroke and after each */
+const UP = key(1.84, -0.12, [-0.22, 0.33, -0.92], [0, 0.55, 0.27, -0.01, 0.02], [0, 0.2, 0.87, 0.16, 0.07], 1.36);
 /** stretched out low over the sand, suckers down, to about twice its length; ψ and the swing along it per direction */
 const REACH_PSI: Record<StrokeDir, number> = { F: 0.35, FL: 1.05, L: 1.6, BL: 1.7 };
 const REACH_SWING: Record<StrokeDir, number> = { F: 0, FL: 0, L: 0.1, BL: 0.85 };
 /** the reach's horizontal curve per joint (× side; − bends towards the midline): a slight outward bow, the distal third hooked in */
 const REACH_HOOK: Record<StrokeDir, number[]> = { F: [0, 0.1, -0.1, -0.45, -0.75], FL: [0, 0.1, -0.1, -0.45, -0.75], L: [0, 0.1, -0.05, -0.35, -0.6], BL: [0, 0, 0, 0, 0] };
-/** drawn back over the head bowed up into an arch, the tips in and down (Fig. 1E): onto the head, or the front of the back */
-const ARCH_H = key(1.85, 0.75, [-0.78, -0.3, -0.55], [0, 0.2, 0.6, 1.1, 1.3], NO_SWING, 1.7);
-const ARCH_B = key(1.75, 0.95, [-0.55, -0.3, -0.8], [0, 0.4, 0.55, 0.8, 0.8], NO_SWING, 1.65);
+/**
+ * drawn back into a round loop over its own eye (Fig. 13E): out along the sand in front of the eye, up outside it, over
+ * its top about an eye's height above it and in again, the tip curling down between the eyes; onto the head, or
+ * further back, lower, onto the front of the back
+ */
+const ARCH_H = key(1.76, -0.19, [0.02, 0.74, -0.68], [0, 1.1, 0.67, 0.59, 1.65], [0, 0.01, 0.58, -0.19, -0.53], 1.74);
+const ARCH_B = key(1.82, -0.22, [-0.05, 0.64, -0.77], [0, 0.91, 0.67, 0.59, 0.99], [0, 0.05, 0.61, -0.36, -0.67], 1.59);
+/** arm II's standing and looped keys (the tests check the rig keeps them clear of the eyes) */
+export const ARM_II_KEYS: Readonly<Record<'up' | 'archHead' | 'archBack', Readonly<ArmKey>>> = { up: UP, archHead: ARCH_H, archBack: ARCH_B };
 const headStroke = (d: StrokeDir) => d === 'F' || d === 'FL';
 function reachKey(d: StrokeDir, elev: number, out: ArmKey): ArmKey {
   const s = REACH_SWING[d];
   // (swung back along its length the arm rises a little off the sand: aimed that much lower)
-  out.psi = REACH_PSI[d]; out.elev = elev - 0.05 * s; out.bend.set(0, -1, 0); out.ext = 2.0;
+  out.psi = REACH_PSI[d]; out.elev = elev - 0.05 * s; out.bend.set(0, -1, 0); out.ext = 2.05;
   // (the distal third laid down onto the sand and hooked in: a curved arm along the sand, not a rod, 44)
   const hk = REACH_HOOK[d];
   out.curl = d === 'BL' ? [0, 0.02, 0.04, 0.08, 0.15] : [0, 0.02, 0.04, 0.12, 0.28];
@@ -176,9 +185,19 @@ function scoopKey(d: StrokeDir, elev: number, out: ArmKey): ArmKey {
   out.swing[4] += d === 'BL' ? 0.5 : -0.35;
   return out;
 }
-function liftKey(d: StrokeDir, out: ArmKey): ArmKey {
-  out.psi = (REACH_PSI[d] + (headStroke(d) ? ARCH_H : ARCH_B).psi) / 2 + 0.2; out.elev = 0.55;
-  out.bend.set(-0.3, -0.8, -0.5).normalize(); out.curl = [0, 0.2, 0.3, 0.4, 0.45]; out.swing = NO_SWING.slice(); out.ext = 1.75;
+/** lifted off the sand from the scoop, the hook let go */
+function drawKey(d: StrokeDir, elev: number, out: ArmKey): ArmKey {
+  reachKey(d, elev + 0.25, out);
+  out.psi += 0.3 * ((headStroke(d) ? ARCH_H : ARCH_B).psi - out.psi);
+  out.curl = [0, 0.02, 0.04, 0.06, 0.08]; out.swing = NO_SWING.slice(); out.ext = 1.95;
+  return out;
+}
+/** the loop it is drawn back into, rolled up by `roll` (0 straight … 1), turned `toReach` of the way back to its reach */
+function rollKey(d: StrokeDir, roll: number, toReach: number, elev: number, ext: number, out: ArmKey): ArmKey {
+  const a = headStroke(d) ? ARCH_H : ARCH_B;
+  copyKey(a, out);
+  out.psi = a.psi + toReach * (REACH_PSI[d] - a.psi); out.elev = a.elev + elev;
+  out.curl = a.curl.map((c) => roll * c); out.swing = a.swing.map((c) => roll * c); out.ext = ext;
   return out;
 }
 const blankKey = (): ArmKey => key(0, 0, [0, -1, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 1);
@@ -355,7 +374,12 @@ export function createSquidBehavior(opts: SquidOptions) {
       if (inSand && mode !== 'ESCAPE' && st.bury > 0.3) emerge();
       st.buryGoal = 0;
     }
-    if (mode !== 'HUNT' && prey && prey.state !== 'caught') prey = null;
+    if (mode !== 'HUNT') dropPrey();
+  }
+  /** the hunt is over: a mysid already in its arms is eaten (cut short, it is not let go to swim off), any other forgotten */
+  function dropPrey(): void {
+    if (prey?.state === 'caught') { prey.state = 'eaten'; prey.remains = 0; }
+    prey = null;
   }
   function phase(p: string, dur: number): void { st.phase = p; st.t = 0; st.dur = dur; }
 
@@ -399,7 +423,7 @@ export function createSquidBehavior(opts: SquidOptions) {
   const sandAmbush = () => st.mode === 'HUNT' && ambushing && st.bury > 0.5;
   /** hover, swim and crawl from the sand (an ambush's too) wait for it to rise; called again, only the command waiting changes */
   function viaEmerge(cmd: () => void): boolean {
-    if (sandAmbush()) { prey = null; toBuried(0); }
+    if (sandAmbush()) { dropPrey(); toBuried(0); }
     if (st.mode !== 'BURROW' || !(st.phase === 'emerge' || st.bury > 0.6)) return false;
     if (st.phase !== 'emerge') startEmerge();
     queued = cmd;
@@ -534,7 +558,7 @@ export function createSquidBehavior(opts: SquidOptions) {
   }
   /** the ambush over, it lies buried again (as long as it was asked to meanwhile: that request is still running) */
   function backToSand(dur: number): void {
-    prey = null;
+    dropPrey();
     toBuried(Math.max(dur, afterAmbush));
     st.settled = afterAmbush <= 0;
     afterAmbush = 0;
@@ -763,17 +787,19 @@ export function createSquidBehavior(opts: SquidOptions) {
       puff(0, 25, 2.5, 0, 18, 50, 10, 4.0, 5.0, 2.2, 0.65);
       for (const sd of [1, -1]) puff(8 * sd, 22, 2.0, 30 * sd, 10, 35, 4, 3.5, 4.5, 2.0, 0.55);
     }
-    // the pit it blows, ringed with thrown-out sand (40–42), darker with each jet; the strokes fill it in again
-    if (canBurrow()) fx.push({ kind: 'pit', pos: st.pos.clone().addScaledVector(fwd, -0.15 * ML), heading: st.heading, halfW: 0.62 * ML, halfL: 1.0 * ML, strength: 0.2 + (0.3 * j) / Math.max(1, pl.jets.length - 1), deepen: !first, life: 20 });
+    // the hollow it blows round itself, ringed with thrown-out sand (42, 44–46), darker with each jet; it stays open
+    // through the strokes and is filled in once it lies buried
+    if (canBurrow()) fx.push({ kind: 'pit', pos: st.pos.clone().addScaledVector(fwd, -0.1 * ML), heading: st.heading, halfW: 0.95 * ML, halfL: 1.25 * ML, strength: 0.35 + (0.65 * j) / Math.max(1, pl.jets.length - 1), deepen: !first, life: 60 });
   }
 
   /** the reach's elevation: the stretched arm's tip lowered onto the sand from the crown, however deep it lies */
   function reachElev(): number {
-    const c = toWorld(_v.copy(CROWN_SIDE), _w);
+    // (the crown turned with the head on the neck: bent down as it strokes)
+    const c = toWorld(_v.copy(CROWN_SIDE).sub(HEAD_PIVOT).applyAxisAngle(_ax, -P.headPitch).add(HEAD_PIVOT), _w);
     const h = (c.y - ground(c.x, c.z)) / (MM * K);
     return 0.1 + Math.asin(clamp(-h / (14.6 * 2.0), -0.3, 0.3));
   }
-  const _k1 = blankKey(), _k2 = blankKey(), _k3 = blankKey();
+  const _k1 = blankKey(), _k2 = blankKey(), _k3 = blankKey(), _k4 = blankKey(), _k5 = blankKey();
   /**
    * Arm II at u (0 … 1) of a stroke towards d: out low over the sand from in front of the eyes, stretched to twice its
    * length (u 0–0.32); a moment at full stretch while the tip digs in and hooks (0.32–0.40); then drawn back without
@@ -785,7 +811,9 @@ export function createSquidBehavior(opts: SquidOptions) {
     const reach = reachKey(d, er, _k1), scoop = scoopKey(d, er, _k2);
     if (u < 0.32) return mixKey(UP, reach, smooth(u / 0.32), out);
     if (u < 0.4) return mixKey(reach, scoop, smooth((u - 0.32) / 0.08), out);
-    return splineKey([scoop, liftKey(d, _k3), headStroke(d) ? ARCH_H : ARCH_B, UP], [0.4, 0.56, 0.76, 1], u, out);
+    // (drawn off the sand straightened, then its suckers turn up and in and it rolls up into the loop)
+    const turned = rollKey(d, 0, 0.6, 0.4, 1.92, _k5);
+    return splineKey([scoop, drawKey(d, er, _k3), turned, rollKey(d, 0.45, 0.25, 0.25, 1.85, _k4), headStroke(d) ? ARCH_H : ARCH_B, UP], [0.4, 0.45, 0.5, 0.6, 0.76, 1], u, out);
   }
 
   /** keeps its place on the sand */
@@ -878,7 +906,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         // folded down so that arms I do not stand up between the eyes (16, Fig. 1E)
         arms(1.3, 0.35, 0.0, 0.02);
         an.tipCurl = damp(an.tipCurl, 0.6, 2, dt);
-        an.headPitch = 0.05;
+        an.headPitch = -0.3;
         burrowDress();
         an.strokeW = Math.min(1, an.strokeW + dt / LEAD);
         const s = st.t - LEAD;
@@ -904,7 +932,10 @@ export function createSquidBehavior(opts: SquidOptions) {
           st.sandCoat = Math.min(1, st.sandCoat + g * (head ? 0.05 : 0.15));
           st.buryGoal = BLOW_BURY + ((1 - BLOW_BURY) * (k + u)) / pl.strokes;
         }
-        if (st.t >= st.dur) toBuried(burrowFor);
+        if (st.t >= st.dur) {
+          toBuried(burrowFor);
+          if (canBurrow()) fx.push({ kind: 'pit', pos: st.pos.clone(), heading: st.heading, halfW: 0, halfL: 0, strength: 0, fill: 2.5 });
+        }
         return;
       }
       case 'emerge': {
@@ -935,8 +966,8 @@ export function createSquidBehavior(opts: SquidOptions) {
         finSet(0.0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
         an.tipCurl = damp(an.tipCurl, 0.5, 2, dt);
-        // (the head bent down a little: the crown and the arms' bases under the sand, the eyes still out: 16)
-        an.headPitch = -0.06;
+        // (the head bent down: the crown and the arms' bases under the sand, the eyes still out: 16)
+        an.headPitch = -0.2;
         chroma(0.7, 0.95, 0.35, 0.45, 0.2, 0, 0.6);
         // the coat made up as the last grains settle: ≥ 0.85 on the head and 0.9 on the back by 1.5 s
         const c = smooth(st.t / 1.5);
@@ -1249,7 +1280,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         const medial = _w.set(-ARMS[i].side, 0, 0).applyQuaternion(_q).setY(0).normalize();
         sand(_tipW, medial.multiplyScalar(0.01 * K).addScaledVector(fwd, -0.008 * K).setY(0.015 * K), 3, 0.0012, 0.0015, 1.0, 0.5, 1.1, true);
       }
-      if (tipFx.pour) sand(_tipW, new Vector3(0, -0.012 * K, 0), 4, 0.0012, 0.0018, 0.9, 0.6, 1.1, true);
+      if (tipFx.pour) sand(_tipW, new Vector3(0, -0.012 * K, 0), 6, 0.0015, 0.0014, 0.9, 0.7, 1.1, true);
     }
     tipFx.scoop = tipFx.throw = tipFx.pour = false;
   }

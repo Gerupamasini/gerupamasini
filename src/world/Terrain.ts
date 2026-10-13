@@ -797,6 +797,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   setSandTint(r: number, g: number, b: number): void {
     this.uSandTint.value.set(r, g, b);
   }
+  /** the sand's tint as set (live: the creatures' floor reads it) */
+  get sandTint(): Readonly<Vector3> {
+    return this.uSandTint.value;
+  }
 
   /** Close-up surface detail on or off (quality preset). */
   setDetail(on: boolean): void {

@@ -21,11 +21,13 @@ const BURROW_SHOTS = [
   { name: 'burrow_land', set: { scene: 'tank', seed: 2, night: false }, call: { fn: 'mode', args: ['BURROW'] }, call2: { fn: 'until', args: ['blow', 10, 0, 0] }, follow: { offset: [0.002, 0.008, 0.085], dt: [0.002, 0.0, 0] } },
   { name: 'burrow_jetB', call: { fn: 'untilJet', args: ['B', 0, 0.3] }, follow: { offset: [-0.03, 0.012, 0.075], dt: [-0.004, -0.002, 0] } },
   { name: 'burrow_jetF', call: { fn: 'untilJet', args: ['F', 0, 0.3] }, follow: { offset: [0.075, 0.008, 0.03], dt: [0.008, -0.002, 0] } },
-  { name: 'burrow_sunk', call: { fn: 'until', args: [['gap', 'sweep'], 15, 0, 0] }, follow: { offset: [0.002, 0.01, 0.085], dt: [0.002, -0.002, 0] } },
+  // (from about photo 42's height, ≈ 20° up: the hollow round it shows)
+  { name: 'burrow_sunk', call: { fn: 'until', args: [['gap', 'sweep'], 15, 0, 0] }, follow: { offset: [0.002, 0.03, 0.08], dt: [0.002, -0.002, 0] } },
   { name: 'burrow_reach', call: { fn: 'untilStroke', args: [1, 0.3] }, follow: { offset: [0.05, 0.075, 0.035], dt: [0.012, -0.004, -0.004] } },
   { name: 'burrow_arch_front', call: { fn: 'untilStroke', args: [4, 0.75] }, follow: { offset: [0.075, 0.006, 0.0], dt: [0.004, 0.002, 0] } },
+  // (the coat half made, mid-sweep as in 46; complete only once it lies buried, 21)
+  { name: 'burrow_coat', call: { fn: 'untilStroke', args: [5, 0.05] }, follow: { offset: [-0.035, 0.06, 0.03], dt: [0.002, -0.004, 0] } },
   { name: 'burrow_arch_side', call: { fn: 'untilStroke', args: [6, 0.74] }, follow: { offset: [0.004, 0.012, 0.085], dt: [0.004, 0.002, 0] } },
-  { name: 'burrow_coat', call: { fn: 'untilStroke', args: [7, 0.05] }, follow: { offset: [-0.035, 0.06, 0.03], dt: [0.002, -0.004, 0] } },
   { name: 'burrow_buried', call: { fn: 'until', args: ['buried', 30, 0, 3] }, follow: { offset: [0.075, 0.01, 0.0], dt: [0.004, -0.004, 0] } },
   { name: 'burrow_buried_side', follow: { offset: [0.01, 0.025, 0.075], dt: [0.002, -0.005, 0] } },
   { name: 'emerge_shed', set: { night: true }, call: { fn: 'mode', args: ['HOVER'] }, call2: { fn: 'untilShed', args: [10, 0, 0.35] }, follow: { offset: [0.01, 0.02, 0.085], dt: [0.0, 0.0, 0] } },

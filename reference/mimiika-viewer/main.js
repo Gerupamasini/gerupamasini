@@ -81,7 +81,7 @@ function poseStudio(dt = 0) {
   if (chromaOverride) { sq.look.uniforms.uChroma.value.set(...chromaOverride.slice(0, 4)); sq.look.uniforms.uPale.value = chromaOverride[4] ?? 0; }
   for (const e of beh.fx) {
     // (the pit it blows: laid just over the bed, under the buried eyes)
-    if (e.kind === 'pit') { if (e.deepen) studioFx.growImprint(e.strength); else studioFx.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007); continue; }
+    if (e.kind === 'pit') { if (e.fill) studioFx.fillImprint(e.fill); else if (e.deepen) studioFx.growImprint(e.strength); else studioFx.imprint(e.pos.x, e.pos.z, e.heading, e.halfW, e.halfL, () => FLOOR, e.strength, e.life ?? 150, 0.0007, MimiikaDriver.PIT_LOOK); continue; }
     (e.kind === 'ink' ? studioInk : studioFx).emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, undefined, e.grow, e.kill, e.shade);
   }
   beh.fx.length = 0;

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { Euler, Group, Quaternion, Vector3, type Bone, type BufferAttribute, type Mesh, type SkinnedMesh } from 'three';
 import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, profileAt, surfacePoint, toModel } from '../../src/creatures/species/mimiika/anatomy';
 import { LODS, buildArms, buildBody, buildFin, buildFunnel, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
-import { createSquidBehavior, MODES, type Mode } from '../../src/creatures/species/mimiika/behavior';
+import { ARM_II_KEYS, createSquidBehavior, MODES, type Mode, type PitEvent } from '../../src/creatures/species/mimiika/behavior';
 import { ARM_AIM_MAX, applyPose, armEyeGap, armExtOf, armJoints, armThin, armThinAt, armTip, emptyPose, type Pose } from '../../src/creatures/species/mimiika/rig';
 import { buildModel, disposeModel, type MimiikaModel } from '../../src/creatures/species/mimiika/model';
-import { MimiikaLook, sandGrain } from '../../src/creatures/species/mimiika/materials';
-import { MimiikaDriver, lookSpecFor } from '../../src/creatures/species/mimiika/MimiikaDriver';
+import { MimiikaLook, SUBSTRATE_TINT, sandGrain } from '../../src/creatures/species/mimiika/materials';
+import { MimiikaDriver, lookSpecFor, sandColour } from '../../src/creatures/species/mimiika/MimiikaDriver';
 import { SandFX } from '../../src/creatures/species/akaei/SandFX';
 import type { Individual } from '../../src/creatures/Individual';
 import type { DriverContext } from '../../src/creatures/drivers/Driver';
@@ -290,6 +290,31 @@ describe('ミミイカ: behaviour', () => {
     expect(struck).toBeGreaterThanOrEqual(3);
   });
 
+  it('eats the mysid it holds when the hunt is cut short (from the sand too): it never vanishes half eaten', () => {
+    const cuts = { hover: (b: ReturnType<typeof make>) => b.hover(5), swim: (b: ReturnType<typeof make>) => b.swim(null), crawl: (b: ReturnType<typeof make>) => b.crawl(null), escape: (b: ReturnType<typeof make>) => b.escape(new Vector3(0.05, 0, 0)) };
+    for (const [name, cut] of Object.entries(cuts)) for (const buried of [true, false]) {
+      let held = 0;
+      for (let seed = 1; seed <= 24 && held < 2; seed++) {
+        const b = make(seed, {}, { startBuried: buried });
+        run(b, 0.5);
+        b.hunt();
+        // (eating it: in the arms, from the sand or over it)
+        for (let i = 0; i < 16 * 60 && b.state.phase !== 'aeating' && b.state.phase !== 'eat'; i++) b.update(1 / 60);
+        if (b.state.phase !== 'aeating' && b.state.phase !== 'eat') continue;
+        run(b, 0.5);
+        const p = b.prey!;
+        expect(p.state).toBe('caught');
+        cut(b);
+        run(b, 0.1);
+        expect(p.state, `${name} ${buried ? 'aeating' : 'eat'} ${seed}`).toBe('eaten');
+        expect(p.remains).toBe(0);
+        expect(b.prey).toBeNull();
+        held++;
+      }
+      expect(held, `${name} ${buried}`).toBeGreaterThan(0);
+    }
+  }, 60000);
+
   it('stays in the water and above the sand, and does not bury where there is no sand', () => {
     const shallow = make(17, { waterY: () => 0.03 });
     shallow.hover(5);
@@ -335,7 +360,7 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
   interface Frame {
     phase: string; mode: string; t: number; bury: number; pitch: number; shown: number; roll: number; funnelYaw: number; funnelSide: number;
     fold: number; amp: number; mantle: number; sc: number; hc: number; stroke: { k: number; u: number; dir: string } | null;
-    ext: number[]; aimW: number[]; tipL: Vector3; tipR: Vector3; gap: number; J: Vector3[]; tips: Vector3[];
+    ext: number[]; aimW: number[]; tipL: Vector3; tipR: Vector3; gap: number; J: Vector3[]; tips: Vector3[]; headPitch: number;
     fx: { pos: Vector3; count: number }[]; pos: Vector3; quat: Quaternion; heading: number;
     /** each arm's highest joint and the crown's underside over the sand (model mm) */
     top: number[]; crown: number;
@@ -359,7 +384,7 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
         fold: Math.max(P.finFold[0], P.finFold[1]), amp: Math.max(P.finAmp[0], P.finAmp[1]), mantle: P.mantle, sc: st.sandCoat, hc: st.headCover,
         stroke: st.stroke ? { ...st.stroke } : null, ext: [...P.armExt], aimW: [...P.armAimW],
         tipL: armTip(P, IIL, new Vector3()), tipR: armTip(P, IIR, new Vector3()), gap: P.armAimW[IIL] > 0 ? Math.min(armEyeGap(P, IIL), armEyeGap(P, IIR)) : 9,
-        J: armJoints(P, IIL, []).map((v) => v.clone()), tips: ARMS.map((_, i) => armTip(P, i, new Vector3())),
+        J: armJoints(P, IIL, []).map((v) => v.clone()), tips: ARMS.map((_, i) => armTip(P, i, new Vector3())), headPitch: P.headPitch,
         fx: b.fx.flatMap((e) => (e.kind === 'sand' ? [{ pos: e.pos.clone(), count: e.count }] : [])), pos: st.pos.clone(), quat: P.quat.clone(), heading: st.heading,
         top: ARMS.map((_, n) => Math.max(...armJoints(P, n, _j).map((v) => v.clone().multiplyScalar(0.001 * K).applyQuaternion(P.quat).add(st.pos).y / (0.001 * K)))),
         crown: CROWN_UNDER.clone().multiplyScalar(0.001 * K).applyQuaternion(P.quat).add(st.pos).y / (0.001 * K),
@@ -492,9 +517,14 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
     }
   }, 60000);
 
-  it('reaches out low over the sand (forward, 45°, sideways, back and out), and arches back over the head, clear of the eyes', () => {
+  it('reaches out low over the sand (forward, 45°, sideways, back and out), and loops back over its own eye, clear of it', () => {
     const AZ: Record<string, [number, number]> = { F: [0, 20], FL: [35, 60], L: [70, 100], BL: [105, 135] };
-    const headTop = new Vector3(0, surfacePoint(0.6, 0, HEAD_PROFILE)[1], 0.6 - Z_ROOT), backTop = new Vector3(0, surfacePoint(-4.5, 0)[1], -4.5 - Z_ROOT);
+    const R = EYE.r + EYE.skin, HEAD = new Vector3(0, 0.8, 1.2 - Z_ROOT);
+    // a point of the root frame as seen from in front: out to the animal's left of its midline, over the sand, forward
+    const local = (f: Frame, p: Vector3, K: number) => { const w = world(f, p, K), d = w.clone().sub(f.pos.clone().multiplyScalar(1000 / K)); return new Vector3(d.dot(leftOf(f)), w.y, d.dot(fwdOf(f))); };
+    // a point of the head (the left eye's centre, the crown's side), turned with the head on its joint
+    const onHead = (f: Frame, p: Vector3) => p.clone().sub(HEAD).applyAxisAngle(new Vector3(1, 0, 0), -f.headPitch).add(HEAD);
+    const eyeOf = (f: Frame) => onHead(f, new Vector3(EYE.x, EYE.y, EYE.z - Z_ROOT));
     for (const { F, plan, K } of all()) {
       for (let k = 0; k < plan.strokes; k++) {
         const S = F.filter((f) => f.phase === 'sweep' && f.stroke?.k === k);
@@ -502,7 +532,7 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
         expect(dir).toBe(['F', 'FL', 'L', 'BL'][k % 4]);
         // the scoop: the tip on the sand, about 1.1 ML out from the crown
         const sc = S.find((f) => f.stroke!.u >= 0.36)!;
-        const tip = world(sc, sc.tipL, K), crown = world(sc, new Vector3(2.1, 0.35, 14.8), K);
+        const tip = world(sc, sc.tipL, K), crown = world(sc, onHead(sc, new Vector3(2.1, 0.35, 14.8)), K);
         expect(tip.y, `stroke ${k} tip height`).toBeGreaterThan(-2.5);
         expect(tip.y).toBeLessThan(1.0);
         const d = tip.clone().sub(crown).setY(0);
@@ -512,16 +542,29 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
         const az = (Math.atan2(v.dot(leftOf(sc)), v.dot(fwdOf(sc))) * 180) / Math.PI;
         expect(az, `stroke ${k} ${dir} azimuth`).toBeGreaterThan(AZ[dir][0]);
         expect(az).toBeLessThan(AZ[dir][1]);
-        // over the head (forward strokes) or the front of the back (the others), the tips in and down above it
-        const ar = S.find((f) => f.stroke!.u >= 0.76)!;
-        const to = dir === 'F' || dir === 'FL' ? headTop : backTop;
-        expect(Math.hypot(ar.tipL.x - to.x, ar.tipL.z - to.z), `stroke ${k} over the ${to === headTop ? 'head' : 'back'}`).toBeLessThan(5.5);
-        expect(ar.tipL.y - to.y).toBeGreaterThan(to === headTop ? 2.5 : 1.5);
-        expect(ar.tipL.y - to.y).toBeLessThan(to === headTop ? 6 : 5.5);
-        // the arch's top about an eye's height over the eyes
-        const apex = Math.max(...S.filter((f) => f.stroke!.u > 0.6 && f.stroke!.u < 0.9).flatMap((f) => f.J.map((p) => world(f, p, K).y)));
-        expect(apex, `stroke ${k} apex`).toBeGreaterThan(8);
-        expect(apex).toBeLessThan(13.5);
+        // drawn back into a loop over its own eye (Fig. 13E): up from the sand outside the eye, over it about an eye's
+        // height above its top, the tip curling in and down over its inner side; between the eyes from the forward
+        // strokes, further back over the front of the back from the others
+        const ar = S.find((f) => f.stroke!.u >= 0.76)!, head = dir === 'F' || dir === 'FL';
+        const eye = local(ar, eyeOf(ar), K), top = eye.y + R, L = ar.J.map((p) => local(ar, p, K)), end = L[5];
+        const apex = L.reduce((a, p) => (p.y > a.y ? p : a));
+        expect(apex.x, `stroke ${k} apex over its own eye`).toBeGreaterThan(eye.x - 0.5 * R);
+        expect(apex.x).toBeLessThan(eye.x + R);
+        // (about one eye's height of the dome left out of the sand at Fig. 13E's stage: 0.55–0.95 of the eye's own
+        // diameter; lower, about the body's height, from the back strokes, 45)
+        expect((apex.y - top) / (2 * R), `stroke ${k} apex over the eye`).toBeGreaterThan(head ? 0.55 : 0.33);
+        expect((apex.y - top) / (2 * R)).toBeLessThan(head ? 0.95 : 0.75);
+        expect(Math.max(...L.slice(1, 5).filter((p) => p.y < top).map((p) => p.x)), `stroke ${k} up outside the eye`).toBeGreaterThan(eye.x + R);
+        expect(end.x, `stroke ${k} tip in over the eye's inner side`).toBeLessThan(eye.x);
+        expect(end.y).toBeGreaterThan(top);
+        expect(end.y).toBeLessThan(apex.y - 1.5);
+        if (head) expect(Math.abs(end.z - eye.z), `stroke ${k} tip between the eyes`).toBeLessThan(3);
+        else expect(eye.z - end.z, `stroke ${k} tip behind the eyes`).toBeGreaterThan(1.5);
+        // and stands up beside its eye, out of the sand just outside it, before the next stroke (Fig. 13D)
+        const up = S[S.length - 1], tipUp = local(up, up.J[5], K), eyeUp = local(up, eyeOf(up), K);
+        expect(up.stroke!.u).toBeGreaterThan(0.97);
+        expect(tipUp.x, `stroke ${k} up beside the eye`).toBeGreaterThan(eyeUp.x + R);
+        expect(tipUp.y).toBeGreaterThan(eyeUp.y + R + 3);
       }
       for (const f of F) {
         // the arm's skin stays clear of the eyes' domes; the tips never cross the midline
@@ -594,14 +637,15 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
         // (head-up only as deep as it is: not tipped up on its arms from the first jet)
         if (f.phase === 'blow' && f.bury < 0.3) expect(f.pitch).toBeLessThan(0.15);
         if (f.phase === 'sweep') {
-          // arms I do not stand up between the eyes, and the bracing arms stay down
-          expect(Math.max(...I.map((n) => f.top[n]))).toBeLessThan(3.6);
+          // arms I do not stand up between the eyes (no stubs there, Fig. 13E: the head is bent down as it strokes), and
+          // the bracing arms stay down
+          expect(Math.max(...I.map((n) => f.top[n]))).toBeLessThan(2.6);
           expect(Math.max(...notII.map((n) => world(f, f.tips[n], 1).y))).toBeLessThan(1.5);
         }
       }
       // buried, no part of any arm stands up out of the sand in front of the head (16): every joint under it
       const b = first(F, 'buried');
-      for (const f of F.slice(b + 1.5 * T, b + 3 * T)) expect(Math.max(...f.top)).toBeLessThan(-0.4);
+      for (const f of F.slice(b + 1.5 * T, b + 3 * T)) expect(Math.max(...f.top)).toBeLessThan(-1.0);
     }
   }, 60000);
 
@@ -752,6 +796,53 @@ describe('ミミイカ: burying (settle, jets, arm II strokes, buried, out again
     expect(e.state.headCover).toBe(0);
   }, 60000);
 
+  it('blows a hollow round itself, darker with each jet, open through the strokes and filled in once it lies buried', () => {
+    for (const [seed, K] of [[2, 1], [5, 0.56], [9, 1.6]] as const) {
+      const r = new Rng(seed);
+      const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: K, start: { x: 0, z: 0, heading: 0.4 }, autonomous: false });
+      b.update(1 / T);
+      b.burrow(60);
+      const pits: { phase: string; t: number; e: PitEvent }[] = [];
+      let buriedAt = -1;
+      for (let i = 0; i < 30 * T; i++) {
+        b.update(1 / T);
+        for (const e of b.fx) if (e.kind === 'pit') pits.push({ phase: b.state.phase, t: i, e: e as PitEvent });
+        b.fx.length = 0;
+        if (buriedAt < 0 && b.state.phase === 'buried') buriedAt = i;
+      }
+      const plan = b.state.plan!, laid = pits.filter((p) => !p.e.deepen && !p.e.fill), deeper = pits.filter((p) => p.e.deepen), fill = pits.filter((p) => p.e.fill);
+      // laid with the first jet round the body (wider and longer than it, ∝ its size), deepened with each later one
+      expect(laid.length).toBe(1);
+      expect(laid[0].phase).toBe('blow');
+      const mlK = ML * K;
+      expect(laid[0].e.halfW / mlK).toBeGreaterThan(0.75);
+      expect(laid[0].e.halfW / mlK).toBeLessThan(1.1);
+      expect(laid[0].e.halfL).toBeGreaterThan(laid[0].e.halfW);
+      expect(deeper.length).toBe(plan.jets.length - 1);
+      for (const p of deeper) expect(p.phase).toBe('blow');
+      const str = [laid[0], ...deeper].map((p) => p.e.strength);
+      for (let j = 1; j < str.length; j++) expect(str[j]).toBeGreaterThan(str[j - 1]);
+      expect(str[str.length - 1]).toBeGreaterThan(0.95);
+      // (it lasts the strokes) and is filled in as the burial is made up, in a few seconds
+      expect(laid[0].e.life!).toBeGreaterThan(plan.blow + plan.gap + plan.strokeT.reduce((x, y) => x + y, 0));
+      expect(fill.length).toBe(1);
+      expect(fill[0].t).toBe(buriedAt);
+      expect(fill[0].e.fill!).toBeLessThan(3.01);
+    }
+    // cut short (an escape in the strokes) the hollow is left as it was, not filled
+    const r = new Rng(4);
+    const b = createSquidBehavior({ world: flat(), rng: () => r.next(), scale: 1, start: { x: 0, z: 0 }, autonomous: false });
+    b.burrow(60);
+    let fills = 0;
+    for (let i = 0; i < 25 * T; i++) {
+      b.update(1 / T);
+      if (b.state.phase === 'sweep' && b.state.stroke?.k === 2) b.escape(new Vector3(0.05, 0, 0));
+      fills += b.fx.filter((e) => e.kind === 'pit' && (e as PitEvent).fill).length;
+      b.fx.length = 0;
+    }
+    expect(fills).toBe(0);
+  }, 60000);
+
   it('blends arm II back when the burial is cut short, and keeps its own time when asked again', () => {
     for (const cut of ['hunt', 'escape'] as const) {
       let done = false, i0 = -1;
@@ -864,13 +955,13 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
   };
   /** a direction in the level frame (x the arm's own side out, y up, z forward; ψ from forward to the side, ε up) → head frame */
   const toHead = (P: Pose, d: Vector3) => d.applyQuaternion(P.quat.clone().multiply(new Quaternion().setFromAxisAngle(X, -P.headPitch)).multiply(new Quaternion().setFromAxisAngle(Y, P.headYaw)).invert()).normalize();
-  type Key = { psi: number; elev: number; bend: number[]; curl: number[]; ext: number };
+  type Key = { psi: number; elev: number; bend: number[]; curl: number[]; swing?: number[]; ext: number };
   const aimArm = (P: Pose, i: number, k: Key) => {
     const s = ARMS[i].side;
     P.armAim[i].copy(toHead(P, new Vector3(Math.sin(k.psi) * Math.cos(k.elev) * s, Math.sin(k.elev), Math.cos(k.psi) * Math.cos(k.elev))));
     P.armBend[i].copy(toHead(P, new Vector3(k.bend[0] * s, k.bend[1], k.bend[2])));
     P.armAimW[i] = 1; P.armExt[i] = k.ext;
-    for (let j = 0; j < 5; j++) P.armCurl[i * 5 + j] = k.curl[j];
+    for (let j = 0; j < 5; j++) { P.armCurl[i * 5 + j] = k.curl[j]; P.armSwing[i * 5 + j] = (k.swing?.[j] ?? 0) * s; }
   };
   /** an arm's skinned vertices (world), thinned about their rest axis as the vertex shader does, and their rest t */
   const meshArm = (m: MimiikaModel, P: Pose, i: number) => {
@@ -1039,14 +1130,18 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
       keys.push({ psi, elev, bend: [0, -1, 0], curl: [0, 0, 0, 0, 0], ext });
       if (elev > 0) keys.push({ psi, elev, bend: [-0.65, -0.3, -0.7], curl: [0, 0, 0, 0, 0], ext });
     }
-    keys.push({ psi: 0.5, elev: 0.9, bend: [0, -1, 0], curl: [0, 0.1, 0.15, 0.2, 0.3], ext: 1.15 });
-    keys.push({ psi: 1.2, elev: 0.55, bend: [-0.3, -0.8, -0.5], curl: [0, 0.2, 0.3, 0.4, 0.45], ext: 1.75 });
-    keys.push({ psi: 1.55, elev: 0.95, bend: [-0.65, -0.3, -0.7], curl: [0, 0.4, 0.6, 0.75, 0.7], ext: 1.35 });
-    keys.push({ psi: 1.75, elev: 0.95, bend: [-0.45, -0.3, -0.85], curl: [0, 0.4, 0.55, 0.7, 0.65], ext: 1.65 });
+    // arm II standing beside its eye between the strokes, and looped over it: the behaviour's own keys, half and fully
+    // rolled up, with their swings, with the head up a little and bent down as it is held while it strokes
+    const own: Key[] = [];
+    for (const a of Object.values(ARM_II_KEYS)) for (const roll of [0.45, 1]) {
+      own.push({ psi: a.psi, elev: a.elev, bend: [a.bend.x, a.bend.y, a.bend.z], curl: a.curl.map((c) => c * roll), swing: a.swing.map((c) => c * roll), ext: a.ext });
+    }
     let worstEye = Infinity, worstFk = Infinity, worstBody = Infinity;
     const eyeC = new Vector3(), inv = holder.matrixWorld.clone();
-    for (const bury of [0.78, 1]) for (const k of keys) {
+    const cases = [...keys.map((k) => ({ k, hp: 0.05 })), ...own.flatMap((k) => [{ k, hp: 0.05 }, { k, hp: -0.3 }])];
+    for (const bury of [0.78, 1]) for (const { k, hp } of cases) {
       const P = sunk(bury);
+      P.headPitch = hp;
       aimArm(P, IIL, k);
       applyPose(holder, m.bones, P);
       inv.copy(holder.matrixWorld).invert();
@@ -1117,14 +1212,82 @@ describe('ミミイカ: the arm rig for burying (aim, stretch, thinning, FK)', (
         expect(shader.vertexShader).toContain('attribute vec4 aArm;');
         expect(shader.vertexShader).toContain('uniform float uArmThin[8];');
         expect(shader.fragmentShader).toContain('uniform float uSandFade;');
-        expect(shader.fragmentShader).toContain('smoothstep(0.0, uSandFade, vWPos.y - uGroundY)');
-      }
+        // (the sand heaped on its sides and banked at its foot within so many mm × K of the bed: opaque, the bed's own
+        // colour and light, no longer faded out to see-through)
+        expect(shader.fragmentShader).toContain('float hb = vWPos.y - uGroundY;');
+        expect(shader.fragmentShader).toContain('smoothstep(0.0, 3.0 * uSandFade, hb)');
+        expect(shader.fragmentShader).toContain('smoothstep(0.0, uSandFade * (0.3 + 0.6 * lay), hb)');
+        expect(shader.fragmentShader).not.toContain('diffuseColor.a *= 1.0 - mmSand');
+        // (the skin's grains: three lattices, the coarse one the grain size)
+        expect(shader.fragmentShader).toContain('mmGrain(p, uGrain, 51.0,');
+      } else expect(shader.fragmentShader).toContain('p / uGrain + 51.0');
       expect(shader.fragmentShader).toContain('uniform float uGrain;');
-      expect(shader.fragmentShader).toContain('p / uGrain + 51.0');
       expect(shader.fragmentShader).not.toContain('p / 0.3 + 51.0');
       for (const u of ['uArmThin', 'uSandFade', 'uGrain']) expect(shader.uniforms).toHaveProperty(u);
     }
     look.dispose();
+  });
+
+  it('draws the squid\'s hollow as a darker crater with a rim and fills it on cue; the ray\'s resting oval is as it was', () => {
+    const imprint = (g: Group) => g.children.find((c) => c.name === 'AkaeiImprint') as Mesh;
+    const U = (m: Mesh) => (m.material as unknown as { uniforms: Record<string, { value: { toArray(): number[] } & number }> }).uniforms;
+    // the ray's: the old shallow oval (24 % darker, a 10 % rim, half its life before it fades)
+    const g1 = new Group(), ray = new SandFX(g1);
+    ray.imprint(0, 0, 0.3, 0.1, 0.15, () => 0, 0.8, 150, 0.0015);
+    const m1 = imprint(g1);
+    expect(U(m1).uLook.value.toArray()).toEqual([0.24, 0, 0.1, 0.18]);
+    expect(U(m1).uBowl.value.toArray()).toEqual([0.62, 0.86]);
+    for (let i = 0; i < 74; i++) ray.update(1, () => 0);
+    expect(U(m1).uAmount.value).toBeCloseTo(0.8, 9);
+    for (let i = 0; i < 38; i++) ray.update(1, () => 0);
+    expect(U(m1).uAmount.value).toBeCloseTo(0.8 * (1 - 37 / 75), 6);
+    for (let i = 0; i < 40; i++) ray.update(1, () => 0);
+    expect(imprint(g1)).toBeUndefined();
+    ray.dispose();
+    // the squid's: darker, most in the middle, a crisper wall, a lighter rim; filled in from now in the time given
+    const g2 = new Group(), sq = new SandFX(g2, MimiikaDriver.sandFxOptions(0.56));
+    sq.imprint(0, 0, 0.3, 0.75 * ML * 0.56, 1.05 * ML * 0.56, () => 0, 0.4, 60, 0.0006, MimiikaDriver.PIT_LOOK);
+    const m2 = imprint(g2), look = U(m2).uLook.value.toArray(), bowl = U(m2).uBowl.value.toArray();
+    expect(look[0] + look[1]).toBeGreaterThan(2 * 0.24);
+    expect(look[1]).toBeGreaterThan(0);
+    expect(look[2]).toBeGreaterThan(0.1);
+    expect(look[3]).toBeLessThan(0.18);
+    expect(bowl[1] - bowl[0]).toBeLessThan(0.86 - 0.62);
+    sq.growImprint(1);
+    for (let i = 0; i < 10 * 60; i++) sq.update(1 / 60, () => 0);
+    expect(U(m2).uAmount.value).toBeCloseTo(1, 9);
+    sq.fillImprint(2.5);
+    for (let i = 0; i < 75; i++) sq.update(1 / 60, () => 0);
+    expect(U(m2).uAmount.value).toBeCloseTo(0.5, 1);
+    for (let i = 0; i < 80; i++) sq.update(1 / 60, () => 0);
+    expect(imprint(g2)).toBeUndefined();
+    sq.dispose();
+  });
+
+  it('takes its coat and its clouds\' colour from the bed under it, the map\'s own tint on the sand included (走水)', () => {
+    const tint = new Vector3(0.98, 0.9, 0.74), v = new Vector3();
+    expect(sandColour('sand', undefined, v).toArray()).toEqual(SUBSTRATE_TINT.sand);
+    expect(sandColour(undefined, tint, v).toArray()).toEqual(new Vector3(...SUBSTRATE_TINT.sand).multiply(tint).toArray());
+    expect(sandColour('muddy_sand', tint, v).toArray()).toEqual(new Vector3(...SUBSTRATE_TINT.muddy_sand).multiply(tint).toArray());
+    // (the terrain tints only its sand and muddy sand)
+    expect(sandColour('mud', tint, v).toArray()).toEqual(SUBSTRATE_TINT.mud);
+    const cover = (sandTint?: Vector3) => {
+      const d = new MimiikaDriver(), holder = MimiikaDriver.makeModel().root;
+      new Group().add(holder);
+      const r = new Rng(3);
+      const ind = { id: 'bed#1', length_mm: 14, pos: new Vector3(), home: new Vector3(), heading: 0, alert: 0, rng: { next: () => r.next(), chance: (p: number) => r.next() < p } } as unknown as Individual;
+      d.attach(holder, ind);
+      const floor = { heightAt: () => 0, waterAt: () => 0.3, sampleAt: () => ({ substrate: 'sand' }), ...(sandTint ? { sandTint } : {}) };
+      d.update(1 / 60, { floor, player: new Vector3(0, 1, 0.5), simScale: 1, nowMs: 0 } as unknown as DriverContext);
+      const c = d.view!.look.uniforms.uCover.value.toArray();
+      d.dispose();
+      return c;
+    };
+    // a tank, the case, the viewer: the plain sand as before; 走水: its warm sand
+    for (const [a, e] of cover().map((x, i) => [x, SUBSTRATE_TINT.sand[i]])) expect(a).toBeCloseTo(e, 6);
+    const warm = cover(tint), want = new Vector3(...SUBSTRATE_TINT.sand).multiply(tint).toArray();
+    for (let i = 0; i < 3; i++) expect(warm[i]).toBeCloseTo(want[i], 6);
+    expect(warm[0] / warm[2]).toBeGreaterThan(1.25);
   });
 
   it('leaves the アカエイ\'s sand exactly as it was, and settles the squid\'s on the sand under it', () => {
