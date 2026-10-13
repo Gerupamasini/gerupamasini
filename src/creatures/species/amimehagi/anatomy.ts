@@ -89,11 +89,14 @@ export const fullWidth = curve(WIDTH_PTS);
 export const beltY = curve(BELT_PTS);
 
 /**
- * the eye: centre (s, y), radius of the eyeball, how far its centre sits inside the skin, the socket's raised rim, and
- * the skin that covers the ball's edge: a thick fleshy ring from the opening (`aperture`, radius round the eye's axis)
- * out to where it runs into the cheek (`lidOut`). The opening shows the iris and pupil; the rest of the ball is under skin
+ * the eye, after close photographs of live fish: an eyeball (`r`) sunk into a raised socket (`sink`: how far its
+ * centre lies inside the skin), under a clear, smooth corneal dome that is part of the skin and does not turn with it.
+ * The dome's rim (`dome`, radius round the eye's axis) is a glassy edge where the granular skin begins; it stands
+ * `gap` above the ball's crown. Through it: the iris out to `iris` (radius on the ball, round the axis), a grey-blue
+ * band beyond it, and the large tear-shaped pupil (`pupil`: half width and half height, rad from the axis), its narrow
+ * end forward
  */
-export const EYE = { s: 0.215, y: 0.072, r: 0.052, sink: 0.03, rim: 0.06, aperture: 0.036, lidOut: 0.057 } as const;
+export const EYE = { s: 0.215, y: 0.072, r: 0.054, sink: 0.0298, rim: 0.064, dome: 0.055, gap: 0.003, iris: 0.04, pupil: [0.38, 0.28] } as const;
 /** the gape: mouth corner at s, the line between the lips just below the axis, rising a little to the front */
 export const GAPE = { s: 0.032, y0: -0.002, slope: -0.07 } as const;
 export const gapeY = (s: number): number => GAPE.y0 + GAPE.slope * s;

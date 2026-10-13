@@ -4,12 +4,15 @@ import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '..
 import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
-import { BONES, MODEL_TL, SPINE } from './anatomy';
-import { hakuGeometry, rigRest, type Lod } from './geometry';
-import { hakuMaterials, tickHakuMaterials, VARIANT_COUNT } from './materials';
+import { BONES, HAKU, MODEL_TL, SPINE, formFor, type MulletForm } from './anatomy';
+import { mulletGeometry, rigRest, type Lod } from './geometry';
+import { mulletMaterials, tickHakuMaterials, variantCount } from './materials';
 import { applyPose, restPose, type RigBones } from './swim';
 import { HakuFish, releaseSchool, schoolFor, type FishEnv, type School } from './School';
-import { shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from './ContactShadows';
+import { CONTACT_SHADOWS, shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from './ContactShadows';
+import { grazeFXFor, type GrazeFX } from './GrazeFX';
+import { seagrass } from '../amimehagi/seagrass';
+import { SAND_COLOURS } from '../akaei/material';
 
 /** camera distances (m, for a 30 mm fish; scaled with size) where the tiers change */
 const LOD1_AT = 0.9;
@@ -30,9 +33,9 @@ interface Model {
   skeleton: Skeleton;
 }
 
-/** One fish's rig and three tiers (shared geometry and materials, its own skeleton). */
-function buildModel(variant: number, tiers: Lod[] = [0, 1, 2]): Model {
-  const rest = rigRest();
+/** One fish's rig and three tiers (its form's shared geometry and materials, its own skeleton). */
+function buildModel(F: MulletForm, variant: number, tiers: Lod[] = [0, 1, 2]): Model {
+  const rest = rigRest(F);
   const bones = BONES.map((name, i) => {
     const b = new Bone();
     b.name = name;
@@ -43,11 +46,11 @@ function buildModel(variant: number, tiers: Lod[] = [0, 1, 2]): Model {
   });
   BONES.forEach((_, i) => { const pi = rest.parent[i]; if (pi >= 0) bones[pi].add(bones[i]); });
   const skeleton = new Skeleton(bones, rest.inverses);
-  const mats = hakuMaterials();
+  const mats = mulletMaterials(F);
   const lod = new LOD();
   lod.name = 'HakuLOD';
   for (const t of tiers) {
-    const geo = hakuGeometry(t);
+    const geo = mulletGeometry(t, F);
     const level = new Group();
     level.name = `HakuLOD${t}`;
     const body = new SkinnedMesh(geo.body, t === 2 ? mats.bodyLow[variant] : mats.body[variant]);
@@ -84,6 +87,12 @@ export class HakuDriver implements Driver {
   private school: School | null = null;
   private shadows: ShadowLayer | null = null;
   private shadowSlot = -1;
+  /** what grazing stirs up (shared by the fish under one parent), and the leaf this fish tugs at (a push slot) */
+  private puffs: GrazeFX | null = null;
+  private tugSlot = -1;
+  private sand = SAND_COLOURS.sand;
+  private sandT = 0;
+  private level: 0 | 1 | 2 = 0;
   private locked = false;
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private readonly tmp = new Vector3();
@@ -105,7 +114,7 @@ export class HakuDriver implements Driver {
 
   /** A swimming ハク at the model size for the 図鑑. */
   static makePreview(): Object3D {
-    const m = buildModel(0, [0]);
+    const m = buildModel(HAKU, 0, [0]);
     const root = new Group();
     root.name = 'HakuPreview';
     root.add(m.bones[0], m.lod);
@@ -123,8 +132,10 @@ export class HakuDriver implements Driver {
     this.ind = individual;
     const tl = individual.length_mm / 1000;
     const scale = tl / MODEL_TL;
-    const variant = strHash(individual.id) % VARIANT_COUNT;
-    this.model = buildModel(variant);
+    // a ハク up to 4.5 cm, a スバシリ from there: the same rig, its own shape and skin
+    const form = formFor(individual.length_mm);
+    const variant = strHash(individual.id) % variantCount(form);
+    this.model = buildModel(form, variant);
     root.add(this.model.bones[0], this.model.lod);
     root.scale.setScalar(scale);
     // the tiers switch at distances that grow with the fish
@@ -135,10 +146,22 @@ export class HakuDriver implements Driver {
     const key = `${parent.uuid}|${individual.species.id}|${individual.cell}|${individual.ruleIndex}`;
     this.school = schoolFor(key, strHash(key));
     if (!this.fish) {
-      this.fish = new HakuFish(tl, new Rng(hashInts(strHash(individual.id), 31)));
+      this.fish = new HakuFish(tl, new Rng(hashInts(strHash(individual.id), 31)), form);
       this.fish.pos.copy(individual.pos);
       this.fish.heading = individual.heading;
       this.fish.onEvent = (id) => this.emit(id);
+      this.fish.onPuff = (kind, at, dir, amount) => {
+        // (the puffs go with the contact shadows: off on 超軽量, and not for a far fish)
+        const f = this.fish;
+        if (!f || !this.puffs || !this.floor || this.level > 1 || !CONTACT_SHADOWS.enabled) return;
+        this.puffs.emit(kind, at, dir, amount, f.tl, this.floor.heightAt(at.x, at.z), this.sand);
+      };
+      this.fish.onTug = (at, radius) => {
+        // the leaf it bites at is pulled toward its mouth (the meadow's push slots; near tiers only)
+        if (!at || this.level > 1) { this.releaseTug(); return; }
+        if (this.tugSlot < 0) this.tugSlot = seagrass.claimPush();
+        if (this.tugSlot >= 0) seagrass.setPush(this.tugSlot, at.x, at.y, at.z, radius);
+      };
     }
     const f = this.fish;
     f.time = Math.max(f.time, this.school.time);
@@ -146,6 +169,7 @@ export class HakuDriver implements Driver {
     this.gather(f, this.school);
     this.shadows = shadowLayerFor(parent);
     this.shadowSlot = this.shadows.claim();
+    this.puffs = grazeFXFor(parent);
     // shown from the first update on, once it knows where the water is
     root.visible = false;
     this.place();
@@ -175,12 +199,14 @@ export class HakuDriver implements Driver {
     if (this.shadows) this.shadows.release(this.shadowSlot);
     this.shadowSlot = -1;
     this.shadows = null;
+    this.puffs = null;
+    this.releaseTug();
     if (this.model) {
       this.model.lod.removeFromParent();
       this.model.bones[0].removeFromParent();
       this.model.skeleton.dispose();
     }
-    if (this.school && this.fish) { this.school.remove(this.fish); releaseSchool(this.school); }
+    if (this.school && this.fish) { this.fish.leave(this.school); this.school.remove(this.fish); releaseSchool(this.school); }
     this.school = null;
     this.model = null;
     this.root = null;
@@ -215,7 +241,8 @@ export class HakuDriver implements Driver {
         if (school.state === 'SCHOOL_SWIM' && school.alert >= 0.6 && school.time - school.stateStart < 3) break;
         const src = intent.from ?? (Number.isNaN(this.player.x) ? null : this.player);
         const away = src ? this.tmp.set(f.pos.x - src.x, 0, f.pos.z - src.z) : this.tmp.set(Math.sin(school.travel), 0, Math.cos(school.travel));
-        const goal = f.pos.clone().addScaledVector(away.lengthSq() > 1e-8 ? away.normalize() : away.set(0, 0, 1), 1.2);
+        // (a bigger fish keeps further off)
+        const goal = f.pos.clone().addScaledVector(away.lengthSq() > 1e-8 ? away.normalize() : away.set(0, 0, 1), 1.2 * (1 + f.vigilance));
         if (school.request('SCHOOL_SWIM', intent.seconds, goal, true)) school.alert = Math.max(school.alert, 0.6);
         break;
       }
@@ -234,7 +261,16 @@ export class HakuDriver implements Driver {
     tickHakuMaterials(performance.now() / 1000);
     this.player.copy(ctx.player);
     const sdt = Math.min(0.1, dt * ctx.simScale);
-    const env: FishEnv = { floor: ctx.floor, bounds: ctx.bounds, minDepth: Math.max(0.012, ctx.minDepth ?? 0.012) };
+    this.floor = ctx.floor;
+    const env: FishEnv = { floor: ctx.floor, bounds: ctx.bounds, minDepth: Math.max(0.012, ctx.minDepth ?? 0.012), meadow: ctx.floor.meadow ?? null };
+    // how uneasy the player makes it (the creature system's alert), and how closely it is drawn
+    f.alarm = ind.alert;
+    f.detail = this.level;
+    this.sandT -= sdt;
+    if (this.sandT <= 0 && ctx.floor.sampleAt) {
+      this.sandT = 2;
+      this.sand = SAND_COLOURS[ctx.floor.sampleAt(f.pos.x, f.pos.z)?.substrate ?? 'sand'] ?? SAND_COLOURS.sand;
+    }
     if (Number.isNaN(f.pos.y)) {
       const L = f.layer(env, f.pos.x, f.pos.z);
       f.pos.y = L.surface - Math.min(0.07, Math.max(0.012, 0.3 * (L.surface - L.bottom)));
@@ -259,11 +295,23 @@ export class HakuDriver implements Driver {
     ind.heading = f.heading;
     this.place();
     this.root.visible = true;
-    const level = this.locked ? 0 : model.lod.getCurrentLevel();
-    applyPose(model.rig, f.pose, level as 0 | 1 | 2);
+    const level = (this.locked ? 0 : model.lod.getCurrentLevel()) as 0 | 1 | 2;
+    this.level = level;
+    applyPose(model.rig, f.pose, level);
+    if (this.puffs) {
+      this.puffs.current.set(school.current.x, school.current.z);
+      this.puffs.advance(ctx.nowMs, sdt);
+    }
     this.busy = school.state === 'ESCAPE' || !school.expired;
     // the shadow on the bed (the far tier's at half rate)
     if (level < 2 || (this.shadowTick++ & 1) === 0) this.updateShadow(env);
+  }
+
+  private floor: DriverContext['floor'] | null = null;
+
+  private releaseTug(): void {
+    if (this.tugSlot >= 0) seagrass.releasePush(this.tugSlot);
+    this.tugSlot = -1;
   }
 
   private place(): void {
@@ -299,6 +347,7 @@ export class HakuDriver implements Driver {
     f.pos.x = x; f.pos.z = z; f.pos.y = Number.NaN;
     if (heading !== undefined) f.heading = heading;
     f.speed = 0; f.vy = 0; f.reactAt = -1; f.escT = -1;
+    if (this.school) f.leave(this.school);
     ind.pos.x = x; ind.pos.z = z;
     this.rider.reset();
     this.busy = false;

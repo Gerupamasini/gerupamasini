@@ -7,7 +7,8 @@ import { defaultEquipmentLayout, EQUIPMENT_MAX, FLOW_KINDS, makeEquipment, norma
 import { itemForCategory } from './catalog';
 import { isFilterKind } from './progression';
 
-export interface WaterFlow { position: Vector3; direction: Vector3; flowRate: number; radius: number; device: string }
+/** A running outlet. `surface` is how much of it reaches the water's surface: 1 for a shower falling onto it, less the deeper it comes out. */
+export interface WaterFlow { position: Vector3; direction: Vector3; flowRate: number; radius: number; surface: number; device: string }
 const DIGITS = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
 /** Readable geometry digits, batched into one mesh; no canvas redraws, textures or per-device materials. */
 class TemperatureDisplay extends Group {
@@ -250,7 +251,8 @@ export class AquariumEquipment extends Group {
         if (r.kind === 'topFilter') { d.localToWorld(position.set(this.dimensions.width * 0.25, -0.085, 0.018)); direction.set(0, -1, 0).transformDirection(d.matrixWorld); }
         const local = this.worldToLocal(position.clone());
         if (local.y >= 0 && local.y <= this.dimensions.waterHeight + 0.025 && Math.abs(local.x) < this.dimensions.width / 2 && Math.abs(local.z) < this.dimensions.depth / 2)
-          this.flows.push({ position, direction, flowRate: r.setting, radius: r.kind === 'flowPump' ? 0.18 : 0.085, device: r.id });
+          this.flows.push({ position, direction, flowRate: r.setting, radius: r.kind === 'flowPump' ? 0.18 : 0.085, device: r.id,
+            surface: r.kind === 'topFilter' ? 1 : Math.max(0.05, Math.min(1, 1 - (this.dimensions.waterHeight - local.y) / 0.2)) });
       }
       const b = this.bubbles.get(r.id); if (b) { const air = this.layout.connections.find((c) => c.kind === 'air' && c.to.device === r.id); b.visible = r.enabled && r.position[1] >= 0 && r.position[1] + (r.kind === 'spongeFilter' ? 0.213 : 0.008) < this.dimensions.waterHeight && Math.abs(r.position[0]) < this.dimensions.width / 2 && Math.abs(r.position[2]) < this.dimensions.depth / 2 && !!air && this.supplied(air.from.device); }
     }
@@ -269,7 +271,8 @@ export class AquariumEquipment extends Group {
       b.update(this.time, this.vector, this.localToWorld(this.waterPoint.set(0, this.dimensions.waterHeight, 0)).y, viewportHeight, this.sampleFlow(this.vector, this.current));
       if (b.visible && this.rippleAcc > 0.25) { const p = this.worldToLocal(this.waterPoint.copy(this.vector)); this.onRipple?.(p.x, p.z, 0.25); }
     }
-    if (this.rippleAcc > 0.25) { for (const f of this.flows) { const p = this.worldToLocal(this.waterPoint.copy(f.position)); if (p.y > this.dimensions.waterHeight - 0.06) this.onRipple?.(p.x, p.z, Math.min(0.5, f.flowRate / 1600)); } this.rippleAcc = 0; }
+    // (the outlets stir the surface in the water simulation, from `flows`)
+    if (this.rippleAcc > 0.25) this.rippleAcc = 0;
     let cooling = 0;
     for (const chill of this.layout.devices.filter((r) => r.kind === 'chiller')) {
       if (!this.supplied(chill.id) || !this.waterCircuit(chill.id)) this.chillerDemand.set(chill.id, false);

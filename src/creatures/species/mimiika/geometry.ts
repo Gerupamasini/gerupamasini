@@ -12,7 +12,10 @@ import {
  * part: 0 mantle, 1 head, 2 arm, 3 tentacle, 4 funnel — the shader lays the chromatophores on the rest position in
  * millimetres (no texture, no seams) and deforms the mantle (ventilation, the jet) about its own axis.
  * The fins carry aFin = (u along the base 0 front … 1 back, v out to the edge 0 … 1, side +1 left / −1 right): the
- * waves that run along them are made in the vertex shader.
+ * waves that run along them are made in the vertex shader. Every skin vertex also carries
+ *   aArm = (the arm's rest axis under it in model metres, arm index + 1; 0 off the arms)
+ * so that the vertex shader can thin a stretched arm about its own axis (uArmThin); the other parts carry zeros, so
+ * that a stale attribute value can never thin them.
  */
 
 export interface Tier {
@@ -61,6 +64,12 @@ function frame(pos: Vector3, dir: Vector3, up: Vector3): Matrix4 {
 
 export const armBone = (a: ArmDef, k: number) => `J_arm${a.name}_${k}`;
 export const tenBone = (side: 1 | -1, k: number) => `J_ten${side > 0 ? 'L' : 'R'}_${k}`;
+
+let RIG: RigDef | null = null;
+/** the rig definition, built once and shared (the meshes, the bones and the arms' FK in rig.ts) */
+export function mimiikaRig(): RigDef {
+  return (RIG ??= rigDefinition());
+}
 
 export function rigDefinition(): RigDef {
   const defs: BoneDef[] = [];
@@ -118,14 +127,15 @@ export function rigDefinition(): RigDef {
 // ------------------------------------------------------------------ builders
 
 class Builder {
-  pos: number[] = []; nor: number[] = []; uv: number[] = []; skin: number[] = []; si: number[] = []; sw: number[] = []; idx: number[] = []; fin: number[] = [];
+  pos: number[] = []; nor: number[] = []; uv: number[] = []; skin: number[] = []; si: number[] = []; sw: number[] = []; idx: number[] = []; fin: number[] = []; arm: number[] = [];
   get count(): number { return this.pos.length / 3; }
-  vert(p: Vector3, n: Vector3, uv: [number, number], skin: [number, number, number, number], bones: [number, number][], fin?: [number, number, number]): number {
+  vert(p: Vector3, n: Vector3, uv: [number, number], skin: [number, number, number, number], bones: [number, number][], fin?: [number, number, number], arm?: [number, number, number, number]): number {
     this.pos.push(p.x, p.y, p.z);
     this.nor.push(n.x, n.y, n.z);
     this.uv.push(uv[0], uv[1]);
     this.skin.push(...skin);
     if (fin) this.fin.push(...fin);
+    if (arm) this.arm.push(...arm); else this.arm.push(0, 0, 0, 0);
     const b = bones.filter(([, w]) => w > 1e-4).sort((a, c) => c[1] - a[1]).slice(0, 4);
     const tot = b.reduce((s, [, w]) => s + w, 0) || 1;
     for (let k = 0; k < 4; k++) { this.si.push(b[k]?.[0] ?? 0); this.sw.push(b[k] ? b[k][1] / tot : 0); }
@@ -145,6 +155,7 @@ class Builder {
     g.setAttribute('normal', new BufferAttribute(new Float32Array(this.nor), 3));
     g.setAttribute('uv', new BufferAttribute(new Float32Array(this.uv), 2));
     if (this.skin.length) g.setAttribute('aSkin', new BufferAttribute(new Float32Array(this.skin), 4));
+    if (this.skin.length) g.setAttribute('aArm', new BufferAttribute(new Float32Array(this.arm), 4));
     if (this.fin.length) g.setAttribute('aFin', new BufferAttribute(new Float32Array(this.fin), 3));
     g.setAttribute('skinIndex', new BufferAttribute(new Uint16Array(this.si), 4));
     g.setAttribute('skinWeight', new BufferAttribute(new Float32Array(this.sw), 4));
@@ -295,9 +306,12 @@ function domeMin(b: Builder): number {
   return best;
 }
 
-/** a tapering tube along a straight rest line, skinned to a chain of bones; `club` widens the far end (the tentacles) */
+/**
+ * a tapering tube along a straight rest line, skinned to a chain of bones; `club` widens the far end (the tentacles);
+ * `armId` (arm index + 1) tags an arm's vertices with their rest axis point (aArm)
+ */
 function tube(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: number, radius: (t: number) => number, flat: (t: number) => number,
-  around: number, along: number, bones: number[], part: number, t0 = -0.1): void {
+  around: number, along: number, bones: number[], part: number, t0 = -0.1, armId = 0): void {
   const z = dir.clone().normalize();
   const y = out.clone().addScaledVector(z, -out.dot(z)).normalize();
   const x = new Vector3().crossVectors(y, z);
@@ -328,7 +342,8 @@ function tube(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: num
       // (arm joints at k / nb of the length, the tentacle's at k / (nb − 1) of 96 % of it)
       const f = Math.max(0, Math.min(nb - 1, part === 3 ? (tt / 0.96) * (nb - 1) - 0.5 : tt * nb - 0.5));
       const k0 = Math.floor(f), k1 = Math.min(nb - 1, k0 + 1), w1 = f - k0;
-      b.vert(new Vector3(p.x / 1000, p.y / 1000, p.z / 1000), n, [j / around, Math.max(0, tt)], [part, Math.max(0, tt), -ca, 0], [[bones[k0], 1 - w1], [bones[k1], w1]]);
+      b.vert(new Vector3(p.x / 1000, p.y / 1000, p.z / 1000), n, [j / around, Math.max(0, tt)], [part, Math.max(0, tt), -ca, 0], [[bones[k0], 1 - w1], [bones[k1], w1]], undefined,
+        armId ? [c.x / 1000, c.y / 1000, c.z / 1000, armId] : undefined);
     }
   }
   b.grid(first, rows.length, cols, false);
@@ -340,7 +355,7 @@ function tube(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: num
  * rounded rim and the hollow inside it (aSkin.z: 0 the wall, 1 the rim, 2 the hollow). Skinned like the arm under it.
  */
 function suckers(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: number, radius: (t: number) => number, flat: (t: number) => number,
-  bones: number[], weightAt: (t: number) => [number, number][], rows: number[], from: number, to: number, size: (t: number) => number, seg: number, part: number): void {
+  bones: number[], weightAt: (t: number) => [number, number][], rows: number[], from: number, to: number, size: (t: number) => number, seg: number, part: number, armId = 0): void {
   const z = dir.clone().normalize();
   const y = out.clone().addScaledVector(z, -out.dot(z)).normalize();
   const x = new Vector3().crossVectors(y, z);
@@ -359,6 +374,8 @@ function suckers(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: 
       const T = z.clone().addScaledVector(N, -z.dot(N)).normalize();
       const B = new Vector3().crossVectors(N, T);
       const w = weightAt(tt);
+      // (on an arm the cup thins with it, about the arm's axis)
+      const ax: [number, number, number, number] | undefined = armId ? [c.x / 1000, c.y / 1000, c.z / 1000, armId] : undefined;
       const first = b.count;
       for (const [rr, hh, kind] of RING) {
         for (let k = 0; k <= seg; k++) {
@@ -366,12 +383,12 @@ function suckers(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: 
           const radial = T.clone().multiplyScalar(Math.cos(ph)).addScaledVector(B, Math.sin(ph));
           const p = P.clone().addScaledVector(radial, rr * rs).addScaledVector(N, hh * rs);
           const n = kind === 0 ? radial.clone().addScaledVector(N, 0.3).normalize() : kind === 1 ? N.clone().addScaledVector(radial, 0.4).normalize() : N.clone().addScaledVector(radial, -0.6).normalize();
-          b.vert(new Vector3(p.x / 1000, p.y / 1000, p.z / 1000), n, [k / seg, tt], [part, tt, kind, 0], w);
+          b.vert(new Vector3(p.x / 1000, p.y / 1000, p.z / 1000), n, [k / seg, tt], [part, tt, kind, 0], w, undefined, ax);
         }
       }
       b.grid(first, RING.length, seg + 1, true);
       // the bottom of the hollow
-      const ci = b.vert(P.clone().addScaledVector(N, 0.08 * rs).divideScalar(1000), N, [0.5, tt], [part, tt, 2, 0], w);
+      const ci = b.vert(P.clone().addScaledVector(N, 0.08 * rs).divideScalar(1000), N, [0.5, tt], [part, tt, 2, 0], w, undefined, ax);
       const last = first + (RING.length - 1) * (seg + 1);
       for (let k = 0; k < seg; k++) b.idx.push(last + k, ci, last + k + 1);
       tt += 2.5 * rs / length;
@@ -379,22 +396,25 @@ function suckers(b: Builder, base: Vector3, dir: Vector3, out: Vector3, length: 
   });
 }
 
+/** an arm's radius at rest (mm, model) at t along it (0 at the crown … 1 the tip; before the rounded tip) */
+export const armRadius = (a: ArmDef, t: number): number => a.rBase * (1 - 0.86 * Math.pow(Math.max(0, t), 0.85)) + 0.08;
+
 /** the eight arms in one geometry */
 export function buildArms(rig: RigDef, t: Tier): BufferGeometry {
   const b = new Builder();
-  for (const a of ARMS) {
+  ARMS.forEach((a, ai) => {
     const B = armBase(a);
     const base = new Vector3(...toModel(B.pos)).multiplyScalar(1000);
     const bones = Array.from({ length: ARM_BONES }, (_, k) => rig.byName[armBone(a, k)]);
-    const radius = (u: number) => a.rBase * (1 - 0.86 * Math.pow(u, 0.85)) + 0.08, flat = (u: number) => 0.72 + 0.18 * u;
-    tube(b, base, v3(B.dir), v3(B.out), a.length, radius, flat, t.armAround, t.armAlong, bones, 2);
+    const radius = (u: number) => armRadius(a, u), flat = (u: number) => 0.72 + 0.18 * u;
+    tube(b, base, v3(B.dir), v3(B.out), a.length, radius, flat, t.armAround, t.armAlong, bones, 2, -0.1, ai + 1);
     if (t.sucker) {
       const nb = bones.length;
       const wAt = (u: number): [number, number][] => { const f = Math.max(0, Math.min(nb - 1, u * nb - 0.5)); const k0 = Math.floor(f), k1 = Math.min(nb - 1, k0 + 1); return [[bones[k0], 1 - (f - k0)], [bones[k1], f - k0]]; };
       // two rows either side of the oral midline, from the mouth to near the tip, shrinking along the arm
-      suckers(b, base, v3(B.dir), v3(B.out), a.length, radius, flat, bones, wAt, [Math.PI - 0.5, Math.PI + 0.5], 0.04, 0.93, (u) => a.rBase * 0.24 * (1 - 0.72 * u) + 0.03, t.sucker, 7);
+      suckers(b, base, v3(B.dir), v3(B.out), a.length, radius, flat, bones, wAt, [Math.PI - 0.5, Math.PI + 0.5], 0.04, 0.93, (u) => a.rBase * 0.24 * (1 - 0.72 * u) + 0.03, t.sucker, 7, ai + 1);
     }
-  }
+  });
   return b.build();
 }
 

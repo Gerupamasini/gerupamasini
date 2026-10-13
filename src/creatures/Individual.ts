@@ -105,6 +105,15 @@ export function warinessFor(lengthPct: number): number {
   return 0.7 + 0.6 * Math.max(0, Math.min(100, lengthPct)) / 100;
 }
 
+/**
+ * How much further off a bigger animal of its species takes fright (flight distances grow with body size): its length
+ * over the species' `fleeLengthRef_mm`, to the power `fleeLengthExp` (brain params; 1 for a species that gives none).
+ */
+export function fleeScale(ind: Pick<Individual, 'species' | 'length_mm'>): number {
+  const p = ind.species.brain.params, ref = Number(p.fleeLengthRef_mm ?? 0);
+  return ref > 0 ? Math.pow(ind.length_mm / ref, Number(p.fleeLengthExp ?? 0.5)) : 1;
+}
+
 /** Deterministically generate an individual from a species definition and a seed. */
 export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number, lengthRange?: [number, number]): Individual {
   const rng = new Rng(seed);

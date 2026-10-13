@@ -222,6 +222,26 @@ uniform vec4 uAmt;      // x: net, y: spots, z: saddles / blotches, w: spot size
 uniform vec2 uSeed;
 uniform float uDark;    // 0 calm .. 1 frightened / asleep: darker, blotchier
 uniform float uEyeRing;
+uniform vec3 uIris;
+uniform vec3 uIrisRim;
+uniform float uIrisDark;
+// the eye as the far tiers paint it (no eyeball or dome of their own): the same tear-shaped pupil with its gold line,
+// the iris darker above, the grey margin under the dome, in the flank's (s, height) coordinates
+vec3 amFarEye(vec2 P, vec3 skin, out float inside) {
+  vec2 d = vec2(-(P.x - ${f(EYE.s)}), P.y - ${f(EYE.y)}) / ${f(EYE.dome)};
+  float r = length(d);
+  inside = 1.0 - smoothstep(0.92, 1.0, r);
+  float a = ${f(EYE.r * Math.sin(EYE.pupil[0]) / EYE.dome)}, b0 = ${f(EYE.r * Math.sin(EYE.pupil[1]) / EYE.dome)};
+  vec2 pq = vec2(cos(0.22) * d.x - sin(0.22) * d.y, sin(0.22) * d.x + cos(0.22) * d.y) + vec2(0.03, 0.0);
+  float bx = b0 * (1.0 - 0.34 * smoothstep(-0.3, 1.05, pq.x / a));
+  float rp = length(vec2(pq.x / a, pq.y / bx));
+  float ir = ${f(EYE.iris / EYE.dome)};
+  vec3 iris = mix(uIris, uIrisRim * 0.5, clamp(uIrisDark * 1.3 * smoothstep(-0.3 * ir, 0.2 * ir, d.y), 0.0, 0.95));
+  vec3 c = mix(iris, mix(vec3(0.2, 0.21, 0.22), uIrisRim, 0.3), smoothstep(ir * 0.95, ir * 1.05, r));
+  c = mix(c, vec3(0.8, 0.58, 0.2), smoothstep(0.98, 1.0, rp) * (1.0 - smoothstep(1.05, 1.1, rp)) * 0.8);
+  c = mix(c, vec3(0.003, 0.006, 0.01), 1.0 - smoothstep(0.98, 1.02, rp));
+  return mix(skin, c, inside);
+}
 ${glslTable('amDorsalY', DORSAL_PTS)}
 ${glslTable('amVentralY', VENTRAL_PTS)}
 `;
@@ -306,8 +326,8 @@ vec2 amGranP = vec2(0.0);
   // the far tier: the pattern's average tone, with a soft hint of the saddles, and the eye painted in
   col = mix(col, mix(uNet, uSpot, 0.45), 0.4);
   col = mix(col, uBlotch, clamp(uAmt.z + 0.75 * dark, 0.0, 1.0) * 0.5 * smoothstep(0.35, 0.7, hrel) * (1.0 - smoothstep(0.04, 0.08, abs(s - 0.5))));
-  float re = length(vec2((s - ${f(EYE.s)}) / 1.1, y - ${f(EYE.y)})) / ${f(EYE.r * 0.8)};
-  col = mix(col, mix(vec3(0.02, 0.02, 0.02), vec3(0.4, 0.28, 0.1), smoothstep(0.4, 0.6, re)), 1.0 - smoothstep(0.85, 1.0, re));
+  float inEye;
+  col = amFarEye(vec2(s, y), col, inEye);
 #endif
   // the pelvic flap's dark tip, and a dark edge along the bases of the soft dorsal and anal fins
   float flapTip = (1.0 - smoothstep(0.035, 0.07, y - bot)) * (1.0 - smoothstep(0.035, 0.07, abs(s - 0.428)));
@@ -317,7 +337,10 @@ vec2 amGranP = vec2(0.0);
   col = mix(col, uNet * 0.6, clamp(finEdge, 0.0, 1.0) * 0.55);
   // the eye: a pale ring of skin round the socket
   float de = length(vec2((s - ${f(EYE.s)}) / 1.1, y - ${f(EYE.y)}));
-  // (the ring round the eye is on the skin that covers the eyeball's edge, part 8 below)
+#ifndef AMH_LOW
+  // round the eye's clear dome, a pale ring of skin in many fish
+  col = mix(col, mix(col, uSpot, 0.5), uEyeRing * 0.6 * (1.0 - smoothstep(0.002, 0.005, abs(de - ${f(EYE.dome + 0.003)}))));
+#endif
   // lips: pale, a little pink; the mouth's line between them, which opens with the jaw
   float lip = 1.0 - smoothstep(0.012, 0.03, s);
   col = mix(col, mix(uBelly, vec3(0.62, 0.42, 0.36), 0.55), lip * 0.7);
@@ -348,23 +371,11 @@ vec2 amGranP = vec2(0.0);
   } else if (vPart > 5.5 && vPart < 6.5) {
     col = uNet * 0.55;
     amThinK = 0.8; amGran = 0.0;
-  } else if (vPart > 7.5) {
-    // the skin over the eyeball's edge: the cheek's pattern on a fleshy ring, a pale ring round the opening (paler in
-    // some fish than others), a thin dark wet margin at the opening itself, the margin thin enough to glow
-    float t = vThin;
-    col = mix(col, mix(col, uSpot, 0.7), uEyeRing * smoothstep(0.35, 0.6, t) * (1.0 - smoothstep(0.7, 0.88, t)));
-    col = mix(col, uBase * 0.55, smoothstep(0.86, 0.97, t) * 0.7);
-    amRough = mix(0.62, 0.42, smoothstep(0.6, 1.0, t));
-    amCoat = 0.15;
-    amSheen = 0.15;
-    amThinK = 0.25 + 0.6 * smoothstep(0.7, 1.0, t);
-    amGran *= 1.0 - smoothstep(0.5, 0.8, t);
   } else if (vPart > 6.5) {
-    // the far tiers' small eye: dark pupil, golden iris, a pale ring
-    float r = length(vec2((s - ${f(EYE.s)}) / 1.0, y - ${f(EYE.y)})) / ${f(EYE.r * 0.8)};
-    col = mix(vec3(0.015, 0.02, 0.02), vec3(0.42, 0.3, 0.1), smoothstep(0.35, 0.45, r));
-    col = mix(col, uSpot, smoothstep(0.85, 1.0, r));
-    amRough = 0.15; amCoat = 1.0; amGran = 0.0; amSheen = 0.0;
+    // the far tiers' small eye (a cap of the ball, painted)
+    float inEye;
+    col = amFarEye(vec2(s, y), col, inEye);
+    amRough = 0.12; amCoat = 1.0; amGran = 0.0; amSheen = 0.0;
   } else if (vPart > 1.5 && vPart < 2.5) {
     col = mix(uBase, uNet, 0.4) * 0.85;
     amThinK = 0.8; amGran = 0.0;
@@ -435,8 +446,10 @@ export interface Palette {
   fin: Color;
   bar: Color;
   barAmt: number;
-  /** a golden iris (else pale silvery cream) */
+  /** a golden iris (else a paler brassy grey) */
   goldEye: boolean;
+  /** how much the face's darker colour runs over the iris (its upper part and a band across it) */
+  irisDark: number;
 }
 
 const c = (r: number, g: number, b: number) => new Color(r, g, b);
@@ -446,14 +459,14 @@ const c = (r: number, g: number, b: number) => new Color(r, g, b);
  * rusty one with faint spots, the pale one with brown saddles.
  */
 export const PALETTES: Palette[] = [
-  { name: 'orange', base: c(0.42, 0.16, 0.03), belly: c(0.6, 0.32, 0.1), spot: c(0.82, 0.7, 0.5), net: c(0.2, 0.07, 0.015), blotch: c(0.16, 0.06, 0.015), amt: [0.35, 0.95, 0.15, 0.33], eyeRing: 0.6, fin: c(0.5, 0.26, 0.07), bar: c(0.15, 0.05, 0.015), goldEye: true, barAmt: 0.85 },
-  { name: 'reticulate', base: c(0.17, 0.11, 0.045), belly: c(0.42, 0.33, 0.17), spot: c(0.6, 0.53, 0.36), net: c(0.06, 0.035, 0.015), blotch: c(0.05, 0.03, 0.012), amt: [0.85, 0.8, 0.35, 0.28], eyeRing: 0.3, fin: c(0.36, 0.22, 0.1), bar: c(0.08, 0.04, 0.015), goldEye: true, barAmt: 0.75 },
-  { name: 'olive', base: c(0.2, 0.17, 0.045), belly: c(0.4, 0.36, 0.12), spot: c(0.55, 0.55, 0.36), net: c(0.08, 0.07, 0.02), blotch: c(0.07, 0.06, 0.02), amt: [0.4, 0.55, 0.12, 0.27], eyeRing: 0.2, fin: c(0.34, 0.3, 0.12), bar: c(0.1, 0.08, 0.03), goldEye: false, barAmt: 0.7 },
-  { name: 'grey', base: c(0.11, 0.085, 0.07), belly: c(0.24, 0.21, 0.18), spot: c(0.52, 0.56, 0.6), net: c(0.05, 0.035, 0.03), blotch: c(0.04, 0.03, 0.025), amt: [0.35, 0.85, 0.2, 0.23], eyeRing: 0.15, fin: c(0.3, 0.24, 0.18), bar: c(0.07, 0.05, 0.04), goldEye: false, barAmt: 0.6 },
-  { name: 'yellow', base: c(0.48, 0.32, 0.03), belly: c(0.62, 0.48, 0.1), spot: c(0.85, 0.82, 0.6), net: c(0.22, 0.14, 0.02), blotch: c(0.2, 0.12, 0.02), amt: [0.25, 0.65, 0.08, 0.20], eyeRing: 0.4, fin: c(0.55, 0.42, 0.1), bar: c(0.25, 0.12, 0.03), goldEye: true, barAmt: 0.5 },
-  { name: 'dark', base: c(0.06, 0.035, 0.018), belly: c(0.22, 0.16, 0.09), spot: c(0.55, 0.5, 0.4), net: c(0.025, 0.015, 0.008), blotch: c(0.02, 0.012, 0.006), amt: [0.6, 0.9, 0.45, 0.31], eyeRing: 0.25, fin: c(0.25, 0.17, 0.1), bar: c(0.05, 0.03, 0.015), goldEye: false, barAmt: 0.85 },
-  { name: 'rust', base: c(0.3, 0.12, 0.04), belly: c(0.45, 0.25, 0.1), spot: c(0.6, 0.45, 0.32), net: c(0.13, 0.05, 0.02), blotch: c(0.1, 0.04, 0.015), amt: [0.25, 0.35, 0.1, 0.25], eyeRing: 0.2, fin: c(0.45, 0.22, 0.09), bar: c(0.14, 0.05, 0.02), goldEye: true, barAmt: 0.55 },
-  { name: 'saddled', base: c(0.4, 0.33, 0.22), belly: c(0.6, 0.55, 0.45), spot: c(0.75, 0.72, 0.62), net: c(0.16, 0.08, 0.03), blotch: c(0.13, 0.06, 0.02), amt: [0.55, 0.6, 0.8, 0.31], eyeRing: 0.35, fin: c(0.5, 0.4, 0.3), bar: c(0.17, 0.08, 0.03), goldEye: false, barAmt: 0.8 },
+  { name: 'orange', base: c(0.42, 0.16, 0.03), belly: c(0.6, 0.32, 0.1), spot: c(0.82, 0.7, 0.5), net: c(0.2, 0.07, 0.015), blotch: c(0.16, 0.06, 0.015), amt: [0.35, 0.95, 0.15, 0.33], eyeRing: 0.6, fin: c(0.5, 0.26, 0.07), bar: c(0.15, 0.05, 0.015), goldEye: true, irisDark: 0.25, barAmt: 0.85 },
+  { name: 'reticulate', base: c(0.17, 0.11, 0.045), belly: c(0.42, 0.33, 0.17), spot: c(0.6, 0.53, 0.36), net: c(0.06, 0.035, 0.015), blotch: c(0.05, 0.03, 0.012), amt: [0.85, 0.8, 0.35, 0.28], eyeRing: 0.3, fin: c(0.36, 0.22, 0.1), bar: c(0.08, 0.04, 0.015), goldEye: true, irisDark: 0.6, barAmt: 0.75 },
+  { name: 'olive', base: c(0.2, 0.17, 0.045), belly: c(0.4, 0.36, 0.12), spot: c(0.55, 0.55, 0.36), net: c(0.08, 0.07, 0.02), blotch: c(0.07, 0.06, 0.02), amt: [0.4, 0.55, 0.12, 0.27], eyeRing: 0.2, fin: c(0.34, 0.3, 0.12), bar: c(0.1, 0.08, 0.03), goldEye: false, irisDark: 0.45, barAmt: 0.7 },
+  { name: 'grey', base: c(0.11, 0.085, 0.07), belly: c(0.24, 0.21, 0.18), spot: c(0.52, 0.56, 0.6), net: c(0.05, 0.035, 0.03), blotch: c(0.04, 0.03, 0.025), amt: [0.35, 0.85, 0.2, 0.23], eyeRing: 0.15, fin: c(0.3, 0.24, 0.18), bar: c(0.07, 0.05, 0.04), goldEye: false, irisDark: 0.5, barAmt: 0.6 },
+  { name: 'yellow', base: c(0.48, 0.32, 0.03), belly: c(0.62, 0.48, 0.1), spot: c(0.85, 0.82, 0.6), net: c(0.22, 0.14, 0.02), blotch: c(0.2, 0.12, 0.02), amt: [0.25, 0.65, 0.08, 0.20], eyeRing: 0.4, fin: c(0.55, 0.42, 0.1), bar: c(0.25, 0.12, 0.03), goldEye: true, irisDark: 0.15, barAmt: 0.5 },
+  { name: 'dark', base: c(0.06, 0.035, 0.018), belly: c(0.22, 0.16, 0.09), spot: c(0.55, 0.5, 0.4), net: c(0.025, 0.015, 0.008), blotch: c(0.02, 0.012, 0.006), amt: [0.6, 0.9, 0.45, 0.31], eyeRing: 0.25, fin: c(0.25, 0.17, 0.1), bar: c(0.05, 0.03, 0.015), goldEye: false, irisDark: 0.8, barAmt: 0.85 },
+  { name: 'rust', base: c(0.3, 0.12, 0.04), belly: c(0.45, 0.25, 0.1), spot: c(0.6, 0.45, 0.32), net: c(0.13, 0.05, 0.02), blotch: c(0.1, 0.04, 0.015), amt: [0.25, 0.35, 0.1, 0.25], eyeRing: 0.2, fin: c(0.45, 0.22, 0.09), bar: c(0.14, 0.05, 0.02), goldEye: true, irisDark: 0.35, barAmt: 0.55 },
+  { name: 'saddled', base: c(0.4, 0.33, 0.22), belly: c(0.6, 0.55, 0.45), spot: c(0.75, 0.72, 0.62), net: c(0.16, 0.08, 0.03), blotch: c(0.13, 0.06, 0.02), amt: [0.55, 0.6, 0.8, 0.31], eyeRing: 0.35, fin: c(0.5, 0.4, 0.3), bar: c(0.17, 0.08, 0.03), goldEye: false, irisDark: 0.55, barAmt: 0.8 },
 ];
 /** how often each look turns up in the eelgrass (the olive and brown ones match the leaves) */
 export const PALETTE_WEIGHTS = [0.14, 0.22, 0.22, 0.1, 0.06, 0.1, 0.08, 0.08];
@@ -491,6 +504,7 @@ export interface AmhLookUniforms {
   uBarAmt: IUniform<number>;
   uIris: IUniform<Color>;
   uIrisRim: IUniform<Color>;
+  uIrisDark: IUniform<number>;
 }
 
 function lookUniforms(look: SkinLook): AmhLookUniforms {
@@ -504,8 +518,10 @@ function lookUniforms(look: SkinLook): AmhLookUniforms {
     uAmt: { value: new Vector4(...p.amt) }, uSeed: { value: look.seed.clone() }, uDark: { value: 0 }, uEyeRing: { value: p.eyeRing },
     uFin: { value: adj(p.fin) }, uBar: { value: adj(p.bar) }, uBarAmt: { value: p.barAmt },
     // the iris: pale silvery cream in most, gold in the warm-coloured fish; a little of each fish's own
-    uIris: { value: (p.goldEye ? new Color(0.46, 0.3, 0.09) : new Color(0.5, 0.47, 0.38)).multiplyScalar(1 + 0.12 * look.value) },
-    uIrisRim: { value: p.goldEye ? new Color(0.28, 0.12, 0.03) : new Color(0.36, 0.2, 0.08) },
+    // the iris: gold-bronze, or a paler brassy grey; darkened above and across by the face's own colour
+    uIris: { value: (p.goldEye ? new Color(0.34, 0.22, 0.075) : new Color(0.27, 0.235, 0.16)).multiplyScalar(1 + 0.12 * look.value) },
+    uIrisRim: { value: adj(p.blotch).lerp(adj(p.base), 0.35) },
+    uIrisDark: { value: p.irisDark },
   };
 }
 
@@ -542,7 +558,7 @@ function skinMaterial(u: AmhLookUniforms, low: boolean): MeshPhysicalMaterial {
       .replace('#include <lights_fragment_maps>', ENV_INJECT)
       .replace('#include <emissivemap_fragment>', THIN_EMISSIVE);
   };
-  m.customProgramCacheKey = () => (low ? 'amimehagi-skin-low-v2' : 'amimehagi-skin-v2');
+  m.customProgramCacheKey = () => (low ? 'amimehagi-skin-low-v4' : 'amimehagi-skin-v4');
   return m;
 }
 
@@ -632,46 +648,89 @@ function finMaterial(u: AmhLookUniforms): MeshPhysicalMaterial {
 const EYE_VERT_PARS = /* glsl */ `
 attribute vec3 aEye;
 varying vec3 vEye;
+varying vec2 vEyeQ;
 varying vec3 vWPos;
 `;
 
 /**
- * the eye, as in close photographs of live fish: a round black pupil that glows deep blue to blue-green where it
- * catches the light (the eye's reflecting layer), an iris pale silvery cream or gold (the individual's) with fine
- * radial fibres, a brighter collar round the pupil and an orange-brown outer zone running under the skin's edge
+ * The eyeball, after close photographs of live fish. Through the clear dome: a large pupil shaped like a tear, its
+ * narrow end forward (the gap round the protruding lens), dark but full of the lens's blue-green and red reflections;
+ * a thin bright gold line round it; a metallic gold-bronze iris (guanine) densely stippled with melanophores, its
+ * upper part and a band across it often darkened (the eye's share of the body's pattern); beyond the iris a grey-blue
+ * band of the ball, then the socket. The coordinates are the eye's own (aEye: angle from its axis, azimuth, side), so
+ * everything turns with the eye's bone.
  */
 const EYE_SURFACE = /* glsl */ `
-float amEyeRough = 0.2, amPupil = 0.0, gAmRp = 0.0;
+float amEyeRough = 0.3, amEyeMetal = 0.0, amPupil = 0.0, amIri = 0.0, amIriThick = 400.0;
 {
-  float th = vEye.x * 1.2, psi = vEye.y;
-  vec2 dir = vec2(cos(psi), sin(psi));
-  vec2 q = dir * th;
-  // the opening's edge (the skin over the ball) is at about 0.75 rad from the axis
-  float r = th / 0.75;
-  float rp = length(q / vec2(0.3, 0.29));
-  gAmRp = rp;
+  float side = vEye.z >= 0.0 ? 1.0 : -1.0;
+  // forward and up on the ball, in radians from the eye's axis (the eye frame's first axis points back on the left
+  // eye and forward on the right: vEyeQ has the side folded in, so +x is toward the snout on both)
+  vec2 q = vec2(-vEyeQ.x, vEyeQ.y);
+  float th = length(q);
+  // the pupil: an egg narrowing forward and a little down
+  float ca = cos(-0.22), sa = sin(-0.22);
+  vec2 pq = vec2(ca * q.x + sa * q.y, -sa * q.x + ca * q.y) - vec2(-0.03, 0.0);
+  float a = ${f(EYE.pupil[0])}, b0 = ${f(EYE.pupil[1])};
+  float bx = b0 * (1.0 - 0.34 * smoothstep(-0.3, 1.05, pq.x / a));
+  float rp = length(vec2(pq.x / a, pq.y / bx));
   float aa = fwidth(rp) + 1e-4;
-  // radial fibres (noise on the direction, stretched along the radius), crypts, a few dark flecks
-  float fib = amNoise(dir * 26.0 + vec2(th * 6.0, 0.0)) * 0.55 + amNoise(dir * 61.0 + vec2(0.0, th * 9.0)) * 0.45;
-  vec3 iris = uIris * (0.72 + 0.56 * fib);
-  iris = mix(iris, uIris * 1.35 + vec3(0.06, 0.04, 0.0), (1.0 - smoothstep(0.0, 0.18, rp - 1.0)) * 0.7);
-  iris = mix(iris, uIrisRim, smoothstep(0.62, 0.95, r));
-  iris *= 1.0 - 0.45 * step(0.9, amHash(floor(dir * 30.0 + th * 18.0)));
-  // a thin dark ring at the pupil's edge, then the pupil
-  iris *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.08, rp - 1.0));
   amPupil = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, rp);
-  vec3 col = mix(iris, vec3(0.003, 0.008, 0.016), amPupil);
-  // under the skin's edge the ball is dark
-  col = mix(col, vec3(0.04, 0.03, 0.02), smoothstep(0.98, 1.06, r));
-  amEyeRough = mix(0.14, 0.45, smoothstep(0.95, 1.05, r));
+  // where on the iris: 0 at the pupil's edge .. 1 at the iris's outer edge
+  float thI = ${f(Math.asin(EYE.iris / EYE.r))};
+  float ri = clamp((th - 0.0) / thI, 0.0, 1.5);
+  // the iris: metallic gold-bronze, brighter low and near the pupil, stippled with dark melanophores and gold flecks
+  vec3 iris = uIris * mix(1.15, 0.8, smoothstep(0.3, 1.0, ri));
+  iris = mix(iris, uIris * 1.3, smoothstep(0.1, -0.7, q.y / thI) * 0.35);
+  vec2 cid;
+  vec3 mc = amCells(q * 60.0 + side * 13.0, cid);
+  float mel = (1.0 - smoothstep(0.1, 0.38 + fwidth(mc.x), mc.x)) * step(0.3, mc.z);
+  float fine = amNoise(q * 170.0 + side * 7.0);
+  float vis = 1.0 - smoothstep(0.6, 1.0, fwidth(q.x * 60.0));
+  iris *= 1.0 - 0.85 * mel * vis;
+  iris *= 0.7 + 0.6 * fine;
+  // larger mottling: patches of darker and paler pigment, so the iris is not an even ring
+  float mot = amNoise(q * 7.0 + side * 11.0) * 0.6 + amNoise(q * 15.0 - side * 4.0) * 0.4;
+  iris *= 0.62 + 0.75 * mot;
+  // irregular gold flecks (iridophores), mostly in the lower iris
+  vec2 fid;
+  vec3 fc = amCells(q * 38.0 + side * 29.0, fid);
+  float fleck = (1.0 - smoothstep(0.15, 0.4, fc.x)) * step(0.72, fc.z) * vis * smoothstep(0.4, -0.3, q.y / thI);
+  iris = mix(iris, uIris * 1.9 + vec3(0.04, 0.03, 0.0), fleck * 0.7);
+  // the dark upper part and the dark band across the eye (the face pattern running through it)
+  float edgeN = amNoise(q * 14.0 + side * 5.0) - 0.5;
+  float darkTop = smoothstep(-0.32, 0.22, q.y / thI + 0.25 * edgeN);
+  float bar = exp(-pow((q.x + 0.1 * q.y) / 0.22, 2.0)) * smoothstep(0.3, 0.7, abs(q.y) / thI + 0.15);
+  float dk = clamp(uIrisDark * (1.3 * darkTop + 0.8 * bar), 0.0, 0.95);
+  iris = mix(iris, uIrisRim * 0.5, dk) * mix(1.0, 0.45, dk);
+  // the outer iris fades into the ball's grey-blue band
+  // the iris's edge is ragged where it gives way to the dark ball seen through the dome's clear margin
+  float band = smoothstep(0.9, 1.05, ri + 0.08 * (mot - 0.5));
+  vec3 ball = mix(vec3(0.2, 0.21, 0.22), uIrisRim, 0.3) * (0.7 + 0.6 * fine);
+  vec3 col = mix(iris, ball, band);
+  // the iris's guanine gives it a soft metallic lustre; the ball beyond is dull
+  amEyeMetal = mix(0.3 * (1.0 - 0.8 * dk), 0.0, band);
+  amEyeRough = mix(0.5, 0.6, band);
+  // a fine gold line round the pupil
+  float collar = smoothstep(1.0 - aa, 1.0 + aa, rp) * (1.0 - smoothstep(1.035, 1.065 + aa, rp));
+  col = mix(col, vec3(0.8, 0.58, 0.2), collar * 0.85);
+  amEyeMetal = mix(amEyeMetal, 0.6, collar);
+  // the pupil: dark, the lens behind it glossy, its reflections shifting blue-green and red (a thin-film sheen)
+  col = mix(col, vec3(0.002, 0.004, 0.008), amPupil);
+  amEyeRough = mix(amEyeRough, 0.06, amPupil);
+  amEyeMetal = mix(amEyeMetal, 0.0, amPupil);
+  amIri = mix(0.08, 0.4, amPupil);
+  amIriThick = 330.0 + 160.0 * amNoise(q * 3.0 + side * 3.0);
+  // round the back of the ball, under the socket
+  col = mix(col, col * 0.4, smoothstep(0.95, 1.1, th / ${f(Math.acos(EYE.sink / EYE.r))}));
   diffuseColor.rgb = col;
 }
 `;
 
 function eyeMaterial(u: AmhLookUniforms): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
-    color: 0xffffff, metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03, ior: 1.376,
-    iridescence: 0.35, iridescenceIOR: 1.5, iridescenceThicknessRange: [200, 500],
+    color: 0xffffff, metalness: 0.3, roughness: 0.3, clearcoat: 0.15, clearcoatRoughness: 0.08, ior: 1.376,
+    iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [250, 650],
   });
   m.name = 'AmimehagiEye';
   m.envMapIntensity = 0.3;
@@ -679,29 +738,72 @@ function eyeMaterial(u: AmhLookUniforms): MeshPhysicalMaterial {
     Object.assign(shader.uniforms, AMH_UNIFORMS, u);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${EYE_VERT_PARS}`)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEye = aEye;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEye = aEye;\nvEyeQ = vec2(cos(aEye.y) * sign(aEye.z), sin(aEye.y)) * aEye.x * 1.2;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vEye;\nuniform vec3 uIris;\nuniform vec3 uIrisRim;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEye;\nvarying vec2 vEyeQ;\nuniform vec3 uIris;\nuniform vec3 uIrisRim;\nuniform float uIrisDark;')
       .replace('void main() {', `${HELPERS}\nvoid main() {`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${EYE_SURFACE}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = amEyeRough;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = amEyeMetal;')
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#ifdef USE_IRIDESCENCE
+  material.iridescence = amIri;
+  material.iridescenceThickness = amIriThick;
+#endif`)
       .replace('#include <lights_fragment_begin>', SUN_INJECT)
       .replace('#include <lights_fragment_maps>', ENV_INJECT)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
-  // the pupil's deep blue glow: light sent back by the reflecting layer behind the retina, strongest head-on
+  // the lens's glow in the pupil: a little of the water's light sent back, blue-green
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
-  vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
-  float head = pow(clamp(-dot(nW, vW), 0.0, 1.0), 1.5);
-  // (a dark core, the blue gathering toward the pupil's rim and where the eye faces the viewer)
-  float rim = smoothstep(0.2, 1.0, gAmRp);
-  totalEmissiveRadiance += amPupil * vec3(0.02, 0.12, 0.26) * (amUnderwater(nW, 1.0) * 1.2 + amSunCol() * amSunThrough() * 0.02) * (0.25 + 0.75 * head) * (0.3 + 0.7 * rim);
-  // the iris is thin tissue too: a little of the light round it comes through
-  totalEmissiveRadiance += (1.0 - amPupil) * diffuseColor.rgb * amUnderwater(nW, 1.0) * 0.18;
+  totalEmissiveRadiance += amPupil * vec3(0.004, 0.014, 0.022) * amUnderwater(nW, 1.0);
+  // the iris is thin tissue over a reflecting layer: some of the light round it comes back out of it
+  totalEmissiveRadiance += (1.0 - amPupil) * diffuseColor.rgb * amUnderwater(nW, 1.0) * 0.3 * (1.0 - smoothstep(0.9, 1.05, length(vEyeQ) / ${f(Math.asin(EYE.iris / EYE.r))}));
 }`);
   };
-  m.customProgramCacheKey = () => 'amimehagi-eye-v2';
+  m.customProgramCacheKey = () => 'amimehagi-eye-v13';
+  return m;
+}
+
+/**
+ * The corneal dome over the eye: clear, smooth skin. Under water it nearly vanishes (its refractive index is close
+ * to the water's), so its reflection is weak; the sun still glints on it. Glass is drawn as what it reflects plus a faint body, with
+ * premultiplied alpha so the reflection is not dimmed by the transparency: the dome reads as a bright sheen of the
+ * water's light and a glint of the sun on a clear bubble. Its rim is a thicker, greyish glassy edge.
+ */
+function corneaMaterial(): MeshPhysicalMaterial {
+  const m = new MeshPhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: 0.035, ior: 1.376, transparent: true, depthWrite: false, premultipliedAlpha: true });
+  m.name = 'AmimehagiCornea';
+  m.envMapIntensity = 0.3;
+  m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+    Object.assign(shader.uniforms, AMH_UNIFORMS);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${EYE_VERT_PARS}`)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEye = aEye;\nvEyeQ = vec2(cos(aEye.y) * sign(aEye.z), sin(aEye.y)) * aEye.x * 1.2;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEye;\nvarying vec2 vEyeQ;')
+      .replace('void main() {', `${HELPERS}\nvoid main() {`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+float amBody = 0.0;
+{
+  float t = vEye.x;
+  // the rim: a thicker glassy edge, a faint darker line just inside it where the dome meets the socket
+  float edge = smoothstep(0.84, 0.97, t) * (1.0 - smoothstep(0.985, 1.0, t));
+  float groove = smoothstep(0.74, 0.84, t) * (1.0 - smoothstep(0.86, 0.92, t));
+  diffuseColor.rgb = mix(vec3(0.3, 0.32, 0.33), vec3(0.06, 0.06, 0.06), groove);
+  amBody = 0.012 + 0.16 * edge + 0.06 * groove;
+}`)
+      .replace('#include <lights_fragment_begin>', SUN_INJECT)
+      // (the cornea and the water bend light almost alike: under water the dome reflects hardly anything but the sun
+      // and the bright window above; in air, a little of the room)
+      .replace('#include <lights_fragment_maps>', ENV_INJECT + 'radiance *= mix(0.1, 0.35, uAir);')
+      .replace('#include <opaque_fragment>', `
+gl_FragColor = vec4((totalDiffuse + totalEmissiveRadiance) * amBody + totalSpecular, clamp(amBody + dot(totalSpecular, vec3(0.3)), 0.0, 1.0));`)
+      .replace('#include <premultiplied_alpha_fragment>', '');
+  };
+  m.customProgramCacheKey = () => 'amimehagi-cornea-v5';
   return m;
 }
 
@@ -712,6 +814,7 @@ export class AmimehagiLook {
   readonly skinLow: MeshPhysicalMaterial;
   readonly fins: MeshPhysicalMaterial;
   readonly eyes: MeshPhysicalMaterial;
+  readonly cornea: MeshPhysicalMaterial;
   readonly palette: Palette;
 
   constructor(readonly look: SkinLook) {
@@ -721,6 +824,7 @@ export class AmimehagiLook {
     this.skinLow = skinMaterial(this.uniforms, true);
     this.fins = finMaterial(this.uniforms);
     this.eyes = eyeMaterial(this.uniforms);
+    this.cornea = corneaMaterial();
   }
 
   /** frightened or asleep: darker and blotchier (0 .. 1) */
@@ -732,6 +836,7 @@ export class AmimehagiLook {
     this.skinLow.dispose();
     this.fins.dispose();
     this.eyes.dispose();
+    this.cornea.dispose();
   }
 }
 

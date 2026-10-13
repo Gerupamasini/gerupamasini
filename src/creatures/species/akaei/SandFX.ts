@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, CustomBlending, DstColorFactor, Mesh, ShaderMaterial, Vector2, ZeroFactor, type Object3D } from 'three';
+import { BufferAttribute, BufferGeometry, CustomBlending, DstColorFactor, Mesh, ShaderMaterial, Vector2, Vector4, ZeroFactor, type Object3D } from 'three';
 import { CONTACT_SHADOWS } from '../haku/ContactShadows';
 
 /**
@@ -30,16 +30,18 @@ void main() {
 const IMPRINT_FRAG = /* glsl */ `
 uniform float uAmount;
 uniform float uSeed;
+uniform vec4 uLook;   // x the bowl's darkening, y more towards its centre, z the rim's lightening, w its outline's wobble
+uniform vec2 uBowl;   // where the bowl's edge begins and ends
 varying vec2 vUv;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
 void main() {
-  float d = length(vUv) + (n(vUv * 5.0 + uSeed) - 0.5) * 0.18;
-  // the wetter, darker bowl, a lighter rim of thrown-out sand just outside it
-  float bowl = 1.0 - smoothstep(0.62, 0.86, d);
+  float d = length(vUv) + (n(vUv * 5.0 + uSeed) - 0.5) * uLook.w;
+  // the wetter, darker bowl (deepest in the middle), a lighter rim of thrown-out sand just outside it
+  float bowl = 1.0 - smoothstep(uBowl.x, uBowl.y, d);
   float rim = smoothstep(0.78, 0.9, d) * (1.0 - smoothstep(0.92, 1.0, d)) * (0.6 + 0.4 * n(vUv * 11.0 + uSeed * 3.0));
-  float k = 1.0 - uAmount * (0.24 * bowl * (0.85 + 0.15 * n(vUv * 23.0))) + uAmount * 0.1 * rim;
+  float k = 1.0 - uAmount * (uLook.x * bowl * (0.85 + 0.15 * n(vUv * 23.0)) + uLook.y * (1.0 - smoothstep(0.0, uBowl.y, d))) + uAmount * uLook.z * rim;
   gl_FragColor = vec4(vec3(k), 1.0);
 }`;
 
@@ -87,7 +89,20 @@ function layPatch(g: BufferGeometry, x: number, z: number, heading: number, half
   g.computeBoundingSphere();
 }
 
-interface Imprint { mesh: Mesh; mat: ShaderMaterial; age: number; life: number; strength: number }
+interface Imprint { mesh: Mesh; mat: ShaderMaterial; age: number; life: number; strength: number; fadeAt: number; fadeFor: number }
+
+/** how an imprint looks (the defaults are the ray's: a shallow, faintly darker oval) */
+export interface ImprintLook {
+  /** how much darker the bowl is at full strength, and how much more towards its middle */
+  dark?: number;
+  centre?: number;
+  /** where the bowl's edge begins and ends (0 the middle … 1 the patch's edge) */
+  bowl?: readonly [number, number];
+  /** how much lighter the rim of thrown-out sand is */
+  rim?: number;
+  /** how ragged its outline is */
+  wobble?: number;
+}
 
 export class SandFX {
   readonly shadow: Mesh;
@@ -119,16 +134,30 @@ export class SandFX {
     layPatch(this.shadow.geometry, x, z, heading, halfW * grow, halfL * grow, ground, 0.002);
   }
 
-  /** leave an oval of disturbed sand (burrowing, a feeding pit) */
-  imprint(x: number, z: number, heading: number, halfW: number, halfL: number, ground: (x: number, z: number) => number, strength = 1, life = 150): void {
+  /** leave an oval of disturbed sand (burrowing, a feeding pit); `lift`: how far over the ground it is laid (m) */
+  imprint(x: number, z: number, heading: number, halfW: number, halfL: number, ground: (x: number, z: number) => number, strength = 1, life = 150, lift = 0.0015, look: ImprintLook = {}): void {
     if (this.imprints.length >= 3) { const old = this.imprints.shift()!; old.mesh.removeFromParent(); old.mesh.geometry.dispose(); old.mat.dispose(); }
-    const mat = multiplyMaterial(IMPRINT_FRAG, { uAmount: { value: 0 }, uSeed: { value: Math.random() * 50 } });
+    const bowl = look.bowl ?? [0.62, 0.86];
+    const mat = multiplyMaterial(IMPRINT_FRAG, {
+      uAmount: { value: 0 }, uSeed: { value: Math.random() * 50 },
+      uLook: { value: new Vector4(look.dark ?? 0.24, look.centre ?? 0, look.rim ?? 0.1, look.wobble ?? 0.18) }, uBowl: { value: new Vector2(bowl[0], bowl[1]) },
+    });
     const mesh = new Mesh(patchGeometry(), mat);
     mesh.name = 'AkaeiImprint';
     mesh.renderOrder = 1;
-    layPatch(mesh.geometry, x, z, heading, halfW, halfL, ground, 0.0015);
+    layPatch(mesh.geometry, x, z, heading, halfW, halfL, ground, lift);
     this.parent.add(mesh);
-    this.imprints.push({ mesh, mat, age: 0, life, strength });
+    this.imprints.push({ mesh, mat, age: 0, life, strength, fadeAt: life * 0.5, fadeFor: life * 0.5 });
+  }
+
+  /** the latest imprint filled in: from how it looks now to gone in `seconds` */
+  fillImprint(seconds: number): void {
+    const im = this.imprints[this.imprints.length - 1];
+    if (!im) return;
+    const f = Math.max(0, 1 - Math.max(0, (im.age - im.fadeAt) / im.fadeFor));
+    im.fadeFor = Math.max(1e-3, seconds);
+    im.fadeAt = im.age - (1 - f) * im.fadeFor;
+    im.life = Math.min(im.life, im.age + f * im.fadeFor);
   }
 
   /** deepen the latest imprint (it builds up over a burrowing or a feeding bout) */
@@ -143,7 +172,7 @@ export class SandFX {
       const im = this.imprints[k];
       im.mesh.visible = CONTACT_SHADOWS.enabled;
       im.age += dt;
-      const fade = 1 - Math.max(0, (im.age - im.life * 0.5) / (im.life * 0.5));
+      const fade = 1 - Math.max(0, (im.age - im.fadeAt) / im.fadeFor);
       im.mat.uniforms.uAmount.value = im.strength * Math.max(0, fade);
       if (im.age >= im.life) { im.mesh.removeFromParent(); im.mesh.geometry.dispose(); im.mat.dispose(); this.imprints.splice(k, 1); }
     }
