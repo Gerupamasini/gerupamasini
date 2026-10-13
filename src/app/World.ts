@@ -1,4 +1,4 @@
-import { FogExp2, Scene, Vector3, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { FogExp2, MathUtils, Scene, Vector3, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
@@ -70,6 +70,12 @@ export class World {
   overcast = 0;
   /** tone-mapping exposure suggested for the current light */
   exposure = 0.5;
+  /**
+   * The picture's grade by the sun (fitted to photographs, tools/grade/calibrate.mjs): the colour cast at sunset and
+   * sunrise, as a camera set to daylight sees the reddened light.
+   */
+  readonly grade = { duskTint: new Vector3(1.05, 0.95, 0.85) };
+  private readonly gradeTmp = new Vector3();
   private readonly sunColTmp = new Vector3();
   private readonly viewTmp = new Vector3();
   /** the sun's shadow over the whole flat, beyond the near map (size 0 when the tier has no shadows) */
@@ -289,6 +295,9 @@ export class World {
     this.terrain.wetDry.update((ms) => this.tide.level(ms), gameMs, this.tideLevel, this.map.origin.lat, this.map.origin.lon);
     // the eelgrass sways with the same breeze and leans with the tidal current
     this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
+    // the grade: the sunset's cast from a little below the horizon to about 14° up
+    const glow = MathUtils.smoothstep(sp.elevation, -5, 0) * (1 - MathUtils.smoothstep(sp.elevation, 2, 14));
+    this.water.uniforms.uGradeTint.value.copy(this.gradeTmp.set(1, 1, 1).lerp(this.grade.duskTint, glow));
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;

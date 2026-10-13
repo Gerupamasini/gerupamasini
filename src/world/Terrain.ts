@@ -107,6 +107,12 @@ export class Terrain {
     uFarShadowMap: { value: null }, uFarShadowMatrix: { value: new Matrix4() }, uFarShadowOn: { value: 0 },
   };
   private readonly uNearShadowMatrix: IUniform<Matrix4> = { value: new Matrix4() };
+  /**
+   * The wet ground's look, fitted to photographs (tools/grade/calibrate.mjs): how dark saturated sediment is (its
+   * albedo's share), how far over the water the water table keeps films standing in the troughs and hollows (m), and
+   * how rough a film gets far off (its ripples finer than a pixel).
+   */
+  readonly look = { wetDark: { value: 0.45 }, filmTable: { value: 0.5 }, filmFarRough: { value: 0.3 } };
   /** the relief's own shadow over the flat (TerrainShadow) */
   private terrainSun: { uTerrainSun: IUniform<Texture | null>; uTerrainSunOn: IUniform<number> } = { uTerrainSun: { value: null }, uTerrainSunOn: { value: 0 } };
   private readonly uTime: IUniform<number> = { value: 0 };
@@ -357,6 +363,9 @@ export class Terrain {
       shader.uniforms.uWaterLevel = uWater;
       shader.uniforms.uWetDry = this.uWetDry;
       Object.assign(shader.uniforms, this.farShadow, this.terrainSun);
+      shader.uniforms.uWetDark = this.look.wetDark;
+      shader.uniforms.uFilmTable = this.look.filmTable;
+      shader.uniforms.uFilmFarRough = this.look.filmFarRough;
       shader.uniforms.uNearShadowMatrix = this.uNearShadowMatrix;
       shader.uniforms.uWetDryRange = this.uWetDryRange;
       shader.uniforms.uTime = uTime;
@@ -385,6 +394,7 @@ varying float vPit;
 uniform float uWaterLevel;
 uniform sampler2D uWetDry;
 uniform vec2 uWetDryRange;
+uniform float uWetDark, uFilmTable, uFilmFarRough;
 uniform sampler2D uFarShadowMap;
 uniform mat4 uFarShadowMatrix;
 uniform float uFarShadowOn;
@@ -675,7 +685,11 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float film = pow(max(mix(wd.r, wd.g, mudW), 1e-4), 1.0 / retain);
   float moist = pow(max(mix(wd.b, wd.a, mudW), 1e-4), 1.0 / (0.8 + 0.4 * retain));
   film = max(film, 1.0 - smoothstep(0.0, mix(0.025, 0.07, mudW), wetHere));
-  moist = max(moist, 1.0 - smoothstep(0.0, mix(0.08, 0.5, mudW), wetHere));
+  // a low flat holds its water table at the surface: water stands in the troughs and hollows the whole low tide, up
+  // to half the table's height over the water and thinning out above that; the sediment there stays saturated
+  float table = (1.0 - smoothstep(0.5 * uFilmTable, max(uFilmTable, 1e-3), wetHere)) * step(1e-4, uFilmTable);
+  film = max(film, clamp(1.6 * trough + hollow, 0.0, 1.0) * table);
+  moist = max(moist, max(table, 1.0 - smoothstep(0.0, mix(0.08, 0.5, mudW), wetHere)));
   // (the levee stones and the bank above the high water stay as they were)
   film *= 1.0 - gRock;
   float wet = wetHere <= 0.0 ? 1.0 : max(moist, film);
@@ -693,7 +707,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
       wet = max(wet, max(gSwash, zone * 0.9));
     }
   }
-  diffuseColor.rgb *= mix(1.0, 0.66, wet);
+  diffuseColor.rgb *= mix(1.0, uWetDark, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
   // a standing film takes a little more of the light into the water
   diffuseColor.rgb *= mix(1.0, 0.92, film * step(0.0, wetHere));
@@ -748,7 +762,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
   // a film of water: a mirror of the sky, the sun's glint in it. Further off, the ripples under the film are finer than
   // a pixel and spread its mirror out (their slopes become roughness; otherwise the sky aliases into stripes)
-  roughnessFactor = mix(roughnessFactor, mix(0.07, 0.3, smoothstep(6.0, 40.0, gFootMm)), gWetFilm);
+  roughnessFactor = mix(roughnessFactor, mix(0.07, uFilmFarRough, smoothstep(6.0, 40.0, gFootMm)), gWetFilm);
 }`)
         .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
   {

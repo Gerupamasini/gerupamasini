@@ -169,6 +169,8 @@ export class WaterPass {
       // screen); three does both only for the screen, so the shader does them itself, with three's exposure
       uLdrOut: { value: 0 },
       uExposure: { value: 1 },
+      // the picture's last grade (World sets it with the sun: the warm cast of a sunset as a camera sees it)
+      uGradeTint: { value: new Vector3(1, 1, 1) },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -199,6 +201,7 @@ export class WaterPass {
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
         uniform vec2 uRes;
         uniform float uLdrOut, uExposure;
+        uniform vec3 uGradeTint;
         varying vec2 vUv;
         varying float vCamLevel;
         ${TONE_MAP_GLSL}
@@ -494,6 +497,7 @@ export class WaterPass {
             c = mix(c * vec3(0.97, 1.0, 1.03), c * vec3(1.03, 1.0, 0.95), smoothstep(0.2, 0.8, l));
             vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
             c *= mix(0.84, 1.0, smoothstep(1.15, 0.3, length(q)));
+            c *= uGradeTint;
             gl_FragColor.rgb = c;
           }
           #include <colorspace_fragment>

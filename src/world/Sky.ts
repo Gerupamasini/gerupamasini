@@ -7,6 +7,23 @@ import { Sky } from 'three/addons/objects/Sky.js';
  */
 const NEAR_HALF = 32;
 
+/** the ozone layer's optical depth straight up (red, green, blue: Bruneton's absorption over a 15 km column) */
+const OZONE_TAU = [0.00975, 0.0282, 0.00128];
+
+/**
+ * The sunlight's transmittance through the ozone layer (a shell 25 km up) on its way to the sky the player sees, for
+ * a sun `elevation`° up, `column` times the real ozone column, into `out`. The Preetham model leaves ozone out; it is
+ * what keeps the sky over a sunset blue (Chappuis absorption takes the orange and green out of the light crossing the
+ * layer edge-on) where without it the sky goes teal. Past the horizon the light crosses the layer twice (doubled by
+ * 6° down).
+ */
+export function ozoneTransmittance(elevation: number, column: number, out: Vector3): Vector3 {
+  const R = 6371, H = 25;
+  const c = Math.cos(MathUtils.degToRad(Math.max(0, elevation))) * R;
+  const m = (R + H) / Math.sqrt((R + H) ** 2 - c * c) * (1 + MathUtils.clamp(-elevation / 6, 0, 1));
+  return out.set(Math.exp(-OZONE_TAU[0] * column * m), Math.exp(-OZONE_TAU[1] * column * m), Math.exp(-OZONE_TAU[2] * column * m));
+}
+
 /** Preetham sky dome, key light, hemisphere light and a PMREM environment refreshed as the sun moves. */
 export class SkyDome {
   readonly sky: Sky;
@@ -24,6 +41,13 @@ export class SkyDome {
   private lastEnvOvercast = 0;
   private overcast = 0;
   elevation = 45;
+  /**
+   * The sky's look, fitted to photographs of flats (tools/grade/calibrate.mjs): the dome's brightness against the
+   * ground and the saturation of its colour (by day, toward sunset), the haze it gathers toward sunset (turbidity and
+   * Mie scattering, clear day → dusk), the ozone the sunlight crosses on its way to the sky (times the real column; see
+   * `ozoneTransmittance`), and how much of the sunset's warmth the sky light gives the shadows.
+   */
+  readonly look = { scale: 0.27, saturation: 1.4, saturationDusk: 1, turbidity: 1.8, turbidityDusk: 10, rayleigh: 3, mie: 0.002, mieDusk: 0.012, ozone: 1.5, ambientDusk: 0.5 };
 
   constructor(private readonly scene: Scene, private readonly renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number) {
     this.sky = new Sky();
@@ -31,11 +55,17 @@ export class SkyDome {
     // the Preetham model comes out far brighter than the ground at any exposure; scale the dome so the sky keeps its
     // blue and the environment maps built from it stop washing the flat out
     const mat = this.sky.material;
-    mat.uniforms.uSkyScale = { value: 0.32 };
+    mat.uniforms.uSkyScale = { value: this.look.scale };
+    mat.uniforms.uSkySat = { value: this.look.saturation };
+    mat.uniforms.uOzone = { value: new Vector3(1, 1, 1) };
     mat.fragmentShader = mat.fragmentShader
       .replace('uniform float mieDirectionalG;', `uniform float mieDirectionalG;
-		uniform float uSkyScale;`)
-      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uSkyScale, 1.0 );');
+		uniform float uSkyScale;
+		uniform float uSkySat;
+		uniform vec3 uOzone;`)
+      .replace('vec3 L0 = vec3( 0.1 ) * Fex;', 'Lin *= uOzone;\n\t\t\tvec3 L0 = vec3( 0.1 ) * Fex;')
+      // (more saturated, but not past the spectrum's edge: the reddened sun's disc would go negative in blue)
+      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( max( mix( vec3( dot( texColor, vec3( 0.2126, 0.7152, 0.0722 ) ) ), texColor, uSkySat ), 0.0 ) * uSkyScale, 1.0 );');
     mat.needsUpdate = true;
     // fair-weather cumulus: three's own cloud layer (lit by the sun with a silver lining on the rims toward it,
     // self-shadowed, fading into the haze toward the horizon); they also end up in the environment cube and in the
@@ -121,7 +151,7 @@ export class SkyDome {
     this.sunLight.position.copy(c).addScaledVector(lightDir, 120);
     this.sunLight.target.position.copy(c);
     // hemisphere: sky colour tracks the horizon tint
-    const skyCol = new Color(0.58, 0.68, 0.78).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
+    const skyCol = new Color(0.58, 0.68, 0.78).lerp(new Color(0.9, 0.62, 0.45), this.look.ambientDusk * dusk).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
     const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
@@ -129,11 +159,20 @@ export class SkyDome {
     this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
     this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
     this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
-    this.sky.material.uniforms.turbidity.value = 2.0 + 6 * dusk + 14 * cloud;
-    this.sky.material.uniforms.rayleigh.value = 2.2 - 1.2 * cloud;
-    this.sky.material.uniforms.mieCoefficient.value = 0.002 + 0.03 * cloud;
+    const look = this.look;
+    this.sky.material.uniforms.turbidity.value = look.turbidity + look.turbidityDusk * dusk + 14 * cloud;
+    this.sky.material.uniforms.rayleigh.value = look.rayleigh - 1.2 * cloud;
+    this.sky.material.uniforms.mieCoefficient.value = look.mie + look.mieDusk * dusk + 0.03 * cloud;
+    this.sky.material.uniforms.uSkyScale.value = look.scale;
+    this.sky.material.uniforms.uSkySat.value = MathUtils.lerp(look.saturation, look.saturationDusk, dusk);
+    ozoneTransmittance(elevation, look.ozone, this.sky.material.uniforms.uOzone.value);
     // below the horizon the Preetham model goes black: hide the dome and show the dark fog colour instead
     this.sky.visible = elevation > -7;
+  }
+
+  /** The environment maps are built again on the next refresh (the look changed). */
+  invalidateEnvironment(): void {
+    this.lastEnvElevation = Number.NaN;
   }
 
   /** Rebuild the environment map when the sun moved enough (throttled by the caller). */
