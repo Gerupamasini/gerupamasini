@@ -111,6 +111,7 @@ export class CreatureSystem {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
       sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
+      colorAt: (x, z, out) => terrain.colorAt(x, z, out),
     };
   }
 
