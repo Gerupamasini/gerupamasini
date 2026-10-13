@@ -43,6 +43,9 @@ const DEFAULT_SHOTS = [
   { name: 'escape_0', call: { fn: 'startle' }, advance: 0.08, follow: { i: 3, offset: [0.0, 0.06, 0.24] } },
   { name: 'escape_1', advance: 0.2 },
   { name: 'escape_2', advance: 1.2, follow: { i: 3, offset: [0.12, 0.04, 0.12] } },
+  // the eye close up: in the photo case (air) and in the bed (water)
+  { name: 'eye_lod0', set: { scene: 'tank', lod: 0, palette: 1, cam: [0.04, 0.0035, 0.0085], target: [0, 0.0028, 0.0066], fov: 30 } },
+  { name: 'eye_water', set: { scene: 'meadow' }, advance: 3, portrait: { i: 0, dist: 0.05, fov: 30, angle: 0.2 } },
 ];
 
 const shotsFile = arg('--shots', null);

@@ -9,16 +9,16 @@ import {
  *
  *  LOD0  the named parts of the rig, one mesh each: Head and Body (a 64-around loft split behind the gill slit, with
  *        the lips' seam over the jaw bone, the eye sockets' rims and a scatter of skin filaments), Eye_L / Eye_R
- *        (eyeballs turning on their own bones), DorsalSpine (the barbed first spine with the membrane behind it),
+ *        (eyeballs turning on their own bones under clear corneal domes fixed to the head), DorsalSpine (the barbed first spine with the membrane behind it),
  *        DorsalFin, AnalFin, PectoralFin_L / _R and CaudalFin (membranes at ray resolution)
  *  LOD1  Body (a 24-around loft with small eye caps and the spine) and Fins (all five fins, coarser)
  *  LOD2  Body only: an 10-around loft with the tail folded into the same mesh (one draw call, opaque)
  *
  * Skin vertices carry aPart (0 skin, 2 the far tier's opaque tail, 4 the spine, 5 a skin filament, 6 the spine's
- * membrane, 7 a small eye on the far tiers, 8 the skin over the eyeball's edge) and aThin (how much light gets through the
- * tissue: 0 thick .. 1 thin; on the eye's skin ring, how near the opening); fin
+ * membrane, 7 a small eye on the far tiers) and aThin (how much light gets through the tissue: 0 thick .. 1 thin); fin
  * vertices carry aFin = (across the base 0..1, along the ray 0..1, fin id: 0 caudal, 1 dorsal, 2 anal, 3 pectoral);
- * eye vertices aEye = (angle from the eye's axis / the largest drawn, azimuth, side).
+ * eye vertices aEye = (angle from the eye's axis / the largest drawn, azimuth, side) on the ball and (0 crown .. 1 rim,
+ * azimuth, 2 · side) on the corneal dome, the eye mesh's second material group.
  * Model frame: metres, +Z forward, +Y up, +X the fish's left, origin on the axis at S_PIVOT.
  */
 
@@ -432,18 +432,19 @@ function buildEye(b: Builder, side: 1 | -1, nTh: number, nPsi: number, thMax: nu
 }
 
 /**
- * The skin over the eyeball's edge: a fleshy ring round the eye, from the opening (where it lies just over the ball)
- * out to the cheek, standing a little proud between. It sits on the head and does not turn with the eye, so the ball
- * moves under it as in the photographs. Vertices carry part 8 and, in aThin, how near the opening they are (1 at its
- * margin): the margin is thin, darker and lets light through.
+ * The corneal dome over the eye: clear skin, smooth where the rest is granular, a shallow cap a little proud of the
+ * eyeball's crown that runs down into the cheek at a glassy rim. It sits on the head (the ball turns beneath it) and
+ * is drawn with its own transparent material: aEye = (0 at the crown .. 1 at the rim, azimuth, 2 · side).
  */
-function buildEyeLid(b: Builder, side: 1 | -1, nR: number, nPsi: number): void {
+function buildCornea(b: Builder, side: 1 | -1, nR: number, nPsi: number): void {
   const c = eyeCentre(side);
   const ax = eyeAxis(side);
   const u = new Vector3(0, 1, 0).cross(ax).normalize();
   const v = ax.clone().cross(u).normalize();
-  const R = EYE.r, r0 = EYE.aperture, r1 = EYE.lidOut;
-  const hIn = Math.sqrt(R * R - r0 * r0) + 0.0012;
+  const crown = EYE.r + EYE.gap, rim = EYE.dome;
+  // a spherical cap from the crown down to the skin at the rim
+  const hc = crown - EYE.sink, Rc = (rim * rim + hc * hc) / (2 * hc);
+  const capAt = (r: number) => crown - (Rc - Math.sqrt(Math.max(0, Rc * Rc - r * r)));
   const grid: P3[][] = [];
   for (let j = 0; j < nPsi; j++) {
     const psi = (j / nPsi) * Math.PI * 2;
@@ -451,22 +452,20 @@ function buildEyeLid(b: Builder, side: 1 | -1, nR: number, nPsi: number): void {
     const row: P3[] = [];
     for (let k = 0; k <= nR; k++) {
       const t = k / nR;
-      // a little narrower in front and behind than above and below: the opening is a slightly upright oval
-      const r = r0 * (1 + 0.06 * Math.sin(psi) * Math.sin(psi)) + (r1 - r0) * t;
+      const r = rim * t;
       const px = c[0] + dir.x * r, py = c[1] + dir.y * r, pz = c[2] + dir.z * r;
-      // where the cheek's skin lies along the eye's axis from here
+      // where the cheek's skin lies along the eye's axis from here: the rim settles onto it
       let hS = EYE.sink;
       for (let it = 0; it < 3; it++) {
         const qx = px + ax.x * hS, qy = py + ax.y * hS, qz = pz + ax.z * hS;
-        const sk = side * halfWidthAt(S_PIVOT - qz, qy);
-        hS += (sk - qx) / ax.x;
+        hS += (side * halfWidthAt(S_PIVOT - qz, qy) - qx) / ax.x;
       }
-      const e = smooth(0, 1, t);
-      const h = hIn * (1 - e) + (hS - 0.0006) * e + 0.0038 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15)), 1.3);
+      const h = Math.max(capAt(r), hS + 0.0004) * (1 - smooth(0.82, 1, t)) + (hS + 0.0004) * smooth(0.82, 1, t);
       row.push([px + ax.x * h, py + ax.y * h, pz + ax.z * h]);
     }
     grid.push(row);
   }
+  const head = chainWeights(EYE.s);
   const ids: number[][] = [];
   for (let j = 0; j < nPsi; j++) {
     const row: number[] = [];
@@ -475,10 +474,9 @@ function buildEyeLid(b: Builder, side: 1 | -1, nR: number, nPsi: number): void {
       const a = grid[(j + 1) % nPsi][k], bq = grid[(j + nPsi - 1) % nPsi][k];
       const o = grid[j][Math.min(nR, k + 1)], i = grid[j][Math.max(0, k - 1)];
       const dpsi = [a[0] - bq[0], a[1] - bq[1], a[2] - bq[2]], dr = [o[0] - i[0], o[1] - i[1], o[2] - i[2]];
-      let n: P3 = [dr[1] * dpsi[2] - dr[2] * dpsi[1], dr[2] * dpsi[0] - dr[0] * dpsi[2], dr[0] * dpsi[1] - dr[1] * dpsi[0]];
+      let n: P3 = k === 0 ? [ax.x, ax.y, ax.z] : [dr[1] * dpsi[2] - dr[2] * dpsi[1], dr[2] * dpsi[0] - dr[0] * dpsi[2], dr[0] * dpsi[1] - dr[1] * dpsi[0]];
       if (n[0] * ax.x + n[1] * ax.y + n[2] * ax.z < 0) n = [-n[0], -n[1], -n[2]];
-      const t = k / nR;
-      row.push(b.vertex(p, chainWeights(EYE.s), n, { part: 8, thin: 1 - t }));
+      row.push(b.vertex(p, head, n, { a3: [k / nR, (j / nPsi) * Math.PI * 2, 2 * side] }));
     }
     ids.push(row);
   }
@@ -730,8 +728,6 @@ export function amimehagiGeometry(lod: Lod): AmimehagiGeometry {
     const iHead = st.findIndex((s) => s >= S_HEAD - 1e-6);
     const head = new Builder('skin'), body = new Builder('skin');
     buildLoft(head, st.slice(0, iHead + 1), 64, true, false);
-    buildEyeLid(head, 1, 6, 40);
-    buildEyeLid(head, -1, 6, 40);
     buildCirri(head, 0.06, S_HEAD - 0.01, 22, 0x5a17);
     buildLoft(body, st.slice(iHead), 64, false, true);
     buildCirri(body, S_HEAD + 0.01, 0.74, 54, 0x91c3);
@@ -739,8 +735,14 @@ export function amimehagiGeometry(lod: Lod): AmimehagiGeometry {
     out.Body = body.geometry();
     for (const side of [1, -1] as const) {
       const e = new Builder('eye');
-      buildEye(e, side, 18, 36, 1.2);
-      out[side === 1 ? 'Eye_L' : 'Eye_R'] = e.geometry();
+      // the eyeball (group 0, on the eye's bone) and the corneal dome over it (group 1, on the head)
+      buildEye(e, side, 22, 48, 1.2);
+      const ball = e.idx.length;
+      buildCornea(e, side, 10, 48);
+      const g = e.geometry();
+      g.addGroup(0, ball, 0);
+      g.addGroup(ball, e.idx.length - ball, 1);
+      out[side === 1 ? 'Eye_L' : 'Eye_R'] = g;
     }
     const sp = new Builder('skin');
     buildSpine(sp, 14, 12, true);
@@ -763,8 +765,6 @@ export function amimehagiGeometry(lod: Lod): AmimehagiGeometry {
     buildLoft(body, st, 24, true, true);
     buildEye(body, 1, 3, 10, 0.95, 7);
     buildEye(body, -1, 3, 10, 0.95, 7);
-    buildEyeLid(body, 1, 2, 14);
-    buildEyeLid(body, -1, 2, 14);
     buildSpine(body, 4, 5, false);
     out.Body = body.geometry();
     const fins = [new Builder('fin'), new Builder('fin'), new Builder('fin'), new Builder('fin'), new Builder('fin')];
