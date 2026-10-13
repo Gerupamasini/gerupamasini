@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vector2, Vector3 } from 'three';
-import { amimehagiGeometry, chainWeights, rigRest, triangleCount, PART_NAMES } from '../../src/creatures/species/amimehagi/geometry';
+import { amimehagiGeometry, chainWeights, eyeCentre, rigRest, triangleCount, PART_NAMES } from '../../src/creatures/species/amimehagi/geometry';
 import { BONES, EYE, MODEL_TL, SPINE_D1, bodyDepth, dorsalY, halfWidthAt, ventralY } from '../../src/creatures/species/amimehagi/anatomy';
 import { AmimehagiFish, type FishEnv } from '../../src/creatures/species/amimehagi/Behavior';
 import { medianAngle, restPose } from '../../src/creatures/species/amimehagi/pose';
@@ -95,9 +95,24 @@ describe('アミメハギ geometry', () => {
     const r = rigRest();
     expect(r.dorsalAxes.length).toBe(7);
     expect(r.analAxes.length).toBe(7);
+    // the eye mesh: the ball on the eye's own bone, the clear corneal dome over it on the head (the ball turns under it)
     const eye = amimehagiGeometry(0).Eye_L!;
-    const si = eye.getAttribute('skinIndex');
-    for (let i = 0; i < si.count; i++) expect(BONES[si.getX(i)]).toBe('J_eye_L');
+    expect(eye.groups.length).toBe(2);
+    const si = eye.getAttribute('skinIndex'), ae = eye.getAttribute('aEye'), idx = eye.index!;
+    const [ball, dome] = eye.groups;
+    for (let k = ball.start; k < ball.start + ball.count; k++) expect(BONES[si.getX(idx.getX(k))]).toBe('J_eye_L');
+    for (let k = dome.start; k < dome.start + dome.count; k++) {
+      expect(BONES[si.getX(idx.getX(k))]).toBe('J_head');
+      expect(ae.getZ(idx.getX(k))).toBe(2);
+    }
+    // the dome stands clear of the ball everywhere inside its rim (the ball can turn beneath it)
+    const pos = eye.getAttribute('position'), c = eyeCentre(1);
+    for (let k = dome.start; k < dome.start + dome.count; k++) {
+      const i = idx.getX(k);
+      if (ae.getX(i) > 0.8) continue;
+      const d = Math.hypot(pos.getX(i) / MODEL_TL - c[0], pos.getY(i) / MODEL_TL - c[1], pos.getZ(i) / MODEL_TL - c[2]);
+      expect(d).toBeGreaterThan(EYE.r + 0.0015);
+    }
     // a stiff deep body: rigid in a segment's middle
     expect(chainWeights(0.47)[0][1]).toBeCloseTo(1, 2);
   });

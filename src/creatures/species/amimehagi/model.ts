@@ -27,7 +27,7 @@ export interface AmimehagiModel {
  *   AmimehagiRoot
  *   ├── J_root (the skeleton)
  *   └── AmimehagiLOD
- *       ├── LOD0: Body, Head, Eye_L, Eye_R, DorsalFin, AnalFin, PectoralFin_L, PectoralFin_R, CaudalFin, DorsalSpine
+ *       ├── LOD0: Body, Head, Eye_L, Eye_R (eyeball + corneal dome), DorsalFin, AnalFin, PectoralFin_L, PectoralFin_R, CaudalFin, DorsalSpine
  *       ├── LOD1: Body, Fins
  *       └── LOD2: Body
  * every mesh skinned to the same skeleton.
@@ -53,11 +53,12 @@ export function buildModel(look: AmimehagiLook, tiers: Lod[] = [0, 1, 2]): Amime
     level.name = `LOD${t}`;
     for (const [name, g] of Object.entries(geo) as [PartName, NonNullable<(typeof geo)[PartName]>][]) {
       const kind = PART_KIND[name];
-      const mat: Material = kind === 'eye' ? look.eyes : kind === 'fin' ? look.fins : t === 2 ? look.skinLow : look.skin;
+      // the eye: its ball and, over it, the clear corneal dome (two material groups of one mesh)
+      const mat: Material | Material[] = kind === 'eye' ? [look.eyes, look.cornea] : kind === 'fin' ? look.fins : t === 2 ? look.skinLow : look.skin;
       const m = new SkinnedMesh(g, mat);
       m.name = name;
-      // fins after the body (transparent, no depth write)
-      m.renderOrder = kind === 'fin' ? 2 : 0;
+      // the transparent parts after the body: the corneas, then the fins (no depth write)
+      m.renderOrder = kind === 'fin' ? 2 : kind === 'eye' ? 1 : 0;
       m.bind(skeleton, IDENTITY);
       m.boundingSphere = SPHERE;
       m.castShadow = false;
