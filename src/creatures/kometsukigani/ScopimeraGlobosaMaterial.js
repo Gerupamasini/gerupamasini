@@ -291,7 +291,7 @@ const FRAG_SURFACE = /* glsl */ `
     // the dorsum's ground is darker than the limbs' (049, 069: the pale is in the granules, not between them), and
     // darkest in the blotches
     // (and the darkening is toward a grey-brown, the sand's own shade — not olive, not a warm brown)
-    baseC *= mix(vec3(1.0), vec3(0.58, 0.56, 0.52), (0.25 + 0.65 * blot) * dorsal);
+    baseC *= mix(vec3(1.0), vec3(0.57, 0.565, 0.55), (0.25 + 0.65 * blot) * dorsal);
     vec3 pigC = mix(marb * 0.42, marb * 1.05 + vec3(0.01, 0.007, 0.0), tone);
     vec3 dcol = mix(baseC, pigC, pig);
     // the translucent rim inside the lateral and posterior margins: fewer dots, paler (008)
@@ -318,7 +318,7 @@ const FRAG_SURFACE = /* glsl */ `
       float fl = kgN3(vec3(qs * 130.0, seedP + 7.0) + vec3(0.0, 0.0, P.y * 130.0)) * 0.7 + kgN3(vec3(qs * 260.0, seedP + 9.0)) * 0.3;
       float flecks = smoothstep(0.62, 0.74, fl) * paleField * (1.0 - smoothstep(0.004, 0.012, fw));
       float apex = smoothstep(0.55, 0.95, tub) * (0.35 + 0.4 * paleField) + smoothstep(0.6, 1.0, tub2) * (0.15 + 0.35 * D);
-      vec3 paleC = mix(ground * 1.12 + vec3(0.03, 0.03, 0.025), vec3(0.75, 0.72, 0.64), 0.25);
+      vec3 paleC = mix(ground * 1.12 + vec3(0.03, 0.03, 0.025), vec3(0.74, 0.735, 0.71), 0.25);
       dcol = mix(dcol, paleC, clamp(apex + flecks * 0.6, 0.0, 0.8) * (dorsal + 0.5 * side));
       // micro-relief that no two square millimetres share: fine pits and a grainy skin
       h += (kgN3(P * 420.0 + seedP) - 0.5) * 0.0007 * (1.0 - smoothstep(0.0008, 0.003, fw));
@@ -908,10 +908,10 @@ export function makeSetaeMaterial() {
  *   brown — darker grey-brown, heavily mottled
  */
 const MORPHS = {
-  pale: { tint: [0.76, 0.74, 0.68], dark: [0.4, 0.38, 0.35], purple: 0, pale: 0.85, red: 0.04, cover: 0.75, legTint: 0.3 },
-  khaki: { tint: [0.73, 0.7, 0.63], dark: [0.37, 0.35, 0.31], purple: 0, pale: 0.8, red: 0.03, cover: 0.75, legTint: 0.5 },
-  grey: { tint: [0.71, 0.7, 0.66], dark: [0.34, 0.33, 0.31], purple: 0, pale: 0.7, red: 0.04, cover: 0.8, legTint: 0.35 },
-  brown: { tint: [0.68, 0.65, 0.58], dark: [0.32, 0.3, 0.27], purple: 0, pale: 0.7, red: 0.04, cover: 0.6, legTint: 0.55 },
+  pale: { tint: [0.75, 0.74, 0.7], dark: [0.39, 0.38, 0.36], purple: 0, pale: 0.85, red: 0.04, cover: 0.75, legTint: 0.3 },
+  khaki: { tint: [0.72, 0.7, 0.66], dark: [0.36, 0.35, 0.33], purple: 0, pale: 0.8, red: 0.03, cover: 0.75, legTint: 0.5 },
+  grey: { tint: [0.7, 0.7, 0.68], dark: [0.34, 0.34, 0.33], purple: 0, pale: 0.7, red: 0.04, cover: 0.8, legTint: 0.35 },
+  brown: { tint: [0.68, 0.66, 0.61], dark: [0.32, 0.31, 0.29], purple: 0, pale: 0.7, red: 0.04, cover: 0.6, legTint: 0.55 },
 };
 
 export function paletteFor(name, seed = 1) {
