@@ -18,6 +18,8 @@ export function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 const PI = Math.PI, HALF_PI = Math.PI / 2;
+/** SURF_DRY: how far under the sand the surface lies where the swash has drained (m) */
+const DRY = 0.02;
 
 const K_HASH = fr(0.1031), K_HASH2 = fr(33.33), K_GOLD = fr(0.6180339887);
 function surfHash(n: number): number {
@@ -186,7 +188,7 @@ function surfEval(c: Ctx, x: number, z: number, level: number, t: number): numbe
   const ground = Z[0], Ta = Z[1], Tb = Z[2], slope = Z[3];
   const D = level - ground;
   // high and dry, above any run-up: the ground itself
-  if (D < -0.9 * c.Hs - 0.12) return -D - 0.002;
+  if (D < -0.9 * c.Hs - 0.12) return -D - DRY;
   const A = auxAt(c, x, z);
   const bar = A[0];
   const f = clamp((level - c.lv0) / Math.max(c.lv1 - c.lv0, 1e-4), 0, 1);
@@ -241,7 +243,7 @@ function surfEval(c: Ctx, x: number, z: number, level: number, t: number): numbe
   // up the beach (and a little below the still waterline) the surface is the swash's
   if (wsw > 0) {
     const h = swashDepth(c, syx, syy, D, ph, ta, m, shelter);
-    eta = mix(eta, h > 0 ? -D + h : -D - 0.002, wsw);
+    eta = mix(eta, h > 0 ? -D + h : -D - DRY, wsw);
   }
   return eta;
 }

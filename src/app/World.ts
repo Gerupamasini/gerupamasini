@@ -10,7 +10,7 @@ import { SurfZone } from '../world/SurfZone';
 import { SurfMemory } from '../world/SurfMemory';
 import { breakerBand, SurfLip } from '../world/SurfLip';
 import { SurfSpray } from '../world/SurfSpray';
-import { runup2, seaStateFor, type SeaState } from '../world/surfPhysics';
+import { seaStateFor, type SeaState } from '../world/surfPhysics';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -381,7 +381,7 @@ export class World {
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
     // the sand's memory of the swash, on the same clock
     if (this.surfMemory && this.gl) this.surfMemory.update(this.gl, camera, this.tideLevel, this.water.uniforms.uTime.value, dt);
-    if (this.sea) this.terrain.setSurfMemory(this.surfMemory?.uniforms ?? null, runup2(this.sea.height, this.sea.period, 0.08));
+    if (this.sea) this.terrain.setSurfMemory(this.surfMemory?.uniforms ?? null);
     // the lips and the spray look for breaking crests in the breaker zone at the viewer's place
     if (this.sea && this.surfZone && this.layout?.surf && (this.surfLip || this.surfSpray)) {
       breakerBand(this.surfZone, this.layout.surf.seaward, camera, this.tideLevel, this.sea, this.band);

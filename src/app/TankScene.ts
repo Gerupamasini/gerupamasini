@@ -84,7 +84,20 @@ export class TankScene {
   private readonly contacts = new AnimalContacts();
   /** mean top of the substrate: the decorations and the caustics sit on it; the animals stand on its relief */
   private sandTop = SAND_H;
-  private readonly floor: Floor = { heightAt: (x, z) => this.substrate.heightAt(x, z), waterAt: () => this.dimensions.waterHeight };
+  private readonly floor: Floor = ((scene: TankScene): Floor => ({
+    heightAt: (x, z) => scene.substrate.heightAt(x, z),
+    waterAt: () => scene.dimensions.waterHeight,
+    colorAt: (x, z, out) => scene.substrate.colorAt(x, z, out),
+    // the bed's sand shader, in the tank's frame (the bed shades tank-local positions: world − aquariumRoot)
+    get bed() { return scene.bedInfo(); },
+  }))(this);
+  private readonly bedRef = { uniforms: {} as Record<string, IUniform>, origin: new Vector3(), siltAt: (x: number, z: number) => this.substrate.siltAt(x, z) };
+  private bedInfo(): Floor['bed'] {
+    if (this.layout.substrate === 'none') return null;
+    this.bedRef.uniforms = this.substrate.U;
+    this.bedRef.origin.copy(this.aquariumRoot.position);
+    return this.bedRef;
+  }
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
   private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL - TANK_OFFSET_Y);

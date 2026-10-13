@@ -38,7 +38,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
 
-波打ち際ラボは `surf-lab.html`（開発時は http://localhost:5173/gerupamasini/surf-lab.html）。急な前浜・砂州・岩場のある浜で、潮位・波高・周期・波向・時刻・画質・デバッグ表示（区分・泡の種類・位相）と視点を切り替え、寄せ波・砕波・遡上・引き波・濡れた砂を確かめられます。`node tests/smoke/surf-lab.mjs` で各視点の連番、`node tests/smoke/surf.mjs` で走水の画、`node tests/smoke/surf-perf.mjs` で画質ごとの負荷。
+波打ち際ラボは `surf-lab.html`（開発時は http://localhost:5173/gerupamasini/surf-lab.html）。急な前浜・砂州・岩場のある浜で、潮位・波高・周期・波向・時刻・画質・デバッグ表示（区分・泡の種類・位相）と視点を切り替え、寄せ波・砕波・遡上・引き波・濡れた砂を確かめられます。`node tests/smoke/surf-lab.mjs` で各視点の連番、`node tests/smoke/surf.mjs` で走水の画、`node tests/smoke/surf-trace.mjs` で歩いて振り返るときの砂の跡、`node tests/smoke/surf-perf.mjs` で画質ごとの負荷。
 
 ユビナガホンヤドカリ単体のラボは `hermit-lab.html`（開発時は http://localhost:5173/gerupamasini/hermit-lab.html）。
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。

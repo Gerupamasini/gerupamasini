@@ -8,7 +8,7 @@ import { MirrorView } from '../render/Mirror';
 import type { Terrain } from './Terrain';
 import { WAVES_GLSL, type WaveSet } from './Waves';
 import { makeFoamTexture, SURF_GLSL, type SurfUniforms } from './Surf';
-import type { SurfMemoryUniforms } from './SurfMemory';
+import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
 import type { SurfSpray } from './SurfSpray';
 
 /** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
@@ -304,6 +304,7 @@ export class WaterPass {
         }
 
         ${SURF_ETA_GLSL}
+        ${SURF_MEM_GLSL}
 
         // ---- sun glitter. The small waves' facets, each tilted at random about the surface's own slope (the
         // unresolved slopes' spread, Cox & Munk's σ), flash wherever one turns the sun into the eye. The facets are
@@ -642,7 +643,8 @@ export class WaterPass {
                   float mem = 0.0;
                   if (uMemBox.w > 0.0) {
                     vec2 muv = (S.xz - uMemBox.xy) / uMemBox.z + 0.5;
-                    if (all(greaterThan(muv, vec2(0.0))) && all(lessThan(muv, vec2(1.0)))) mem = texture2D(tSurfMem, muv).b;
+                    float mw = surfMemWeight(muv);
+                    if (mw > 0.0) mem = texture2D(tSurfMem, muv).b * mw;
                   }
                   // the backwash's streaks: what the sheet still carries, drawn out down the slope
                   float carried = (1.0 - sf.swUp) * exp(-sf.swAge / 3.0) * 0.55 * smoothstep(0.0005, 0.004, sf.film);

@@ -1,4 +1,4 @@
-import type { Object3D, Vector3 } from 'three';
+import type { Color, IUniform, Object3D, Vector3 } from 'three';
 import type { Individual } from '../Individual';
 import type { HabitatSample } from '../../world/Habitat';
 import type { AmamoUniforms } from '../../world/amamo/kit';
@@ -59,6 +59,12 @@ export interface Floor {
   heightAt(x: number, z: number): number;
   waterAt(x: number, z: number): number;
   sampleAt?(x: number, z: number): HabitatSample | null;
+  /** the sediment's colour as it is drawn here (linear albedo, before the light); null where there is none (a bare
+   *  tank). For what takes on the colour of the bottom: sand over a buried flatfish, a fish matching its background */
+  colorAt?(x: number, z: number, out: Color): Color | null;
+  /** a bed drawn by the tank's sand shader (BED_SAND_GLSL): its uniforms, the world position of its frame's origin
+   *  and the silt in it, so that sand over an animal can be drawn grain for grain as the bed round it */
+  bed?: { uniforms: Record<string, IUniform>; origin: Vector3; siltAt(x: number, z: number): number } | null;
   /** the eelgrass meadow, on a flat that has one */
   meadow?: MeadowProbe | null;
   /** the carrion lying about, for the scavengers */
