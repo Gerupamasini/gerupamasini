@@ -118,12 +118,14 @@ vec3 waveHess(vec2 p, float t, float minLambda) {
 // map, 1 / det(I + D (1 - 1/n) H), from the same wave field (after MahazeViewer). Around 1.0; bright lines where
 // the surface curvature focuses the light, dimmer cells between them.
 float waveCaustic(vec2 p, vec3 L, float D, float t, float fp, float gain) {
+  float soft = 0.09 + 6.0 * fp / max(D, 1e-3);
+  // (a pixel too wide for the net to show on this shallow a bed: the mean it averages to, without the waves' curvature)
+  if (soft > 2.0) return mix(1.0, mix(1.0, 1.0 / soft, 0.65), smoothstep(0.0, 0.004, D));
   vec2 s = p + L.xz * D;
   // capillaries (under ~5 cm) are damped before they focus anything; the net on the bed comes from the 5–30 cm ripples
   vec3 H = waveHess(s, t, max(fp * 5.0, 0.04)) * (D * gain);
   float g = 0.2513;
   float det = (1.0 + H.x * g) * (1.0 + H.z * g) - H.y * H.y * g * g;
-  float soft = 0.09 + 6.0 * fp / max(D, 1e-3);
   float I = 1.0 / max(abs(det), soft);
   I = mix(I, 1.0, smoothstep(0.0, -1.5, det) * 0.3);
   I = mix(1.0, clamp(I, 0.0, 4.0), 0.65);

@@ -47,6 +47,9 @@ export class GameRenderer {
     const antialias = QUALITY_PRESETS[savedQualityHint()].msaa > 0;
     this.canvasMsaa = antialias;
     this.gl = new WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance', alpha: false, stencil: false });
+    // three asks the driver for every program's link status and logs on its first use, which waits for the compile
+    // (and defeats compiling in parallel): only in development and under test automation, where a shader error must show
+    this.gl.debug.checkShaderErrors = import.meta.env.DEV || !!globalThis.navigator?.webdriver;
     this.gl.outputColorSpace = SRGBColorSpace;
     // the game's tone curve (ToneMapGlsl: ACES, or AgX with its look), shared with the passes that tone map themselves
     installToneMap();

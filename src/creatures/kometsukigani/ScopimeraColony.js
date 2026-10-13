@@ -859,8 +859,11 @@ export class ScopimeraColony {
   /** the burrow under a point (for the HUD), or -1 */
   burrowNear(x, z, reach) { return this.burrowAt(x, z, reach); }
 
-  /** compile the crab, pellet and burrow programs up front (no hitch when the first crab appears) */
-  prewarm(gl, camera) {
+  /**
+   * compile the crab, pellet and burrow programs up front (no hitch when the first crab appears): `compile` compiles
+   * the colony's own group in the variant the flat is drawn in (the rest of the scene is compiled already)
+   */
+  async prewarm(camera, compile) {
     const crab = new ScopimeraGlobosa({ seed: 1, sex: 'm', cw_mm: 8 });
     // the legs' reach tables are shared by every crab: build them now, not on the first crab's first step
     for (const leg of crab.model.rig.legs) leg.reachTables();
@@ -871,7 +874,7 @@ export class ScopimeraColony {
     this.group.add(crab.root);
     this.pellets.add(crab.root.position.x, crab.root.position.y, crab.root.position.z, 0.001, 'feed', 0, 0.5);
     this.pellets.update(0, crab.root.position, null);
-    try { gl.compile(this.group.parent ?? this.group, camera); } catch (err) { console.warn('[kometsukigani] prewarm', err); }
+    try { await compile(this.group); } catch (err) { console.warn('[kometsukigani] prewarm', err); }
     crab.dispose();
     this.pellets.clear();
   }

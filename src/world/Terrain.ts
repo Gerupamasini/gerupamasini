@@ -1,6 +1,6 @@
 import {
   BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, Matrix4, RedFormat, RGBAFormat, Vector2, Vector3,
-  Vector4, type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
+  Vector4, type IUniform, type Texture, type WebGLRenderer, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
@@ -10,6 +10,7 @@ import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
 import { WetDry } from './WetDry';
+import { RippleMap, RIPPLE_MAP_GLSL } from './RippleMap';
 
 export interface TerrainGrid {
   n: number;
@@ -87,9 +88,11 @@ function terrainVnoise(x: number, z: number): number {
   return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz;
 }
 
-/** GLSL shared by the fragment stage (shading) and the ripple sheet's vertex stage (relief): hashes, value noise and
- * the ripple field. Needs `uRipRot` and `uRippleGain`. */
-const RIPPLE_GLSL = /* glsl */ `
+/** the ripples' crest-to-trough half height (m) where they are fully formed */
+const RIPPLE_H = 0.015;
+
+/** GLSL: integer hashes and value noise (the shading's grain, patches and films, and the ripple field's) */
+const NOISE_GLSL = /* glsl */ `
 // integer hash: the flat is 320 m wide and the grains are a millimetre, so cell ids run into the hundreds of
 // thousands — float tricks fall apart there, integer mixing does not
 float hash21(vec2 p) {
@@ -101,6 +104,12 @@ float hash21(vec2 p) {
 vec2 hash22(vec2 p) { return vec2(hash21(p), hash21(p + vec2(1013.0, 7177.0))); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
+`;
+
+/** GLSL: the ripple field (needs `uRipRot` and `uRippleGain`), baked round the player by RippleMap; the shading and the
+ * ripple sheet read the bake */
+const RIPPLE_GLSL = /* glsl */ `
+${NOISE_GLSL}
 // Ripple marks as one continuous scalar field over the whole flat: shore-parallel crests (wavelength ~10 cm, as in the
 // photos of the flat) whose
 // line is bent by layers of noise displacement. Bending the phase instead of the direction keeps the local
@@ -165,8 +174,7 @@ float rippleSkew(vec2 p) { return 0.05 + 0.25 * vnoise(p * 0.15 + 9.7); }
 float rippleSize(vec2 p) { return 0.55 + 0.6 * vnoise(p * 0.07 - 2.3) + 0.25 * (vnoise(p * 0.6 + 4.1) - 0.5); }
 // the ripples' cross-section: a gentle stoss face and a steeper lee (up to the crest, then down), −1..1-ish
 float rippleProfile(float ph, float skew) { return -(sin(ph) + skew * sin(2.0 * ph + 0.6)) / (1.0 + skew); }
-// the ripples' crest-to-trough half height (m) where they are fully formed
-#define RIPPLE_H 0.015
+#define RIPPLE_H ${RIPPLE_H}
 // the ripple relief (m) at a point, from the same field the shading uses (crest positive, trough negative)
 float rippleHeight(vec2 xz, float sandy, float pit) {
   vec2 rq = rippleFrame(xz);
@@ -188,7 +196,7 @@ uniform float uCell;
 uniform vec3 uSubCol[8];
 float gSheetH = 0.0, gSheetSub = 0.0, gSheetPit = 0.0;
 vec3 gSheetNrm = vec3(0.0, 1.0, 0.0), gSheetCol = vec3(0.0);
-${RIPPLE_GLSL}
+${RIPPLE_MAP_GLSL}
 // the coarse mesh at a point: the grid cell's two triangles (split along the b–c diagonal, as the chunks are), with
 // height, substrate, pit, normal and colour interpolated as the mesh's own vertices interpolate them
 void sheetSample(vec2 xz) {
@@ -205,8 +213,6 @@ void sheetSample(vec2 xz) {
 }
 `;
 
-/** the ripple sheet's radius (m) per quality: none at the lightest (the ripples stay painted on the flat mesh) */
-export const RIPPLE_SHEET_RADIUS: Record<'minimal' | 'low' | 'mid' | 'high', number> = { minimal: 0, low: 2, mid: 3, high: 4 };
 /** the sheet's vertex spacing (m): eight to a ripple, so where the water's edge cuts the troughs it runs smooth */
 const SHEET_STEP = 0.0125;
 /** how far the coarse mesh steps down under the sheet (m): clear of the deepest trough */
@@ -283,6 +289,11 @@ export class Terrain {
   private readonly uMudTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
   /** (cos, sin) of the ripple marks' turn from 葛西's: their crests run along x there, parallel to that shore */
   private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
+  /** the ripple field baked round the player (near and far), which the shading and the ripple sheet read */
+  readonly rippleMaps = [new RippleMap(RIPPLE_GLSL, this.uRipRot, 0), new RippleMap(RIPPLE_GLSL, this.uRipRot, 1)] as const;
+  private readonly uRippleOn: IUniform<number> = { value: 0 };
+  /** the ripple map's size the quality preset asks for (off while the flat has no ripples) */
+  private rippleMapWanted = 0;
   /** the ripple sheet: its centre (snapped to its grid), radius and the coarse mesh's step down under it */
   private readonly uSheetC: IUniform<Vector2> = { value: new Vector2(0, 0) };
   private readonly uSheetR: IUniform<number> = { value: 0 };
@@ -566,6 +577,11 @@ export class Terrain {
       shader.uniforms.uSandTint = this.uSandTint;
       shader.uniforms.uMudTint = this.uMudTint;
       shader.uniforms.uRipRot = this.uRipRot;
+      shader.uniforms.uRippleMap0 = this.rippleMaps[0].uniforms.map;
+      shader.uniforms.uRippleWin0 = this.rippleMaps[0].uniforms.win;
+      shader.uniforms.uRippleMap1 = this.rippleMaps[1].uniforms.map;
+      shader.uniforms.uRippleWin1 = this.rippleMaps[1].uniforms.win;
+      shader.uniforms.uRippleOn = this.uRippleOn;
       shader.uniforms.uSurf = this.surf.uSurf;
       shader.uniforms.tSurfZone = this.surf.tSurfZone;
       shader.uniforms.uSurfGrid = this.surf.uSurfGrid;
@@ -610,7 +626,7 @@ ${kind === 'sheet' ? 'vSubstrateV = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrate
   // the relief fades out toward the sheet's rim, where the coarse mesh takes over again
   float edge = 1.0 - smoothstep(uSheetR - 1.6, uSheetR - 0.5, length(position.xz));
   float sandy = 1.0 - smoothstep(1.5, 2.5, gSheetSub);
-  transformed.y += rippleHeight(transformed.xz, sandy, gSheetPit) * edge;
+  transformed.y += ${RIPPLE_H} * rippleAt(transformed.xz).x * (0.12 + 0.88 * sandy) * (1.0 - gSheetPit) * uRippleGain * edge;
 }`);
       } else if (kind === 'terrain') {
         // under the ripple sheet the coarse mesh steps down out of the way (it comes back up before the sheet's rim)
@@ -620,7 +636,7 @@ if (uSheetDrop > 0.0) transformed.y -= uSheetDrop * (1.0 - smoothstep(uSheetR - 
       if (kind === 'sheet') {
         // the sheet stops where the coarse mesh comes back up to the same surface (that is the ground beyond)
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nuniform vec2 uSheetC;\nuniform float uSheetR;')
+          .replace('#include <common>', '#include <common>\nuniform vec2 uSheetC;')
           .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 { vec2 sd = vWorldPos.xz - uSheetC; if (dot(sd, sd) > (uSheetR - 0.32) * (uSheetR - 0.32)) discard; }`);
       }
@@ -668,6 +684,7 @@ uniform vec3 uSunDirT;
 uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
+uniform float uSheetR;
 uniform float uMudLook;
 uniform sampler2D tMirror;
 uniform mat4 uMirrorMat;
@@ -710,11 +727,13 @@ float gFootMm = 1.0;
 float gSat = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
-vec4 gDis = vec4(0.0);
+// the ripple field here (RippleMap): relief, slope (world x, z), inside the baked window
+vec4 gRippleAt = vec4(0.0);
 float gRipple = 0.0;
 // where a silt flat's own look (uMudLook) takes over the wetness's sheen and mirror
 float gMudArea = 0.0;
-${RIPPLE_GLSL}
+${NOISE_GLSL}
+${RIPPLE_MAP_GLSL}
 // value noise with its derivative (quintic), for micro relief
 vec3 vnoiseD(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -736,7 +755,6 @@ vec3 grains(vec2 p, out vec2 off) {
   }
   return vec3(sqrt(best), hash21(id + vec2(31.0, 17.0)), hash21(id + vec2(59.0, 3.0)));
 }
-float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 `)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -754,11 +772,11 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
   diffuseColor.rgb *= mix(vec3(1.0), uSandTint, 1.0 - smoothstep(1.5, 2.5, vSubstrate));
   diffuseColor.rgb *= mix(vec3(1.0), uMudTint, smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.0, 4.5, vSubstrate)));
-  vec2 rq = rippleFrame(vWorldPos.xz);
-  gDis = rippleDisloc(rq);
-  // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  // (-1 in a trough, +1 on a crest, scaled by how well formed the ripples are here)
-  float ripple = rippleProfile(ripplePhase(rq), rippleSkew(rq)) * rippleAmp(rq) * rippleSize(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
+  // the ripple field, baked round the player (RippleMap): ripple troughs hold a little more moisture and fines, so
+  // they are faintly darker, following the same field as the normals (-1 in a trough, +1 on a crest, scaled by how
+  // well formed the ripples are here)
+  gRippleAt = uRippleGain > 0.0 ? rippleAt(vWorldPos.xz) : vec4(0.0);
+  float ripple = gRippleAt.x * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
   gRipple = ripple;
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 + ripple * 0.1;
   diffuseColor.rgb *= detail;
@@ -852,8 +870,8 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     gNrmAdd += -o4 * 1.4 * pel;
   }
   // ---- burrow openings: the holes of アナジャコ, スナモグリ and worms, dark with a low collar or a mound of
-  // ejected sand; thick on muddy sand, a few on clean sand, none in a pit
-  if (uDetail > 0.5) {
+  // ejected sand; thick on muddy sand, a few on clean sand, none in a pit (gone once a pixel covers 4 cm: see detM)
+  if (uDetail > 0.5 && fw < 40.0) {
     vec2 ob;
     vec3 gb = grains(vWorldPos.xz / 0.3 + 3.0, ob);
     float holeP = mix(0.1, 0.7, muddy) * (1.0 - vPit) * (1.0 - 0.5 * smoothstep(2.5, 3.5, vSubstrate));
@@ -873,13 +891,13 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     vec2 away = -ob / max(gb.x, 1e-3);
     gNrmAdd += (away * (0.6 + 0.6 * mound) * collar - away * 1.2 * hole) * mix(1.0, 0.4, mudL);
   }
-  // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
-  if (uDetail > 0.5) {
-    vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
+  // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance (worked out only where
+  // they still show: the millimetre lumps under a 1.4 mm pixel, the centimetre ones under 15 mm)
+  if (uDetail > 0.5 && fw < 14.5) {
     float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
-    vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
+    if (bump > 0.0) gNrmAdd += (vnoiseD(mm * 0.35).yz * 0.5 + vnoiseD(mm * 1.1 + 7.0).yz * 0.25) * bump;
     float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 0.3 * mudL);
-    gNrmAdd += nd.yz * bump + nd2.yz * bump2;
+    gNrmAdd += vnoiseD(mm * 0.055 + 3.0).yz * bump2;
   }
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
   // strewn with the chalky grit of the clams it crushed
@@ -1041,23 +1059,16 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 {
-  // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
+  // ripple marks: one continuous warped field with its forks and joins (RIPPLE_GLSL, baked round the player by
+  // RippleMap: its slope follows the crests' bends); sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  vec2 rp = rippleFrame(vWorldPos.xz);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.42 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
-  float ph = ripplePhase(rp);
-  // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
-  // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
-  float e = 0.02;
-  vec2 gph = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e) * RIPPLE_K + gDis.yz;
-  float kRel = clamp(length(gph) / RIPPLE_K, 0.4, 1.6);
-  vec2 grad = rippleToWorld(normalize(gph + vec2(0.0, 1e-4)));
-  // the slope of rippleProfile (the lee side steeper by this stretch's skew), scaled like its height
-  float skew = rippleSkew(rp);
-  float slope = (cos(ph) + 2.0 * skew * cos(ph * 2.0 + 0.6)) / (1.0 + skew) * strength * kRel * rippleSize(rp);
+  // (where no ripple sheet raises them, the shading near the player also carries the tilt of the relief itself, about
+  // RIPPLE_H × the wavenumber: as the sheet's facets would show it)
+  float relief = uSheetR > 0.0 ? 0.0 : 0.94 * (1.0 - smoothstep(2.5, 4.5, distance(cameraPosition.xz, vWorldPos.xz)));
+  float strength = (0.12 + 0.88 * sandy) * (0.42 + relief) * (1.0 - vPit) * uRippleGain;
   // a standing film fills in between the grains and over the lumps: the ripples still show through it
   vec2 nrmAdd = gNrmAdd * (1.0 - 0.8 * gWetFilm);
-  vec3 worldPerturb = vec3(grad.x * slope + nrmAdd.x, 0.0, grad.y * slope + nrmAdd.y);
+  vec3 worldPerturb = vec3(gRippleAt.y * strength + nrmAdd.x, 0.0, gRippleAt.z * strength + nrmAdd.y);
   // (a sheet of water lies flat over the silt's lumps; saturated silt is smoothed by its own film of water)
   worldPerturb *= (1.0 - 0.97 * gSheet) * (1.0 - 0.4 * gMudWet) * (1.0 - 0.5 * gHalo);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
@@ -1136,7 +1147,8 @@ if (uMudLook > 0.001) {
 if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.0) - 0.5) * 0.9 + (vnoise(vWorldPos.xz * 3.0 - 5.0) - 0.5) * 0.3);
 #include <clipping_planes_fragment>`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v12';
+    // (the three kinds' shaders differ: each its own program)
+    mat.customProgramCacheKey = () => `higata-terrain-v13-${kind}`;
     return mat;
   }
 
@@ -1167,6 +1179,7 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.patchMaterial.dispose();
     if (this.sheet) this.sheet.geometry.dispose();
     this.sheetMaterial?.dispose();
+    for (const m of this.rippleMaps) m.dispose();
     this.gridTexture.dispose();
     this.nrmTexture.dispose();
     this.heightTexture.dispose();
@@ -1216,6 +1229,20 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
   /** Turn the ripple marks by `angle` (radians) from 葛西's, whose crests run along x (parallel to its shore). */
   setRippleAngle(angle: number): void {
     this.uRipRot.value.set(Math.cos(angle), Math.sin(angle));
+    for (const m of this.rippleMaps) m.invalidate();
+  }
+
+  /** The ripple maps' size in texels (quality preset; RippleMap): 0 takes them away. */
+  setRippleMap(n: number): void {
+    this.rippleMapWanted = n;
+    for (const m of this.rippleMaps) m.setSize(this.uRippleGain.value > 0 ? n : 0);
+    this.uRippleOn.value = 0;
+  }
+
+  /** Per frame: the ripple maps follow the player (`anchor`). */
+  updateRippleMap(gl: WebGLRenderer, anchor: Vector3): void {
+    for (const m of this.rippleMaps) m.update(gl, anchor);
+    this.uRippleOn.value = this.rippleMaps[0].size > 0 ? 1 : 0;
   }
 
   /** The ripple marks' strength (0: a lake's mud flat has none) and the silt-flat look of the mud (0..1). */
@@ -1223,6 +1250,7 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.uRippleGain.value = rippleGain;
     this.uMudLook.value = mudLook;
     this.setRippleSheet(this.sheetWanted);
+    this.setRippleMap(this.rippleMapWanted);
   }
 
 

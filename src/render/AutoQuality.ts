@@ -1,5 +1,8 @@
 import { QUALITY_ORDER, QUALITY_PRESETS, type Quality } from '../core/Settings';
 
+/** the tiers the measurement chooses among (最高 is only ever the player's own choice) */
+const ORDER = QUALITY_ORDER.slice(0, QUALITY_ORDER.indexOf('high') + 1);
+
 /** seconds at a new tier before measuring (its shaders compiled, its models loaded, the first frames' stalls over) */
 const SETTLE = 2.5;
 /** seconds measured */
@@ -26,7 +29,7 @@ export class AutoQuality {
   private finished = false;
 
   constructor(start: Quality) {
-    this.tier = start;
+    this.tier = ORDER.includes(start) ? start : 'high';
   }
 
   get done(): boolean {
@@ -48,16 +51,16 @@ export class AutoQuality {
     this.n++;
     if (this.time < SETTLE + WINDOW) return { kind: 'measuring' };
     const ms = this.sum / this.n;
-    const i = QUALITY_ORDER.indexOf(this.tier);
+    const i = ORDER.indexOf(this.tier);
     const target = 1000 / QUALITY_PRESETS[this.tier].targetFps;
     let to: Quality | null = null;
-    if (ms > target * 1.3 && i > 0) to = QUALITY_ORDER[i - 1];
-    else if (timed && !this.wentDown && i < QUALITY_ORDER.length - 1 && ms < 0.5 * (1000 / QUALITY_PRESETS[QUALITY_ORDER[i + 1]].targetFps)) to = QUALITY_ORDER[i + 1];
+    if (ms > target * 1.3 && i > 0) to = ORDER[i - 1];
+    else if (timed && !this.wentDown && i < ORDER.length - 1 && ms < 0.5 * (1000 / QUALITY_PRESETS[ORDER[i + 1]].targetFps)) to = ORDER[i + 1];
     if (!to || this.steps >= MAX_STEPS) {
       this.finished = true;
       return { kind: 'done', quality: this.tier };
     }
-    if (QUALITY_ORDER.indexOf(to) < i) this.wentDown = true;
+    if (ORDER.indexOf(to) < i) this.wentDown = true;
     this.steps++;
     this.tier = to;
     this.time = this.sum = this.n = 0;

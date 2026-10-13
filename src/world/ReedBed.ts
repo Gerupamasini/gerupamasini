@@ -4,7 +4,7 @@ import {
 } from 'three';
 import { Rng, hashInts } from '../core/Rng';
 import type { Season } from '../core/Time';
-import type { Quality } from '../core/Settings';
+import type { VegetationTier } from '../core/Settings';
 import type { Terrain } from './Terrain';
 import type { LeveeLine } from './LeveeLine';
 
@@ -141,7 +141,7 @@ function buildClump(kind: ReedKind, seed: number): BufferGeometry {
 }
 
 /** clumps per metre of levee where a stand grows, by quality */
-const DENSITY: Record<Quality, number> = { minimal: 0.9, low: 1.6, mid: 2.4, high: 3.2 };
+const DENSITY: Record<VegetationTier, number> = { minimal: 0.9, low: 1.6, mid: 2.4, high: 3.2 };
 
 interface Clump { m: Matrix4; u: number }
 
@@ -153,7 +153,7 @@ export class ReedBed {
   private readonly material: MeshStandardMaterial;
   private season: Season | null = null;
 
-  constructor(terrain: Terrain, levee: LeveeLine, seed: number, quality: Quality) {
+  constructor(terrain: Terrain, levee: LeveeLine, seed: number, quality: VegetationTier) {
     const rng = new Rng(hashInts(seed, 0x9ee));
     const rock = terrain.palette.indexOf('rock');
     const n = new Vector3(), q = new Quaternion(), s = new Vector3(), p = new Vector3();

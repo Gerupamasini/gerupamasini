@@ -25,7 +25,7 @@ export class ModelPreview {
   private readonly environment: WebGLRenderTarget;
 
   constructor(readonly canvas: HTMLCanvasElement, private readonly quality: Quality = 'mid') {
-    this.renderer = new WebGLRenderer({ canvas, antialias: quality === 'high', alpha: true });
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality === 'high' || quality === 'ultra', alpha: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
     installToneMap();
     this.renderer.toneMapping = CustomToneMapping;

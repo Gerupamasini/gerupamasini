@@ -14,7 +14,7 @@ function settle(start: Quality, gpuAt: (q: Quality) => number, timed = true): { 
   throw new Error('never settled');
 }
 
-const cost: Record<Quality, number> = { minimal: 1, low: 1.8, mid: 3.2, high: 5.5 };
+const cost: Record<Quality, number> = { minimal: 1, low: 1.8, mid: 3.2, high: 5.5, ultra: 9 };
 
 describe('AutoQuality', () => {
   it('keeps a tier the GPU runs at its frame rate', () => {
@@ -25,6 +25,11 @@ describe('AutoQuality', () => {
     const r = settle('mid', (q) => 0.8 * cost[q]);
     expect(r.quality).toBe('high');
     expect(r.changes).toEqual(['high']);
+  });
+
+  it('never steps up to 最高 (the player\'s own choice), and measures from 高 when asked again on it', () => {
+    expect(settle('high', (q) => 0.5 * cost[q]).quality).toBe('high');
+    expect(new AutoQuality('ultra').quality).toBe('high');
   });
 
   it('steps down on a slow GPU until it keeps up, and not back up', () => {
