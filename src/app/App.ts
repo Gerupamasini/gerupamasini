@@ -5,13 +5,13 @@ import { GameRenderer } from '../render/Renderer';
 import { RIPPLE_SHEET_RADIUS } from '../world/Terrain';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
-import { loadSettings, saveSettings, normalizeSettings, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
+import { loadSettings, saveSettings, normalizeSettings, QUALITY_LABELS, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
 import { formatJst, jstParts } from '../core/Time';
 import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { World } from './World';
+import { World, farShadowSize } from './World';
 import { LAYOUTS } from '../world/maps/hashirimizu';
 import { TankScene } from './TankScene';
 import { RoomTanks } from './RoomTanks';
@@ -27,7 +27,8 @@ import { ClamField } from '../world/ClamField';
 import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
-import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { configureModelLoader, instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { AutoQuality } from '../render/AutoQuality';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
 import { SAND_DUST } from '../creatures/fx/SandDust';
@@ -154,6 +155,7 @@ export class App {
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     this.renderer = new GameRenderer(canvas);
+    configureModelLoader(this.renderer.gl);
     this.camera = new PerspectiveCamera(70, this.renderer.aspect, 0.05, 2500);
     this.input = new Input(canvas);
     document.documentElement.classList.toggle('touch-device', this.input.touchDevice);
@@ -256,8 +258,9 @@ export class App {
     // the first run on an integrated or software GPU (a laptop) starts on 低, as does a touch device; the player is
     // told, and may change it
     let fresh = false;
-    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return this.renderer.weakGpu ? { quality: 'low' } : {}; });
-    const autoLow = fresh && this.settings.quality === 'low';
+    // (on a PC the flat's tier is then measured in the flat itself, the first time: stepAutoQuality)
+    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return { ...(this.renderer.weakGpu ? { quality: 'low' as const } : {}), fieldAuto: !this.input.touchDevice }; });
+    const autoLow = fresh && this.settings.quality === 'low' && !this.settings.fieldAuto;
     if (fresh) void saveSettings(this.settings);   // (so the first run's choice, and its notice, happen once)
     ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.homeQuality);
@@ -497,7 +500,7 @@ export class App {
       // flat: otherwise the first frame stalls for as long as they take
       performance.mark('world:built');
       ui.loading.value = { frac: 0.6, label: t('loading.shaders') };
-      await this.field?.compile(this.world.scene, this.camera, this.world.water);
+      await this.field?.compile(this.world.scene, this.camera, this.world.water, { upscale: !this.input.touchDevice });
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
@@ -609,6 +612,9 @@ export class App {
     const canvasBefore = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
     // Preserve the public legacy API used by old clients; the menu edits each scene independently.
     if (patch.quality) patch = { homeQuality: patch.quality, fieldQuality: patch.quality, ...patch };
+    // a tier picked for the flat ends the measured choice; asking for the measured choice again measures again
+    if (patch.fieldQuality && patch.fieldAuto === undefined) patch = { ...patch, fieldAuto: false };
+    if (patch.fieldAuto === true && !this.settings.fieldAuto) patch = { ...patch, autoGpu: '' };
     this.settings = normalizeSettings({ ...this.settings, ...patch });
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
@@ -619,19 +625,26 @@ export class App {
     await saveSettings(this.settings);
   }
 
+  /** Whether the scene shown (or behind the overlay) is the flat. */
+  private get fieldScene(): boolean {
+    const from = ui.overlayFrom.value;
+    return this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
+  }
+
   /** Overlays use the setting of the scene they were opened from. */
   get activeQuality(): Quality {
-    const from = ui.overlayFrom.value;
-    const field = this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
-    return field ? this.settings.fieldQuality : this.settings.homeQuality;
+    return this.fieldScene ? this.settings.fieldQuality : this.settings.homeQuality;
   }
 
   private applySceneQuality(): void {
     if (!this.settings) return;
     this.sceneDirty = true;
     this.renderer.setQuality(this.activeQuality);
+    // the flat on a PC is drawn smaller and scaled up by FSR 1, its size kept to the frame rate (phones as they were)
+    this.renderer.setUpscaling(this.fieldScene && !!this.field && !this.input.touchDevice);
     const preset = QUALITY_PRESETS[this.settings.fieldQuality];
     this.field?.setQuality(preset);
+    this.field?.setTaa(preset.taa && !this.input.touchDevice);
     this.applyPreset();
     this.creatures?.setQuality(preset);
     this.fieldCase?.setQuality(preset);
@@ -645,6 +658,8 @@ export class App {
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
+    this.world?.farShadow.setSize(farShadowSize(preset));
+    this.world?.terrainShadow.setEnabled(preset.shadows);
     this.world?.setSurfQuality(preset);
     const light = this.world?.sky.sunLight;
     if (light) {
@@ -1841,6 +1856,8 @@ export class App {
   private frameErrors = 0;
   private slowSecs = 0;
   private slowHinted = false;
+  /** the flat's tier being measured on this computer (settings.fieldAuto), while it runs */
+  private autoQuality: AutoQuality | null = null;
   /** when the flat was last entered (the first seconds there are the models' first draws, not the frame rate) */
   private fieldSince = 0;
 
@@ -1938,17 +1955,26 @@ export class App {
     }
     this.renderer.gl.toneMappingExposure = this.tankVisible() ? 0.6 : (world?.exposure ?? 0.5);
 
+    const gpu = this.renderer.gpuTimer;
+    let drewField = false;
     if (mode === 'shop' && this.shop) {
       this.shop.update(dt);
+      gpu.begin();
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
+      gpu.end();
     } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
       if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       this.roomTanks.updateLOD(this.tank.camera);
       const heroOn = !!this.hero && this.tank.heroActive;
       if (heroOn) this.hero!.setLighting(this.tank.lighting);
+      // (the tank's own renderer times its passes itself: timer queries of one kind cannot nest)
       if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
-      else if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
-      else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+      else {
+        gpu.begin();
+        if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
+        else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+        gpu.end();
+      }
     } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
@@ -1972,13 +1998,16 @@ export class App {
         playerSpeed: player.speedNow, playerCrouched: player.crouching, playerRunning: player.running,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
       });
+      gpu.begin();
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {
         const anchor = creatures.anchorOf(this.lockedId!) ?? player.position;
         this.hero.setLighting(this.heroLightingFromWorld(anchor));
         this.hero.render(world.scene, this.camera, dt, world.water);
       } else if (this.field) this.field.render(world.scene, this.camera, world.water);
       else this.renderer.gl.render(world.scene, this.camera);
+      drewField = true;
       if ((this.net?.group.visible || this.shovel?.group.visible || this.binoculars?.group.visible) && (mode === 'capture' || mode === 'field')) this.renderNetOverlay(world.scene);
+      gpu.end();
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }
@@ -1986,9 +2015,11 @@ export class App {
     }
 
     this.sceneDirty = false;
+    this.renderer.afterFrame(dt, drewField);
+    this.stepAutoQuality(dt, mode);
     this.fpsAcc += dt; this.fpsCount++;
     // a flat that crawls: say once where the lighter picture is (after the first seconds, which are the models' first draws)
-    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal') {
+    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal' && !this.settings.fieldAuto) {
       this.slowSecs = dt >= 1 / 20 ? this.slowSecs + dt : Math.max(0, this.slowSecs - dt * 0.5);
       if (this.slowSecs > 8) { this.slowHinted = true; toast(t('toast.slowHint'), 'info', 9000); }
     }
@@ -1998,6 +2029,36 @@ export class App {
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
     if (this.save && (this.worldVisible() || mode === 'home')) this.save.stats.playSeconds += dt;
     this.input.endFrame();
+  }
+
+  /**
+   * The flat's tier, measured in the flat the first time it is played on this GPU (settings.fieldAuto): the view held
+   * at the tier's full size while AutoQuality times it, a tier up or down until one keeps the frame rate. Leaving the
+   * flat (or the menu) breaks the measurement off; it starts again next time.
+   */
+  private stepAutoQuality(dt: number, mode: Screen): void {
+    const s = this.settings, gpuId = this.renderer.gpuName || '?';
+    const wanted = !!s && s.fieldAuto && s.autoGpu !== gpuId && mode === 'field' && this.renderer.upscalingOn && !document.hidden;
+    if (!wanted) {
+      if (this.autoQuality) { this.autoQuality = null; this.renderer.setFixedScale(null); }
+      return;
+    }
+    if (!this.autoQuality) {
+      this.autoQuality = new AutoQuality(s.fieldQuality);
+      this.renderer.setFixedScale(this.renderer.tierScale);
+    }
+    const gpu = this.renderer.gpuTimer;
+    const v = this.autoQuality.update(dt, gpu.available ? gpu.ms : Number.NaN);
+    if (v.kind === 'change') {
+      // (the tier is applied at once; the view is then held at the new tier's size)
+      void this.updateSettings({ fieldQuality: v.to, fieldAuto: true });
+      this.renderer.setFixedScale(this.renderer.tierScale);
+    } else if (v.kind === 'done') {
+      this.autoQuality = null;
+      this.renderer.setFixedScale(null);
+      void this.updateSettings({ fieldQuality: v.quality, fieldAuto: true, autoGpu: gpuId });
+      toast(t('toast.autoMeasured').replace('{q}', QUALITY_LABELS[v.quality]), 'info', 8000);
+    }
   }
 
   /** The タモ over the finished frame: its own depth, no water on it, never cut by the ground. */
@@ -2187,7 +2248,7 @@ export class App {
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
       const reef = this.world?.oysters;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), tank: this.tankStats() } };
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), tank: this.tankStats(), gpuMs: Number.isFinite(this.renderer.gpuTimer.ms) ? this.renderer.gpuTimer.ms : null, view: `${this.renderer.renderSize.x}×${this.renderer.renderSize.y}${this.renderer.upscaled ? ` → ${this.renderer.gl.domElement.width}×${this.renderer.gl.domElement.height} FSR` : ''}` } };
     }
   }
 }

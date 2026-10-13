@@ -202,7 +202,9 @@ export class SandDust {
         const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as Float32Array | null;
         this.maxPx = Math.max(64, Math.min(512, range?.[1] ?? 256));
       }
-      renderer.getDrawingBufferSize(this.size);
+      // (the size of what is being drawn into: the view is drawn smaller than the screen when scaled up)
+      const target = renderer.getRenderTarget();
+      if (target) this.size.set(target.width, target.height); else renderer.getDrawingBufferSize(this.size);
       const proj = (camera as unknown as { projectionMatrix: { elements: number[] } }).projectionMatrix.elements;
       const u = this.points.material.uniforms;
       u.uScale.value = proj[5] * this.size.y * 0.5;

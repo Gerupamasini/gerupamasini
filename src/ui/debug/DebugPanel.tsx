@@ -110,7 +110,7 @@ export function DebugPanel({ app }: { app: App }) {
         })}
       </div>
       <div class="debug-row dim small">
-        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / マガキ 描画 {d.stats.oysters ?? '-'}（全 {d.stats.oystersTotal ?? 0}） / アマモ {d.stats.amamo ?? '-'}{d.stats.tank ? ` / 水槽 ${d.stats.tank}` : ''} / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
+        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / マガキ 描画 {d.stats.oysters ?? '-'}（全 {d.stats.oystersTotal ?? 0}） / アマモ {d.stats.amamo ?? '-'}{d.stats.tank ? ` / 水槽 ${d.stats.tank}` : ''} / {hud.fps} fps / GPU {d.stats.gpuMs == null ? '-' : `${d.stats.gpuMs.toFixed(1)} ms`} / 描画 {d.stats.view ?? '-'} / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>
     </div>
   );

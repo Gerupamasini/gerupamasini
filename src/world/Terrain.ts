@@ -9,6 +9,7 @@ import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
+import { WetDry } from './WetDry';
 
 export interface TerrainGrid {
   n: number;
@@ -238,7 +239,23 @@ export class Terrain {
   spillTexture: DataTexture;
   private readonly uSpill: IUniform<DataTexture>;
   private readonly uWater: IUniform<number> = { value: -10 };
-  private readonly uWet: IUniform<number> = { value: -10 };
+  /** how long each height has been out of the water, as drying (WetDry): the sediment's film, darkness and gloss */
+  readonly wetDry: WetDry;
+  private readonly uWetDry: IUniform<DataTexture>;
+  private readonly uWetDryRange: IUniform<Vector2>;
+  /** the sun's shadow beyond the near map (FarShadow), and the near map's world → UV (to know where it reaches) */
+  private farShadow: { uFarShadowMap: IUniform<Texture | null>; uFarShadowMatrix: IUniform<Matrix4>; uFarShadowOn: IUniform<number> } = {
+    uFarShadowMap: { value: null }, uFarShadowMatrix: { value: new Matrix4() }, uFarShadowOn: { value: 0 },
+  };
+  private readonly uNearShadowMatrix: IUniform<Matrix4> = { value: new Matrix4() };
+  /**
+   * The wet ground's look, fitted to photographs (tools/grade/calibrate.mjs): how dark saturated sediment is (its
+   * albedo's share), how far over the water the water table keeps films standing in the troughs and hollows (m), and
+   * how rough a film gets far off (its ripples finer than a pixel).
+   */
+  readonly look = { wetDark: { value: 0.45 }, filmTable: { value: 0.5 }, filmFarRough: { value: 0.3 } };
+  /** the relief's own shadow over the flat (TerrainShadow) */
+  private terrainSun: { uTerrainSun: IUniform<Texture | null>; uTerrainSunOn: IUniform<number> } = { uTerrainSun: { value: null }, uTerrainSunOn: { value: 0 } };
   private readonly uTime: IUniform<number> = { value: 0 };
   private readonly uSunUp: IUniform<number> = { value: 1 };
   private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
@@ -305,6 +322,11 @@ export class Terrain {
       }
     }
     this.palette = palette;
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < this.heights.length; k++) { const y = this.heights[k]; if (y < lo) lo = y; if (y > hi) hi = y; }
+    this.wetDry = new WetDry(lo - 0.05, hi + 0.05);
+    this.uWetDry = { value: this.wetDry.texture };
+    this.uWetDryRange = { value: this.wetDry.range };
 
     this.heightTexture = new DataTexture(this.heights, this.n, this.n, RedFormat, FloatType);
     this.heightTexture.minFilter = LinearFilter;
@@ -518,10 +540,16 @@ export class Terrain {
     // the depth whether the ground is above the swash's sheet of a few millimetres, sees it where it is)
     const over = kind === 'patch';
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: over, polygonOffsetFactor: over ? -1 : 0, polygonOffsetUnits: over ? -2 : 0 });
-    const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
+    const uWater = this.uWater, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
-      shader.uniforms.uWetLevel = uWet;
+      shader.uniforms.uWetDry = this.uWetDry;
+      Object.assign(shader.uniforms, this.farShadow, this.terrainSun);
+      shader.uniforms.uWetDark = this.look.wetDark;
+      shader.uniforms.uFilmTable = this.look.filmTable;
+      shader.uniforms.uFilmFarRough = this.look.filmFarRough;
+      shader.uniforms.uNearShadowMatrix = this.uNearShadowMatrix;
+      shader.uniforms.uWetDryRange = this.uWetDryRange;
       shader.uniforms.uTime = uTime;
       shader.uniforms.uSunUp = this.uSunUp;
       shader.uniforms.uSunDirT = this.uSunDirT;
@@ -605,7 +633,35 @@ varying float vSubstrateV;
 float vSubstrate;
 varying float vPit;
 uniform float uWaterLevel;
-uniform float uWetLevel;
+uniform sampler2D uWetDry;
+uniform vec2 uWetDryRange;
+uniform float uWetDark, uFilmTable, uFilmFarRough;
+uniform sampler2D uFarShadowMap;
+uniform mat4 uFarShadowMatrix;
+uniform float uFarShadowOn;
+uniform mat4 uNearShadowMatrix;
+uniform sampler2D uTerrainSun;
+uniform float uTerrainSunOn;
+// the sun's shadow where the near map does not reach: the coarse map of the whole flat, 2×2 filtered (1 lit)
+float farSunShadow(vec3 wp) {
+  if (uFarShadowOn < 0.5) return 1.0;
+  vec4 nc = uNearShadowMatrix * vec4(wp, 1.0);
+  vec2 nuv = nc.xy / nc.w;
+  float nearCover = smoothstep(0.0, 0.06, min(min(nuv.x, nuv.y), min(1.0 - nuv.x, 1.0 - nuv.y)));
+  if (nearCover >= 1.0) return 1.0;
+  vec4 c = uFarShadowMatrix * vec4(wp, 1.0);
+  vec3 sc = c.xyz / c.w;
+  if (any(lessThan(sc.xy, vec2(0.0))) || any(greaterThan(sc.xy, vec2(1.0)))) return 1.0;
+  vec2 ts = vec2(textureSize(uFarShadowMap, 0));
+  vec2 p = sc.xy * ts - 0.5, f = fract(p);
+  vec2 b = (floor(p) + 0.5) / ts, o = 1.0 / ts;
+  // (a texel is 15–30 cm: the bias keeps the ground from shadowing itself)
+  float z = sc.z - 0.0008;
+  float s00 = step(z, texture2D(uFarShadowMap, b).r), s10 = step(z, texture2D(uFarShadowMap, b + vec2(o.x, 0.0)).r);
+  float s01 = step(z, texture2D(uFarShadowMap, b + vec2(0.0, o.y)).r), s11 = step(z, texture2D(uFarShadowMap, b + o).r);
+  float lit = mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+  return mix(lit, 1.0, nearCover);
+}
 uniform float uTime;
 uniform float uSunUp;
 uniform vec3 uSunDirT;
@@ -646,12 +702,18 @@ float gSheetField = -1.0;
 float gHalo = 0.0;
 float gSubm = 0.0;
 float gSwash = 0.0;
+// how wet the sediment is (0 dry .. 1 saturated), and the film of water standing on it (gloss, smoothed grains)
+float gWet = 0.0;
+float gWetFilm = 0.0;
+// the pixel's footprint on the ground (mm): ripples finer than a few pixels become roughness rather than stripes
+float gFootMm = 1.0;
 float gSat = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
 float gRipple = 0.0;
-float gTrough = 0.0;
+// where a silt flat's own look (uMudLook) takes over the wetness's sheen and mirror
+float gMudArea = 0.0;
 ${RIPPLE_GLSL}
 // value noise with its derivative (quintic), for micro relief
 vec3 vnoiseD(vec2 p) {
@@ -821,12 +883,30 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // the water level here: the tide, or a tide pool's own level above it
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
-  // wet band: everything between the current water level and the recent high-water mark is darker
-  // (a flat stays saturated below the last high water while the tide is out: wet throughout that band, draining a
-  // little toward its top, as the photos' dark, sky-grey low-water flat)
-  float wetTop = max(lvl, uWetLevel);
-  float wet = (1.0 - smoothstep(wetTop - 0.03, wetTop + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvl + 0.05, lvl + 0.8, vWorldPos.y));
-  wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
+  // how wet the sediment is. The CPU follows the tide back (WetDry): for this height, the drying since the water
+  // left it (the sun dries faster than the night), as the film left on the surface and the pore water's darkness, on
+  // sand and on mud. Sand drains in hours; mud holds its water through the low tide. Ripple troughs and shallow
+  // hollows keep their film longest; just above the water the capillary fringe stays saturated, and a seepage film
+  // shines along the water's edge.
+  float wetHere = vWorldPos.y - lvl;
+  vec4 wd = texture2D(uWetDry, vec2(clamp((vWorldPos.y - uWetDryRange.x) / (uWetDryRange.y - uWetDryRange.x), 0.0, 1.0), 0.5));
+  float mudD = clamp(smoothstep(0.5, 2.0, vSubstrate) * (1.0 - smoothstep(2.5, 3.0, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.5, 5.0, vSubstrate)), 0.0, 1.0);
+  // (the ripples are 8 cm: once a pixel covers more than a fifth of one, their troughs blend into their mean)
+  float trough = mix(clamp(max(-gRipple, 0.0) * 1.6, 0.0, 1.0), 0.2, smoothstep(10.0, 30.0, fw));
+  gFootMm = fw;
+  float hollow = smoothstep(0.45, 0.8, vnoise(vWorldPos.xz * 0.6 + 13.0)) * 0.7 + smoothstep(0.5, 0.85, vnoise(vWorldPos.xz * 2.3 - 5.0)) * 0.5;
+  float retain = 1.0 + 2.5 * trough * trough + 2.0 * hollow;
+  float film = pow(max(mix(wd.r, wd.g, mudD), 1e-4), 1.0 / retain);
+  float moist = pow(max(mix(wd.b, wd.a, mudD), 1e-4), 1.0 / (0.8 + 0.4 * retain));
+  film = max(film, 1.0 - smoothstep(0.0, mix(0.025, 0.07, mudD), wetHere));
+  // a low flat holds its water table at the surface: water stands in the troughs and hollows the whole low tide, up
+  // to half the table's height over the water and thinning out above that; the sediment there stays saturated
+  float table = (1.0 - smoothstep(0.5 * uFilmTable, max(uFilmTable, 1e-3), wetHere)) * step(1e-4, uFilmTable);
+  film = max(film, clamp(1.6 * trough + hollow, 0.0, 1.0) * table);
+  moist = max(moist, max(table, 1.0 - smoothstep(0.0, mix(0.08, 0.5, mudD), wetHere)));
+  // (a silt flat's own look, below, lays its sheets of water and its sheen there instead)
+  film *= 1.0 - uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+  float wet = wetHere <= 0.0 ? 1.0 : max(moist, film);
   // an open shore's swash, as the sand remembers it (SurfMemory): saturated wherever the sheets have been lately
   // (drying over a minute or so), a glassy film just after one drains, foam and swash marks left on it. Away from the
   // viewer, where the memory fades out, the sand is as it usually is (the band the swash usually keeps wet, its lower
@@ -853,17 +933,17 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   }
   // a glassy film: darker still, a little cooler
   diffuseColor.rgb *= mix(1.0, 0.82, gSwash);
-  diffuseColor.rgb *= mix(1.0, 0.76, wet);
-  // water left in the ripple troughs: on sand the tide has just uncovered, each trough keeps a thin film — dark,
-  // glassy, carrying the sky — while the crests between have already drained
-  float exposedWet = smoothstep(lvl - 0.004, lvl + 0.01, vWorldPos.y) * (1.0 - smoothstep(max(lvl, uWetLevel) - 0.02, max(lvl, uWetLevel) + 0.06, vWorldPos.y));
-  // (patchy: some stretches drain at once, others keep a trough of water in every hollow)
-  gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
+  diffuseColor.rgb *= mix(1.0, uWetDark, wet);
+  // a standing film takes a little more of the light into the water
+  diffuseColor.rgb *= mix(1.0, 0.92, film * step(0.0, wetHere));
+  gWet = wet;
+  // (the swash's own film gives back the sky as the sea does, below)
+  gWetFilm = wetHere > 0.0 ? film : 0.0;
   // a mud flat at low water (user's photos): the silt stays saturated through the day and glistens, and thin
   // sheets of water lie in the hollows and along the water's edge, flat and glassy, mirroring the sky
   if (uMudLook > 0.001) {
     float mudW = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+    gMudArea = mudW;
     float aboveW = vWorldPos.y - lvl;
     // the sheets: water left in the flat's shallow hollows, in lobes and channels that join and part (a warped
     // field over tens of metres, with smaller bays at a metre), more of it on low ground near the water's edge
@@ -889,7 +969,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     diffuseColor.rgb *= mix(1.0, 0.97, gMudWet) * mix(1.0, 0.78, gSheet) * mix(1.0, 0.8, gHalo);
   }
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
   // foam left on the sand: clusters of fine bubbles (a few millimetres) that pop one by one, and the swash marks, thin
   // lines of bubbles and dark grit where the fronts stopped
   if (sandFoam + mark > 0.003) {
@@ -912,6 +992,8 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
+  gWet *= 1.0 - land;
+  gWetFilm *= 1.0 - land;
   // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
   // Jacobian of the refraction map from the wave field's curvature (pools are calm: broad, slow, soft bands)
   float depth = lvl - vWorldPos.y;
@@ -943,7 +1025,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // the slope of rippleProfile (the lee side steeper by this stretch's skew), scaled like its height
   float skew = rippleSkew(rp);
   float slope = (cos(ph) + 2.0 * skew * cos(ph * 2.0 + 0.6)) / (1.0 + skew) * strength * kRel * rippleSize(rp);
-  vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
+  // a standing film fills in between the grains and over the lumps: the ripples still show through it
+  vec2 nrmAdd = gNrmAdd * (1.0 - 0.8 * gWetFilm);
+  vec3 worldPerturb = vec3(grad.x * slope + nrmAdd.x, 0.0, grad.y * slope + nrmAdd.y);
   // (a sheet of water lies flat over the silt's lumps; saturated silt is smoothed by its own film of water)
   worldPerturb *= (1.0 - 0.97 * gSheet) * (1.0 - 0.4 * gMudWet) * (1.0 - 0.5 * gHalo);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
@@ -973,24 +1057,37 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 #endif`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
-  float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
-  float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
-  float wetR = (1.0 - smoothstep(max(lvlR, uWetLevel) - 0.03, max(lvlR, uWetLevel) + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvlR + 0.05, lvlR + 0.8, vWorldPos.y));
-  wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.48, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
-  roughnessFactor = mix(roughnessFactor, 0.5, gSat * (1.0 - wetR));                // sand the swash has soaked: damp, satin
+  roughnessFactor = mix(roughnessFactor, 0.58, gWet);   // damp sand is darker and only faintly satin
+  roughnessFactor = mix(roughnessFactor, 0.5, gSat * (1.0 - gWet));                // sand the swash has soaked: damp, satin
   roughnessFactor = mix(roughnessFactor, 0.06, gSwash);                                // the film a sheet just left: a mirror
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
-  roughnessFactor = mix(roughnessFactor, 0.06, gTrough);       // the water standing in the ripple troughs
+  // a film of water: a mirror of the sky, the sun's glint in it. Further off, the ripples under the film are finer than
+  // a pixel and spread its mirror out (their slopes become roughness; otherwise the sky aliases into stripes)
+  roughnessFactor = mix(roughnessFactor, mix(0.07, uFilmFarRough, smoothstep(6.0, 40.0, gFootMm)), gWetFilm);
   // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
   float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
-  roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
+  roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, gWet), mudR);
   roughnessFactor = mix(roughnessFactor, 0.45, gMudWet);  // saturated silt: a satin sheen
   roughnessFactor = mix(roughnessFactor, 0.15, gHalo);    // the margins of the sheets: glossy
   roughnessFactor = mix(roughnessFactor, 0.04, gSheet);   // a film of water: a mirror
   roughnessFactor = mix(roughnessFactor, 0.85, gSubm);    // under the water: dull (the water pass draws the surface)
-}`);
+}`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+  {
+    // beyond the near shadow map, the sun's light is shaded by the far one (the sun is the only directional light);
+    // everywhere, by the relief's own shadow (the ground casts into neither map)
+    float farS = farSunShadow(vWorldPos);
+    if (uTerrainSunOn > 0.5) farS *= texture2D(uTerrainSun, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
+    reflectedLight.directDiffuse *= farS;
+    reflectedLight.directSpecular *= farS;
+  }`)
+        .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+  // the sky's light comes in at a small share (scene.environmentIntensity, for the diffuse fill); what wet ground
+  // mirrors of the sky is the sky itself, at full strength (a silt flat's own look raises its sheen and sheets itself)
+  radiance *= mix(1.0, 1.0 / max(envMapIntensity, 1e-3), max(gWetFilm, 0.5 * gWet) * (1.0 - gMudArea));
+#endif`);
       // (the vnoise above is declared with the common chunk; main() starts with the clipping planes)
       if (!shader.fragmentShader.includes('#include <clipping_planes_fragment>')) throw new Error('Terrain: clipping_planes_fragment not found');
       // (on a silt flat the substrate's colour follows the frayed substrate too, not the vertices' palette colours)
@@ -1009,7 +1106,7 @@ if (uMudLook > 0.001) {
 if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.0) - 0.5) * 0.9 + (vnoise(vWorldPos.xz * 3.0 - 5.0) - 0.5) * 0.3);
 #include <clipping_planes_fragment>`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v11';
+    mat.customProgramCacheKey = () => 'higata-terrain-v12';
     return mat;
   }
 
@@ -1044,6 +1141,7 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.nrmTexture.dispose();
     this.heightTexture.dispose();
     this.spillTexture.dispose();
+    this.wetDry.dispose();
     this.mesh.removeFromParent();
   }
 
@@ -1054,9 +1152,18 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.uSpill.value = this.spillTexture;
   }
 
-  setWater(level: number, wetLevel: number, time: number, sunUp = 1, sunDir?: Vector3): void {
+  /**
+   * The far shadow's uniforms (FarShadow), the near map's matrix (the sun light's shadow.matrix, which three keeps
+   * up to date in place) and the relief's own shadow (TerrainShadow): call before the first frame.
+   */
+  setShadows(far: Terrain['farShadow'], nearMatrix: Matrix4, terrainSun: Terrain['terrainSun']): void {
+    this.farShadow = far;
+    this.terrainSun = terrainSun;
+    this.uNearShadowMatrix.value = nearMatrix;
+  }
+
+  setWater(level: number, time: number, sunUp = 1, sunDir?: Vector3): void {
     this.uWater.value = level;
-    this.uWet.value = Math.max(level, wetLevel);
     this.uTime.value = time;
     this.uSunUp.value = sunUp;
     if (sunDir) this.uSunDirT.value.copy(sunDir);

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>packed model comparison</title>
+<style>html, body { margin: 0; background: #202326; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="view" width="640" height="480"></canvas>
+<script type="module">
+// Renders a model master and its packed copy the same way, for tools/models/pack/compare.mjs.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0.13, 0.14, 0.15);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xffffff, 2);
+sun.position.set(1, 2, 1.5);
+scene.add(sun, new THREE.HemisphereLight(0xdfe9ec, 0x6b5e4e, 0.6));
+const camera = new THREE.PerspectiveCamera(30, canvas.width / canvas.height, 0.001, 100);
+
+const base = import.meta.env?.BASE_URL ?? '/gerupamasini/';
+const plain = new GLTFLoader();
+const packed = new GLTFLoader()
+  .setMeshoptDecoder(MeshoptDecoder)
+  .setKTX2Loader(new KTX2Loader().setTranscoderPath(`${base}node_modules/three/examples/jsm/libs/basis/`).detectSupport(renderer));
+
+async function shot(loader, url, view) {
+  const gltf = await loader.loadAsync(url);
+  const root = gltf.scene;
+  scene.add(root);
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+  const r = Math.max(size.x, size.y, size.z) * 0.5 || 0.05;
+  const d = (r / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * view.zoom;
+  camera.position.copy(centre).add(new THREE.Vector3(...view.dir).normalize().multiplyScalar(d));
+  camera.near = d / 100; camera.far = d * 10; camera.updateProjectionMatrix();
+  camera.lookAt(centre);
+  renderer.render(scene, camera);
+  const png = canvas.toDataURL('image/png');
+  scene.remove(root);
+  root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); for (const m of [o.material].flat()) { for (const v of Object.values(m)) if (v?.isTexture) v.dispose(); m.dispose(); } } });
+  return png;
+}
+
+window.__cmp = {
+  /** Both renders of one model (path relative to src/assets/models), from a side and from above-front. */
+  async show(rel, view = { dir: [1, 0.35, 0.9], zoom: 0.9 }) {
+    const master = await shot(plain, `${base}src/assets/models/${rel}`, view);
+    const pack = await shot(packed, `${base}src/assets/models-packed/${rel}`, view);
+    return { master, packed: pack, gpu: renderer.getContext().getParameter(renderer.getContext().VERSION) };
+  },
+};
+</script>
+</body>
+</html>

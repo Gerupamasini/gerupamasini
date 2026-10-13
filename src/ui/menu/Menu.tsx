@@ -19,9 +19,13 @@ export function Menu({ app }: { app: App }) {
         {(['homeQuality', 'fieldQuality'] as const).map((scene) => <div class="setting" key={scene}>
           <span class="label">{scene === 'homeQuality' ? 'ホーム（水槽）の画質' : '干潟の画質'}</span>
           <div class="seg">
-            {QUALITY_ORDER.map((q) => (
-              <button key={q} class={s[scene] === q ? 'on' : ''} aria-pressed={s[scene] === q} onClick={() => void app.updateSettings({ [scene]: q })}>{QUALITY_LABELS[q]}</button>
-            ))}
+            {scene === 'fieldQuality' && !app.input.touchDevice && (
+              <button class={s.fieldAuto ? 'on' : ''} aria-pressed={s.fieldAuto} title="この PC で干潟を描く速さを測って選びます" onClick={() => void app.updateSettings({ fieldAuto: true })}>自動{s.fieldAuto ? `（${QUALITY_LABELS[s.fieldQuality]}）` : ''}</button>
+            )}
+            {QUALITY_ORDER.map((q) => {
+              const on = s[scene] === q && !(scene === 'fieldQuality' && s.fieldAuto);
+              return <button key={q} class={on ? 'on' : ''} aria-pressed={on} onClick={() => void app.updateSettings({ [scene]: q })}>{QUALITY_LABELS[q]}</button>;
+            })}
           </div>
         </div>)}
         <p class="small dim">超軽量（最低画質）では図鑑を写真で表示します。</p>
