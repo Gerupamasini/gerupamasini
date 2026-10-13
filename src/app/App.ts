@@ -30,6 +30,7 @@ import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
@@ -676,6 +677,8 @@ export class App {
     this.world?.terrain.setLite(field.water === 'lite');
     this.tank?.setLite(home.tankWater === 'lite');
     CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+    SAND_DUST.amount = QUALITY_PRESETS[this.activeQuality].sandDust;
+    SAND_DUST.enabled = SAND_DUST.amount > 0;
     AKAEI_DETAIL.viewScale = field.viewScale;
     AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
   }

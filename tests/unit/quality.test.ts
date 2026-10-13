@@ -15,7 +15,7 @@ describe('quality presets', () => {
   });
 
   it('never costs more on a lighter tier', () => {
-    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters', 'surfMemory', 'spray'] as const;
+    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters', 'surfMemory', 'spray', 'sandDust'] as const;
     const flags = ['shadows', 'post', 'contactShadows', 'hero', 'surfLip'] as const;
     const rank = { lite: 0, full: 1 } as const;
     for (let i = 1; i < QUALITY_ORDER.length; i++) {
@@ -38,6 +38,7 @@ describe('quality presets', () => {
     expect(p.maxDpr).toBeLessThan(1);
     expect(p.creatureScale).toBeLessThan(0.5);
     expect(p.contactShadows).toBe(false);
+    expect(p.sandDust).toBe(0);
     expect(p.hero).toBe(false);
     const q: Quality = 'minimal';
     expect(MEADOW_QUALITY[q].shadowLod).toBeLessThan(0);
