@@ -148,7 +148,8 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
+// lod: the distance tiers' packed maps instead of the snout cap (see tools/lib/gobyLod.mjs)
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, lod = false, log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -187,7 +188,7 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
     for (let j = jt - 1; j >= 0; j--) QD[i * colsB + j] = QD[i * colsB + j + 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j + 1)));
   }
   log('  baking body textures …');
-  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log });
+  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, lod });
 
   // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
   log('  render mesh …');
@@ -410,7 +411,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, lod = false } = ctx;
   const nT = texW * texH;
   // per-texel interpolated attributes
   const A = {
@@ -1158,6 +1159,8 @@ function bakeBodyTextures(ctx) {
   const normalMap = new Uint8Array(nT * 3);
   const orm = new Uint8Array(nT * 3);
   const pigment = new Uint8Array(nT * 3);
+  // distance tiers: the albedo without the melanin and the raw pigment densities (the game darkens it by the melanin)
+  const lodMaps = lod ? { albedo: new Uint8Array(nT * 3), mel: new Uint8Array(nT), iri: new Uint8Array(nT), xan: new Uint8Array(nT) } : null;
   const volume = new Uint8Array(nT * 3);
   const srgb = (c) => {
     c = clamp(c, 0, 1);
@@ -1188,6 +1191,11 @@ function bakeBodyTextures(ctx) {
       const cavity = clamp(lap * 0.35, 0, 0.35) * (om < 1 ? 1 - Math.exp(-((om / 0.15) ** 2)) : 1);
 
       const C = shadeAt(s, yy, z, HN[t], HEAD[t], MEL[t], IRI[t], XAN[t], GILL[t], cavity, secs[x], om);
+      if (lodMaps) {
+        const C0 = shadeAt(s, yy, z, HN[t], HEAD[t], 0, IRI[t], XAN[t], GILL[t], cavity, secs[x], om);
+        lodMaps.albedo[t * 3] = srgb(C0.r); lodMaps.albedo[t * 3 + 1] = srgb(C0.g); lodMaps.albedo[t * 3 + 2] = srgb(C0.b);
+        lodMaps.mel[t] = Math.round(clamp(MEL[t]) * 255); lodMaps.iri[t] = Math.round(clamp(IRI[t]) * 255); lodMaps.xan[t] = Math.round(clamp(XAN[t]) * 255);
+      }
       const I = IRI[t], X = XAN[t];
       albedo[t * 3] = srgb(C.r); albedo[t * 3 + 1] = srgb(C.g); albedo[t * 3 + 2] = srgb(C.b);
       const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
@@ -1211,6 +1219,7 @@ function bakeBodyTextures(ctx) {
   // ---------------------------------------------------------------------------
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
+  if (lodMaps) return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume, cap: null, lod: lodMaps };
   log('    snout cap …');
   const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.6, z0: -2.4, z1: 2.4 };

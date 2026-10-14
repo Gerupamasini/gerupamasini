@@ -29,6 +29,8 @@ const PAT = pick(
   { mott: 0.27, blot: 0.33, pocket: 0.44, verm: 0.3, belly: [-0.34, -0.85], base: [0.7, 0.53, 0.14], dors: [0.45, 0.37, 0.08], spots: 1.4 },
 );
 const bellyOf = (hn) => smoothstep(PAT.belly[0], PAT.belly[1], hn);
+/** the pale belly's height ramp (hn) of this growth stage (the distance tiers' shader rebuilds the colour morphs with it) */
+export const BELLY_RAMP = PAT.belly;
 // Three patterns per growth stage: different individuals of the same species pattern. Each has its own random
 // seeds (blotch placement, marbling, melanophores) and a slight style difference:
 //   1: the reference pattern; 2: the midline blotches reach up the flank as saddles, coarser;
@@ -161,7 +163,8 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], log = () => {} } = {}) {
+// lod: the distance tiers' packed maps instead of the snout cap (see tools/lib/gobyLod.mjs)
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], lod = false, log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -198,7 +201,7 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
   }
   const TS = patterns.map((pattern) => {
     log(`  baking body textures (pattern ${pattern}) …`);
-    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors });
+    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors, lod });
   });
   // pattern 1 in colour 1 (normal, ORM and thickness are shared by all patterns and colours)
   const T = { ...TS[0], ...TS[0].colors[0] };
@@ -422,7 +425,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1] } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1], lod = false } = ctx;
   // pattern-dependent random streams (shape relief, pores and roughness keep their fixed seeds)
   const PS = (pattern - 1) * 1009;
   const ST = PATTERNS[pattern - 1];
@@ -967,6 +970,9 @@ function bakeBodyTextures(ctx) {
   const orm = new Uint8Array(nT * 3);
   const volume = new Uint8Array(nT * 3);
   const morphs = colors.map(() => ({ albedo: new Uint8Array(nT * 3), pigment: new Uint8Array(nT * 3) }));
+  // distance tiers: the standard colour's albedo without the melanin and the raw pigment densities (the game
+  // darkens it by the melanin of the individual's pattern and colour morph)
+  const lodMaps = lod ? { albedo: new Uint8Array(nT * 3), mel: new Uint8Array(nT), iri: new Uint8Array(nT), xan: new Uint8Array(nT) } : null;
   const srgb = (c) => {
     c = clamp(c, 0, 1);
     return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
@@ -1001,6 +1007,11 @@ function bakeBodyTextures(ctx) {
         out.pigment[t * 3] = Math.round(mel * 255);
         out.pigment[t * 3 + 1] = Math.round(clamp(I) * 255);
         out.pigment[t * 3 + 2] = Math.round(clamp(X) * 255);
+        if (lodMaps && c === 1) {
+          const C0 = shadeAt(s, yy, z, HN[t], HEAD[t], 0, I, X, GILL[t], cavity, secs[x].w, col);
+          lodMaps.albedo[t * 3] = srgb(C0.r); lodMaps.albedo[t * 3 + 1] = srgb(C0.g); lodMaps.albedo[t * 3 + 2] = srgb(C0.b);
+          lodMaps.mel[t] = Math.round(clamp(MEL[t]) * 255); lodMaps.iri[t] = Math.round(clamp(IRI[t]) * 255); lodMaps.xan[t] = Math.round(clamp(XAN[t]) * 255);
+        }
         // roughness does not depend on the colour: taken from the first morph
         if (ci === 0) {
           const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
@@ -1020,6 +1031,7 @@ function bakeBodyTextures(ctx) {
   // ---------------------------------------------------------------------------
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
+  if (lodMaps) return { width: texW, height: texH, normal: normalMap, orm, volume, lod: lodMaps, colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: null })) };
   log('    snout cap …');
   const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.8, z0: -2.7, z1: 2.7 };

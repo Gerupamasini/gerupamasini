@@ -50,9 +50,25 @@ interface ShippedAnatomy {
   gillHn?: [number, number, number, number]; spine?: V3; jaw?: [number, number, number, number];
   organs?: { name: string; c: V3; r: V3; k: V3 }[];
 }
+/** a goby distance tier's packed maps and how its patterns and colour morphs are made from them (tools/lib/gobyLod.mjs) */
+export interface GobyLodPacking {
+  packing: 1;
+  /** the individual's variant (any integer, taken modulo this): pattern ⌊i / colours⌋, colour i mod colours */
+  variants: number;
+  colours: number;
+  /** patterns the melanin map holds (the far tier: only the first) */
+  patternChannels: number;
+  melRGB: V3;
+  /** マハゼ: the colour morphs (the first is the standard colour the albedo map is baked in) */
+  morphs?: { name: string; base: V3; dors: V3; belly: V3; melK: number; melAdd: number; xanK: number; iriK: number; finTint: V3 }[];
+  bellyRamp?: [number, number];
+  /** the far tier's mean iridophores and xanthophores */
+  far?: { iri: number; xan: number };
+}
 export interface GobyBodyExtras {
   role: string;
   pigmentTexture?: number;
+  lod?: GobyLodPacking;
   profile?: Profile;
   fishFrame?: Frame;
   vertebrae?: { start: number; count: number };
@@ -173,6 +189,17 @@ uniform vec3 uGbOrgK[${N_ORGANS}];
 uniform float uGbInterior;    // how much the organs and the column show
 uniform float uGbBack;        // strength of the light diffused through from behind
 uniform float uGbAmbient;     // strength of the surroundings' light diffused through from the far side
+#ifdef GB_PACKED
+uniform vec3 uGbPatSel;       // the individual's pattern: its channel of the melanin map
+uniform vec3 uGbMelRGB;       // how the melanin darkens the albedo (exp(-mel · this), as the bake applies it)
+uniform vec2 uGbFarPig;       // far tier: mean iridophores and xanthophores (it has no map for them)
+#ifdef GB_MORPH
+uniform vec3 uGbMorphC[3];    // the individual's colour morph: tissue of the flank, the back and the belly
+uniform vec3 uGbStdC[3];      // … and of the standard colour, which the albedo map is baked in
+uniform vec4 uGbMorphK;       // melanophore factor, dusky layer over the back, xanthophore and iridophore factors
+uniform vec2 uGbBelly;        // the pale belly's height ramp
+#endif
+#endif
 `;
 
 const FUNCTIONS = /* glsl */ `
@@ -244,6 +271,53 @@ vec2 gbFishUV(vec3 p) {
 vec3 gbSkinT(vec3 pig) {
   return exp(-pig.r * vec3(3.4, 3.8, 4.3)) * exp(-pig.b * vec3(0.02, 0.12, 0.5)) * (1.0 - 0.45 * pig.g);
 }
+#ifdef GB_PACKED
+// the distance tiers' packed maps (tools/lib/gobyLod.mjs): the albedo map holds the standard colour without the melanin
+// (alpha: the xanthophores, on the far tier the melanin), the pigment map the melanin of every pattern (rgb) and the
+// iridophores (alpha). The individual's pattern picks its melanin; its colour morph scales the pigments as the bake does.
+float gbHn(vec3 p) {
+  GbSec q = gbSection(clamp(p.x, 0.05, uGbFrame.w - 0.05));
+  float dy = p.y - q.yc;
+  return clamp(dy / max(dy > 0.0 ? q.t : q.b, 1e-3), -1.2, 1.2);
+}
+// raw densities (melanin, iridophores, xanthophores) from the albedo map's and the pigment map's texels
+vec3 gbRawPig(vec4 A, vec4 B) {
+#ifdef GB_LOW
+  return vec3(A.a, uGbFarPig.x, uGbFarPig.y);
+#else
+  return vec3(dot(B.rgb, uGbPatSel), B.a, A.a);
+#endif
+}
+// … in the individual's colour morph (more melanophores and a dusky layer over the back, other yellows and silvers)
+vec3 gbMorphPig(vec3 raw, float hn) {
+#ifdef GB_MORPH
+  float belly = smoothstep(uGbBelly.x, uGbBelly.y, hn);
+  float mel = 1.0 - pow(1.0 - clamp(raw.x, 0.0, 1.0), uGbMorphK.x) * (1.0 - uGbMorphK.y * (1.0 - belly));
+  return vec3(mel, clamp(raw.y * uGbMorphK.w, 0.0, 1.0), raw.z * uGbMorphK.z);
+#else
+  return raw;
+#endif
+}
+vec3 gbPigAt(vec3 p, vec2 uv, float lod) {
+#ifdef GB_LOW
+  vec4 B = vec4(0.0);
+#else
+  vec4 B = textureLod(uGbPigment, uv, lod);
+#endif
+  return gbMorphPig(gbRawPig(textureLod(map, uv, lod), B), gbHn(p));
+}
+#ifdef GB_MORPH
+// the tissue's colour under the melanin: flank, darker back, milky belly, yellowed by the xanthophores and silvered
+// by the iridophores (the bake's shading before the melanin darkens it)
+vec3 gbTissue(vec3 flank, vec3 back, vec3 belly, float hn, float X, float I) {
+  vec3 c = mix(mix(flank, back, smoothstep(-0.2, 0.8, hn) * 0.6), belly, smoothstep(uGbBelly.x, uGbBelly.y, hn));
+  c *= mix(vec3(1.0), vec3(1.02, 0.9, 0.55), X * 0.6);
+  return mix(c, vec3(0.78, 0.77, 0.7), I * 0.4);
+}
+#endif
+#else
+vec3 gbPigAt(vec3 p, vec2 uv, float lod) { return textureLod(uGbPigment, uv, lod).rgb; }
+#endif
 float gbErf(float x) { return tanh(1.2025 * x); }
 // chord through a uniform ellipsoid, softened toward its rim
 float gbEll(vec3 o, vec3 d, float L, vec3 c, vec3 r, inout float tFirst) {
@@ -307,7 +381,7 @@ vec3 gbThrough(vec3 LW, vec3 col, mat3 w2o, vec3 pIn, vec3 NgF, vec3 VW, vec3 sk
   float tF, sp, scL;
   vec3 orgL = gbOrgans(pIn, LF, dL, tF, sp, scL);
   tauL += (orgL + scL * 0.3) * (0.5 + uGbInterior);
-  vec3 skinL = gbSkinT(textureLod(uGbPigment, gbFishUV(pIn + LF * dL), 2.0).rgb);
+  vec3 skinL = gbSkinT(gbPigAt(pIn + LF * dL, gbFishUV(pIn + LF * dL), 2.0));
   float ph = mix(1.0, 4.0 * PI * gbHG(dot(-LW, -VW), 0.45), 0.55);
   return col * exp(-tauL) * skinIn * skinL * ph * backW * uGbBack;
 }
@@ -353,9 +427,26 @@ float gbAlpha = 1.0;
   // chromatophores where the light leaves the body and where it enters it (seam-free derivatives at the ventral wrap)
   vec2 uvA = GB_UV, uvB = vec2(GB_UV.x, fract(GB_UV.y + 0.5));
   vec2 dxA = dFdx(uvA), dyA = dFdy(uvA), dxB = dFdx(uvB), dyB = dFdy(uvB);
+#ifdef GB_PACKED
+#ifdef GB_LOW
+  vec4 gbB = vec4(0.0);
+#else
+  vec4 gbB = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB);
+#endif
+  vec3 gbRaw = gbRawPig(sampledDiffuseColor, gbB);
+  float hnS = clamp(hn, -1.2, 1.2);
+  vec3 pig = gbMorphPig(gbRaw, hnS);
+  // the albedo map is the standard colour without the melanin: the individual's colour morph, then its melanin
+#ifdef GB_MORPH
+  diffuseColor.rgb *= gbTissue(uGbMorphC[0], uGbMorphC[1], uGbMorphC[2], hnS, pig.b, pig.g)
+                    / max(gbTissue(uGbStdC[0], uGbStdC[1], uGbStdC[2], hnS, gbRaw.z, gbRaw.y), vec3(1e-3));
+#endif
+  diffuseColor.rgb *= exp(-pig.r * uGbMelRGB);
+#else
   vec3 pig = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB).rgb;
+#endif
   vec3 skinIn = gbSkinT(pig);
-  vec3 skinOut = gbSkinT(textureLod(uGbPigment, gbFishUV(xE), 2.0).rgb);
+  vec3 skinOut = gbSkinT(gbPigAt(xE, gbFishUV(xE), 2.0));
   vec3 T = exp(-tau) * skinIn * skinOut;
   // the caudal blade thins to a film over the fin-ray bases
   float endFade = smoothstep(uGbFrame.w - 1.6, uGbFrame.w - 0.15, pF.x) * 0.92;
@@ -452,6 +543,11 @@ function noPigment(): DataTexture {
 }
 
 const PREPARED = Symbol('gobyTranslucent');
+const pigmentReady = new WeakMap<Material, Promise<void>>();
+/** Resolves once a goby body's pigment map is in its uniforms (the distance tiers draw their pattern from it). */
+export function gobyBodyReady(m: Material): Promise<void> {
+  return pigmentReady.get(m) ?? Promise.resolve();
+}
 
 /** Is this one of the goby GLBs' body materials (マハゼ, エドハゼ, ヒメハゼ)? */
 export function isGobyBody(m: Material): boolean {
@@ -497,16 +593,37 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     ...GOBY_LIGHT,
   };
   if (x.pigmentTexture !== undefined && parser) {
-    void (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {
+    pigmentReady.set(m, (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {
       t.colorSpace = NoColorSpace;
       uniforms.uGbPigment.value = t;
-    }).catch(() => { /* keeps the unpigmented filter */ });
+    }).catch(() => { /* keeps the unpigmented filter */ }));
+  }
+  // the distance tiers' packed maps: the individual's pattern and colour morph (its variant, set on a derived material)
+  const lod = x.lod?.packing === 1 ? x.lod : null;
+  const morph = !!lod?.morphs?.length;
+  if (lod) {
+    const i = (((ud as { gobyVariant?: number }).gobyVariant ?? 0) % lod.variants + lod.variants) % lod.variants;
+    const pattern = Math.min(Math.floor(i / lod.colours), lod.patternChannels - 1);
+    Object.assign(uniforms, {
+      uGbPatSel: { value: new Vector3(pattern === 0 ? 1 : 0, pattern === 1 ? 1 : 0, pattern === 2 ? 1 : 0) },
+      uGbMelRGB: { value: new Vector3(...lod.melRGB) },
+      uGbFarPig: { value: new Vector2(lod.far?.iri ?? 0, lod.far?.xan ?? 0) },
+    });
+    if (morph) {
+      const c = lod.morphs![i % lod.colours], std = lod.morphs![0];
+      Object.assign(uniforms, {
+        uGbMorphC: { value: [c.base, c.dors, c.belly].map((v) => new Vector3(...v)) },
+        uGbStdC: { value: [std.base, std.dors, std.belly].map((v) => new Vector3(...v)) },
+        uGbMorphK: { value: new Vector4(c.melK, c.melAdd, c.xanK, c.iriK) },
+        uGbBelly: { value: new Vector2(...(lod.bellyRamp ?? [-0.4, -0.88])) },
+      });
+    }
   }
   m.transmission = 0;
   m.thickness = 0;
   m.transparent = true;
   m.depthWrite = true;
-  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}) };
+  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}), ...(lod ? { GB_PACKED: '' } : {}), ...(morph ? { GB_MORPH: '' } : {}) };
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -525,6 +642,45 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v3' : 'goby-body-translucent-v3');
+  const key = `goby-body-translucent${low ? '-low' : ''}${lod ? '-packed' : ''}${morph ? '-morph' : ''}-v4`;
+  m.customProgramCacheKey = () => key;
   m.needsUpdate = true;
+}
+
+const lodDerived = new WeakMap<Material, Map<number, Material>>();
+/**
+ * The material of a goby distance tier for one individual: those tiers carry one body and one fin material for all the
+ * patterns and colour morphs (packed maps, tools/lib/gobyLod.mjs); each variant gets its own copy of it, made once per
+ * asset and shared by every fish of that variant, which differs only in its uniforms (the body: pattern and colour
+ * morph) or its colour (the fins: the morph's tint). The shader program is the same for all. `prepare` readies a new
+ * copy as the loader readies the asset's own materials. null: the asset's own material serves (variant 0, or none).
+ */
+export function gobyLodVariant(base: Material, meshName: string, variant: number, prepare: (m: Material) => void): Material | null {
+  // (a mesh with several materials has none of these)
+  const x = (base.userData as { mahaze?: GobyBodyExtras & { lodTints?: V3[] } } | undefined)?.mahaze;
+  if (!x) return null;
+  let n = 0;
+  let apply: ((m: Material, i: number) => void) | null = null;
+  if (x.role === 'body' && x.lod?.packing === 1 && x.lod.variants > 1) {
+    n = x.lod.variants;
+    apply = (m, i) => { (m.userData as { gobyVariant?: number }).gobyVariant = i; };
+  } else if (x.role === 'fin' && (x.lodTints?.length ?? 0) > 1 && !meshName.startsWith('Eye')) {
+    // (the far tier's eyes share the fins' material: they keep their own colour)
+    const tints = x.lodTints!;
+    n = tints.length;
+    apply = (m, i) => { (m as MeshPhysicalMaterial).color.fromArray(tints[i]); };
+  }
+  if (!apply) return null;
+  const i = ((Math.floor(variant) % n) + n) % n;
+  if (i === 0) return null;
+  let byIndex = lodDerived.get(base);
+  if (!byIndex) lodDerived.set(base, (byIndex = new Map()));
+  let m = byIndex.get(i);
+  if (!m) {
+    m = base.clone();
+    apply(m, i);
+    prepare(m);
+    byIndex.set(i, m);
+  }
+  return m;
 }
