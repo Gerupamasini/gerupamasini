@@ -126,6 +126,35 @@ describe('the goby body material', GLB_READS, () => {
     for (const u of ['uGbProfile', 'uGbPigment', 'uGbFrame', 'uGbOrgC', 'uGbOrgR', 'uGbOrgK']) expect(s.uniforms, u).toHaveProperty(u);
   });
 
+  it('the マハゼ wears one of nine looks rebuilt from one set of maps: its pattern\'s melanophores, its colour morph\'s tissue', () => {
+    const near = material('mahaze/mahaze_subadult.lod1.glb'), far = material('mahaze/mahaze_subadult.lod2.glb');
+    void makeTranslucentBody(near, 'lod1');
+    void makeTranslucentBody(far, 'lod2');
+    expect(near.defines).toMatchObject({ GB_MORPH: '', GB_NRM_PACKED: '' });
+    expect(far.defines).toMatchObject({ GB_MORPH: '', GB_LOW: '' });
+    expect(far.defines?.GB_NRM_PACKED).toBeUndefined();
+    const s = compile(near);
+    // the colour in place of three's map stage, the normal map's x and y (z rebuilt), its roughness and occlusion
+    expect(s.fragmentShader).toContain('diffuseColor.rgb *= gbMorphAlbedo(sampledDiffuseColor.rgb, m4.rgb, m4.a, sampledDiffuseColor.a, hn);');
+    expect(s.fragmentShader).toContain('mapN.z = sqrt(saturate(1.0 - dot(mapN.xy, mapN.xy)));');
+    expect(s.fragmentShader).toContain('roughnessFactor = gbN4.a;');
+    expect(s.fragmentShader).toContain('float ambientOcclusion = (gbN4.b - 1.0) * uGbAoStrength + 1.0;');
+    type U = { uGbMorphPattern: { value: { toArray(): number[] } }; uGbMorphK: { value: { x: number; y: number } }; uGbMorphCol: { value: { x: number }[] } };
+    // the first pattern in the standard colour, unless the material wears another look
+    expect((s.uniforms as unknown as U).uGbMorphPattern.value.toArray()).toEqual([1, 0, 0]);
+    const look = material('mahaze/mahaze_subadult.lod1.glb');
+    (look.userData.mahaze as GobyBodyExtras).morph = { pattern: 2, color: 2 };
+    void makeTranslucentBody(look, 'lod1');
+    const u = compile(look).uniforms as unknown as U;
+    const dark = bodyExtras('mahaze/mahaze_subadult.lod1.glb').morphs!.colors[2];
+    expect(dark.name).toBe('dark');
+    expect(u.uGbMorphPattern.value.toArray()).toEqual([0, 0, 1]);
+    expect([u.uGbMorphK.value.x, u.uGbMorphK.value.y]).toEqual([dark.melK, dark.melAdd]);
+    expect(u.uGbMorphCol.value[0].x).toBe(dark.base[0]);
+    // one program for every look
+    expect(look.customProgramCacheKey()).toBe(near.customProgramCacheKey());
+  });
+
   it('the far tier has its own, lighter program', () => {
     const near = material('mahaze/mahaze_juvenile.lod1.glb'), far = material('mahaze/mahaze_juvenile.lod2.glb');
     makeTranslucentBody(near, 'lod1');

@@ -6,6 +6,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { morphPick, type MorphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -61,8 +62,8 @@ export function preloadModel(rel: string): Promise<GLTF> {
   let p = cache.get(rel);
   if (!p) {
     if (!ktx2) return Promise.reject(new Error('configureModelLoader(renderer) must run before a model loads'));
-    p = loader.loadAsync(modelUrl(rel)).then((gltf) => {
-      prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
+    p = loader.loadAsync(modelUrl(rel)).then(async (gltf) => {
+      await prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
       loaded.add(rel);
       return gltf;
     }).catch((error: unknown) => {
@@ -78,19 +79,21 @@ export function isModelLoaded(rel: string): boolean {
   return loaded.has(rel);
 }
 
-/** Tier-dependent material adjustments on the shared (cached) materials. */
-function prepareMaterials(gltf: GLTF, tier: Tier): void {
+/** Tier-dependent material adjustments on the shared (cached) materials; resolves when the maps they add are in. */
+function prepareMaterials(gltf: GLTF, tier: Tier): Promise<unknown> {
+  const pending: Promise<void>[] = [];
   gltf.scene.traverse((o) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) prepareMaterial(m, tier, gltf.parser);
+    for (const m of mats) pending.push(prepareMaterial(m, tier, gltf.parser));
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
+  return Promise.all(pending);
 }
 
-function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
+function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): Promise<void> {
   const pm = m as MeshPhysicalMaterial;
   if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
     // transmission needs an extra scene pass; keep it for the observed hero only
@@ -99,26 +102,68 @@ function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
   }
   if (tier === 'lod2') {
     pm.clearcoat = 0;
-    if (pm.transparent && pm.alphaTest === 0) { pm.transparent = false; pm.alphaTest = 0.5; }
+    // (a goby body blends by the light through it, not by its map's alpha, which holds a pigment)
+    if (pm.transparent && pm.alphaTest === 0 && !isGobyBody(m)) { pm.transparent = false; pm.alphaTest = 0.5; }
   }
   const sm = m as MeshStandardMaterial;
   sm.envMapIntensity = 0.8;
   // the gobies' bodies: translucent tissue in every tier (the observed hero swaps in its volumetric material)
-  if (pm.isMeshPhysicalMaterial && isGobyBody(m)) makeTranslucentBody(pm, tier, parser);
+  return pm.isMeshPhysicalMaterial && isGobyBody(m) ? makeTranslucentBody(pm, tier, parser) : Promise.resolve();
 }
 
-interface VariantMappings { mappings: { material: number; variants: number[] }[] }
-interface VariantList { variants: { name: string }[] }
+interface MorphExtras { role?: string; morphs?: MorphTable; morph?: MorphPick; tint?: number[]; melK?: number }
+const extrasOf = (m: Material) => (m.userData as { mahaze?: MorphExtras }).mahaze;
 
-/** Number of KHR_materials_variants (pattern variants) a loaded asset carries. */
-function variantCount(gltf: GLTF): number {
-  return (gltf.userData as { gltfExtensions?: { KHR_materials_variants?: VariantList } }).gltfExtensions?.KHR_materials_variants?.variants.length ?? 0;
+/** The looks a loaded asset's individuals wear (the マハゼ's patterns × colour morphs, body extras `morphs`), if any. */
+function morphsOf(gltf: GLTF): MorphTable | null {
+  let t: MorphTable | null = null;
+  gltf.scene.traverse((o) => {
+    const m = (o as Mesh).material;
+    if (!t && m && !Array.isArray(m)) t = extrasOf(m)?.morphs ?? null;
+  });
+  return t;
+}
+
+/** one asset's materials per look: shared by every fish that wears it (maps and programs shared with the asset's own) */
+const looks = new WeakMap<GLTF, Map<string, Material>>();
+/** … and when each is ready (its pigment map in its uniforms) */
+const lookReady = new WeakMap<Material, Promise<void>>();
+
+/**
+ * The asset's body or fin material in one look: a copy with the look's uniforms (the body: pattern and colour morph,
+ * ../species/mahaze/colourMorph.js) or tint (the fins: the morph tints them and scales their melanophores). The first
+ * pattern in the standard colour is the asset's own material.
+ */
+function lookMaterial(gltf: GLTF, tier: Tier, base: Material, morphs: MorphTable, pick: MorphPick): Material {
+  const x = extrasOf(base);
+  if ((x?.role !== 'body' && x?.role !== 'fin') || (pick.pattern === 0 && pick.color === 0)) return base;
+  if (x.role === 'fin' && pick.color === 0) return base;
+  let byAsset = looks.get(gltf);
+  if (!byAsset) looks.set(gltf, (byAsset = new Map()));
+  const key = `${base.uuid}:${x.role === 'fin' ? 0 : pick.pattern}:${pick.color}`;
+  let m = byAsset.get(key);
+  if (!m) {
+    // (a copy carries the maps, the flags and a deep copy of the extras; the translucent tissue is worked in again)
+    m = base.clone();
+    const mx = extrasOf(m)!;
+    if (x.role === 'body') mx.morph = pick;
+    else {
+      const fin = morphs.colors[pick.color].fin;
+      (m as MeshStandardMaterial).color.setRGB(fin.tint[0], fin.tint[1], fin.tint[2]);
+      mx.tint = fin.tint;
+      mx.melK = fin.melK;
+    }
+    m.name = `${base.name}_${x.role === 'body' ? `p${pick.pattern + 1}_` : ''}${morphs.colors[pick.color].name}`;
+    lookReady.set(m, prepareMaterial(m, tier, gltf.parser));
+    byAsset.set(key, m);
+  }
+  return m;
 }
 
 /**
- * Instantiate a loaded model (skeleton-aware clone). Materials are shared. `variant` picks one of the asset's
- * pattern variants (glTF KHR_materials_variants; any integer, taken modulo their number): the mesh stays the same,
- * the materials (and their textures) are the variant's own.
+ * Instantiate a loaded model (skeleton-aware clone). Materials are shared. `variant` picks the look of an asset that
+ * carries several (the マハゼ's three patterns × three colour morphs; any integer, taken modulo their number): the mesh
+ * and the maps stay the same, the body and fin materials are the look's own.
  */
 export async function instantiateModel(rel: string, variant?: number): Promise<LoadedModel> {
   const gltf = await preloadModel(rel);
@@ -126,28 +171,18 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
   const root = skeletonClone(gltf.scene);
   const bones: Record<string, Bone> = {};
   const meshes: Mesh[] = [];
-  const n = variantCount(gltf);
-  const pick = variant !== undefined && n > 0 ? ((Math.floor(variant) % n) + n) % n : -1;
-  const swaps: Promise<void>[] = [];
+  const morphs = variant !== undefined ? morphsOf(gltf) : null;
+  const pick = morphs ? morphPick(morphs, variant!) : null;
   root.traverse((o) => {
     if ((o as Bone).isBone) bones[o.name] = o as Bone;
     if ((o as Mesh).isMesh) {
       const mesh = o as Mesh;
       meshes.push(mesh);
-      if (pick >= 0) {
-        const maps = (mesh.userData as { gltfExtensions?: { KHR_materials_variants?: VariantMappings } }).gltfExtensions?.KHR_materials_variants?.mappings;
-        const map = maps?.find((mp) => mp.variants.includes(pick));
-        if (map) {
-          swaps.push((gltf.parser.getDependency('material', map.material) as Promise<Material>).then((mat) => {
-            prepareMaterial(mat, tier, gltf.parser);
-            mesh.material = mat;
-            gltf.parser.assignFinalMaterial(mesh);   // the loader's per-geometry adjustments (tangents, vertex colours)
-          }));
-        }
-      }
+      if (morphs && pick && !Array.isArray(mesh.material)) mesh.material = lookMaterial(gltf, tier, mesh.material, morphs, pick);
     }
   });
-  await Promise.all(swaps);
+  // (the look's pattern is in its pigment map: not drawn before that is in its uniforms)
+  await Promise.all(meshes.map((mesh) => lookReady.get(mesh.material as Material)));
   for (const mesh of meshes) {
     // keep the species extras on the mesh so drivers still find them after a material swap
     const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;

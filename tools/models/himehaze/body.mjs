@@ -112,7 +112,7 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, cap = true, log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -148,7 +148,7 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
     for (let j = jt - 1; j >= 0; j--) QD[i * colsB + j] = QD[i * colsB + j + 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j + 1)));
   }
   log('  baking body textures …');
-  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log });
+  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, cap });
 
   // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
   log('  render mesh …');
@@ -369,7 +369,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, cap: withCap = true } = ctx;
   const nT = texW * texH;
   // per-texel interpolated attributes
   const A = {
@@ -1093,6 +1093,8 @@ function bakeBodyTextures(ctx) {
     }
   }
   // ---------------------------------------------------------------------------
+  // (only the observed hero's volumetric material shades the snout from the cap: the lighter tiers skip it)
+  if (!withCap) return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume, cap: null };
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
   log('    snout cap …');
