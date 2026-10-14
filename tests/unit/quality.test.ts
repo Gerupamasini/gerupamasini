@@ -2,20 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { QUALITY_ORDER, QUALITY_PRESETS, type Quality } from '../../src/core/Settings';
 import { MEADOW_QUALITY } from '../../src/world/amamo/AmamoMeadow';
 
-// The quality tiers (超軽量 / 低 / 中 / 高) and what each one turns down: every tier is listed, every tier has
-// a meadow setting, and the knobs fall monotonically from 高 to 超軽量 (a lighter tier never costs more).
+// The quality tiers (超軽量 / 低 / 中 / 高 / 最高) and what each one turns down: every tier is listed, every tier's
+// vegetation has a meadow setting, and the knobs fall monotonically from 最高 to 超軽量 (a lighter tier never costs
+// more).
 describe('quality presets', () => {
   it('lists every tier in order, each with a meadow setting', () => {
-    expect(QUALITY_ORDER).toEqual(['minimal', 'low', 'mid', 'high']);
+    expect(QUALITY_ORDER).toEqual(['minimal', 'low', 'mid', 'high', 'ultra']);
     for (const q of QUALITY_ORDER) {
       expect(QUALITY_PRESETS[q]).toBeDefined();
-      expect(MEADOW_QUALITY[q]).toBeDefined();
+      expect(MEADOW_QUALITY[QUALITY_PRESETS[q].vegetation]).toBeDefined();
     }
     expect(Object.keys(QUALITY_PRESETS).sort()).toEqual([...QUALITY_ORDER].sort());
   });
 
   it('never costs more on a lighter tier', () => {
-    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters', 'surfMemory', 'spray', 'sandDust'] as const;
+    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters', 'surfMemory', 'spray', 'sandDust', 'rippleSheet', 'rippleMap'] as const;
     const flags = ['shadows', 'post', 'contactShadows', 'hero', 'surfLip'] as const;
     const rank = { lite: 0, full: 1 } as const;
     for (let i = 1; i < QUALITY_ORDER.length; i++) {
@@ -24,9 +25,16 @@ describe('quality presets', () => {
       for (const k of flags) expect(Number(lo[k]), k).toBeLessThanOrEqual(Number(hi[k]));
       expect(rank[lo.water]).toBeLessThanOrEqual(rank[hi.water]);
       expect(rank[lo.tankWater]).toBeLessThanOrEqual(rank[hi.tankWater]);
-      const ml = MEADOW_QUALITY[QUALITY_ORDER[i - 1]], mh = MEADOW_QUALITY[QUALITY_ORDER[i]];
+      const ml = MEADOW_QUALITY[lo.vegetation], mh = MEADOW_QUALITY[hi.vegetation];
       expect(ml.density).toBeLessThanOrEqual(mh.density);
       expect(ml.lod[2]).toBeLessThanOrEqual(mh.lod[2]);
+    }
+  });
+
+  it('only 最高 raises the ripples as a mesh; the others draw them from the ripple map', () => {
+    for (const q of QUALITY_ORDER) {
+      expect(QUALITY_PRESETS[q].rippleSheet > 0, q).toBe(q === 'ultra');
+      expect(QUALITY_PRESETS[q].rippleMap, q).toBeGreaterThan(0);
     }
   });
 

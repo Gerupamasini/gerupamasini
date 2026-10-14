@@ -1,7 +1,7 @@
 import { FogExp2, MathUtils, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { Terrain, loadTerrainGrid, RIPPLE_SHEET_RADIUS, type TerrainGrid } from '../world/Terrain';
+import { Terrain, loadTerrainGrid, type TerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
@@ -148,7 +148,8 @@ export class World {
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
-    terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
+    terrain.setRippleSheet(preset.rippleSheet);
+    terrain.setRippleMap(preset.rippleMap);
     terrain.setLite(preset.water === 'lite');
     mark('terrain');
     onProgress?.('潮だまり');
@@ -290,6 +291,19 @@ export class World {
     return w;
   }
 
+  /**
+   * The sun, the sky and the environment map at `gameMs`, before the shaders are compiled: the scene's materials are
+   * compiled in the variant they will be drawn in (with the environment map), not once without it and again on the
+   * first frame.
+   */
+  prepareLight(gameMs: number, camera: PerspectiveCamera): void {
+    const sp = sunPosition(gameMs, this.map.origin.lat, this.map.origin.lon);
+    sunDirection(sp, this.sunDir);
+    this.sunElevation = sp.elevation;
+    this.sky.update(this.sunDir, sp.elevation, camera.position, this.overcast, camera.getWorldDirection(this.viewTmp));
+    this.sky.refreshEnvironment();
+  }
+
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
     this.farShadow?.dispose();
@@ -404,6 +418,8 @@ export class World {
       this.farShadow.update(this.renderer, this.scene, this.sunDir, dt, anchor);
       this.terrainShadow.update(this.renderer, this.sunDir);
     }
+    // the ripple field baked round the player (the strips the walk uncovers)
+    if (this.renderer) this.terrain.updateRippleMap(this.renderer, anchor);
     this.fog.color.copy(this.sky.fogColor);
     this.mangroves?.setLight(this.sky.sunColorHdr(this.sunColTmp), this.sky.hemi.color, this.sky.hemi.intensity, this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);

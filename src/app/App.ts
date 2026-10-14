@@ -2,7 +2,6 @@ import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
 import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
-import { RIPPLE_SHEET_RADIUS } from '../world/Terrain';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
 import { loadSettings, saveSettings, normalizeSettings, QUALITY_LABELS, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
@@ -509,6 +508,7 @@ export class App {
       // flat: otherwise the first frame stalls for as long as they take
       performance.mark('world:built');
       ui.loading.value = { frac: 0.6, label: t('loading.shaders') };
+      this.world.prepareLight(this.clock.nowGame(), this.camera);
       await this.field?.compile(this.world.scene, this.camera, this.world.water, { upscale: !this.input.touchDevice });
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
@@ -564,7 +564,8 @@ export class App {
         });
         // the creature system let one of the colony's crabs go (captured, or a time jump cleared the flat)
         this.creatures.events.on('despawn', (ind) => { if (ind.managed === 'colony') this.crabs?.forget(ind.id); });
-        this.crabs.prewarm(this.renderer.gl, this.camera);
+        const world = this.world, field = this.field;
+        await this.crabs.prewarm(this.camera, (root: Object3D) => field ? field.compileKept(root, this.camera, world.scene) : this.renderer.gl.compileAsync(root, this.camera, world.scene));
       }
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
       this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
@@ -680,7 +681,8 @@ export class App {
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
-    this.world?.terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
+    this.world?.terrain.setRippleSheet(preset.rippleSheet);
+    this.world?.terrain.setRippleMap(preset.rippleMap);
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);

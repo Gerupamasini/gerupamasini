@@ -22,13 +22,13 @@ export function Menu({ app }: { app: App }) {
             {scene === 'fieldQuality' && !app.input.touchDevice && (
               <button class={s.fieldAuto ? 'on' : ''} aria-pressed={s.fieldAuto} title="この PC で干潟を描く速さを測って選びます" onClick={() => void app.updateSettings({ fieldAuto: true })}>自動{s.fieldAuto ? `（${QUALITY_LABELS[s.fieldQuality]}）` : ''}</button>
             )}
-            {QUALITY_ORDER.map((q) => {
+            {QUALITY_ORDER.filter((q) => q !== 'ultra' || (scene === 'fieldQuality' && !app.input.touchDevice)).map((q) => {
               const on = s[scene] === q && !(scene === 'fieldQuality' && s.fieldAuto);
               return <button key={q} class={on ? 'on' : ''} aria-pressed={on} onClick={() => void app.updateSettings({ [scene]: q })}>{QUALITY_LABELS[q]}</button>;
             })}
           </div>
         </div>)}
-        <p class="small dim">超軽量（最低画質）では図鑑を写真で表示します。</p>
+        <p class="small dim">超軽量（最低画質）では図鑑を写真で表示します。{!app.input.touchDevice && '最高は足元の砂紋を立体で描きます（重い）。'}</p>
         <div class="setting">
           <span class="label">{app.input.touchDevice ? '視点の感度' : t('menu.sensitivity')}<span class="num">{s.mouseSensitivity.toFixed(1)}</span></span>
           <input type="range" min="0.3" max="10" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />

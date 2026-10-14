@@ -1,8 +1,10 @@
 import { get, set } from 'idb-keyval';
 
-export type Quality = 'minimal' | 'low' | 'mid' | 'high';
-export const QUALITY_ORDER: Quality[] = ['minimal', 'low', 'mid', 'high'];
-export const QUALITY_LABELS: Record<Quality, string> = { minimal: '超軽量', low: '低', mid: '中', high: '高' };
+export type Quality = 'minimal' | 'low' | 'mid' | 'high' | 'ultra';
+export const QUALITY_ORDER: Quality[] = ['minimal', 'low', 'mid', 'high', 'ultra'];
+export const QUALITY_LABELS: Record<Quality, string> = { minimal: '超軽量', low: '低', mid: '中', high: '高', ultra: '最高' };
+/** the vegetation's detail tiers (アマモ, reeds, mangroves): 最高 draws them as 高 does */
+export type VegetationTier = 'minimal' | 'low' | 'mid' | 'high';
 
 export interface SettingsData {
   version: 1;
@@ -53,7 +55,12 @@ export interface QualityPreset {
   creatureScale: number;
   lod1Count: number;
   /** アマモ beds: how many shoots, how far each detail tier reaches, which tiers cast shadows (MEADOW_QUALITY) */
-  vegetation: Quality;
+  vegetation: VegetationTier;
+  /** the ripple sheet: a fine mesh of this radius (m) round the player raised into the ripples' relief (0: none, the
+   * ripples drawn on the flat from the ripple map) */
+  rippleSheet: number;
+  /** the ripple map (RippleMap): texels across the window of the ripple field baked round the player */
+  rippleMap: number;
   /** the sea's mirror of the land and sky: its resolution as a fraction of the screen's (0: the sky cube only) */
   mirror: number;
   /** steps of the trace that gives the waves at the waterline their relief (0: the surf drawn on the flat plane) */
@@ -103,10 +110,13 @@ export interface QualityPreset {
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
   // (the 3D view renders at most at these device-pixel ratios: on a high-density screen mid draws at 1×, about half
   // the pixels of 1.5×; the water, the sand and the surf are per-pixel work)
-  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, sandDust: 0, oysters: 2000, tankWater: 'lite', hero: false, modelTier: 'lod2', tankWaterHz: 30, surfMemory: 0, spray: 0, surfLip: false, tankShafts: 0, tankMotes: 0, tankHitIter: 1, tankBloom: false, tankMinScale: 0.6, targetFps: 30, taa: false },
-  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, sandDust: 0.5, oysters: 5000, tankWater: 'full', hero: true, modelTier: 'lod1', tankWaterHz: 30, surfMemory: 256, spray: 600, surfLip: false, tankShafts: 6, tankMotes: 350, tankHitIter: 2, tankBloom: true, tankMinScale: 0.6, targetFps: 30, taa: false },
-  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, sandDust: 1, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, surfMemory: 512, spray: 1600, surfLip: true, tankShafts: 10, tankMotes: 800, tankHitIter: 2, tankBloom: true, tankMinScale: 0.65, targetFps: 60, taa: true },
-  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, sandDust: 1, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, surfMemory: 1024, spray: 3200, surfLip: true, tankShafts: 16, tankMotes: 1400, tankHitIter: 3, tankBloom: true, tankMinScale: 0.75, targetFps: 60, taa: true },
+  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, sandDust: 0, oysters: 2000, tankWater: 'lite', hero: false, modelTier: 'lod2', tankWaterHz: 30, surfMemory: 0, spray: 0, surfLip: false, tankShafts: 0, tankMotes: 0, tankHitIter: 1, tankBloom: false, tankMinScale: 0.6, targetFps: 30, taa: false, rippleSheet: 0, rippleMap: 1024 },
+  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, sandDust: 0.5, oysters: 5000, tankWater: 'full', hero: true, modelTier: 'lod1', tankWaterHz: 30, surfMemory: 256, spray: 600, surfLip: false, tankShafts: 6, tankMotes: 350, tankHitIter: 2, tankBloom: true, tankMinScale: 0.6, targetFps: 30, taa: false, rippleSheet: 0, rippleMap: 2048 },
+  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, sandDust: 1, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, surfMemory: 512, spray: 1600, surfLip: true, tankShafts: 10, tankMotes: 800, tankHitIter: 2, tankBloom: true, tankMinScale: 0.65, targetFps: 60, taa: true, rippleSheet: 0, rippleMap: 2048 },
+  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, sandDust: 1, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, surfMemory: 1024, spray: 3200, surfLip: true, tankShafts: 16, tankMotes: 1400, tankHitIter: 3, tankBloom: true, tankMinScale: 0.75, targetFps: 60, taa: true, rippleSheet: 0, rippleMap: 2048 },
+  // (最高, PCs: 高 with the ripples' relief as a mesh round the player, big and dense screens at their full resolution,
+  // more animals near in detail)
+  ultra: { maxDpr: 2, maxPixels: 8.3e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 8, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, sandDust: 1, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, surfMemory: 1024, spray: 3200, surfLip: true, tankShafts: 16, tankMotes: 1400, tankHitIter: 3, tankBloom: true, tankMinScale: 0.75, targetFps: 60, taa: true, rippleSheet: 4, rippleMap: 2048 },
 };
 
 const KEY = 'settings';

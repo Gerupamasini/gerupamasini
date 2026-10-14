@@ -47,7 +47,7 @@ const QUALITY = [
   { maxLive: 44, rLive: 9.5, holes: 32, pelR: 3.6, pelMax: 180, pelDraw: 3.4, lod: [0.4, 2.5] },
 ];
 /** the tier for the field's quality setting */
-export function colonyQuality(q) { return q === 'minimal' ? 0 : q === 'low' ? 1 : q === 'high' ? 3 : 2; }
+export function colonyQuality(q) { return q === 'minimal' ? 0 : q === 'low' ? 1 : q === 'high' || q === 'ultra' ? 3 : 2; }
 /** how often the burrows' decals and holes are laid out again (s), and how far the camera may move meanwhile (m) */
 const GROUND_EVERY = 0.25, GROUND_MOVE = 0.2;
 /** an open burrow nearer the eye than this (m: some 25 px across and more) is drawn with the fine, ragged shaft */
@@ -925,8 +925,11 @@ export class ScopimeraColony {
   /** the burrow under a point (for the HUD), or -1 */
   burrowNear(x, z, reach) { return this.burrowAt(x, z, reach); }
 
-  /** compile the crab, pellet and burrow programs up front (no hitch when the first crab appears) */
-  prewarm(gl, camera) {
+  /**
+   * compile the crab, pellet and burrow programs up front (no hitch when the first crab appears): `compile` compiles
+   * the colony's own group in the variant the flat is drawn in (the rest of the scene is compiled already)
+   */
+  async prewarm(camera, compile) {
     const crab = new ScopimeraGlobosa({ seed: 1, sex: 'm', cw_mm: 8 });
     // the legs' reach tables are shared by every crab: build them now, not on the first crab's first step
     for (const leg of crab.model.rig.legs) leg.reachTables();
@@ -939,7 +942,7 @@ export class ScopimeraColony {
     this.pellets.update(0, crab.root.position, null);
     // (the holes and decals are hidden while there are none: shown for the compile)
     for (const m of this.renderer.group.children) m.visible = true;
-    try { gl.compile(this.group.parent ?? this.group, camera); } catch (err) { console.warn('[kometsukigani] prewarm', err); }
+    try { await compile(this.group); } catch (err) { console.warn('[kometsukigani] prewarm', err); }
     this.renderer.begin(); this.renderer.end();
     this.renderer.beginContacts(); this.renderer.endContacts();
     crab.dispose();
