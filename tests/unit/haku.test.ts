@@ -341,6 +341,25 @@ describe('スバシリ', () => {
     expect(oper).toBeGreaterThan(100);
     expect(rim).toBeGreaterThan(50);
   });
+
+  it('has fleshy lips: a roll on the head above the gape and one on the jaw below it, thick across the front', () => {
+    const g = mulletGeometry(0, SUBASHIRI).body;
+    const pos = g.getAttribute('position'), si = g.getAttribute('skinIndex'), sw = g.getAttribute('skinWeight');
+    const jaw = boneIndex('J_jaw'), R = SUBASHIRI.lips.rolls!;
+    const gy = SUBASHIRI.gapeY(0) + SUBASHIRI.frontLift(0, 0, SUBASHIRI.gapeY(0));
+    let top = -Infinity, bottom = Infinity, onHead = 0, onJaw = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i) / MODEL_TL, y = pos.getY(i) / MODEL_TL, s = S_PIVOT - pos.getZ(i) / MODEL_TL;
+      // the middle of the front of the mouth
+      if (Math.abs(x) > 0.003 || s > 0.004 || Math.abs(y - gy) > 0.03) continue;
+      const jawW = si.getX(i) === jaw ? sw.getX(i) : 0;
+      if (jawW > 0.99) { onJaw++; bottom = Math.min(bottom, y); } else if (jawW < 0.01) { onHead++; top = Math.max(top, y); }
+    }
+    expect(onHead).toBeGreaterThan(4);
+    expect(onJaw).toBeGreaterThan(4);
+    expect(top - gy).toBeGreaterThan(1.2 * R.upper);
+    expect(gy - bottom).toBeGreaterThan(1.0 * R.lower);
+  });
 });
 
 // ------------------------------------------------------------------ grazing

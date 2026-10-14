@@ -591,6 +591,7 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
     hy: knotLerp(spec.sections, t, (k) => k.hy), hz: knotLerp(spec.sections, t, (k) => k.hz),
     cy: knotLerp(spec.sections, t, (k) => k.cy ?? 0), cz: knotLerp(spec.sections, t, (k) => k.cz ?? 0),
   });
+  const twistAt = (t: number) => (spec.twist ? knotLerp(spec.twist.map(([tt, v]) => ({ t: tt, v })), Math.max(0, t), (k) => k.v) : 0);
   const radial = (t: number, a: number) => {
     const s = sec(t);
     const ca = Math.cos(a), sa = Math.sin(a);
@@ -607,8 +608,13 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
     let rid = 0;
     if (spec.costae) for (const [ac, h, w] of spec.costae) rid += h * Math.exp(-((angDist(a, ac) / w) ** 2));
     if (rid) { const l = Math.hypot(ca * s.hz, sa * s.hy) || 1; const f = Math.min(1, Math.min(s.hy, s.hz) / 1.5); y += ((ca * s.hz) / l) * rid * f; z += ((sa * s.hy) / l) * rid * f; }
+    // the twist: the section turned about the axis, its anterior face (+z) towards the top (+y)
+    const th = twistAt(t);
+    if (th) { const c = Math.cos(th), si = Math.sin(th); const y2 = y * c + z * si; z = -y * si + z * c; y = y2; }
     return new Vector3(t * L, s.cy + y, s.cz + z);
   };
+  // (the angle round as the shader reads it — top, outer face — follows the twist)
+  const angAt = (j: number, t: number) => j / nA - twistAt(t) / (Math.PI * 2);
   // stations along the article (finer at the joints and the tip)
   const ts: number[] = [];
   const nT = Math.max(2, Math.ceil(L / lod.legStep));
@@ -631,7 +637,7 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
       const p = radial(Math.max(0, t), a);
       if (t < 0) p.x = t * L;
       const cav = neck > 0 && t < neck ? 0.7 : t > 0.96 && !last ? 0.4 : 0;
-      const vi = gb.v(p.x, p.y, p.z, bone, weight(t), parent, partAt(t), t, j / nA, cav);
+      const vi = gb.v(p.x, p.y, p.z, bone, weight(t), parent, partAt(t), t, angAt(j, t), cav);
       const sc = sec(Math.max(0, t));
       gb.setMm(vi, t * L, a * 0.5 * (sc.hy + sc.hz));
       row.push(vi);
@@ -651,7 +657,7 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   const s1 = sec(1);
   if (last) {
     // (a pole vertex for each triangle, at the angle of its edge, the normal along the axis)
-    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(L + 0.05, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, (j + 0.5) / nA, 0));
+    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(L + 0.05, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0));
   } else {
     let prevRow = lastRow;
     for (const [dx, k] of [[0.5, 0.86], [0.85, 0.55]] as const) {
@@ -659,13 +665,13 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
       for (let j = 0; j <= nA; j++) {
         const a = (j / nA) * Math.PI * 2;
         const p = radial(1, a);
-        row.push(gb.v(L + capX * dx, s1.cy + (p.y - s1.cy) * k, s1.cz + (p.z - s1.cz) * k, bone, 1, parent, part, 1, j / nA, 0.35));
+        row.push(gb.v(L + capX * dx, s1.cy + (p.y - s1.cy) * k, s1.cz + (p.z - s1.cz) * k, bone, 1, parent, part, 1, angAt(j, 1), 0.35));
       }
       gb.twin(row[0], row[nA]);
       for (let j = 0; j < nA; j++) { const kk = j + 1; gb.quad(prevRow[j], prevRow[kk], row[kk], row[j]); }
       prevRow = row;
     }
-    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[j + 1], gb.vn(L + capX, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, (j + 0.5) / nA, 0.3));
+    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[j + 1], gb.vn(L + capX, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0.3));
   }
   return {
     surface(t: number, a: number) {

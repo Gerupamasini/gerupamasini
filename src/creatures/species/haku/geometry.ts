@@ -352,9 +352,12 @@ function buildMouth(F: MulletForm, b: Builder, g: Gape, across: number): void {
     const k = Math.max(0, 1 - s / G.s) * smooth(0, 0.004, s);
     const arch = Math.min(0.006, 0.5 * Math.abs(A.x)) * Math.sqrt(k), back = 0.004 * k;
     const out: number[] = [];
+    // (the lips' edges are raised into the front's ∧: the palate and the floor follow them across, so no gap opens)
+    const gy = F.gapeY(s), liftA = F.frontLift(s, A.x, gy), liftB = F.frontLift(s, B.x, gy);
     for (let t = 0; t <= across; t++) {
       const u = t / across, bump = Math.sin(Math.PI * u);
       const p = A.clone().lerp(B, u);
+      p.y += F.frontLift(s, p.x, gy) - (liftA + (liftB - liftA) * u);
       p.y += sign * arch * bump;
       p.z -= back * bump;
       out.push(b.vertex([p.x, p.y, p.z], w, [s, 0, 0], [s, 0], 3, undefined, 0.2 + 0.25 * (1 - bump)));
@@ -372,6 +375,93 @@ function buildMouth(F: MulletForm, b: Builder, g: Gape, across: number): void {
         faced(b, rows[r][t], rows[r + 1][t], rows[r][t + 1], want);
         faced(b, rows[r][t + 1], rows[r + 1][t], rows[r + 1][t + 1], want);
       }
+    }
+  }
+}
+
+/**
+ * Fleshy lips (a form with `lips.rolls`, the スバシリ): two rolls along the gape, the upper on the head and the lower
+ * on the jaw, meeting along it in a crease. Thickest across the front of the snout, where from in front they draw the
+ * mouth's ∧, and tapering back into the corners of the mouth, where they sink into the skin. Each roll is half buried
+ * in the skin it grows from; the side facing into the gape is shut in.
+ */
+function buildLips(F: MulletForm, b: Builder, along: number, around: number): void {
+  const R = F.lips.rolls;
+  if (!R) return;
+  const G = F.gape;
+  const jaw = boneIndex('J_jaw');
+  const f0 = F.section(0).hw;
+  // the gape's path: across the front of the snout (s = 0), then back along each side to the corner
+  const sidePoint = (s: number, side: 1 | -1) => skinPoint(F, s, side > 0 ? Math.PI / 2 : (3 * Math.PI) / 2);
+  let Ls = 0;
+  for (let i = 0, prev = sidePoint(0, 1); i < 24; i++) { const q = sidePoint((G.s * (i + 1)) / 24, 1); Ls += q.distanceTo(prev); prev = q; }
+  const a = f0 / (f0 + Ls);
+  // (the lips draw the ∧ more steeply than the skin's gape under them: the chin keeps its smooth line)
+  const LIFT = 0.6;
+  const at = (u: number): { p: Vector3; s: number; side: 1 | -1; extra: number } => {
+    const side: 1 | -1 = u < 0 ? -1 : 1, v = Math.abs(u);
+    if (v <= a) {
+      const x = side * f0 * (v / a), y0 = F.gapeY(0), extra = LIFT * F.frontLift(0, x, y0);
+      return { p: new Vector3(x, y0 + F.frontLift(0, x, y0) + extra, zOf(0) + F.lipShift(0, y0)), s: 0, side, extra };
+    }
+    const s = G.s * ((v - a) / (1 - a));
+    const p = sidePoint(s, side), extra = LIFT * F.frontLift(s, p.x, F.gapeY(s));
+    p.y += extra;
+    return { p, s, side, extra };
+  };
+  for (const upper of [true, false]) {
+    const R0 = upper ? R.upper : R.lower;
+    const M = 2 * along + 1;
+    const rings: number[][] = [], centres: Vector3[] = [], tangents: Vector3[] = [];
+    for (let i = 0; i < M; i++) {
+      const u = -1 + (2 * i) / (M - 1), v = Math.abs(u);
+      const { p, s, side, extra } = at(u);
+      const e = 1e-3;
+      const T = at(Math.min(1, u + e)).p.sub(at(Math.max(-1, u - e)).p).normalize();
+      // outward from the snout's axis, square to the path; "up" square to both
+      const O = p.clone().sub(new Vector3(0, p.y, zOf(s) - 0.015));
+      O.addScaledVector(T, -O.dot(T)).normalize();
+      const U = new Vector3().crossVectors(O, T);
+      if (U.y < 0) U.negate();
+      // full across the front, tapering along the sides, the ends sunk into the corners
+      const r = R0 * (1 - 0.7 * smooth(a * 0.7, 1, v)) * (1 - 0.35 * smooth(0.85, 1, v));
+      // sunk further into the skin across the front (the snout's tip stays ahead of the lips) and into the corners
+      const sink = 0.3 * r + 0.5 * r * (1 - smooth(a * 0.6, a * 1.4, v)) + 1.1 * R0 * smooth(0.8, 1, v);
+      const c = p.clone().addScaledVector(U, (upper ? 0.5 : -0.5) * r).addScaledVector(O, -sink);
+      // the lower lip rides the jaw back to just short of the corner, where the head takes it over
+      const k = upper ? 0 : 1 - smooth(G.s - 0.008, G.s, s);
+      const w = upper ? chainWeights(s) : k >= 1 ? ([[jaw, 1]] as [number, number][]) : blendJaw(chainWeights(s), k);
+      const { a3, a2 } = skinAttrs(F, s, F.gapeY(Math.min(s, G.s)), side);
+      const ring: number[] = [];
+      for (let j = 0; j < around; j++) {
+        const th = (j / around) * Math.PI * 2;
+        // (the upper lip reaches down over the skin's own edge where it is raised above it)
+        const down = upper && Math.sin(th) < 0 ? 1 + extra / Math.max(r, 1e-6) : 1;
+        const d = O.clone().multiplyScalar(Math.cos(th)).addScaledVector(U, Math.sin(th) * down);
+        const q = c.clone().addScaledVector(d, r);
+        // the side turned into the gape is shut in
+        const into = upper ? -Math.sin(th) : Math.sin(th);
+        const occ = 1 - 0.55 * smooth(-0.2, 0.9, into);
+        ring.push(b.vertex([q.x, q.y, q.z], w, a3, a2, 0.01, undefined, occ));
+      }
+      rings.push(ring); centres.push(c); tangents.push(T);
+    }
+    for (let i = 0; i < M - 1; i++) {
+      for (let j = 0; j < around; j++) {
+        const j1 = (j + 1) % around;
+        const out = vAt(b, rings[i][j]).add(vAt(b, rings[i + 1][j1])).multiplyScalar(0.5).sub(centres[i].clone().add(centres[i + 1]).multiplyScalar(0.5));
+        faced(b, rings[i][j], rings[i + 1][j], rings[i][j1], out);
+        faced(b, rings[i][j1], rings[i + 1][j], rings[i + 1][j1], out);
+      }
+    }
+    // the ends: closed (inside the skin at the corners)
+    for (const [ri, sign] of [[0, -1], [M - 1, 1]] as const) {
+      const T = tangents[ri].clone().multiplyScalar(sign);
+      const tip = vAt(b, rings[ri][0]).sub(centres[ri]).length();
+      const cp = centres[ri].clone().addScaledVector(T, 0.6 * tip);
+      const v0 = rings[ri][0];
+      const end = b.vertex([cp.x, cp.y, cp.z], [[b.si[v0 * 4], 1]], [b.a3[v0 * 3], b.a3[v0 * 3 + 1], b.a3[v0 * 3 + 2]], [b.a2[v0 * 2], b.a2[v0 * 2 + 1]], 0.01, undefined, 0.6);
+      for (let j = 0; j < around; j++) faced(b, end, rings[ri][j], rings[ri][(j + 1) % around], T);
     }
   }
 }
@@ -668,6 +758,7 @@ export function mulletGeometry(lod: Lod, F: MulletForm = HAKU): MulletGeometry {
   if (lod === 0) {
     const gape = buildBody(F, body, { tip: 10, mouth: 8, head: 28, trunk: 38, around: 48, squeeze: 0.22, mouthOpen: true });
     buildMouth(F, body, gape!, 6);
+    buildLips(F, body, 14, 10);
     buildEye(F, body, 1, 12, 28); buildEye(F, body, -1, 12, 28);
     buildGillCover(F, body, 1, 18); buildGillCover(F, body, -1, 18);
   } else if (lod === 1) {
