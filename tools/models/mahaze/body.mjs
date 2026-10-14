@@ -163,8 +163,8 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-// lod: the distance tiers' packed maps instead of the snout cap (see tools/lib/gobyLod.mjs)
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], lod = false, log = () => {} } = {}) {
+// lod: the packed maps (see tools/lib/gobyLod.mjs); cap: the snout cap (the hero's), packed with them when lod
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], lod = false, cap = !lod, log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -201,7 +201,7 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
   }
   const TS = patterns.map((pattern) => {
     log(`  baking body textures (pattern ${pattern}) …`);
-    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors, lod });
+    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors, lod, withCap: cap });
   });
   // pattern 1 in colour 1 (normal, ORM and thickness are shared by all patterns and colours)
   const T = { ...TS[0], ...TS[0].colors[0] };
@@ -425,7 +425,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1], lod = false } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1], lod = false, withCap = !lod } = ctx;
   // pattern-dependent random streams (shape relief, pores and roughness keep their fixed seeds)
   const PS = (pattern - 1) * 1009;
   const ST = PATTERNS[pattern - 1];
@@ -1031,11 +1031,12 @@ function bakeBodyTextures(ctx) {
   // ---------------------------------------------------------------------------
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
-  if (lodMaps) return { width: texW, height: texH, normal: normalMap, orm, volume, lod: lodMaps, colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: null })) };
+  if (lodMaps && !withCap) return { width: texW, height: texH, normal: normalMap, orm, volume, lod: lodMaps, colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: null })) };
   log('    snout cap …');
   const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.8, z0: -2.7, z1: 2.7 };
-  const caps = colors.map(() => ({ albedo: new Uint8Array(CAP * CAP * 4), pigment: new Uint8Array(CAP * CAP * 3) }));
+  // (packed: the standard colour's cap albedo without the melanin too, the pigment raw as the body's)
+  const caps = colors.map((c) => ({ albedo: new Uint8Array(CAP * CAP * 4), pigment: new Uint8Array(CAP * CAP * 3), albedoNoMel: lodMaps && c === 1 ? new Uint8Array(CAP * CAP * 4) : null }));
   const valid = new Uint8Array(CAP * CAP);
   for (let j = 0; j < CAP; j++)
     for (let i = 0; i < CAP; i++) {
@@ -1060,6 +1061,11 @@ function bakeBodyTextures(ctx) {
         out.albedo[o * 4] = srgb(C.r); out.albedo[o * 4 + 1] = srgb(C.g); out.albedo[o * 4 + 2] = srgb(C.b);
         out.albedo[o * 4 + 3] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
         out.pigment[o * 3] = Math.round(mel * 255); out.pigment[o * 3 + 1] = Math.round(I * 255); out.pigment[o * 3 + 2] = Math.round(clamp(X) * 255);
+        if (out.albedoNoMel) {
+          const C0 = shadeAt(Math.max(sp, 0.02), yy, z, P.hn, P.head, 0, I, X, P.gill, 0, halfW, col);
+          out.albedoNoMel[o * 4] = srgb(C0.r); out.albedoNoMel[o * 4 + 1] = srgb(C0.g); out.albedoNoMel[o * 4 + 2] = srgb(C0.b);
+          out.albedoNoMel[o * 4 + 3] = out.albedo[o * 4 + 3];
+        }
       });
     }
   // dilate into the empty border so bilinear / mip filtering never pulls in black
@@ -1076,6 +1082,7 @@ function bakeBodyTextures(ctx) {
           if (!valid[q]) continue;
           for (const out of caps) {
             for (let c = 0; c < 4; c++) out.albedo[o * 4 + c] = out.albedo[q * 4 + c];
+            if (out.albedoNoMel) for (let c = 0; c < 4; c++) out.albedoNoMel[o * 4 + c] = out.albedoNoMel[q * 4 + c];
             for (let c = 0; c < 3; c++) out.pigment[o * 3 + c] = out.pigment[q * 3 + c];
           }
           next[o] = 1;
@@ -1087,6 +1094,7 @@ function bakeBodyTextures(ctx) {
   return {
     width: texW, height: texH, normal: normalMap, orm, volume,
     // per colour morph: body albedo + pigment and the snout cap
-    colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: { size: CAP, albedo: caps[ci].albedo, pigment: caps[ci].pigment, rect: capRect } })),
+    colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: { size: CAP, albedo: caps[ci].albedo, pigment: caps[ci].pigment, albedoNoMel: caps[ci].albedoNoMel, rect: capRect } })),
+    ...(lodMaps ? { lod: lodMaps } : {}),
   };
 }

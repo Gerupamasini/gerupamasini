@@ -189,6 +189,16 @@ describe('the goby distance tiers\' packed maps (one material for every pattern 
     expect(uniforms(base).u.uGbMorphK.value.x).toBe(1);
   });
 
+  it('the observed fish reads its melanin as a density, the distance tiers as a darkening', () => {
+    const hero = material('mahaze/mahaze_adult.hero.glb'), near = material('mahaze/mahaze_adult.lod1.glb');
+    makeTranslucentBody(hero, 'hero');
+    makeTranslucentBody(near, 'lod1');
+    expect(hero.defines).toMatchObject({ GB_PACKED: '', GB_MORPH: '', GB_MEL_DENSITY: '' });
+    expect(near.defines?.GB_MEL_DENSITY).toBeUndefined();
+    expect(hero.customProgramCacheKey()).not.toBe(near.customProgramCacheKey());
+    expect(uniforms(hero).fs).toContain('diffuseColor.rgb *= gbDark4(');
+  });
+
   it('the far tier has the first pattern only, but every colour', () => {
     const base = material('mahaze/mahaze_juvenile.lod2.glb');
     const prepare = (m: unknown) => makeTranslucentBody(m as MeshPhysicalMaterial, 'lod2');

@@ -1,4 +1,4 @@
-import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
+import { DataTexture, NoColorSpace, RGBAFormat, SRGBColorSpace, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
 import type { GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { createProfileTexture } from './hero/BodyMaterial.js';
 
@@ -50,7 +50,7 @@ interface ShippedAnatomy {
   gillHn?: [number, number, number, number]; spine?: V3; jaw?: [number, number, number, number];
   organs?: { name: string; c: V3; r: V3; k: V3 }[];
 }
-/** a goby distance tier's packed maps and how its patterns and colour morphs are made from them (tools/lib/gobyLod.mjs) */
+/** a goby GLB's packed maps and how its patterns and colour morphs are made from them (tools/lib/gobyLod.mjs) */
 export interface GobyLodPacking {
   packing: 1;
   /** the individual's variant (any integer, taken modulo this): pattern ⌊i / colours⌋, colour i mod colours */
@@ -59,8 +59,10 @@ export interface GobyLodPacking {
   /** patterns the melanin map holds (the far tier: only the first) */
   patternChannels: number;
   melRGB: V3;
+  /** how the maps store the melanin: its density (the observed fish), or its darkening exp(-mel · melRGB.g) sRGB-encoded */
+  melanin?: 'density' | 'darkening';
   /** マハゼ: the colour morphs (the first is the standard colour the albedo map is baked in) */
-  morphs?: { name: string; base: V3; dors: V3; belly: V3; melK: number; melAdd: number; xanK: number; iriK: number; finTint: V3 }[];
+  morphs?: { name: string; base: V3; dors: V3; belly: V3; melK: number; melAdd: number; xanK: number; iriK: number; finTint: V3; finMelK: number }[];
   bellyRamp?: [number, number];
   /** the far tier's mean iridophores and xanthophores */
   far?: { iri: number; xan: number };
@@ -272,9 +274,19 @@ vec3 gbSkinT(vec3 pig) {
   return exp(-pig.r * vec3(3.4, 3.8, 4.3)) * exp(-pig.b * vec3(0.02, 0.12, 0.5)) * (1.0 - 0.45 * pig.g);
 }
 #ifdef GB_PACKED
-// the distance tiers' packed maps (tools/lib/gobyLod.mjs): the albedo map holds the standard colour without the melanin
-// (alpha: the xanthophores, on the far tier the melanin), the pigment map the melanin of every pattern (rgb) and the
-// iridophores (alpha). The individual's pattern picks its melanin; its colour morph scales the pigments as the bake does.
+// the packed maps (tools/lib/gobyLod.mjs): the albedo map holds the standard colour without the melanin (alpha: the
+// xanthophores, on the far tier the melanin), the pigment map the melanin of every pattern (rgb) and the iridophores
+// (alpha). The distance tiers store the melanin as the darkening it gives, exp(-mel · melRGB.g), sRGB-encoded (the
+// pigment map is an sRGB texture: decoded before it is filtered, so the filter averages darkening; the far tier's alpha
+// is decoded here), and gbMel takes the density back out. The observed fish's maps (GB_MEL_DENSITY) store the density,
+// and its albedo averages the darkening over four finer taps (gbDark4). The individual's pattern picks its melanin; its
+// colour morph scales the pigments as the bake does.
+#ifdef GB_MEL_DENSITY
+float gbMel(float m) { return m; }
+#else
+float gbMel(float dark) { return clamp(-log(max(dark, 0.002)) / uGbMelRGB.y, 0.0, 1.0); }
+#endif
+float gbSrgb(float c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
 float gbHn(vec3 p) {
   GbSec q = gbSection(clamp(p.x, 0.05, uGbFrame.w - 0.05));
   float dy = p.y - q.yc;
@@ -283,9 +295,9 @@ float gbHn(vec3 p) {
 // raw densities (melanin, iridophores, xanthophores) from the albedo map's and the pigment map's texels
 vec3 gbRawPig(vec4 A, vec4 B) {
 #ifdef GB_LOW
-  return vec3(A.a, uGbFarPig.x, uGbFarPig.y);
+  return vec3(gbMel(gbSrgb(A.a)), uGbFarPig.x, uGbFarPig.y);
 #else
-  return vec3(dot(B.rgb, uGbPatSel), B.a, A.a);
+  return vec3(gbMel(dot(B.rgb, uGbPatSel)), B.a, A.a);
 #endif
 }
 // … in the individual's colour morph (more melanophores and a dusky layer over the back, other yellows and silvers)
@@ -298,6 +310,19 @@ vec3 gbMorphPig(vec3 raw, float hn) {
   return raw;
 #endif
 }
+#ifdef GB_MEL_DENSITY
+// the albedo's darkening by the individual's melanin, averaged over four taps one mip finer: a texture filter averages
+// the density, but the albedo averaged the darkening when the melanin was baked into it
+vec3 gbDark4(vec2 uv, vec2 gdx, vec2 gdy, float hn) {
+  vec3 d = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    vec2 o = vec2(i == 1 || i == 3 ? 0.25 : -0.25, i >= 2 ? 0.25 : -0.25);
+    float m = dot(textureGrad(uGbPigment, uv + gdx * o.x + gdy * o.y, gdx * 0.5, gdy * 0.5).rgb, uGbPatSel);
+    d += exp(-gbMorphPig(vec3(m, 0.0, 0.0), hn).x * uGbMelRGB);
+  }
+  return d * 0.25;
+}
+#endif
 vec3 gbPigAt(vec3 p, vec2 uv, float lod) {
 #ifdef GB_LOW
   vec4 B = vec4(0.0);
@@ -427,11 +452,12 @@ float gbAlpha = 1.0;
   // chromatophores where the light leaves the body and where it enters it (seam-free derivatives at the ventral wrap)
   vec2 uvA = GB_UV, uvB = vec2(GB_UV.x, fract(GB_UV.y + 0.5));
   vec2 dxA = dFdx(uvA), dyA = dFdy(uvA), dxB = dFdx(uvB), dyB = dFdy(uvB);
+  vec2 gbDx = dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, gbDy = dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB;
 #ifdef GB_PACKED
 #ifdef GB_LOW
   vec4 gbB = vec4(0.0);
 #else
-  vec4 gbB = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB);
+  vec4 gbB = textureGrad(uGbPigment, GB_UV, gbDx, gbDy);
 #endif
   vec3 gbRaw = gbRawPig(sampledDiffuseColor, gbB);
   float hnS = clamp(hn, -1.2, 1.2);
@@ -441,9 +467,13 @@ float gbAlpha = 1.0;
   diffuseColor.rgb *= gbTissue(uGbMorphC[0], uGbMorphC[1], uGbMorphC[2], hnS, pig.b, pig.g)
                     / max(gbTissue(uGbStdC[0], uGbStdC[1], uGbStdC[2], hnS, gbRaw.z, gbRaw.y), vec3(1e-3));
 #endif
-  diffuseColor.rgb *= exp(-pig.r * uGbMelRGB);
+#ifdef GB_MEL_DENSITY
+  diffuseColor.rgb *= gbDark4(GB_UV, gbDx, gbDy, hnS);
 #else
-  vec3 pig = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB).rgb;
+  diffuseColor.rgb *= exp(-pig.r * uGbMelRGB);
+#endif
+#else
+  vec3 pig = textureGrad(uGbPigment, GB_UV, gbDx, gbDy).rgb;
 #endif
   vec3 skinIn = gbSkinT(pig);
   vec3 skinOut = gbSkinT(gbPigAt(xE, gbFishUV(xE), 2.0));
@@ -592,14 +622,16 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbOrgK: { value: organs.map((o) => o.k) },
     ...GOBY_LIGHT,
   };
+  const lod = x.lod?.packing === 1 ? x.lod : null;
+  const density = lod?.melanin === 'density' && !low;
   if (x.pigmentTexture !== undefined && parser) {
     pigmentReady.set(m, (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {
-      t.colorSpace = NoColorSpace;
+      // (the distance tiers' melanin is an sRGB-encoded darkening, the observed fish's its density: see gbMel)
+      t.colorSpace = lod && !density ? SRGBColorSpace : NoColorSpace;
       uniforms.uGbPigment.value = t;
     }).catch(() => { /* keeps the unpigmented filter */ }));
   }
-  // the distance tiers' packed maps: the individual's pattern and colour morph (its variant, set on a derived material)
-  const lod = x.lod?.packing === 1 ? x.lod : null;
+  // the packed maps: the individual's pattern and colour morph (its variant, set on a derived material)
   const morph = !!lod?.morphs?.length;
   if (lod) {
     const i = (((ud as { gobyVariant?: number }).gobyVariant ?? 0) % lod.variants + lod.variants) % lod.variants;
@@ -623,7 +655,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
   m.thickness = 0;
   m.transparent = true;
   m.depthWrite = true;
-  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}), ...(lod ? { GB_PACKED: '' } : {}), ...(morph ? { GB_MORPH: '' } : {}) };
+  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}), ...(lod ? { GB_PACKED: '' } : {}), ...(morph ? { GB_MORPH: '' } : {}), ...(density ? { GB_MEL_DENSITY: '' } : {}) };
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -642,7 +674,7 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  const key = `goby-body-translucent${low ? '-low' : ''}${lod ? '-packed' : ''}${morph ? '-morph' : ''}-v4`;
+  const key = `goby-body-translucent${low ? '-low' : ''}${lod ? '-packed' : ''}${morph ? '-morph' : ''}${density ? '-density' : ''}-v4`;
   m.customProgramCacheKey = () => key;
   m.needsUpdate = true;
 }

@@ -27,7 +27,8 @@ void main() {
 const fragmentShader = /* glsl */ `
 ${commonGLSL}
 uniform mat4 modelMatrix;
-uniform sampler2D uIris;
+uniform sampler2D uIris;       // the fin atlas; the iris sits in its corner uIrisRect (x, y, width, height in UV)
+uniform vec4 uIrisRect;
 uniform float uEyeR;         // mm
 uniform float uPupil;        // rad
 uniform float uIrisA;        // rad
@@ -44,7 +45,7 @@ vec2 irisUV(vec3 p) {
   float th = acos(clamp(normalize(p).z, -1.0, 1.0));
   float ps = atan(p.y, p.x);
   float r = th / PI;
-  return vec2(0.5 + 0.5 * r * cos(ps), 0.5 - 0.5 * r * sin(ps));
+  return uIrisRect.xy + uIrisRect.zw * vec2(0.5 + 0.5 * r * cos(ps), 0.5 - 0.5 * r * sin(ps));
 }
 
 void main() {
@@ -112,6 +113,7 @@ export function createEyeMaterial({ irisTexture, params, shared }) {
     uniforms: {
       ...shared,
       uIris: { value: irisTexture },
+      uIrisRect: { value: new THREE.Vector4(...(params.irisRect ?? [0, 0, 1, 1])) },
       uEyeR: { value: params.radiusMM },
       uPupil: { value: params.pupilAngle },
       uIrisA: { value: params.irisAngle },

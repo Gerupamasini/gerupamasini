@@ -9,7 +9,11 @@ import { generateIndividual } from '../../src/creatures/Individual';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const sp = SpeciesSchema.parse(JSON.parse(readFileSync(root + 'public/data/species/acanthogobius_flavimanus.json', 'utf8')));
 
-function glbJson(rel: string): { extensions?: { KHR_materials_variants?: { variants: { name: string }[] } }; nodes: { extras?: Record<string, unknown> }[]; meshes: { name: string; primitives: { extensions?: Record<string, unknown> }[] }[] } {
+interface Lod { variants: number; colours: number; patternChannels: number; melanin?: string; morphs?: { name: string }[] }
+function glbJson(rel: string): {
+  extensions?: Record<string, unknown>; extensionsUsed?: string[]; nodes: { extras?: Record<string, unknown> }[];
+  materials: { extras?: { mahaze?: { role: string; lod?: Lod; pigmentTexture?: number; snoutCap?: unknown; relief?: number; pigment?: number } } }[];
+} {
   const buf = readFileSync(root + 'src/assets/models/' + rel);
   expect(buf.readUInt32LE(0)).toBe(0x46546c67);
   const len = buf.readUInt32LE(12);
@@ -36,19 +40,30 @@ describe('マハゼの成長段階ごとのモデル', () => {
     expect(modelFor(sp, 'nonsense')).toBe(sp.model);
   });
 
-  it('the hero GLBs carry nine variants (three patterns × three colour morphs) on the body and fins, tagged with their growth stage', () => {
+  it('the hero GLBs carry nine variants (three patterns × three colour morphs) in packed maps, tagged with their growth stage', () => {
     for (const [stage, variant] of [['juvenile', 'juvenile'], ['young', 'subadult'], ['adult', 'adult']] as const) {
       const m = modelFor(sp, stage);
       for (const key of ['hero', 'lod1', 'lod2'] as const) expect(existsSync(root + 'src/assets/models/' + m[key]!), `${stage} ${key}`).toBe(true);
       const j = glbJson(m.hero!);
-      expect(j.extensions?.KHR_materials_variants?.variants.map((v) => v.name)).toEqual(
-        [1, 2, 3].flatMap((p) => ['standard', 'amber', 'dark'].map((c) => `pattern${p}_${c}`)),
-      );
+      // one body material for all nine (no glTF material variants): the patterns are channels of its pigment map,
+      // the colour morphs a table the game rebuilds them from
+      expect(j.extensionsUsed ?? []).not.toContain('KHR_materials_variants');
+      const bodies = j.materials.filter((mm) => mm.extras?.mahaze?.role === 'body');
+      expect(bodies.length).toBe(1);
+      const x = bodies[0].extras!.mahaze!;
+      // (the observed fish keeps the melanin as its density, the distance tiers as its darkening: tools/lib/gobyLod.mjs)
+      expect(x.lod).toMatchObject({ variants: 9, colours: 3, patternChannels: 3, melanin: 'density' });
+      expect(x.lod!.morphs!.map((c) => c.name)).toEqual(['standard', 'amber', 'dark']);
+      expect(x.pigmentTexture).toBeDefined();
+      expect(x.snoutCap).toBeDefined();
+      const fins = j.materials.filter((mm) => mm.extras?.mahaze?.role === 'fin');
+      expect(fins.length).toBe(1);
+      expect(fins[0].extras!.mahaze).toMatchObject({ relief: expect.any(Number), pigment: expect.any(Number) });
       const fish = j.nodes.find((n) => n.extras?.totalLength_mm);
       expect(fish?.extras?.variant).toBe(variant);
-      for (const name of ['Body', 'Fin_Caudal', 'Fin_Pectoral_L']) {
-        const mesh = j.meshes.find((mm) => mm.name === name)!;
-        expect(mesh.primitives[0].extensions?.KHR_materials_variants, name).toBeDefined();
+      for (const key of ['lod1', 'lod2'] as const) {
+        const lod = glbJson(m[key]!).materials.find((mm) => mm.extras?.mahaze?.role === 'body')!.extras!.mahaze!.lod;
+        expect(lod, `${stage} ${key}`).toMatchObject({ variants: 9, colours: 3, melanin: 'darkening' });
       }
     }
   });
