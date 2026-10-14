@@ -5,7 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
-import { gobyLook, gobyLookReady, isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
 import { morphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
@@ -107,6 +107,8 @@ function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): Promise<v
   }
   const sm = m as MeshStandardMaterial;
   sm.envMapIntensity = 0.8;
+  // the gobies' far fins and eyes: the eyes keep their colour under a look's fin tint
+  if (sm.isMeshStandardMaterial && isMergedGobyFins(m)) keepGobyEyeColour(sm);
   // the gobies' bodies: translucent tissue in every tier (the observed hero swaps in its volumetric material)
   return pm.isMeshPhysicalMaterial && isGobyBody(m) ? makeTranslucentBody(pm, tier, parser) : Promise.resolve();
 }

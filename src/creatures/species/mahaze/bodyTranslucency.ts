@@ -62,6 +62,8 @@ interface ShippedAnatomy {
  */
 export interface GobyChannels {
   mapAlpha?: 'ao' | 'melanin' | 'xanthophores'; aoStrength?: number; pigmentAlpha?: 'roughness';
+  /** the far level with only the melanophores: its mean iridophores and xanthophores */
+  pigmentFill?: [number, number];
   pigment?: 'melanin3+iridophores'; normal?: 'xy+ao+roughness';
 }
 export interface GobyBodyExtras {
@@ -620,7 +622,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbOrgC: { value: organs.map((o) => new Vector4(o.c.x, o.c.y, o.c.z, o.s)) },
     uGbOrgR: { value: organs.map((o) => o.r) },
     uGbOrgK: { value: organs.map((o) => o.k) },
-    uGbPigFill: { value: new Vector2(0.25, 0.3) },
+    uGbPigFill: { value: new Vector2(...(x.channels?.pigmentFill ?? [0.25, 0.3])) },
     uGbAoStrength: { value: x.channels?.aoStrength ?? 0.85 },
     ...(x.morphs ? morphUniforms(x.morphs, x.morph) : {}),
     ...GOBY_LIGHT,
@@ -671,6 +673,39 @@ vGbRest = position;
   return pigment;
 }
 
+const EYES_KEEP_COLOUR = /* glsl */ `
+#include <map_fragment>
+// the eyes share the merged fins' material: their texels (the iris in the atlas' corner) keep their own colour, not
+// the colour morph's fin tint
+if (all(greaterThanEqual(vMapUv, uGbIris.xy)) && all(lessThanEqual(vMapUv, uGbIris.xy + uGbIris.zw))) diffuseColor.rgb = sampledDiffuseColor.rgb;
+`;
+
+/** Is this the far level's one mesh of the fins and the eyes (its material carries the iris rectangle)? */
+export function isMergedGobyFins(m: Material): boolean {
+  const x = (m.userData as { mahaze?: { role?: string; merged?: boolean; irisRect?: number[] } }).mahaze;
+  return x?.role === 'fin' && !!x.merged && x.irisRect?.length === 4;
+}
+
+/**
+ * The far level's merged fins and eyes (tools/lib/gobyBuild.mjs): the eyes keep their colour when a look tints the
+ * fins (gobyLook). Every copy of the material, the asset's own too, gets it, so they share one program. Idempotent.
+ */
+export function keepGobyEyeColour(m: MeshStandardMaterial): void {
+  const ud = m.userData as { [PREPARED]?: boolean; mahaze: { irisRect: number[] } };
+  if (ud[PREPARED]) return;
+  ud[PREPARED] = true;
+  const rect = ud.mahaze.irisRect;
+  const uGbIris = { value: new Vector4(rect[0], rect[1], rect[2], rect[3]) };
+  m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+    shader.uniforms.uGbIris = uGbIris;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec4 uGbIris;')
+      .replace('#include <map_fragment>', EYES_KEEP_COLOUR);
+  };
+  m.customProgramCacheKey = () => 'goby-fins-merged-eyes-v1';
+  m.needsUpdate = true;
+}
+
 /** the looks made of each asset material (shared by every fish that wears one), and when each is ready */
 const looks = new WeakMap<Material, Map<string, Material>>();
 const lookReady = new WeakMap<Material, Promise<void>>();
@@ -680,8 +715,8 @@ const lookReady = new WeakMap<Material, Promise<void>>();
  * made once per material and look and shared, that differs only in its uniforms (the body: its pattern's melanophores
  * and its colour morph) or its colour (the fins: the morph's tint, and its melanophore factor for the hero). Maps and
  * shader program are the asset's own. The first pattern in the standard colour is the asset's material itself, as is
- * any material that is neither (the eyes; on the far level they share the fins' material and take their tint, a few
- * pixels across). `prepare` readies a new copy as the loader readies the asset's own materials.
+ * any material that is neither (the eyes; on the far level they share the fins' material, and their texels there
+ * keep their colour: keepGobyEyeColour). `prepare` readies a new copy as the loader readies the asset's own materials.
  */
 export function gobyLook(base: Material, morphs: MorphTable, pick: MorphPick, prepare: (m: Material) => Promise<void>): Material {
   const x = (base.userData as { mahaze?: { role?: string } } | undefined)?.mahaze;

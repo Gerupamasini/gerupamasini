@@ -1,13 +1,13 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { MeshPhysicalMaterial, ShaderLib } from 'three';
-import { anatomyFor, gobyLook, gobyLookReady, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
+import { MeshPhysicalMaterial, MeshStandardMaterial, ShaderLib } from 'three';
+import { anatomyFor, gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
 import { morphPick } from '../../src/creatures/species/mahaze/colourMorph.js';
 
 // The gobies' bodies are translucent on the flat and in the tank, not only in the observation's hero material.
 const root = fileURLToPath(new URL('../../', import.meta.url));
-/** the body material of a GLB (only its JSON chunk is read: the hero files are 40 MB) */
+/** the body material of a GLB (only its JSON chunk is read: the hero files are 13–20 MB) */
 function body(rel: string): { name: string; extras: GobyBodyExtras } {
   const fd = openSync(root + 'src/assets/models/' + rel, 'r');
   try {
@@ -23,6 +23,20 @@ function body(rel: string): { name: string; extras: GobyBodyExtras } {
   }
 }
 const bodyExtras = (rel: string) => body(rel).extras;
+/** the fin material's extras of a GLB (JSON chunk only) */
+function finExtras(rel: string): Record<string, unknown> {
+  const fd = openSync(root + 'src/assets/models/' + rel, 'r');
+  try {
+    const head = new Uint8Array(20);
+    readSync(fd, head, 0, 20, 0);
+    const json = new Uint8Array(new DataView(head.buffer).getUint32(12, true));
+    readSync(fd, json, 0, json.length, 20);
+    const j = JSON.parse(new TextDecoder().decode(json)) as { materials: { extras?: { mahaze?: Record<string, unknown> } }[] };
+    return j.materials.find((mm) => mm.extras?.mahaze?.role === 'fin')!.extras!.mahaze!;
+  } finally {
+    closeSync(fd);
+  }
+}
 const GOBIES = [
   'mahaze/mahaze_juvenile', 'mahaze/mahaze_subadult', 'mahaze/mahaze_adult', 'edohaze/edohaze', 'edohaze/edohaze_gravid',
   'himehaze/himehaze', 'himehaze/himehaze_male',
@@ -109,7 +123,7 @@ describe('the goby body material', GLB_READS, () => {
     expect(m.depthWrite).toBe(true);
     expect(m.defines).toMatchObject({ STANDARD: '', PHYSICAL: '', USE_UV: '' });
     expect(m.defines?.GB_LOW).toBeUndefined();
-    // idempotent: the cached material is prepared again on every variant swap
+    // idempotent: every mesh that shares a material prepares it
     const before = m.onBeforeCompile;
     makeTranslucentBody(m, 'lod1');
     expect(m.onBeforeCompile).toBe(before);
@@ -234,7 +248,7 @@ describe('the マハゼ\'s looks: one body and one fin material per file, a copy
     expect(v8.defines).toMatchObject({ GB_LOW: '', GB_MORPH: '' });
   });
 
-  it('the fins take the colour morph\'s tint and melanophore factor, shared by the patterns; eyes and plain species keep theirs', () => {
+  it('the fins take the colour morph\'s tint and melanophore factor, shared by the patterns; the eyes keep theirs', () => {
     const morphs = bodyExtras('mahaze/mahaze_adult.lod1.glb').morphs!;
     const fin = new MeshPhysicalMaterial();
     fin.name = 'Mahaze_Fin';
@@ -248,5 +262,55 @@ describe('the マハゼ\'s looks: one body and one fin material per file, a copy
     const eye = new MeshPhysicalMaterial();
     eye.userData.mahaze = { role: 'eye' };
     expect(gobyLook(eye, morphs, morphPick(morphs, 4), () => Promise.resolve())).toBe(eye);
+  });
+
+  it('the far level\'s merged fins and eyes: the eyes keep their colour under a look\'s fin tint, in one program', () => {
+    const morphs = bodyExtras('mahaze/mahaze_adult.lod2.glb').morphs!;
+    for (const rel of ['mahaze/mahaze_adult.lod2.glb', 'himehaze/himehaze.lod2.glb', 'edohaze/edohaze.lod2.glb']) {
+      const fin = new MeshStandardMaterial();
+      fin.userData.mahaze = finExtras(rel);
+      expect(isMergedGobyFins(fin), rel).toBe(true);
+    }
+    const near = new MeshStandardMaterial();
+    near.userData.mahaze = finExtras('mahaze/mahaze_adult.lod1.glb');
+    expect(isMergedGobyFins(near)).toBe(false);
+    const base = new MeshStandardMaterial();
+    base.name = 'Mahaze_Fins';
+    base.userData.mahaze = finExtras('mahaze/mahaze_adult.lod2.glb');
+    const prepare = (m: unknown) => { keepGobyEyeColour(m as MeshStandardMaterial); return Promise.resolve(); };
+    void prepare(base);
+    const dark = gobyLook(base, morphs, morphPick(morphs, 2), prepare) as MeshStandardMaterial;
+    expect(dark).not.toBe(base);
+    expect(dark.color.toArray()).toEqual(morphs.colors[2].fin.tint);
+    expect(dark.customProgramCacheKey()).toBe(base.customProgramCacheKey());
+    const shader = { uniforms: {}, vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader } as unknown as Parameters<NonNullable<typeof dark.onBeforeCompile>>[0];
+    dark.onBeforeCompile(shader, null as never);
+    expect(shader.fragmentShader).toContain('diffuseColor.rgb = sampledDiffuseColor.rgb;');
+    const rect = (shader.uniforms as unknown as { uGbIris: { value: { toArray(): number[] } } }).uGbIris.value.toArray();
+    expect(rect).toEqual((finExtras('mahaze/mahaze_adult.lod2.glb').irisRect as number[]));
+  });
+});
+
+describe('the far level of the one-look gobies filters the light by its own mean pigments', GLB_READS, () => {
+  it('each file carries its iridophores and xanthophores; the shader takes them', () => {
+    const fills: number[][] = [];
+    for (const g of ['edohaze/edohaze', 'edohaze/edohaze_gravid', 'himehaze/himehaze', 'himehaze/himehaze_male']) {
+      const x = bodyExtras(`${g}.lod2.glb`);
+      const f = x.channels!.pigmentFill!;
+      expect(f.length, g).toBe(2);
+      for (const v of f) expect(v, g).toBeGreaterThan(0.1);
+      for (const v of f) expect(v, g).toBeLessThan(0.4);
+      fills.push(f);
+      const m = new MeshPhysicalMaterial();
+      m.userData.mahaze = x;
+      void makeTranslucentBody(m, 'lod2');
+      const shader = { uniforms: {}, vertexShader: ShaderLib.physical.vertexShader, fragmentShader: ShaderLib.physical.fragmentShader } as unknown as Parameters<NonNullable<typeof m.onBeforeCompile>>[0];
+      m.onBeforeCompile(shader, null as never);
+      const u = (shader.uniforms as unknown as { uGbPigFill: { value: { x: number; y: number } } }).uGbPigFill.value;
+      expect([u.x, u.y], g).toEqual(f);
+    }
+    // the species differ (the ヒメハゼ is paler in both)
+    expect(fills[2][0]).toBeLessThan(fills[0][0]);
+    expect(fills[2][1]).toBeLessThan(fills[0][1]);
   });
 });

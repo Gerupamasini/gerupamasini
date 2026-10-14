@@ -79,7 +79,9 @@ describe('goby models within the budget', { timeout: 60_000 }, () => {
         expect(role(j, 'fin').length, rel).toBe(1);
         expect(body.morphs !== undefined, rel).toBe(morphs);
         if (rel.endsWith('.lod2.glb')) {
-          expect(body.channels, rel).toEqual(LAYOUT[id].far);
+          expect(body.channels, rel).toMatchObject(LAYOUT[id].far);
+          // (one look: the far level's mean iridophores and xanthophores stand in for the pigment map it does not carry)
+          if (!morphs) expect((body.channels as { pigmentFill?: number[] }).pigmentFill?.length, rel).toBe(2);
           expect(typeof body.pigmentTexture, rel).toBe(morphs ? 'number' : 'undefined');
           expect(j.meshes.map((m) => m.name).sort(), rel).toEqual(['Body', 'Fins']);
           expect(role(j, 'fin')[0].alphaMode, rel).toBe('MASK');

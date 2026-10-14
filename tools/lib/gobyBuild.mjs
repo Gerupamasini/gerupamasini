@@ -84,7 +84,7 @@ export function buildGobyTier(o) {
     NS: tier.NS, NV: tier.NV, NSb: tier.NSb, NVb: tier.NVb, texW: tier.texW, texH: tier.texH, cap: tier.cap, log,
     ...(M ? { patterns: M.table.patterns.map((_, i) => i + 1), colors: M.validate ? M.table.colors.map((_, i) => i + 1) : [] } : {}),
   });
-  const { tAlb, tNrm, tPig, tCapAlb, tCapPig, capRect } = M ? bodyMorphMaps(body.patternTextures) : bodyMaps(body.textures);
+  const { tAlb, tNrm, tPig, tCapAlb, tCapPig, capRect, pigmentFill } = M ? bodyMorphMaps(body.patternTextures) : bodyMaps(body.textures);
   if (M?.validate) validateMorphs(body.patternTextures, M.table, M.rebuild, log);
 
   /** One fish per file: its colour, normal and pigment maps (+ the snout cap's two on the hero). */
@@ -99,8 +99,12 @@ export function buildGobyTier(o) {
     const nT = W * H;
     const r = {};
     if (far) {
-      // body colour with the melanophores in its alpha: the far level's translucency filters by them (no pigment map)
+      // body colour with the melanophores in its alpha: the far level's translucency filters by them (no pigment map),
+      // and by the mean iridophores and xanthophores, as the near levels' pigment map holds them
       r.tAlb = gb.addTexture(image(gb, 'body_basecolor_melanin', W, H, 4, withAlpha(albedo, pigment, 3, 0, nT), 'png'), sBody, 'body_basecolor_melanin');
+      let si = 0, sx = 0;
+      for (let i = 0; i < nT; i++) { si += pigment[i * 3 + 1]; sx += pigment[i * 3 + 2]; }
+      r.pigmentFill = [+(si / nT / 255).toFixed(3), +(sx / nT / 255).toFixed(3)];
     } else {
       // body colour with the ambient occlusion in its alpha; pigment (melanophores, iridophores, xanthophores) with the
       // roughness in its alpha: the near levels' four maps hold what the ORM map held
@@ -183,7 +187,7 @@ export function buildGobyTier(o) {
         // what the maps' free channels hold (bodyTranslucency.ts, hero/BodyMaterial.js)
         channels: M
           ? (far ? { mapAlpha: 'xanthophores', pigment: 'melanin3+iridophores' } : { mapAlpha: 'xanthophores', normal: 'xy+ao+roughness', aoStrength: 0.85, pigment: 'melanin3+iridophores' })
-          : far ? { mapAlpha: 'melanin' } : { mapAlpha: 'ao', aoStrength: 0.85, pigmentAlpha: 'roughness' },
+          : far ? { mapAlpha: 'melanin', pigmentFill } : { mapAlpha: 'ao', aoStrength: 0.85, pigmentAlpha: 'roughness' },
         ...(far && !M ? {} : { pigmentTexture: tPig }),
         // the patterns and colour morphs the individuals wear (the game picks one per fish: src/creatures/models)
         ...(M ? { morphs: M.table } : {}),
@@ -319,7 +323,8 @@ export function buildGobyTier(o) {
       alphaCutoff: 0.5,
       doubleSided: true,
       extensions: { KHR_materials_ior: { ior: 1.36 } },
-      extras: { mahaze: { role: 'fin', merged: true, ...finMorph } },
+      // (irisRect: the eyes' texels, which keep their colour under a colour morph's fin tint: bodyTranslucency.ts)
+      extras: { mahaze: { role: 'fin', merged: true, irisRect: atlas.irisRect, ...finMorph } },
     });
     const parts = [];
     const pec = { Fin_Pectoral_L: 'J_pecL', Fin_Pectoral_R: 'J_pecR' };
