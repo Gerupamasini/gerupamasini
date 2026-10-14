@@ -26,13 +26,23 @@ interface GltfJson {
   skins: { joints: number[] }[];
   nodes: { name?: string }[];
 }
+/** a master's JSON chunk (only that is read: the hero files are 13–20 MB) */
 const master = (rel: string): GltfJson => {
-  const b = fs.readFileSync(new URL(`../../src/assets/models/${rel}`, import.meta.url).pathname);
-  return JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString('utf8')) as GltfJson;
+  const fd = fs.openSync(new URL(`../../src/assets/models/${rel}`, import.meta.url).pathname, 'r');
+  try {
+    const head = new Uint8Array(20);
+    fs.readSync(fd, head, 0, 20, 0);
+    const json = new Uint8Array(new DataView(head.buffer).getUint32(12, true));
+    fs.readSync(fd, json, 0, json.length, 20);
+    return JSON.parse(new TextDecoder().decode(json)) as GltfJson;
+  } finally {
+    fs.closeSync(fd);
+  }
 };
 const role = (j: GltfJson, r: string) => j.materials.filter((m) => m.extras?.mahaze?.role === r);
 
-describe('goby models within the budget', () => {
+// (measures 21 packed files, the hero ones 13 MB: generous time for a cold disk)
+describe('goby models within the budget', { timeout: 60_000 }, () => {
   for (const id of GOBIES) {
     const sp = species(id);
     const rows = checkSpecies(sp) as Row[];

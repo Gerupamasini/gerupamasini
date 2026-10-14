@@ -5,8 +5,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
-import { isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
-import { morphPick, type MorphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
+import { gobyLook, gobyLookReady, isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { morphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -111,53 +111,14 @@ function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): Promise<v
   return pm.isMeshPhysicalMaterial && isGobyBody(m) ? makeTranslucentBody(pm, tier, parser) : Promise.resolve();
 }
 
-interface MorphExtras { role?: string; morphs?: MorphTable; morph?: MorphPick; tint?: number[]; melK?: number }
-const extrasOf = (m: Material) => (m.userData as { mahaze?: MorphExtras }).mahaze;
-
 /** The looks a loaded asset's individuals wear (the マハゼ's patterns × colour morphs, body extras `morphs`), if any. */
 function morphsOf(gltf: GLTF): MorphTable | null {
   let t: MorphTable | null = null;
   gltf.scene.traverse((o) => {
     const m = (o as Mesh).material;
-    if (!t && m && !Array.isArray(m)) t = extrasOf(m)?.morphs ?? null;
+    if (!t && m && !Array.isArray(m)) t = (m.userData as { mahaze?: { morphs?: MorphTable } }).mahaze?.morphs ?? null;
   });
   return t;
-}
-
-/** one asset's materials per look: shared by every fish that wears it (maps and programs shared with the asset's own) */
-const looks = new WeakMap<GLTF, Map<string, Material>>();
-/** … and when each is ready (its pigment map in its uniforms) */
-const lookReady = new WeakMap<Material, Promise<void>>();
-
-/**
- * The asset's body or fin material in one look: a copy with the look's uniforms (the body: pattern and colour morph,
- * ../species/mahaze/colourMorph.js) or tint (the fins: the morph tints them and scales their melanophores). The first
- * pattern in the standard colour is the asset's own material.
- */
-function lookMaterial(gltf: GLTF, tier: Tier, base: Material, morphs: MorphTable, pick: MorphPick): Material {
-  const x = extrasOf(base);
-  if ((x?.role !== 'body' && x?.role !== 'fin') || (pick.pattern === 0 && pick.color === 0)) return base;
-  if (x.role === 'fin' && pick.color === 0) return base;
-  let byAsset = looks.get(gltf);
-  if (!byAsset) looks.set(gltf, (byAsset = new Map()));
-  const key = `${base.uuid}:${x.role === 'fin' ? 0 : pick.pattern}:${pick.color}`;
-  let m = byAsset.get(key);
-  if (!m) {
-    // (a copy carries the maps, the flags and a deep copy of the extras; the translucent tissue is worked in again)
-    m = base.clone();
-    const mx = extrasOf(m)!;
-    if (x.role === 'body') mx.morph = pick;
-    else {
-      const fin = morphs.colors[pick.color].fin;
-      (m as MeshStandardMaterial).color.setRGB(fin.tint[0], fin.tint[1], fin.tint[2]);
-      mx.tint = fin.tint;
-      mx.melK = fin.melK;
-    }
-    m.name = `${base.name}_${x.role === 'body' ? `p${pick.pattern + 1}_` : ''}${morphs.colors[pick.color].name}`;
-    lookReady.set(m, prepareMaterial(m, tier, gltf.parser));
-    byAsset.set(key, m);
-  }
-  return m;
 }
 
 /**
@@ -178,11 +139,11 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
     if ((o as Mesh).isMesh) {
       const mesh = o as Mesh;
       meshes.push(mesh);
-      if (morphs && pick && !Array.isArray(mesh.material)) mesh.material = lookMaterial(gltf, tier, mesh.material, morphs, pick);
+      if (morphs && pick && !Array.isArray(mesh.material)) mesh.material = gobyLook(mesh.material, morphs, pick, (m) => prepareMaterial(m, tier, gltf.parser));
     }
   });
   // (the look's pattern is in its pigment map: not drawn before that is in its uniforms)
-  await Promise.all(meshes.map((mesh) => lookReady.get(mesh.material as Material)));
+  await Promise.all(meshes.map((mesh) => gobyLookReady(mesh.material as Material)));
   for (const mesh of meshes) {
     // keep the species extras on the mesh so drivers still find them after a material swap
     const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;

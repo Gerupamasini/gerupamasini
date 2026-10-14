@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SpeciesSchema } from '../../src/data/schemas/species';
 import { modelFor, variantOf } from '../../src/creatures/models/choice';
@@ -18,11 +18,20 @@ interface Glb {
   materials: { extras?: { mahaze?: { role?: string; morphs?: MorphTable; channels?: Record<string, unknown>; tint?: number[] } } }[];
   meshes: { name: string; primitives: { extensions?: Record<string, unknown> }[] }[];
 }
+/** a GLB's JSON chunk (only that is read: the hero files are 20 MB) */
 function glbJson(rel: string): Glb {
-  const buf = readFileSync(root + 'src/assets/models/' + rel);
-  expect(buf.readUInt32LE(0)).toBe(0x46546c67);
-  const len = buf.readUInt32LE(12);
-  return JSON.parse(buf.subarray(20, 20 + len).toString('utf8'));
+  const fd = openSync(root + 'src/assets/models/' + rel, 'r');
+  try {
+    const head = new Uint8Array(20);
+    readSync(fd, head, 0, 20, 0);
+    const v = new DataView(head.buffer);
+    expect(v.getUint32(0, true)).toBe(0x46546c67);
+    const json = new Uint8Array(v.getUint32(12, true));
+    readSync(fd, json, 0, json.length, 20);
+    return JSON.parse(new TextDecoder().decode(json)) as Glb;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 describe('マハゼの成長段階ごとのモデル', () => {

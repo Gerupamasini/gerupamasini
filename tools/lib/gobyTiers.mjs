@@ -24,7 +24,7 @@ export function downsample2(w, h, ch, data) {
  * Soften channels `chans` of an interleaved `ch`-channel w × h image by a [1 2 1] / 4 kernel, wrapping round the body
  * in v and clamped along it in u (in place). The distance tiers' melanophores: single-texel speckle is below what those
  * tiers show (they are drawn from the smaller mipmaps), and three channels of it do not survive the block compression
- * (tools/models/pack: PSNR ≥ 30 dB). As the packed maps of the earlier distance tiers did (tools/lib/gobyLod.mjs).
+ * (tools/models/pack: PSNR ≥ 30 dB). As the distance tiers' first packed maps did (PR #84).
  */
 export function softenChannels(data, w, h, ch, chans) {
   const tmp = new Float32Array(w * h);

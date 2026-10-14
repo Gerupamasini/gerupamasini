@@ -2,7 +2,8 @@ import { closeSync, openSync, readSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MeshPhysicalMaterial, ShaderLib } from 'three';
-import { anatomyFor, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
+import { anatomyFor, gobyLook, gobyLookReady, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
+import { morphPick } from '../../src/creatures/species/mahaze/colourMorph.js';
 
 // The gobies' bodies are translucent on the flat and in the tank, not only in the observation's hero material.
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -164,5 +165,88 @@ describe('the goby body material', GLB_READS, () => {
     // the large organs first (gut, peritoneum, liver): the far tier loops over only those
     const big = (compile(far).uniforms as unknown as { uGbOrgK: { value: { x: number }[] } }).uGbOrgK.value.slice(0, 3).map((k) => k.x).sort();
     expect(big).toEqual([1.0, 1.3, 3.8]);
+  });
+});
+
+describe('the マハゼ\'s looks: one body and one fin material per file, a copy per pattern and colour', GLB_READS, () => {
+  const material = (rel: string) => {
+    const m = new MeshPhysicalMaterial();
+    const b = body(rel);
+    m.name = b.name;
+    m.userData.mahaze = b.extras;
+    return m;
+  };
+  const uniforms = (m: MeshPhysicalMaterial) => {
+    const shader = { uniforms: {}, vertexShader: ShaderLib.physical.vertexShader, fragmentShader: ShaderLib.physical.fragmentShader } as unknown as Parameters<NonNullable<typeof m.onBeforeCompile>>[0];
+    m.onBeforeCompile(shader, null as never);
+    return { u: shader.uniforms as Record<string, { value: { x: number; y: number; z: number; w?: number; toArray(): number[] } }>, fs: shader.fragmentShader };
+  };
+
+  it('every level of the マハゼ carries the nine looks as a table; the other gobies none', () => {
+    for (const stage of ['juvenile', 'subadult', 'adult'])
+      for (const tier of ['hero', 'lod1', 'lod2']) {
+        const x = bodyExtras(`mahaze/mahaze_${stage}.${tier}.glb`);
+        expect(x.morphs!.colors.map((c) => c.name), `${stage} ${tier}`).toEqual(['standard', 'amber', 'dark']);
+        // the standard colour is the one the ground map is baked in: its factors change nothing
+        expect(x.morphs!.colors[0], `${stage} ${tier}`).toMatchObject({ melK: 1, melAdd: 0, xanK: 1, iriK: 1 });
+        // every level holds the three patterns' melanophores (the far one too: a fish keeps its pattern as it nears)
+        expect(x.channels?.pigment, `${stage} ${tier}`).toBe('melanin3+iridophores');
+        expect(x.pigmentTexture, `${stage} ${tier}`).toBeDefined();
+      }
+    for (const g of ['edohaze/edohaze', 'edohaze/edohaze_gravid', 'himehaze/himehaze', 'himehaze/himehaze_male'])
+      for (const tier of ['hero', 'lod1', 'lod2']) expect(bodyExtras(`${g}.${tier}.glb`).morphs, `${g} ${tier}`).toBeUndefined();
+  });
+
+  it('a look gets its own copy of the material, with its pattern\'s melanophores and its colour morph', async () => {
+    const base = material('mahaze/mahaze_adult.lod1.glb');
+    const morphs = (base.userData.mahaze as GobyBodyExtras).morphs!;
+    const prepare = (m: unknown) => makeTranslucentBody(m as MeshPhysicalMaterial, 'lod1');
+    await prepare(base);
+    expect(base.defines).toMatchObject({ GB_MORPH: '', GB_NRM_PACKED: '' });
+    expect(gobyLook(base, morphs, morphPick(morphs, 0), prepare)).toBe(base);
+    expect(gobyLook(base, morphs, morphPick(morphs, 9), prepare)).toBe(base);
+    // look 5: pattern 2 in the dark morph
+    const v5 = gobyLook(base, morphs, morphPick(morphs, 5), prepare) as MeshPhysicalMaterial;
+    expect(v5).not.toBe(base);
+    expect(gobyLook(base, morphs, morphPick(morphs, 14), prepare)).toBe(v5);
+    expect(gobyLook(base, morphs, morphPick(morphs, -4), prepare)).toBe(v5);
+    await gobyLookReady(v5);
+    expect(v5.customProgramCacheKey()).toBe(base.customProgramCacheKey());
+    expect(v5.name).toBe('Mahaze_Body_p2_dark');
+    const { u, fs } = uniforms(v5);
+    expect(u.uGbMorphPattern.value.toArray()).toEqual([0, 1, 0]);
+    expect(u.uGbMorphK.value.x).toBeCloseTo(1.35);
+    expect(fs).toContain('vec3 gbMorphPig(');
+    expect(uniforms(base).u.uGbMorphK.value.x).toBe(1);
+    // the asset's own material keeps its look
+    expect((base.userData.mahaze as GobyBodyExtras).morph).toBeUndefined();
+  });
+
+  it('the far level keeps every pattern and every colour', () => {
+    const base = material('mahaze/mahaze_juvenile.lod2.glb');
+    const morphs = (base.userData.mahaze as GobyBodyExtras).morphs!;
+    const prepare = (m: unknown) => makeTranslucentBody(m as MeshPhysicalMaterial, 'lod2');
+    void prepare(base);
+    const v8 = gobyLook(base, morphs, morphPick(morphs, 8), prepare) as MeshPhysicalMaterial;
+    const { u } = uniforms(v8);
+    expect(u.uGbMorphPattern.value.toArray()).toEqual([0, 0, 1]);
+    expect(u.uGbMorphK.value.x).toBeCloseTo(1.35);
+    expect(v8.defines).toMatchObject({ GB_LOW: '', GB_MORPH: '' });
+  });
+
+  it('the fins take the colour morph\'s tint and melanophore factor, shared by the patterns; eyes and plain species keep theirs', () => {
+    const morphs = bodyExtras('mahaze/mahaze_adult.lod1.glb').morphs!;
+    const fin = new MeshPhysicalMaterial();
+    fin.name = 'Mahaze_Fin';
+    fin.userData.mahaze = { role: 'fin', tint: [1, 1, 1], melK: 1 };
+    const amber = gobyLook(fin, morphs, morphPick(morphs, 4), () => Promise.resolve()) as MeshPhysicalMaterial;
+    expect(amber.color.toArray()).toEqual(morphs.colors[1].fin.tint);
+    expect((amber.userData.mahaze as { melK: number }).melK).toBe(morphs.colors[1].fin.melK);
+    // the same tint for every pattern: one copy
+    expect(gobyLook(fin, morphs, morphPick(morphs, 1), () => Promise.resolve())).toBe(amber);
+    expect(gobyLook(fin, morphs, morphPick(morphs, 3), () => Promise.resolve())).toBe(fin);
+    const eye = new MeshPhysicalMaterial();
+    eye.userData.mahaze = { role: 'eye' };
+    expect(gobyLook(eye, morphs, morphPick(morphs, 4), () => Promise.resolve())).toBe(eye);
   });
 });

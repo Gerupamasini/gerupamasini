@@ -1,4 +1,4 @@
-import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
+import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type MeshStandardMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
 import type { GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { createProfileTexture } from './hero/BodyMaterial.js';
 import { morphGLSL, morphUniforms, type MorphPick, type MorphTable } from './colourMorph.js';
@@ -669,4 +669,47 @@ vGbRest = position;
   m.customProgramCacheKey = () => key;
   m.needsUpdate = true;
   return pigment;
+}
+
+/** the looks made of each asset material (shared by every fish that wears one), and when each is ready */
+const looks = new WeakMap<Material, Map<string, Material>>();
+const lookReady = new WeakMap<Material, Promise<void>>();
+
+/**
+ * A goby asset's body or fin material in one look (the マハゼ's patterns × colour morphs, ./colourMorph.js): a copy,
+ * made once per material and look and shared, that differs only in its uniforms (the body: its pattern's melanophores
+ * and its colour morph) or its colour (the fins: the morph's tint, and its melanophore factor for the hero). Maps and
+ * shader program are the asset's own. The first pattern in the standard colour is the asset's material itself, as is
+ * any material that is neither (the eyes; on the far level they share the fins' material and take their tint, a few
+ * pixels across). `prepare` readies a new copy as the loader readies the asset's own materials.
+ */
+export function gobyLook(base: Material, morphs: MorphTable, pick: MorphPick, prepare: (m: Material) => Promise<void>): Material {
+  const x = (base.userData as { mahaze?: { role?: string } } | undefined)?.mahaze;
+  const body = x?.role === 'body', fin = x?.role === 'fin';
+  if ((!body && !fin) || pick.color === 0 && (fin || pick.pattern === 0)) return base;
+  let byLook = looks.get(base);
+  if (!byLook) looks.set(base, (byLook = new Map()));
+  const key = `${body ? pick.pattern : 0}:${pick.color}`;
+  let m = byLook.get(key);
+  if (!m) {
+    // (a copy carries the maps, the flags and a deep copy of the extras; the translucent tissue is worked in again)
+    m = base.clone();
+    const mx = (m.userData as { mahaze: GobyBodyExtras & { tint?: number[]; melK?: number } }).mahaze;
+    const colour = morphs.colors[pick.color];
+    if (body) mx.morph = pick;
+    else {
+      (m as MeshStandardMaterial).color.setRGB(colour.fin.tint[0], colour.fin.tint[1], colour.fin.tint[2]);
+      mx.tint = colour.fin.tint;
+      mx.melK = colour.fin.melK;
+    }
+    m.name = `${base.name}_${body ? `p${pick.pattern + 1}_` : ''}${colour.name}`;
+    lookReady.set(m, prepare(m));
+    byLook.set(key, m);
+  }
+  return m;
+}
+
+/** Resolves once a look's material is ready to draw (a goby body's pigment map is in its uniforms). */
+export function gobyLookReady(m: Material): Promise<void> {
+  return lookReady.get(m) ?? Promise.resolve();
 }
