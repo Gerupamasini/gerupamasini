@@ -10,7 +10,11 @@ import { createInteriorMaterial } from './InteriorMaterial.js';
 interface MahazeMatExtras {
   role: string;
   pigmentTexture?: number;
-  snoutCap?: { albedoRoughness: number; pigment: number; rectMM: { y0: number; y1: number; z0: number; z1: number } };
+  /** body: occlusion + roughness, fin: relief, where the GLB keeps them out of the standard material (エドハゼ) */
+  ormTexture?: number;
+  normalTexture?: number;
+  /** tile: where the cap's two maps sit in their (shared) textures, x, y, w, h in UV; absent = the whole texture */
+  snoutCap?: { albedoRoughness: number; pigment: number; rectMM: { y0: number; y1: number; z0: number; z1: number }; tile?: [number, number, number, number] };
   profile?: { n: number; data: number[] };
   fishFrame?: { S0: number; Y0: number; SL: number; SEND: number };
   vertebrae?: { start: number; count: number };
@@ -54,11 +58,13 @@ export class HeroInstance {
     const bx = roleOf(body)!;
     const orig = body.material as unknown as { map: Texture; normalMap: Texture; roughnessMap?: Texture; aoMap?: Texture };
     const pigment = await tex(bx.pigmentTexture, NoColorSpace);
+    const orm = orig.roughnessMap ?? orig.aoMap ?? (await tex(bx.ormTexture, NoColorSpace));
     const capAlbedo = await tex(bx.snoutCap?.albedoRoughness, SRGBColorSpace);
     const capPigment = await tex(bx.snoutCap?.pigment, NoColorSpace);
     const bodyMat = createBodyMaterial({
-      textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap ?? orig.aoMap, pigment, capAlbedo, capPigment },
+      textures: { albedo: orig.map, normal: orig.normalMap, orm, pigment, capAlbedo, capPigment },
       capRect: bx.snoutCap!.rectMM,
+      capTile: bx.snoutCap!.tile,
       profileTexture: createProfileTexture(bx.profile),
       frame: bx.fishFrame,
       vertebrae: bx.vertebrae,
@@ -74,7 +80,8 @@ export class HeroInstance {
     const finOrig = finMeshes[0].material as unknown as { map: Texture; normalMap: Texture; userData: { mahaze: MahazeMatExtras } };
     const finData = await tex(finOrig.userData.mahaze.dataTexture, NoColorSpace);
     const fx = finOrig.userData.mahaze;
-    const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared, tint: fx.tint, melK: fx.melK }) as { transmit: Material; scatter: Material };
+    const finNormal = finOrig.normalMap ?? (await tex(fx.normalTexture, NoColorSpace));
+    const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finNormal }, shared, tint: fx.tint, melK: fx.melK }) as { transmit: Material; scatter: Material };
     inst.created.push(bodyMat, eyeMat, interiorMat as unknown as Material, finMats.transmit, finMats.scatter);
     for (const f of finMeshes) {
       const scatter = new SkinnedMesh(f.geometry, finMats.scatter);

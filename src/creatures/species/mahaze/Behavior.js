@@ -22,7 +22,7 @@
 //    propped up on the pectorals with the head raised (the tail then touches the sand)
 //  * yawn: slow gape with raised head and erect fins, a short hold, snap shut, opercular flush
 import * as THREE from 'three';
-import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM, REST_FOLD } from './pose.js';
+import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM, REST_FOLD, PERCH_FOLDS } from './pose.js';
 import { bedPlane, bedTilt, fitBed } from '../../physics/bed';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -336,9 +336,9 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     const flick = Math.sin(Math.min(st.flick, 1) * Math.PI);
     st.d1 = damp(st.d1, st.d1Goal, 10, dt);
     p.foldD1 = clamp(st.d1 * (1 - sw) + 0.12 * sw - 0.6 * flick, 0, 1);
-    p.foldD2 = clamp(0.3 * (1 - sw) + 0.05 * sw - 0.3 * flick, 0, 1);
-    p.foldAnal = clamp(0.85 * (1 - sw) + 0.1 * sw, 0, 1);
-    p.foldCaudal = clamp(0.45 * (1 - sw), 0, 1);
+    p.foldD2 = clamp(PERCH_FOLDS.d2 * (1 - sw) + 0.05 * sw - 0.3 * flick, 0, 1);
+    p.foldAnal = clamp(PERCH_FOLDS.anal * (1 - sw) + 0.1 * sw, 0, 1);
+    p.foldCaudal = clamp(PERCH_FOLDS.caudal * (1 - sw), 0, 1);
     p.foldPelvic = 0.6 * sw * (1 - br);
     // passive trailing flex of the caudal and median fins lags the lateral tail velocity
     // (turning: the fins trail the angular velocity of their body segment)

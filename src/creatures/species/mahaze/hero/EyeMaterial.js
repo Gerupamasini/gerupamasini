@@ -28,6 +28,8 @@ const fragmentShader = /* glsl */ `
 ${commonGLSL}
 uniform mat4 modelMatrix;
 uniform sampler2D uIris;
+uniform vec4 uIrisTile;      // the iris map's rectangle in its texture (x, y, w, h; a corner of the fin atlas)
+uniform float uIrisRMax;     // share of the polar angle (of π) the map spans
 uniform float uEyeR;         // mm
 uniform float uPupil;        // rad
 uniform float uIrisA;        // rad
@@ -43,8 +45,8 @@ varying vec2 vUv;
 vec2 irisUV(vec3 p) {
   float th = acos(clamp(normalize(p).z, -1.0, 1.0));
   float ps = atan(p.y, p.x);
-  float r = th / PI;
-  return vec2(0.5 + 0.5 * r * cos(ps), 0.5 - 0.5 * r * sin(ps));
+  float r = min(th / (PI * uIrisRMax), 1.0);
+  return uIrisTile.xy + vec2(0.5 + 0.5 * r * cos(ps), 0.5 - 0.5 * r * sin(ps)) * uIrisTile.zw;
 }
 
 void main() {
@@ -112,6 +114,9 @@ export function createEyeMaterial({ irisTexture, params, shared }) {
     uniforms: {
       ...shared,
       uIris: { value: irisTexture },
+      // (the mesh's own UVs already point into the tile; these place the refracted iris lookup)
+      uIrisTile: { value: new THREE.Vector4(...(params.irisTile ?? [0, 0, 1, 1])) },
+      uIrisRMax: { value: params.irisRMax ?? 1 },
       uEyeR: { value: params.radiusMM },
       uPupil: { value: params.pupilAngle },
       uIrisA: { value: params.irisAngle },

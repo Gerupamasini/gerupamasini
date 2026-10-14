@@ -98,51 +98,51 @@
   },
   "edohaze/edohaze_gravid.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "508f09e61ede62f0d27ce5c46b3e2e413f862493f699d23318fdd6cef5985b38",
-   "masterBytes": 18949708,
-   "bytes": 15686268,
-   "images": 11,
+   "master": "2a6a6f5421a0acf41530b9ccd08b2b5635deaab3cfdfb3037647c47c65cd8eaa",
+   "masterBytes": 12625192,
+   "bytes": 13208240,
+   "images": 7,
    "minPsnr": 46.83
   },
   "edohaze/edohaze_gravid.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "9ae3a085943f026e044655d00b2a963da53a7ccc25a2c290b9e20da3ae7713d1",
-   "masterBytes": 7038152,
-   "bytes": 8047876,
-   "images": 11,
-   "minPsnr": 45.08
+   "master": "ed2116c3ab2e6990564dcaac8aee108796f3f303633a104fed1f7010ab68b008",
+   "masterBytes": 2121200,
+   "bytes": 2106888,
+   "images": 4,
+   "minPsnr": 44.01
   },
   "edohaze/edohaze_gravid.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "ed1281a51668884e1e2ab33513ab4ee5e0170425f182244689fea4f7128214bc",
-   "masterBytes": 4451008,
-   "bytes": 6111688,
-   "images": 11,
-   "minPsnr": 44.52
+   "master": "9dcf039360d07ed71fc3f08064267e4667824bec97886baf14a092eaf7407ad3",
+   "masterBytes": 254256,
+   "bytes": 170000,
+   "images": 2,
+   "minPsnr": 38.95
   },
   "edohaze/edohaze.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "f819ea0b5e866b5ee9ae393887409d0f45106ed4bdc0a9b2a5e4714b6cc11887",
-   "masterBytes": 18914900,
-   "bytes": 15660888,
-   "images": 11,
+   "master": "2344bd1b9dff9c97881adaabcf770dda3beddbef4186aa9497b9a39955b93a75",
+   "masterBytes": 12598580,
+   "bytes": 13177492,
+   "images": 7,
    "minPsnr": 46.93
   },
   "edohaze/edohaze.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "88c6ea1db9f600477dd6dd12b18be788160d0b0497acf948a2b862a157ee5b27",
-   "masterBytes": 7034380,
-   "bytes": 8042764,
-   "images": 11,
-   "minPsnr": 45.06
+   "master": "da456b1cd3214e91eb1d95a92e3fb540afa7a79ac35fc4cf32e9f789a7d2b202",
+   "masterBytes": 2121180,
+   "bytes": 2106408,
+   "images": 4,
+   "minPsnr": 44
   },
   "edohaze/edohaze.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "7afa47957709e13dc235f5ea268e512c3f0495dc4a39c4111037080af014c827",
-   "masterBytes": 4448424,
-   "bytes": 6107488,
-   "images": 11,
-   "minPsnr": 44.55
+   "master": "118ee69bd405f5e5b014b563a626184bcf596bb62eb030a978bd08b36df46ffc",
+   "masterBytes": 254260,
+   "bytes": 169848,
+   "images": 2,
+   "minPsnr": 38.95
   },
   "himehaze/himehaze_male.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",

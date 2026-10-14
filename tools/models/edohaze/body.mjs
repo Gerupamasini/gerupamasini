@@ -1,8 +1,9 @@
 // Body mesh + baked surface textures for the juvenile goby.
 import {
   S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S, MAXILLA_END,
-  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY,
+  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY, FEAT, EYE_FILLED, EYE_BALL_R,
 } from './anatomy.mjs';
+import { irisColor } from './eye.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
 
 const TAU = Math.PI * 2;
@@ -148,7 +149,16 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
+/**
+ * The body: render mesh (NS sections × NV columns) and its textures, baked on a regular NSb × NVb grid at texW × texH.
+ * The normal map carries the sculpted surface's own normals (and its fine relief) in the tangent frames of this mesh,
+ * so a coarse tier shades like the detailed one. `capSize` is the snout cap's map (0: none; the light tiers do not
+ * use it). With anatomy's EYE_FILLED (the far tier) the eyes are painted on the body.
+ */
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, capSize, log = () => {} } = {}) {
+  // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
+  log('  render mesh …');
+  const mesh = buildWarpedMesh(NS, NV, log);
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -187,12 +197,48 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
     for (let j = jt - 1; j >= 0; j--) QD[i * colsB + j] = QD[i * colsB + j + 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j + 1)));
   }
   log('  baking body textures …');
-  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log });
-
-  // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
-  log('  render mesh …');
-  const mesh = buildWarpedMesh(NS, NV, log);
+  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, capSize, frame: meshFrame(mesh, texW, texH), log });
   return { ...mesh, textures: T };
+}
+
+/**
+ * The render mesh's interpolated normal and tangent frame (fish space) at every texel centre: its triangles
+ * rasterised in UV space. Texels no triangle covers keep NaN (their normal map stays the plain relief).
+ */
+function meshFrame(mesh, texW, texH) {
+  const nT = texW * texH;
+  const F = { n: new Float32Array(nT * 3).fill(NaN), t: new Float32Array(nT * 4) };
+  const { uv, indices } = mesh;
+  // object → fish directions (X = z, Y = y, Z = −s)
+  const nF = (k) => [-mesh.normal[k * 3 + 2], mesh.normal[k * 3 + 1], mesh.normal[k * 3]];
+  const tF = (k) => [-mesh.tangent[k * 4 + 2], mesh.tangent[k * 4 + 1], mesh.tangent[k * 4]];
+  for (let f = 0; f < indices.length; f += 3) {
+    const ia = indices[f], ib = indices[f + 1], ic = indices[f + 2];
+    const ax = uv[ia * 2] * texW - 0.5, ay = uv[ia * 2 + 1] * texH - 0.5;
+    const bx = uv[ib * 2] * texW - 0.5, by = uv[ib * 2 + 1] * texH - 0.5;
+    const cx = uv[ic * 2] * texW - 0.5, cy = uv[ic * 2 + 1] * texH - 0.5;
+    const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    if (Math.abs(area) < 1e-12) continue;
+    const x0 = Math.max(0, Math.ceil(Math.min(ax, bx, cx) - 1e-6)), x1 = Math.min(texW - 1, Math.floor(Math.max(ax, bx, cx) + 1e-6));
+    const y0 = Math.max(0, Math.ceil(Math.min(ay, by, cy) - 1e-6)), y1 = Math.min(texH - 1, Math.floor(Math.max(ay, by, cy) + 1e-6));
+    if (x1 < x0 || y1 < y0) continue;
+    const na = nF(ia), nb = nF(ib), nc = nF(ic), ta = tF(ia), tb = tF(ib), tc = tF(ic);
+    const w = mesh.tangent[ia * 4 + 3];
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const l1 = ((bx - x) * (cy - y) - (by - y) * (cx - x)) / area;
+        const l2 = ((cx - x) * (ay - y) - (cy - y) * (ax - x)) / area;
+        const l3 = 1 - l1 - l2;
+        if (l1 < -1e-4 || l2 < -1e-4 || l3 < -1e-4) continue;
+        const t = y * texW + x;
+        for (let c = 0; c < 3; c++) {
+          F.n[t * 3 + c] = l1 * na[c] + l2 * nb[c] + l3 * nc[c];
+          F.t[t * 4 + c] = l1 * ta[c] + l2 * tb[c] + l3 * tc[c];
+        }
+        F.t[t * 4 + 3] = w;
+      }
+  }
+  return F;
 }
 
 // base-loft surface z on the +z side at height y
@@ -406,11 +452,34 @@ function buildWarpedMesh(NS, NV, log) {
   };
 }
 
+/**
+ * The far tier's painted eyes: the colour of the eyeball (iris, pupil) where a body point lies on the ball that
+ * fills the corneal window (anatomy EYE_FILLED), else null. Same frame as eye.mjs (Z the optical axis, Y up).
+ */
+function eyePainter() {
+  const R = EYE_BALL_R;
+  return (s, y, z) => {
+    if (s > 6.5) return null;
+    const side = z >= 0 ? 1 : -1;
+    const e = FEAT.eyes[side > 0 ? 0 : 1];
+    const v = [s - e.c[0], y - e.c[1], z - e.c[2]];
+    const r = Math.hypot(...v);
+    if (r > R + 0.03) return null;
+    const Z = [EYE.axis[0], EYE.axis[1], EYE.axis[2] * side];
+    const ct = dot(v, Z) / Math.max(r, 1e-9);
+    const theta = Math.acos(clamp(ct, -1, 1));
+    if (theta > EYE.aperture + 0.12) return null;
+    const Y = nrm(sub([0, 1, 0], Z.map((c) => c * Z[1])));
+    const X = cross(Y, Z);
+    return irisColor(theta, Math.atan2(dot(v, Y), dot(v, X)));
+  };
+}
+
 // =============================================================================
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, capSize, frame, log } = ctx;
   const nT = texW * texH;
   // per-texel interpolated attributes
   const A = {
@@ -1163,6 +1232,30 @@ function bakeBodyTextures(ctx) {
     c = clamp(c, 0, 1);
     return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
   };
+  // the relief normal (tangent space of the sculpted surface: T along +u, B = cross(N, T)·w toward −v, as the mesh
+  // builds its tangents) re-expressed in the render mesh's interpolated frame at this texel
+  const toMeshFrame = (t, x, y, ym, yp, xm, xp, mx, my, mz) => {
+    const Nh = [A.nx[t], A.ny[t], A.nz[t]];
+    const at = (i) => [A.px[i], A.py[i], A.pz[i]];
+    const du = sub(at(y * texW + xp), at(y * texW + xm)), dv = sub(at(yp * texW + x), at(ym * texW + x));
+    let Th = sub(du, Nh.map((c) => c * dot(Nh, du)));
+    if (Math.hypot(...Th) < 1e-9) return [mx, my, mz];
+    Th = nrm(Th);
+    const wh = dot(cross(Nh, Th), dv) <= 0 ? 1 : -1;
+    const Bh = cross(Nh, Th).map((c) => c * wh);
+    const o = [0, 1, 2].map((c) => mx * Th[c] + my * Bh[c] + mz * Nh[c]);
+    const Nl = nrm([frame.n[t * 3], frame.n[t * 3 + 1], frame.n[t * 3 + 2]]);
+    let Tl = [frame.t[t * 4], frame.t[t * 4 + 1], frame.t[t * 4 + 2]];
+    Tl = sub(Tl, Nl.map((c) => c * dot(Nl, Tl)));
+    if (Math.hypot(...Tl) < 1e-9) return [mx, my, mz];
+    Tl = nrm(Tl);
+    const Bl = cross(Nl, Tl).map((c) => c * frame.t[t * 4 + 3]);
+    let r = [dot(o, Tl), dot(o, Bl), dot(o, Nl)];
+    // (a texel whose detailed normal faces away from the coarse face: lean it back toward the face)
+    if (r[2] < 0.15) r = nrm([r[0], r[1], 0.15]);
+    return nrm(r);
+  };
+  const eyePaint = EYE_FILLED ? eyePainter() : null;
   for (let y = 0; y < texH; y++) {
     const ym = (y - 1 + texH) % texH, yp = (y + 1) % texH;
     for (let x = 0; x < texW; x++) {
@@ -1175,6 +1268,10 @@ function bakeBodyTextures(ctx) {
       let nx = -gx, ny = -gyUp, nz = 1;
       const nl = Math.hypot(nx, ny, nz);
       nx /= nl; ny /= nl; nz /= nl;
+      // (the painted eye of the far tier is a smooth ball: no skin relief on it)
+      const eyeC = eyePaint && eyePaint(A.px[t], A.py[t], A.pz[t]);
+      if (eyeC) { nx = 0; ny = 0; nz = 1; }
+      if (frame && !Number.isNaN(frame.n[t * 3])) [nx, ny, nz] = toMeshFrame(t, x, y, ym, yp, xm, xp, nx, ny, nz);
       normalMap[t * 3] = Math.round((nx * 0.5 + 0.5) * 255);
       normalMap[t * 3 + 1] = Math.round((ny * 0.5 + 0.5) * 255);
       normalMap[t * 3 + 2] = Math.round((nz * 0.5 + 0.5) * 255);
@@ -1188,6 +1285,7 @@ function bakeBodyTextures(ctx) {
       const cavity = clamp(lap * 0.35, 0, 0.35) * (om < 1 ? 1 - Math.exp(-((om / 0.15) ** 2)) : 1);
 
       const C = shadeAt(s, yy, z, HN[t], HEAD[t], MEL[t], IRI[t], XAN[t], GILL[t], cavity, secs[x], om);
+      if (eyeC) { C.r = eyeC[0]; C.g = eyeC[1]; C.b = eyeC[2]; C.rough = 0.12; }
       const I = IRI[t], X = XAN[t];
       albedo[t * 3] = srgb(C.r); albedo[t * 3 + 1] = srgb(C.g); albedo[t * 3 + 2] = srgb(C.b);
       const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
@@ -1211,8 +1309,9 @@ function bakeBodyTextures(ctx) {
   // ---------------------------------------------------------------------------
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
+  const CAP = capSize ?? (texW >= 2048 ? 384 : 192);
+  if (!CAP) return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume, cap: null };
   log('    snout cap …');
-  const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.6, z0: -2.4, z1: 2.4 };
   const capAlb = new Uint8Array(CAP * CAP * 4);
   const capPig = new Uint8Array(CAP * CAP * 3);

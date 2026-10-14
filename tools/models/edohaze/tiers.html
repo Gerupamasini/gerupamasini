@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>goby tiers</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="view" width="1280" height="720"></canvas>
+<script type="module">
+// Renders a goby GLB tier through the game's own loader and materials (the field's translucent body for lod1 / lod2,
+// the volumetric hero materials and their pipeline for the hero), resting on a sand floor, for tools/models/edohaze/tiers.mjs.
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { configureModelLoader, instantiateModel } from '../../../src/creatures/models/ModelLoader.ts';
+import { HeroInstance } from '../../../src/creatures/species/mahaze/hero/applyHero.ts';
+import { HeroPipeline } from '../../../src/render/HeroPipeline.ts';
+import { computePose, defaultPose, configureBody } from '../../../src/creatures/species/mahaze/pose.js';
+
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+configureModelLoader(renderer);
+const pipeline = new HeroPipeline(renderer);
+const scene = new THREE.Scene();
+const water = new THREE.Color(0.05, 0.11, 0.12);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const sunDir = new THREE.Vector3(0.35, 1, 0.45).normalize();
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
+sun.position.copy(sunDir);
+scene.add(sun, new THREE.HemisphereLight(0xcfe3e6, 0x7a6a52, 0.9));
+const floorMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.42, 0.37, 0.29), roughness: 0.95 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), floorMat);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+const camera = new THREE.PerspectiveCamera(30, canvas.width / canvas.height, 0.0005, 10);
+pipeline.setLighting({ sunDir, sunColor: new THREE.Color(1, 0.96, 0.9), sunIntensity: 2.2, skyColor: new THREE.Color(0.55, 0.7, 0.72), groundColor: new THREE.Color(0.4, 0.35, 0.28), ambientIntensity: 0.9, fogColor: water, fogDensity: 0.0, floorY: 0, underwater: false });
+
+/**
+ * The resting pose (the driver's at rest), or the peak of a yawn: joint rotations / offsets and fin folds from the
+ * shared pose model.
+ */
+function restPose(model, yawn = false) {
+  let rigNode = null;
+  model.root.traverse((o) => { if (!rigNode && o.userData.mahazeRig) rigNode = o; });
+  const axes = rigNode.userData.mahazeRig.axes;
+  if (axes.body) configureBody(axes.body);
+  const p = defaultPose();
+  if (yawn) Object.assign(p, { jaw: 0.62, premax: 1, hyoid: 0.3, susp: 0.22, opercL: 0.3, opercR: 0.3, headPitch: p.headPitch + 0.09 });
+  const P = computePose(p, axes, axes.body ?? null);
+  for (const [name, q] of Object.entries(P.q)) model.bones[name]?.quaternion.set(q[0], q[1], q[2], q[3]);
+  for (const [name, off] of Object.entries(P.t)) { const b = model.bones[name]; if (b) b.position.add(new THREE.Vector3(...off)); }
+  for (const m of model.meshes) {
+    const w = P.morph[m.name];
+    if (w && m.morphTargetInfluences) for (let i = 0; i < w.length; i++) m.morphTargetInfluences[i] = w[i];
+  }
+}
+
+const VIEWS = {
+  side: { dir: [1, 0.22, 0], at: [0, 0, 0] },
+  front34: { dir: [0.8, 0.5, 0.9], at: [0, 0, 0] },
+  top: { dir: [0.05, 1, 0.02], at: [0, 0, 0] },
+  head: { dir: [0.9, 0.42, 0.55], at: [0, 0, 1] },
+  mouth: { dir: [0.55, 0.1, 1], at: [0, 0, 1.25] },
+  tail: { dir: [1, 0.3, -0.25], at: [0, 0, -0.95] },
+};
+
+let current = null;
+window.__tiers = {
+  /**
+   * One picture: rel (path under src/assets/models-packed), hero (volumetric materials), px (the fish's length on
+   * screen), view (VIEWS key), size [w, h], bg (the sand floor), yawn (mouth and gill covers open). Returns a PNG data
+   * URL and the renderer's counts.
+   */
+  async shot({ rel, hero = false, px = 600, view = 'side', size = [1280, 720], bg = true, yawn = false }) {
+    if (current) { current.hero?.dispose(); current.model.root.removeFromParent(); current = null; }
+    renderer.setSize(size[0], size[1], false);
+    camera.aspect = size[0] / size[1];
+    const model = await instantiateModel(rel);
+    model.root.updateMatrixWorld(true);
+    restPose(model, yawn);
+    scene.add(model.root);
+    model.root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model.root);
+    model.root.position.y -= box.min.y;
+    floor.visible = bg;
+    const inst = hero ? await HeroInstance.apply(model, pipeline.shared) : null;
+    current = { model, hero: inst };
+    model.root.updateMatrixWorld(true);
+    const b2 = new THREE.Box3().setFromObject(model.root);
+    const c = b2.getCenter(new THREE.Vector3());
+    const len = b2.max.z - b2.min.z;
+    const V = VIEWS[view];
+    const target = c.clone().add(new THREE.Vector3(0, 0, V.at[2] * len * 0.36));
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    // distance so that the fish's length spans px pixels across the frame (side on)
+    const d = (len * size[0]) / (px * 2 * Math.tan(fov / 2) * camera.aspect) * ({ head: 0.4, mouth: 0.22, tail: 0.4 }[view] ?? 1);
+    camera.position.copy(target).add(new THREE.Vector3(...V.dir).normalize().multiplyScalar(d));
+    camera.near = d / 50; camera.far = d * 20; camera.updateProjectionMatrix();
+    camera.lookAt(target);
+    scene.background = water;
+    if (inst) {
+      inst.update(camera, { mouth: yawn ? 1 : 0, gill: yawn ? 1 : 0 });
+      pipeline.render(scene, camera, 1 / 60);
+      pipeline.render(scene, camera, 1 / 60);
+    } else {
+      renderer.setRenderTarget(null);
+      renderer.render(scene, camera);
+      renderer.render(scene, camera);
+    }
+    const info = { tris: renderer.info.render.triangles, calls: renderer.info.render.calls, programs: renderer.info.programs.length };
+    return { png: canvas.toDataURL('image/png'), info };
+  },
+};
+window.__tiersReady = true;
+</script>
+</body>
+</html>

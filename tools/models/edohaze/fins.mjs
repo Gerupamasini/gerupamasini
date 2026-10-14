@@ -401,14 +401,18 @@ function foldedDef(def) {
   return def;
 }
 
+// columns of a fin grid: SUB per ray interval, or (SUB < 1, the far tier) one column every 1/SUB rays, the last ray kept
+const gridCols = (n, SUB) => Math.ceil((n - 1) * SUB - 1e-9) + 1;
+const colA = (i, n, SUB) => Math.min(i / SUB, n - 1);
+
 function gridPositions(def, SUB, NT, disp) {
   const n = def.rays.length;
-  const cols = (n - 1) * SUB + 1;
+  const cols = gridCols(n, SUB);
   const out = [];
   for (let j = 0; j <= NT; j++) {
     const t = j / NT;
     for (let i = 0; i < cols; i++) {
-      const a = i / SUB;
+      const a = colA(i, n, SUB);
       let p = finSurface(def, a, t);
       if (disp) p = add(p, disp(a, t, n));
       out.push(p);
@@ -445,7 +449,7 @@ export function buildFinTargets(def, SUB, NT, targetNames) {
 
 export function buildFinMesh(def, SUB = 6, NT = 36) {
   const n = def.rays.length;
-  const cols = (n - 1) * SUB + 1;
+  const cols = gridCols(n, SUB);
   const rows = NT + 1;
   const count = cols * rows;
   const position = new Float32Array(count * 3);
@@ -460,7 +464,7 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
   for (let j = 0; j < rows; j++) {
     const t = j / NT;
     for (let i = 0; i < cols; i++) {
-      const a = i / SUB;
+      const a = colA(i, n, SUB);
       const idx = j * cols + i;
       const p = finSurface(def, a, t);
       const pa = sub(finSurface(def, Math.min(a + e, n - 1), t), finSurface(def, Math.max(a - e, 0), t));

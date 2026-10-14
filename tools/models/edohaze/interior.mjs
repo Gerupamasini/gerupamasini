@@ -62,7 +62,8 @@ class Builder {
 // ---------------------------------------------------------------------------------------------
 // Buccal cavity
 
-export function buildMouth(mesh) {
+/** `teeth`: rings × sides of the outer (enlarged) and the villiform teeth's cones (the hero tier thins the tiny ones). */
+export function buildMouth(mesh, { teeth: teethRes = { outer: [4, 7], villi: [4, 7] } } = {}) {
   const V = mesh.verts;
   const B = new Builder();
   const edgeU = [...mesh.edges.gapeL.up, ...mesh.edges.gapeR.up.slice().reverse().slice(1)];
@@ -186,10 +187,9 @@ export function buildMouth(mesh) {
   // villiform teeth; both jaws are toothed back to just before the mouth corner
   const teeth = new Builder();
   const colBase = [0.86, 0.83, 0.74, 1], colTip = [0.93, 0.9, 0.82, 1];
-  const addTooth = (base, dir, len, rad, curl, zone) => {
+  const addTooth = (base, dir, len, rad, curl, zone, [NS, NA]) => {
     // curved cone: centre line bends from `dir` toward the back of the mouth (+s) and the midline
     const back = nrm([1, 0, -Math.sign(base[2]) * 0.35]);
-    const NS = 4, NA = 7;
     const centre = (u) => add(base, add(mul(dir, len * u), mul(back, len * curl * u * u)));
     const tangent = (u) => nrm(add(mul(dir, len), mul(back, 2 * len * curl * u)));
     const rings = [];
@@ -247,9 +247,9 @@ export function buildMouth(mesh) {
         if (row === 0) {
           // enlarged outer teeth; the lower jaw's front teeth are the largest (canine-like)
           const len = (upper ? 0.15 + 0.06 * front : 0.15 + 0.12 * front * front) * (0.85 + 0.3 * h);
-          addTooth(base, dir, len, 0.03 + 0.012 * front, 0.35, zone);
+          addTooth(base, dir, len, 0.03 + 0.012 * front, 0.35, zone, teethRes.outer);
         } else {
-          addTooth(base, dir, 0.05 + 0.03 * h, 0.012 + 0.003 * h, 0.2, zone);
+          addTooth(base, dir, 0.05 + 0.03 * h, 0.012 + 0.003 * h, 0.2, zone, teethRes.villi);
         }
       }
     };

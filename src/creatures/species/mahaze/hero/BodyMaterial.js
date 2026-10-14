@@ -67,6 +67,7 @@ uniform sampler2D uPigment;
 uniform sampler2D uCapAlbedo;   // snout cap: rgb albedo, a roughness (planar y/z projection)
 uniform sampler2D uCapPigment;
 uniform vec4 uCapRect;          // y0, y1, z0, z1 (mm)
+uniform vec4 uCapTile;          // the cap maps' rectangle in their textures (x, y, w, h; a corner of the fin atlases)
 uniform sampler2D uProfile;
 uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a, viewer) or depth texture (game)
 uniform sampler2D uBgDepth;     // depth of the opaque scene (game pipeline); uCamNearFar.x < 0 disables it
@@ -328,6 +329,8 @@ void main() {
   // snout cap: the loft UVs converge at the snout tip, so the front face is shaded from a planar map
   float capW = (1.0 - smoothstep(0.75, 1.55, pF.x)) * smoothstep(0.05, 0.45, -NgF.x);
   vec2 capUV = vec2((pF.z - uCapRect.z) / (uCapRect.w - uCapRect.z), (pF.y - uCapRect.x) / (uCapRect.y - uCapRect.x));
+  // (a tile of a shared atlas: kept off its neighbours)
+  if (uCapTile.z < 1.0) capUV = uCapTile.xy + clamp(capUV, 0.002, 0.998) * uCapTile.zw;
 
   vec3 Tw = normalize(vWorldTangent.xyz - Ng * dot(Ng, vWorldTangent.xyz));
   vec3 Bw = cross(Ng, Tw) * vWorldTangent.w;
@@ -516,7 +519,7 @@ void main() {
 }
 `;
 
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect }) {
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, capTile }) {
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
@@ -526,6 +529,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uCapAlbedo: { value: textures.capAlbedo },
     uCapPigment: { value: textures.capPigment },
     uCapRect: { value: new THREE.Vector4(capRect.y0, capRect.y1, capRect.z0, capRect.z1) },
+    uCapTile: { value: new THREE.Vector4(...(capTile ?? [0, 0, 1, 1])) },
     uProfile: { value: profileTexture },
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
     uJaws: { value: new THREE.Vector4(...(frame.jaws || [3.0, 4.6, 2.4, 3.2])) },

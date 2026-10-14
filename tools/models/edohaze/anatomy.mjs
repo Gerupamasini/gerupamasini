@@ -218,6 +218,12 @@ export const EYE = {
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
 // the skin covers the top of the eye (ref photos): no dorsal window
 export const EYE_DORSAL_OPEN = false;
+// the far tier (lod2) has no eyeball mesh: its body surface takes the ball in (the corneal window filled by the
+// eyeball sphere) and the body texture paints the eye on it (build.mjs --tier lod2)
+export let EYE_FILLED = false;
+export function setEyeFilled(on) { EYE_FILLED = !!on; }
+/** radius (mm) of the eyeball sphere that fills the window when EYE_FILLED (the mesh's cornea bulges ~7 % at the pole) */
+export const EYE_BALL_R = 0.95 * 1.03;
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
 const EYE_DORSAL_APERTURE = 50 * (Math.PI / 180);
 
@@ -447,6 +453,7 @@ export function field(s, y, z, eyeCut = true) {
   if (s > 1.8 && s < 5.2) d = smax(d, -ellipsoidDist(p, F.interorb, [1.15, 0.28, 0.3]), 0.2);
   if (s > 23.7 && s < 25.6) d = smax(d, -sphereDist(p, F.anus, 0.085), 0.05);
   if (s < 3.0) d = smax(d, -sphereDist(pm, F.nosB, 0.08), 0.05);
+  if (EYE_FILLED && eyeCut && s < 6.5) for (const e of F.eyes) d = Math.min(d, sphereDist(p, e.c, EYE_BALL_R));
   return d;
 }
 
@@ -504,7 +511,17 @@ function sinkEyeWindow(p) {
   const e = FEAT.eyes[p[2] >= 0 ? 0 : 1];
   const side = (ax) => (p[2] >= 0 ? ax : [ax[0], ax[1], -ax[2]]);
   p = sinkInto(p, e.cut, FEAT.rho, side(EYE.axis));
-  return EYE_DORSAL_OPEN ? sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS)) : p;
+  if (EYE_DORSAL_OPEN) p = sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS));
+  return EYE_FILLED ? liftOnto(p, e.c, EYE_BALL_R, side(EYE.axis)) : p;
+}
+/** A point inside the sphere (c, r) moves out along +a onto its surface (the filled eye: the ball over the socket). */
+function liftOnto(p, c, r, a) {
+  const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const qq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
+  if (qq >= r * r) return p;
+  const qa = q[0] * a[0] + q[1] * a[1] + q[2] * a[2];
+  const t = -qa + Math.sqrt(qa * qa - qq + r * r);
+  return [p[0] + a[0] * t, p[1] + a[1] * t, p[2] + a[2] * t];
 }
 function sinkInto(p, c, rho, a) {
   const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];

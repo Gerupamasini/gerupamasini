@@ -17,6 +17,9 @@ export const SPINE = [
 // Morph target order of every fin mesh
 // resting fin folds (0 = erect, 1 = folded); species may override (エドハゼ rests with erect dorsal fins)
 export const REST_FOLD = { d1: 0.55, d2: 0.3, anal: 0.85, caudal: 0.45 };
+/** median and caudal fin folds of a perched fish, as Behavior.js holds them (the far tier of a GLB goby bakes its rigid fins
+ * in these: tools/models/edohaze/build.mjs) */
+export const PERCH_FOLDS = { d2: 0.3, anal: 0.85, caudal: 0.45 };
 
 /** Switch the module defaults to another species' axial geometry (total length, joint positions in mm). */
 export function configureBody(body) {

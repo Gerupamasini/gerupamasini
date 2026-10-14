@@ -53,6 +53,9 @@ interface ShippedAnatomy {
 export interface GobyBodyExtras {
   role: string;
   pigmentTexture?: number;
+  /** no pigment map: the base colour map's alpha holds the melanin (with the other layers folded in) over the body;
+   * offset x, y and scale x, y from the loft's UV to the map's (a body in part of an atlas, the エドハゼ far tier) */
+  pigmentInMapAlpha?: [number, number, number, number];
   profile?: Profile;
   fishFrame?: Frame;
   vertebrae?: { start: number; count: number };
@@ -158,6 +161,7 @@ varying vec3 vGbWPos;
 varying mat3 vGbToWorld;
 uniform sampler2D uGbProfile;
 uniform sampler2D uGbPigment;
+uniform vec4 uGbPigRect;
 uniform vec4 uGbFrame;        // S0, Y0, SL, SEND (mm)
 uniform vec4 uGbJaws;         // dense lip and jaw tissue: s ramp (x → y), height ramp (z → w)
 uniform vec4 uGbColumn;       // vertebral column: first centrum, last (mm), radius scale, length of a vertebra (mm)
@@ -241,6 +245,14 @@ vec2 gbFishUV(vec3 p) {
   return vec2(clamp(p.x / uGbFrame.w, 0.0, 1.0), phi / (2.0 * PI));
 }
 // chromatophore filter of the skin (melanin, iridophores, xanthophores)
+// the chromatophore layers at a skin UV: their own map, or the melanin in the base colour map's alpha
+#ifdef GB_PIG_MAP_ALPHA
+  #define GB_PIG_GRAD(uv, dx, dy) vec3(textureGrad(map, uv, dx, dy).a, 0.0, 0.0)
+  #define GB_PIG_LOD(uv) vec3(textureLod(map, uGbPigRect.xy + (uv) * uGbPigRect.zw, 1.0).a, 0.0, 0.0)
+#else
+  #define GB_PIG_GRAD(uv, dx, dy) textureGrad(uGbPigment, uv, dx, dy).rgb
+  #define GB_PIG_LOD(uv) textureLod(uGbPigment, uv, 2.0).rgb
+#endif
 vec3 gbSkinT(vec3 pig) {
   return exp(-pig.r * vec3(3.4, 3.8, 4.3)) * exp(-pig.b * vec3(0.02, 0.12, 0.5)) * (1.0 - 0.45 * pig.g);
 }
@@ -307,7 +319,7 @@ vec3 gbThrough(vec3 LW, vec3 col, mat3 w2o, vec3 pIn, vec3 NgF, vec3 VW, vec3 sk
   float tF, sp, scL;
   vec3 orgL = gbOrgans(pIn, LF, dL, tF, sp, scL);
   tauL += (orgL + scL * 0.3) * (0.5 + uGbInterior);
-  vec3 skinL = gbSkinT(textureLod(uGbPigment, gbFishUV(pIn + LF * dL), 2.0).rgb);
+  vec3 skinL = gbSkinT(GB_PIG_LOD(gbFishUV(pIn + LF * dL)));
   float ph = mix(1.0, 4.0 * PI * gbHG(dot(-LW, -VW), 0.45), 0.55);
   return col * exp(-tauL) * skinIn * skinL * ph * backW * uGbBack;
 }
@@ -353,9 +365,9 @@ float gbAlpha = 1.0;
   // chromatophores where the light leaves the body and where it enters it (seam-free derivatives at the ventral wrap)
   vec2 uvA = GB_UV, uvB = vec2(GB_UV.x, fract(GB_UV.y + 0.5));
   vec2 dxA = dFdx(uvA), dyA = dFdy(uvA), dxB = dFdx(uvB), dyB = dFdy(uvB);
-  vec3 pig = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB).rgb;
+  vec3 pig = GB_PIG_GRAD(GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB);
   vec3 skinIn = gbSkinT(pig);
-  vec3 skinOut = gbSkinT(textureLod(uGbPigment, gbFishUV(xE), 2.0).rgb);
+  vec3 skinOut = gbSkinT(GB_PIG_LOD(gbFishUV(xE)));
   vec3 T = exp(-tau) * skinIn * skinOut;
   // the caudal blade thins to a film over the fin-ray bases
   float endFade = smoothstep(uGbFrame.w - 1.6, uGbFrame.w - 0.15, pF.x) * 0.92;
@@ -482,6 +494,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
   const uniforms = {
     uGbProfile: { value: createProfileTexture(prof) },
     uGbPigment: { value: noPigment() as Texture },
+    uGbPigRect: { value: new Vector4(...(x.pigmentInMapAlpha ?? [0, 0, 1, 1])) },
     uGbFrame: { value: new Vector4(f.S0, f.Y0, f.SL, f.SEND) },
     uGbJaws: { value: new Vector4(...an.jaws) },
     uGbColumn: { value: new Vector4(an.column[0], an.column[1], an.columnScale, (f.SL - an.column[0]) / (x.vertebrae?.count ?? 31)) },
@@ -506,7 +519,9 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
   m.thickness = 0;
   m.transparent = true;
   m.depthWrite = true;
-  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}) };
+  // (the melanin from the map's alpha only where the body has a map to read it from)
+  const pigAlpha = !!x.pigmentInMapAlpha && !!m.map;
+  m.defines = { ...(m.defines ?? {}), USE_UV: '', ...(low ? { GB_LOW: '' } : {}), ...(pigAlpha ? { GB_PIG_MAP_ALPHA: '' } : {}) };
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -525,6 +540,6 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v3' : 'goby-body-translucent-v3');
+  m.customProgramCacheKey = () => `${low ? 'goby-body-translucent-low-v3' : 'goby-body-translucent-v3'}${pigAlpha ? '-pigmap' : ''}`;
   m.needsUpdate = true;
 }
