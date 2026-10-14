@@ -36,8 +36,6 @@ export const S_HEAD = 0.31;
 
 /** model z (forward +Z) of a point at s, in TL units */
 export const zOf = (s: number): number => S_PIVOT - s;
-/** inverse of zOf */
-export const sOf = (z: number): number => S_PIVOT - z;
 
 type Table = readonly (readonly [number, number])[];
 

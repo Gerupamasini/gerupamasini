@@ -68,15 +68,6 @@ export function fbm1(t, seed = 0) {
   return 0.66 * noise1(t, seed) + 0.34 * noise1(t * 2.31 + 17.7, seed + 101);
 }
 
-/** 2D value noise in [-1, 1] (used at build time for shell damage, pattern seeds) */
-export function noise2(x, y, seed = 0) {
-  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
-  const h = (a, b) => hash1(a * 374761 + b * 668265 + seed * 9176) * 2 - 1;
-  const a = h(ix, iy), b = h(ix + 1, iy), c = h(ix, iy + 1), d = h(ix + 1, iy + 1);
-  return lerp(lerp(a, b, ux), lerp(c, d, ux), uy);
-}
-
 /**
  * Event scheduler for non-periodic micro-motions: each channel fires after a random (log-normal)
  * interval and produces a smooth 0→1→0 pulse with its own duration. Avoids any visible period.
@@ -116,29 +107,7 @@ export class Twitch {
   }
 }
 
-/** critically-damped-ish 1D spring (semi-implicit Euler) */
-export class Spring1 {
-  constructor(value = 0, stiffness = 120, damping = 18) {
-    this.x = value;
-    this.v = 0;
-    this.k = stiffness;
-    this.c = damping;
-  }
-  update(target, dt) {
-    const a = this.k * (target - this.x) - this.c * this.v;
-    this.v += a * dt;
-    this.x += this.v * dt;
-    return this.x;
-  }
-}
-
 const _qa = new THREE.Quaternion();
-/** rotate quaternion `q` toward `target` by at most `maxAngle` radians */
-export function rotateTowards(q, target, maxAngle) {
-  const ang = q.angleTo(target);
-  if (ang < 1e-6) return q.copy(target);
-  return q.slerp(_qa.copy(target), Math.min(1, maxAngle / ang));
-}
 
 /** axis-angle vector (rad) of the rotation taking qa to qb, expressed in world frame */
 export function rotationError(qa, qb, out) {

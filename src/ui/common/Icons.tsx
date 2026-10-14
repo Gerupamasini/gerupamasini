@@ -86,4 +86,3 @@ export function CapsuleIcon({ size = 20 }: { size?: number }) { return ico('M4 1
 export function ToolboxIcon({ size = 20 }: { size?: number }) { return ico('M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9Z M9 9V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V9 M3 13h18 M10 12v2 M14 12v2', size); }
 export function TankIcon({ size = 20 }: { size?: number }) { return ico('M3 7h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z M3 10c3 0 3 1.5 6 1.5s3-1.5 6-1.5 3 1.5 6 1.5 M8 15c1 0 1.5-.8 2.5-.8s1.5.8 2.5.8', size); }
 export function CalendarIcon({ size = 20 }: { size?: number }) { return ico('M4 6h16v14H4V6Z M4 10h16 M8 3v5 M16 3v5 M8 14h2 M12 14h2 M16 14h2', size); }
-export function MapPinIcon({ size = 20 }: { size?: number }) { return ico('M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', size); }

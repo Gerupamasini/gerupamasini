@@ -8,7 +8,6 @@ import type { Terrain } from '../../src/world/Terrain';
 import type { Input } from '../../src/core/Input';
 import type { Habitat } from '../../src/world/Habitat';
 import type { MapDef } from '../../src/data/schemas';
-import { MapSchema } from '../../src/data/schemas';
 import { FPSController } from '../../src/player/FPSController';
 
 const ground = { heightAt: (x: number, z: number) => 0.02 * x + 0.01 * z, n: 33, size: 64 };

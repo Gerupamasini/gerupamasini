@@ -32,7 +32,6 @@ export const SEGMENTS = ['Coxa', 'Basis', 'Ischium', 'Merus', 'Carpus', 'Propodu
 export const SIDES = [{ id: 'L', sign: 1 }, { id: 'R', sign: -1 }];
 
 const DEG = Math.PI / 180;
-const _m = new Matrix4();
 const _v = new Vector3();
 const _v2 = new Vector3();
 const _v3 = new Vector3();
@@ -563,8 +562,5 @@ export function createRigInstance() {
     legs, chelae, eyes,
   };
 }
-
-/** helpers for the order legs are listed in: index = side * 4 + (pereiopod - 2) */
-export const legIndex = (sideIdx, k) => sideIdx * 4 + k;
 
 export { DEG };

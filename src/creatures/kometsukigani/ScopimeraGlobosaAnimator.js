@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3, Euler } from 'three';
-import { CHELIPED, LEGS, STANCE } from './ScopimeraGlobosaMorphology.js';
+import { STANCE } from './ScopimeraGlobosaMorphology.js';
 import { CHELA_POSES, DEG } from './ScopimeraGlobosaRig.js';
-import { clamp, damp, dampAngle, fbm1, lerp, noise1, smooth01, smoothstep, Spring, wrapAngle } from './util.js';
+import { clamp, damp, fbm1, lerp, noise1, smooth01, smoothstep, Spring, wrapAngle } from './util.js';
 
 /**
  * Procedural motion of one crab: where the body is, how each leg steps, what the chelipeds, eyestalks and
@@ -369,7 +369,6 @@ export class CrabAnimator {
         this.clock = score[0] >= score[1] ? 0.995 : 0.495;
       }
     }
-    const fast = clamp((spG - 2.5) / 10, 0, 1);           // 0 walk … 1 sprint
     // stance fraction: ~0.72 walking, 0.5 running; stride grows with speed; frequency follows
     const duty = lerp(0.72, 0.5, smoothstep(2, 9, spG));
     // a stance can carry a foot ~0.35 CW between a cramped and a stretched leg (the hind legs are shortest);
@@ -643,7 +642,6 @@ export class CrabAnimator {
     for (let s = 0; s < 2; s++) {
       const c = this.chela[s];
       const cr = rig.chelae[s];
-      const side = c.side;
       const restPose = CHELA_POSES[this.cmd.chelaRest] ?? CHELA_POSES.fold;
       // micro-motion of the resting limb
       const j = this.p.jitter;

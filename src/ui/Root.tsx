@@ -1,5 +1,5 @@
 import { skillKeyOf } from '../systems/Encyclopedia';
-import { h, Fragment } from 'preact';
+import { Fragment } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { App } from '../app/App';
 import { ui, t } from './store';

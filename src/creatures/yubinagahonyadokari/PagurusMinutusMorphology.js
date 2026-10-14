@@ -277,4 +277,3 @@ export function individualMorph(sex = 'f', variation = 0) {
 
 /** SL in mm ↔ game length in mm */
 export const slFromLength = (length_mm) => length_mm / MORPH.totalLengthPerSL;
-export const lengthFromSL = (sl_mm) => sl_mm * MORPH.totalLengthPerSL;

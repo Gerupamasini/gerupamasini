@@ -18,7 +18,7 @@ export interface ShelfTool {
 /** where the rack stands in the home room: against the back wall, left of the tank, its base at table height */
 export const SHELF_POS = new Vector3(-1.55, 0.05, -1.1);
 /** one column per tool, the longest nets standing nearly two metres tall */
-const PITCH = 0.3, RACK_H = 2.05, RACK_D = 0.26, RAIL_Y = 0.6, BUTT = 0.09;
+const PITCH = 0.3, RACK_H = 2.05, RACK_D = 0.26, RAIL_Y = 0.6;
 
 /**
  * The tool rack: a tall pegboard with a low bench, the nets standing on it in a row (the hoops up, the bags draped

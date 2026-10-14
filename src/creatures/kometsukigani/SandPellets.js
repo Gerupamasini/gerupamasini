@@ -322,5 +322,3 @@ export class SandPellets {
     this.group.removeFromParent();
   }
 }
-
-export { CELL as PELLET_CELL };

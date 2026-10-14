@@ -1,6 +1,6 @@
-import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Matrix4, Vector3 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Matrix4, Vector3 } from 'three';
 import {
-  MODEL_SH, PSI_CANAL, PSI_COVER, PSI_PERIPHERY, SECTION_LEN, SHELL, THETA_APEX, growth, radialAt, sectionAt, shellPoint,
+  MODEL_SH, PSI_CANAL, PSI_COVER, PSI_PERIPHERY, SECTION_LEN, SHELL, THETA_APEX, growth, radialAt, shellPoint,
   tangentAt, thetaEnd,
 } from './anatomy';
 
@@ -361,9 +361,4 @@ export function lowestY(m: Matrix4): number {
     if (py < y) y = py;
   }
   return y;
-}
-
-/** for tests: the attribute arrays */
-export function shellAttr(lod: Lod, name: string): BufferAttribute {
-  return shellGeometry(lod).getAttribute(name) as BufferAttribute;
 }

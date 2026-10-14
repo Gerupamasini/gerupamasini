@@ -380,12 +380,6 @@ const BEDS: Record<string, { c: [number, number, number]; mud: number }> = {
   rock: { c: [0.3, 0.295, 0.28], mud: 0.2 },
 };
 
-/** the colour a cloud of this sediment shows (linear RGB) */
-export function dustColour(substrate: string | undefined, out: Vector3): Vector3 {
-  const b = BEDS[substrate ?? 'sand'] ?? BEDS.sand;
-  return out.set(b.c[0], b.c[1], b.c[2]);
-}
-
 const _up = new Vector3();
 
 /**

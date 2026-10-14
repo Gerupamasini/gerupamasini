@@ -1,4 +1,4 @@
-import { h, Fragment } from 'preact';
+import { Fragment } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';

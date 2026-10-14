@@ -90,7 +90,6 @@ const yawToHeading = (yaw: number) => Math.atan2(Math.cos(yaw), -Math.sin(yaw));
  * morphology, colours, stripe pattern and kinematics only.
  */
 export class ShrimpDriver implements Driver {
-  private root: Object3D | null = null;
   private ind: Individual | null = null;
   private model: ShrimpModel | null = null;
   private shrimp: Shrimp | null = null;
@@ -132,7 +131,6 @@ export class ShrimpDriver implements Driver {
   }
 
   attach(root: Object3D, individual: Individual): void {
-    this.root = root;
     this.ind = individual;
     this.scale = individual.length_mm / 1000 / MODEL_TL;
     const sex = individual.sex === 'f' ? 'female' : 'male';
@@ -176,7 +174,6 @@ export class ShrimpDriver implements Driver {
     this.appendageMeshes = [];
     this.shrimp = null;
     this.model = null;
-    this.root = null;
     this.world = null;
   }
 

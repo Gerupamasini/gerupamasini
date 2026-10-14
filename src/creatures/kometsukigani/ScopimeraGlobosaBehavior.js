@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { STANCE } from './ScopimeraGlobosaMorphology.js';
-import { clamp, expInterval, lerp, rrange, smoothstep, wrapAngle } from './util.js';
+import { clamp, lerp, rrange, smoothstep, wrapAngle } from './util.js';
 
 /**
  * Behaviour of one コメツキガニ: a state machine over what the animal is doing, driven by a few internal drives and a
@@ -140,7 +140,6 @@ export class CrabBehavior {
     this.t += dt;
     this.dtLast = dt;
     this.timer -= dt;
-    const cmd = anim.cmd;
     this.updateDrives(dt, env, anim);
     const st = this.state;
     // threats interrupt everything on the surface (a peeking or dug-in crab handles its own)

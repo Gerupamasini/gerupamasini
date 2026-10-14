@@ -32,7 +32,6 @@ const TAU = Math.PI * 2;
 const SPECIES_ID = 'scopimera_globosa';
 
 const _v = new Vector3(), _v2 = new Vector3(), _v3 = new Vector3(), _n = new Vector3();
-const UP = new Vector3(0, 1, 0);
 
 /**
  * quality tiers (the field's quality: minimal, low, mid, high): live crabs at most and within (m), burrows drawn as

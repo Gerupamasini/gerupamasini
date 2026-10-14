@@ -232,19 +232,3 @@ function definePorts(o: AquariumDevice): void {
 
 export class AquariumTank extends AquariumDevice { constructor(c: EquipmentContext) { super('tank', c); } }
 export class AquariumStand extends AquariumDevice { constructor(c: EquipmentContext, finish: 'wood' | 'metal' = 'wood') { super('stand', c, finish); } }
-export class GlassLid extends AquariumDevice { constructor(c: EquipmentContext) { super('glassLid', c); } }
-export class LightFixture extends AquariumDevice { constructor(c: EquipmentContext) { super('lightFixture', c); } }
-export class LEDLight extends AquariumDevice { constructor(c: EquipmentContext) { super('ledLight', c); } }
-export class Filter extends AquariumDevice { constructor(c: EquipmentContext) { super('filter', c); } }
-export class CanisterFilter extends AquariumDevice { constructor(c: EquipmentContext) { super('canisterFilter', c); } }
-export class TopFilter extends AquariumDevice { constructor(c: EquipmentContext) { super('topFilter', c); } }
-export class SpongeFilter extends AquariumDevice { constructor(c: EquipmentContext) { super('spongeFilter', c); } }
-export class AirPump extends AquariumDevice { constructor(c: EquipmentContext) { super('airPump', c); } }
-export class AirStone extends AquariumDevice { constructor(c: EquipmentContext) { super('airStone', c); } }
-export class Heater extends AquariumDevice { constructor(c: EquipmentContext) { super('heater', c); } }
-export class Thermometer extends AquariumDevice { constructor(c: EquipmentContext) { super('thermometer', c); } }
-export class Thermostat extends AquariumDevice { constructor(c: EquipmentContext) { super('thermostat', c); } }
-export class FlowPump extends AquariumDevice { constructor(c: EquipmentContext) { super('flowPump', c); } }
-export class CirculationPump extends AquariumDevice { constructor(c: EquipmentContext) { super('circulationPump', c); } }
-export class Chiller extends AquariumDevice { constructor(c: EquipmentContext) { super('chiller', c); } }
-export class PowerStrip extends AquariumDevice { constructor(c: EquipmentContext) { super('powerStrip', c); } }

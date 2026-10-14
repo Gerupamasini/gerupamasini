@@ -6,11 +6,9 @@ import { Brain } from './Brain.js';
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
 const _k = new THREE.Vector3();
 const _k2 = new THREE.Vector3();
 const _k3 = new THREE.Vector3();
-const _k4 = new THREE.Vector3();
 const _k5 = new THREE.Vector3();
 const TAU = Math.PI * 2;
 const clamp = THREE.MathUtils.clamp;
@@ -115,10 +113,6 @@ export class Shrimp {
   initLegs() {
     // Metachronal wave back-to-front; left/right in antiphase; per-leg jitter.
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
-    // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
-    const TLm = this.A.totalLength;
-    const fwd = { P3: -0.005 * TLm, P4: -0.02 * TLm, P5: -0.04 * TLm };
-    const lat = { P3: 0.14 * TLm, P4: 0.15 * TLm, P5: 0.15 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
       const restLocal = leg.restFoot.clone().multiplyScalar(this.scale);
@@ -843,7 +837,6 @@ export class Shrimp {
   updateFlagella(dt) {
     const W = this.world;
     const rootDir = new THREE.Vector3();
-    const selfVel = this.vel;
     const waterVel = (p, out) => W.flowAt(p, out);
     for (const f of this.model.flagella) {
       f.anchor.getWorldPosition(_v);

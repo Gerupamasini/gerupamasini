@@ -108,8 +108,6 @@ export const thickBot = monotone(TH_S, TH_B);
 // gill cover (operculum): elliptical plate; its free margin is where the gill opening is
 export const OPERC = { s: 9.3, x: -0.6, rs: 5.2, rx: 7.6 };
 export function opercE(s, x) { return ((s - OPERC.s) / OPERC.rs) ** 2 + ((x - OPERC.x) / OPERC.rx) ** 2; }
-// lateral line: almost straight, with a low arch over the pectoral fin
-export function lateralLineX(s) { return 0.15 + 1.25 * Math.exp(-(((s - 18) / 6.5) ** 2)); }
 
 /** Surface height (mm, outward) at (s, x) on the eyed (side = +1) or blind (side = -1) side, before the
  *  section profile is applied: the features of the head on top of the smooth lens-shaped section. */
@@ -201,7 +199,6 @@ export const SPINE = [
   ['J_sp5', 44.5], ['J_sp6', 50.0], ['J_caudal', 55.5], ['J_caudal2', 62.5],
 ];
 export const SPINE_S = Object.fromEntries(SPINE);
-export const POSTERIOR = SPINE.slice(2).map((b) => b[0]); // J_sp1 … J_caudal2 (chain)
 
 /** Spine bone weights for a point at s (two bones, smooth blend; the head is rigid in front of J_head). */
 export function spineWeights(s) {
@@ -224,17 +221,4 @@ export function spineWeights(s) {
 export function toModel(s, x, y, out = [0, 0, 0]) {
   out[0] = x * 0.001; out[1] = y * 0.001; out[2] = (S_ROOT - s) * 0.001;
   return out;
-}
-
-/** Packed profile for shaders: 256 samples over [0, S_END] of (xd, xv, top, bottom) in mm. */
-export function profileTable(n = 256) {
-  const data = new Float32Array(n * 4);
-  for (let i = 0; i < n; i++) {
-    const s = (i / (n - 1)) * S_END;
-    data[i * 4] = dorsalEdge(s);
-    data[i * 4 + 1] = ventralEdge(s);
-    data[i * 4 + 2] = thickTop(s);
-    data[i * 4 + 3] = thickBot(s);
-  }
-  return data;
 }

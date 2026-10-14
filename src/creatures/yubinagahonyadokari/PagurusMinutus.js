@@ -18,7 +18,7 @@ import { Behavior, STATE } from './PagurusMinutusBehavior.js';
 import { PagurusWorld } from './PagurusMinutusWorld.js';
 import { LOD_TIERS, chooseLOD } from './PagurusMinutusLOD.js';
 import { CrabDebug } from './PagurusMinutusDebug.js';
-import { SeededRandom, clamp, smoothstep, damp } from './PagurusMinutusUtil.js';
+import { SeededRandom, clamp, smoothstep } from './PagurusMinutusUtil.js';
 
 export { STATE, Shell, PagurusWorld, LOD_TIERS };
 

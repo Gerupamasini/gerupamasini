@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import type { App } from '../../app/App';
 import type { ToolDef } from '../../data/schemas/items';
 import { t } from '../store';

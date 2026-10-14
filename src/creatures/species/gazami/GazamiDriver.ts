@@ -1,4 +1,4 @@
-import { Color, Group, Vector3, type Object3D } from 'three';
+import { Group, Vector3, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
 import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
@@ -358,6 +358,3 @@ export class GazamiDriver implements Driver {
     this.listeners.clear();
   }
 }
-
-/** the sand's colour as a Color (for a viewer's bed) */
-export const sandColor = (sub = 'sand') => new Color(...(SUBSTRATE_TINT[sub] ?? SUBSTRATE_TINT.sand));

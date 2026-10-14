@@ -26,7 +26,6 @@ export class MahazeDriver implements Driver {
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private intent: Intent | null = null;
   private timer = 0;
-  private alertUntil = 0;
   private waitingForPerch = false;
   private readonly tmp = new Vector3();
   private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
@@ -140,7 +139,6 @@ export class MahazeDriver implements Driver {
         break;
       case 'display':
         beh.setAlert(1);
-        this.alertUntil = this.timer;
         break;
       case 'special':
         if (intent.param === 'yawn') beh.yawn();

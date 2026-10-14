@@ -19,7 +19,7 @@ import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentColle
 import { equipmentUnlocked, progressionOf, tankAnimalCapacity, tankUnlocked, buyAquariumUpgrade, isFilterKind, installedFilter, makeEquipment, claimIntroQuests, type FilterKind } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
-import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
+import { NetView, NET_LAYER, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { BinocularView } from '../player/BinocularView';
 import { ClamField } from '../world/ClamField';
@@ -27,7 +27,7 @@ import { colonyQuality, ScopimeraColony } from '../creatures/kometsukigani/Scopi
 import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
-import { configureModelLoader, instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { configureModelLoader, instantiateModel } from '../creatures/models/ModelLoader';
 import { AutoQuality } from '../render/AutoQuality';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
@@ -35,7 +35,7 @@ import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
-import type { SpeciesDef, ToolDef } from '../data/schemas';
+import type { ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import { spawnsOnMap } from '../creatures/Spawner';
 import type { Individual, IndividualRecord } from '../creatures/Individual';

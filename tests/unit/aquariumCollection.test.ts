@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Mesh, PerspectiveCamera, Vector3 } from 'three';
+import { Mesh, PerspectiveCamera } from 'three';
 import { AquariumEquipment, CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_ITEMS, GACHA_POOL, categoryLimit, defaultEquipmentLayout, drawEquipment, emptyEquipmentCollection, gachaProbability, itemForCategory, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity } from '../../src/aquarium';
 import { emptySave, SaveStore } from '../../src/core/Save';
 

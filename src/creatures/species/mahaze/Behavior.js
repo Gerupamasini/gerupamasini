@@ -99,7 +99,6 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     }
   }
 
-  const q = new THREE.Quaternion();
   const e = new THREE.Euler(0, 0, 0, 'YXZ');
   // lying on the bed: the plane of the ground under the footprint, and the turn onto it (eased)
   const FOOT = foot ?? { ahead: 0, halfL: 0.021, halfW: 0.005 };
@@ -366,7 +365,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     }
 
     // eyes: independent saccades (mostly horizontal, ±8°), with long fixations while resting; both lead turns
-    for (const [i, eye] of st.eyes.entries()) {
+    for (const eye of st.eyes) {
       eye.timer -= dt;
       if (eye.timer <= 0) {
         eye.gy = rand(-0.14, 0.14);

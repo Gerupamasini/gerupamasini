@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import {
   ABDOMEN, ANTENNA, ANTENNULE, BIND, CARAPACE, DACTYL_HINGE, ENVELOPE_BACK, EYE, MXP3, ORBIT, domeProfile, dorsalRelief, legSpecs,
-  marginHeight, marginTeeth, type ArticleSpec, type LegId, type LegSpec, type ToothSpec, type V2, type V3,
+  marginHeight, marginTeeth, type ArticleSpec, type LegId, type LegSpec, type ToothSpec, type V2,
 } from './anatomy';
 import { GeoBuilder, PART, knotLerp, noise2, smooth } from './mesh';
 import { Rng } from '../../../core/Rng';
@@ -324,15 +324,6 @@ function rayEllipse(dx: number, dz: number, ax: number, zc: number, az: number):
   const Cc = (cz * cz) / (az * az) - 1;
   const disc = Math.max(0, B * B - 4 * A * Cc);
   return (-B + Math.sqrt(disc)) / (2 * A);
-}
-
-/** the dorsal surface's height at (x, z) for ring s of a column whose margin is at ym (mm, before the edge's half) */
-export function dorsalY(x: number, z: number, s: number, ym: number, Ym0: number, sideSeed: number): number {
-  const base = Ym0 + (ym - Ym0) * s * s;
-  const relief = dorsalRelief(x, z) * (1 - smooth(0.82, 1.0, s));
-  // a real shell's slight unevenness, not mirrored (≈ ±0.15 mm)
-  const unev = (noise2(x * 0.11 + 3.1, z * 0.11, sideSeed) - 0.5) * 0.3 * (1 - s * s);
-  return base + C.dome * domeProfile(s) + relief + unev;
 }
 
 /**

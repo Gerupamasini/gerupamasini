@@ -262,8 +262,3 @@ export const PELLET = { feedDiam: [0.24, 0.36], digDiam: [0.36, 0.62] };
 
 /** burrow entrance diameter relative to the owner's CW [P][R] */
 export const BURROW = { entranceDiam: [0.8, 1.0], shaftSlantDeg: [20, 45] };
-
-/** Total length of a leg (CW) */
-export function legLength(L) {
-  return L.coxa + L.basis + L.ischium + L.merus + L.carpus + L.propodus + L.dactylus;
-}

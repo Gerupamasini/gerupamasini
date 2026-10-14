@@ -111,7 +111,6 @@ export class AkaeiDriver implements Driver {
   private lastFlapCycle = 0;
   private nextRipple = 8;
   private alertK = 0;
-  private wantState: AkaeiState | null = null;
   busy = false;
 
   // motion (world)
