@@ -98,171 +98,171 @@
   },
   "edohaze/edohaze_gravid.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "508f09e61ede62f0d27ce5c46b3e2e413f862493f699d23318fdd6cef5985b38",
-   "masterBytes": 18949708,
-   "bytes": 15686268,
-   "images": 11,
-   "minPsnr": 46.83
+   "master": "e9917aafebaa19b2ea99fd3548e11813e0a79e2b30c538d38bb24acf1367cdb3",
+   "masterBytes": 15027760,
+   "bytes": 12963148,
+   "images": 8,
+   "minPsnr": 43.17
   },
   "edohaze/edohaze_gravid.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "221edf499e7567cdad5bd194f57707ce074c2694c58417498f1519271292c2e0",
-   "masterBytes": 2277400,
-   "bytes": 2091560,
+   "master": "2276c9ec9a17386a8958d90d65ee1d0cf52d1dfe04b79e417df82ce5901ab761",
+   "masterBytes": 3332408,
+   "bytes": 2380240,
    "images": 4,
-   "minPsnr": 44.2
+   "minPsnr": 40.26
   },
   "edohaze/edohaze_gravid.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "e59c2939e11593203ed4cc45ae11ba7cfbc7a4ea75eba61ed7d31f921857ed21",
-   "masterBytes": 196660,
-   "bytes": 167952,
+   "master": "2f11d9bccdd9a102220bc48e6300fd90062b89ab037bbf45f17e84d033750efe",
+   "masterBytes": 236136,
+   "bytes": 162452,
    "images": 2,
-   "minPsnr": 39.44
+   "minPsnr": 37.7
   },
   "edohaze/edohaze.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "f819ea0b5e866b5ee9ae393887409d0f45106ed4bdc0a9b2a5e4714b6cc11887",
-   "masterBytes": 18914900,
-   "bytes": 15660888,
-   "images": 11,
-   "minPsnr": 46.93
+   "master": "7463798ea62f37407ebdb8ce5aef02dff868178f65f0841ca4bd0af5a5610d46",
+   "masterBytes": 14922228,
+   "bytes": 12936928,
+   "images": 8,
+   "minPsnr": 43.15
   },
   "edohaze/edohaze.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "d5b5ae468defd1da785b19e3aac10a8e01843ca1188e91a5e397a9f37f722dc1",
-   "masterBytes": 2272876,
-   "bytes": 2084616,
+   "master": "84675fb0a48aa66d1f08a362b459883ce0348115b62eb02dbd3063606a51631c",
+   "masterBytes": 3301852,
+   "bytes": 2378052,
    "images": 4,
-   "minPsnr": 44.19
+   "minPsnr": 40.43
   },
   "edohaze/edohaze.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "1aa4833a4ada6b22c1006608d2a3d055eec32a6a01cad4a2e537abb4dadd4a76",
-   "masterBytes": 196336,
-   "bytes": 167984,
+   "master": "f1232fa395a6080c487590a859af699471c1b4b1fec4945a1836fb4bea270718",
+   "masterBytes": 235952,
+   "bytes": 162392,
    "images": 2,
-   "minPsnr": 39.45
+   "minPsnr": 37.71
   },
   "himehaze/himehaze_male.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "51944ef0a2d0188d919dda253cd792ec5ba708ae004c24a52ebc62c4e83ec59e",
-   "masterBytes": 18834064,
-   "bytes": 16935040,
-   "images": 11,
-   "minPsnr": 42.59
+   "master": "b756a311c728c29a38c1984e06ff34ea218d71c94bef382b0eb2723d4da1e34f",
+   "masterBytes": 16776748,
+   "bytes": 13805348,
+   "images": 8,
+   "minPsnr": 38.81
   },
   "himehaze/himehaze_male.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "899e9b642cd55dea6576869aaa5257fdee7f666a2c42c38fe7b91d3050ca90e7",
-   "masterBytes": 2540824,
-   "bytes": 2390072,
+   "master": "93dd923ce466b0e7a14feeecb77f9363a8c5d9593a07376c9f484be696f15539",
+   "masterBytes": 3909056,
+   "bytes": 2603224,
    "images": 4,
-   "minPsnr": 43.73
+   "minPsnr": 36.5
   },
   "himehaze/himehaze_male.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "732ced0a3709d693034b18b5b99e1479c0ac1de2966aaf0448613cf3d1ddcdfe",
-   "masterBytes": 224516,
-   "bytes": 171412,
+   "master": "74254278811f3f6f075ff82147a3ae51b5acbfa01737c7b9bb8d066a2599ac7c",
+   "masterBytes": 261940,
+   "bytes": 162256,
    "images": 2,
-   "minPsnr": 34.38
+   "minPsnr": 34.92
   },
   "himehaze/himehaze.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "d6a523ff55d7e03167241677a5c06e40b108d0adb5001418387f5e55bd312ce1",
-   "masterBytes": 18747784,
-   "bytes": 16740276,
-   "images": 11,
-   "minPsnr": 42.65
+   "master": "2878aa0a9844a2d92e199a148c52bb8249bd1f8b9e624f14e75856dbe6789545",
+   "masterBytes": 16622696,
+   "bytes": 13644052,
+   "images": 8,
+   "minPsnr": 38.69
   },
   "himehaze/himehaze.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "9fca8a371a14c748f5329813a13e6104c25857f77fb8c49c7a97f2dd8919ef01",
-   "masterBytes": 2517540,
-   "bytes": 2372148,
+   "master": "c81f07338489b79d3d59ad7575856739b208d6bd0e72b74263954c979e59e544",
+   "masterBytes": 3874864,
+   "bytes": 2585388,
    "images": 4,
-   "minPsnr": 43.77
+   "minPsnr": 36.38
   },
   "himehaze/himehaze.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "67f5db4ce43ab64e620a994b34af34198787bf302864679dcb1a220bcf7e8e6d",
-   "masterBytes": 221572,
-   "bytes": 171532,
+   "master": "9de37439102e229200edbc2e782f730fad1fb3bd99c2089c9c070fc8ee077949",
+   "masterBytes": 260824,
+   "bytes": 163312,
    "images": 2,
-   "minPsnr": 34.52
+   "minPsnr": 34.93
   },
   "mahaze/mahaze_adult.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "97a7c6a8af68c482bf47cfc9bcb7fa2ec7b1aebec44de0ba3f091962ed8fce9b",
-   "masterBytes": 43943436,
-   "bytes": 60147508,
-   "images": 47,
-   "minPsnr": 42.22
+   "master": "b0a8171d2c4dffac92a19526702310dce44054a7d9db150389296d27a6368e09",
+   "masterBytes": 20539784,
+   "bytes": 13796092,
+   "images": 8,
+   "minPsnr": 32.49
   },
   "mahaze/mahaze_adult.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "b429e56f782bb5ad18b002480db52357ee44e6fffb2de67de9993085008103e6",
-   "masterBytes": 3304320,
-   "bytes": 2435844,
+   "master": "67b5203b2fc1b489df56e1dd672a752e4807f68723071ce9396bf1665859c9a9",
+   "masterBytes": 3814428,
+   "bytes": 2418632,
    "images": 4,
    "minPsnr": 34.3
   },
   "mahaze/mahaze_adult.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "247d7a6e2907fd3140dee5c71702e53ff4417fa29433433aac82b7b5f8879e7f",
-   "masterBytes": 362692,
-   "bytes": 265196,
-   "images": 2,
-   "minPsnr": 36.16
+   "master": "c9ff441058094faa821365768eab9cd02a3a57f0dd2a4b25497dfd0137c77635",
+   "masterBytes": 350016,
+   "bytes": 215100,
+   "images": 3,
+   "minPsnr": 33.98
   },
   "mahaze/mahaze_juvenile.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "2d706b75476a65db913b771a04e653be842baa30d22336496a81894b76f75a6f",
-   "masterBytes": 40829984,
-   "bytes": 57618512,
-   "images": 47,
-   "minPsnr": 43.16
+   "master": "6366298d364c35faa7e5bba0f23c7c3d7f0deb60c2b1b7fb5b14a3e57ee1045b",
+   "masterBytes": 19374096,
+   "bytes": 12808296,
+   "images": 8,
+   "minPsnr": 33.87
   },
   "mahaze/mahaze_juvenile.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "8e64b6c297f9b2563787763ddd6fef0143cbe05a4b979a7f7e3ded0e7558cb53",
-   "masterBytes": 3089856,
-   "bytes": 2255244,
+   "master": "46b7db5518e9f2cc66387afbf43286f11f39610f208423b72406e9c2e4ee7bd7",
+   "masterBytes": 3600048,
+   "bytes": 2237636,
    "images": 4,
    "minPsnr": 35.31
   },
   "mahaze/mahaze_juvenile.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "7364a874babd8afd48c3f5a25a326f749b1ecae5a153564e6832555a075111dd",
-   "masterBytes": 341772,
-   "bytes": 258828,
-   "images": 2,
-   "minPsnr": 38.09
+   "master": "7dab38aebd472daf71a1a38ed4c543ec1dce9b7e93054ba115304a33206e9c8b",
+   "masterBytes": 333060,
+   "bytes": 211580,
+   "images": 3,
+   "minPsnr": 35.14
   },
   "mahaze/mahaze_subadult.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "5937a38587a97685e8e49c00f019aaf7427d111c20a97ac5d011f7e2b83fe89b",
-   "masterBytes": 42535020,
-   "bytes": 59284204,
-   "images": 47,
-   "minPsnr": 42.78
+   "master": "4b6cae3dc5aad6d559eb783c520350423ad08ddc90d6ca3ea0a57cf629aa30e9",
+   "masterBytes": 20046172,
+   "bytes": 13431460,
+   "images": 8,
+   "minPsnr": 33.11
   },
   "mahaze/mahaze_subadult.lod1.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "8cae3a6d671fa551da16cd354da479c236f0ecd08d403e6fb1e6718667527fcb",
-   "masterBytes": 3227700,
-   "bytes": 2387100,
+   "master": "8841cccc408ee02a61bf7aa3570db3316814fec7c57b3c3c189b7a8a77a1215e",
+   "masterBytes": 3738468,
+   "bytes": 2369732,
    "images": 4,
    "minPsnr": 34.77
   },
   "mahaze/mahaze_subadult.lod2.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",
-   "master": "874421cebd84ffc80d041164e09f5aef00add4c426dfa17e7f1c68a0d589ca9d",
-   "masterBytes": 354980,
-   "bytes": 263888,
-   "images": 2,
-   "minPsnr": 37.29
+   "master": "678710ff98c68ebd887f8e34d94cbfd93257e970f1f4339b63fed7c7670f3af6",
+   "masterBytes": 344632,
+   "bytes": 213996,
+   "images": 3,
+   "minPsnr": 34.54
   },
   "nets/net_carbon.hero.glb": {
    "settings": "uastc1-zstd-mips+meshopt-v0/1",

@@ -193,7 +193,8 @@ export function buildMouth(mesh) {
   const addTooth = (base, dir, len, rad, curl, zone) => {
     // curved cone: centre line bends from `dir` toward the back of the mouth (+s) and the midline
     const back = nrm([1, 0, -Math.sign(base[2]) * 0.35]);
-    const NS = 4, NA = 7;
+    // 3 rings × 5 sides (25 triangles a tooth): the cones are 0.1–0.3 mm, seen only in the hero's open mouth
+    const NS = 3, NA = 5;
     const centre = (u) => add(base, add(mul(dir, len * u), mul(back, len * curl * u * u)));
     const tangent = (u) => nrm(add(mul(dir, len), mul(back, 2 * len * curl * u)));
     const rings = [];

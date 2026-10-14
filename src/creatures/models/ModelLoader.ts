@@ -5,7 +5,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
-import { gobyBodyReady, gobyLodVariant, isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { morphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -78,21 +79,21 @@ export function isModelLoaded(rel: string): boolean {
   return loaded.has(rel);
 }
 
-/** Tier-dependent material adjustments on the shared (cached) materials; resolves once the maps they need are in. */
+/** Tier-dependent material adjustments on the shared (cached) materials; resolves when the maps they add are in. */
 function prepareMaterials(gltf: GLTF, tier: Tier): Promise<unknown> {
-  const ready: Promise<void>[] = [];
+  const pending: Promise<void>[] = [];
   gltf.scene.traverse((o) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) { prepareMaterial(m, tier, gltf.parser); ready.push(gobyBodyReady(m)); }
+    for (const m of mats) pending.push(prepareMaterial(m, tier, gltf.parser));
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
-  return Promise.all(ready);
+  return Promise.all(pending);
 }
 
-function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
+function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): Promise<void> {
   const pm = m as MeshPhysicalMaterial;
   if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
     // transmission needs an extra scene pass; keep it for the observed hero only
@@ -106,22 +107,26 @@ function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
   }
   const sm = m as MeshStandardMaterial;
   sm.envMapIntensity = 0.8;
+  // the gobies' far fins and eyes: the eyes keep their colour under a look's fin tint
+  if (sm.isMeshStandardMaterial && isMergedGobyFins(m)) keepGobyEyeColour(sm);
   // the gobies' bodies: translucent tissue in every tier (the observed hero swaps in its volumetric material)
-  if (pm.isMeshPhysicalMaterial && isGobyBody(m)) makeTranslucentBody(pm, tier, parser);
+  return pm.isMeshPhysicalMaterial && isGobyBody(m) ? makeTranslucentBody(pm, tier, parser) : Promise.resolve();
 }
 
-interface VariantMappings { mappings: { material: number; variants: number[] }[] }
-interface VariantList { variants: { name: string }[] }
-
-/** Number of KHR_materials_variants (pattern variants) a loaded asset carries. */
-function variantCount(gltf: GLTF): number {
-  return (gltf.userData as { gltfExtensions?: { KHR_materials_variants?: VariantList } }).gltfExtensions?.KHR_materials_variants?.variants.length ?? 0;
+/** The looks a loaded asset's individuals wear (the マハゼ's patterns × colour morphs, body extras `morphs`), if any. */
+function morphsOf(gltf: GLTF): MorphTable | null {
+  let t: MorphTable | null = null;
+  gltf.scene.traverse((o) => {
+    const m = (o as Mesh).material;
+    if (!t && m && !Array.isArray(m)) t = (m.userData as { mahaze?: { morphs?: MorphTable } }).mahaze?.morphs ?? null;
+  });
+  return t;
 }
 
 /**
- * Instantiate a loaded model (skeleton-aware clone). Materials are shared. `variant` picks one of the asset's
- * pattern variants (glTF KHR_materials_variants; any integer, taken modulo their number): the mesh stays the same,
- * the materials (and their textures) are the variant's own.
+ * Instantiate a loaded model (skeleton-aware clone). Materials are shared. `variant` picks the look of an asset that
+ * carries several (the マハゼ's three patterns × three colour morphs; any integer, taken modulo their number): the mesh
+ * and the maps stay the same, the body and fin materials are the look's own.
  */
 export async function instantiateModel(rel: string, variant?: number): Promise<LoadedModel> {
   const gltf = await preloadModel(rel);
@@ -129,37 +134,18 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
   const root = skeletonClone(gltf.scene);
   const bones: Record<string, Bone> = {};
   const meshes: Mesh[] = [];
-  const n = variantCount(gltf);
-  const pick = variant !== undefined && n > 0 ? ((Math.floor(variant) % n) + n) % n : -1;
-  const swaps: Promise<void>[] = [];
+  const morphs = variant !== undefined ? morphsOf(gltf) : null;
+  const pick = morphs ? morphPick(morphs, variant!) : null;
   root.traverse((o) => {
     if ((o as Bone).isBone) bones[o.name] = o as Bone;
     if ((o as Mesh).isMesh) {
       const mesh = o as Mesh;
       meshes.push(mesh);
-      if (pick >= 0) {
-        const maps = (mesh.userData as { gltfExtensions?: { KHR_materials_variants?: VariantMappings } }).gltfExtensions?.KHR_materials_variants?.mappings;
-        const map = maps?.find((mp) => mp.variants.includes(pick));
-        if (map) {
-          swaps.push((gltf.parser.getDependency('material', map.material) as Promise<Material>).then((mat) => {
-            prepareMaterial(mat, tier, gltf.parser);
-            mesh.material = mat;
-            gltf.parser.assignFinalMaterial(mesh);   // the loader's per-geometry adjustments (tangents, vertex colours)
-          }));
-        }
-      }
+      if (morphs && pick && !Array.isArray(mesh.material)) mesh.material = gobyLook(mesh.material, morphs, pick, (m) => prepareMaterial(m, tier, gltf.parser));
     }
   });
-  await Promise.all(swaps);
-  // the goby distance tiers: every pattern and colour morph in one material, set apart per variant (gobyLodVariant)
-  if (variant !== undefined && pick < 0) {
-    for (const mesh of meshes) {
-      const own = gobyLodVariant(mesh.material as Material, mesh.name, variant, (mat) => prepareMaterial(mat, tier, gltf.parser));
-      if (own) mesh.material = own;
-    }
-  }
-  // (a goby body draws its pattern from its pigment map: not before it is in)
-  await Promise.all(meshes.map((mesh) => gobyBodyReady(mesh.material as Material)));
+  // (the look's pattern is in its pigment map: not drawn before that is in its uniforms)
+  await Promise.all(meshes.map((mesh) => gobyLookReady(mesh.material as Material)));
   for (const mesh of meshes) {
     // keep the species extras on the mesh so drivers still find them after a material swap
     const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;
