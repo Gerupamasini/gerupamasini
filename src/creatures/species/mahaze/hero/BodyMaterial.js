@@ -12,6 +12,7 @@
 //   * skin chromatophores (melanin / iridophores / xanthophores) filter light at entry and exit
 import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
+import { morphGLSL, morphUniforms } from '../colourMorph.js';
 
 // Skinned: the volume is evaluated in the rest pose (vObjPos) and world directions are mapped into
 // that rest space with the per-vertex skinning rotation (vObjToWorld).
@@ -64,6 +65,9 @@ uniform sampler2D uAlbedo;
 uniform sampler2D uNormalMap;
 uniform sampler2D uORM;
 uniform sampler2D uPigment;
+#ifdef MORPH_CHANNELS
+${morphGLSL}
+#endif
 uniform sampler2D uCapAlbedo;   // snout cap: rgb albedo, a roughness (planar y/z projection)
 uniform sampler2D uCapPigment;
 uniform vec4 uCapRect;          // y0, y1, z0, z1 (mm)
@@ -168,6 +172,24 @@ vec2 fishUV(vec3 p) {
   float phi = atan(a, c);
   if (phi < 0.0) phi += 2.0 * PI;
   return vec2(clamp(p.x / uFrame.w, 0.0, 1.0), phi / (2.0 * PI));
+}
+
+// height in the section (−1 the keel, 1 the back) of a fish-space point
+float heightIn(vec3 p) {
+  Sec q = section(clamp(p.x, 0.05, uFrame.w - 0.05));
+  return (p.y - q.yc) / max(p.y > q.yc ? q.t : q.b, 1e-3);
+}
+
+// the skin's pigment where the light leaves or enters the body at a fish-space point (coarse mip); the morph layout's
+// is the fish's look (its pattern's melanophores, scaled by its colour morph: ../colourMorph.js)
+vec3 pigAt(vec3 p, float lod) {
+  vec2 uv = fishUV(p);
+#ifdef MORPH_CHANNELS
+  vec4 m = textureLod(uPigment, uv, lod);
+  return gbMorphPig(m.rgb, m.a, textureLod(uAlbedo, uv, lod).a, heightIn(p));
+#else
+  return textureLod(uPigment, uv, lod).rgb;
+#endif
 }
 
 // chromatophore filter of the skin layer (melanin, iridophores, xanthophores)
@@ -331,7 +353,14 @@ void main() {
 
   vec3 Tw = normalize(vWorldTangent.xyz - Ng * dot(Ng, vWorldTangent.xyz));
   vec3 Bw = cross(Ng, Tw) * vWorldTangent.w;
+#ifdef MORPH_CHANNELS
+  // the normal's x and y (z rebuilt); ambient occlusion and roughness in the other two
+  vec4 n4 = textureGrad(uNormalMap, vUv, gdx, gdy);
+  vec3 nm = vec3(n4.xy * 2.0 - 1.0, 0.0);
+  nm.z = sqrt(clamp(1.0 - dot(nm.xy, nm.xy), 0.0, 1.0));
+#else
   vec3 nm = textureGrad(uNormalMap, vUv, gdx, gdy).xyz * 2.0 - 1.0;
+#endif
   nm.xy *= uNormalStrength * (1.0 - capW);
   vec3 N = normalize(mat3(Tw, Bw, Ng) * nm);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -339,11 +368,39 @@ void main() {
   if (nv < 0.02) N = normalize(N + V * (0.02 - nv));
   vec3 L = normalize(uLightDir);
 
-  vec3 albedo = textureGrad(uAlbedo, vUv, gdx, gdy).rgb;
+  vec4 albedo4 = textureGrad(uAlbedo, vUv, gdx, gdy);
+  vec3 albedo = albedo4.rgb;
+  vec4 pig4 = textureGrad(uPigment, vUv, gdx, gdy);
+  vec3 pig = pig4.rgb;
+#if defined(MORPH_CHANNELS)
+  // the マハゼ's look: the standard's ground (a: xanthophores), every pattern's melanophores (a: iridophores); the snout
+  // cap's ground (a: roughness) and melanophores (a: xanthophores), its iridophores the loft's
+  float ao = n4.b;
+  float rough = n4.a;
+  vec3 mel3 = pig4.rgb;
+  float iri = pig4.a, xan = albedo4.a;
+  if (capW > 0.001) {
+    vec4 ca = texture(uCapAlbedo, capUV);
+    vec4 cp = texture(uCapPigment, capUV);
+    albedo = mix(albedo, ca.rgb, capW);
+    rough = mix(rough, ca.a, capW);
+    mel3 = mix(mel3, cp.rgb, capW);
+    xan = mix(xan, cp.a, capW);
+    ao = mix(ao, 1.0, capW * 0.5);
+  }
+  float hnSkin = heightIn(pF);
+  albedo = gbMorphAlbedo(albedo, mel3, iri, xan, hnSkin);
+  pig = gbMorphPig(mel3, iri, xan, hnSkin);
+#elif defined(PACKED_CHANNELS)
+  // budget-sized GLBs: ambient occlusion in the colour map's alpha, roughness in the pigment map's (no ORM map)
+  float ao = albedo4.a;
+  float rough = pig4.a;
+#else
   vec3 orm = textureGrad(uORM, vUv, gdx, gdy).rgb;
-  vec3 pig = textureGrad(uPigment, vUv, gdx, gdy).rgb;
   float ao = orm.r;
   float rough = orm.g;
+#endif
+#ifndef MORPH_CHANNELS
   if (capW > 0.001) {
     vec4 ca = texture(uCapAlbedo, capUV);
     albedo = mix(albedo, ca.rgb, capW);
@@ -351,6 +408,7 @@ void main() {
     pig = mix(pig, texture(uCapPigment, capUV).rgb, capW);
     ao = mix(ao, 1.0, capW * 0.5);
   }
+#endif
   rough = clamp(rough, 0.06, 1.0);
 
   // ---- fish space
@@ -413,7 +471,7 @@ void main() {
   tauS += jaws * 9.0;
   vec3 xE = pIn + R * tExit;
   vec3 skinIn = skinT(pig);
-  vec3 skinOut = skinT(textureLod(uPigment, fishUV(xE), 2.0).rgb);
+  vec3 skinOut = skinT(pigAt(xE, 2.0));
 
   // refraction back into the water at the far surface
   vec3 nE = gradR(xE);
@@ -460,7 +518,7 @@ void main() {
     }
     float tOrgL;
     tauL += organTau(pIn, LF, dL, tOrgL) * organK;
-    vec3 skinL = skinT(textureLod(uPigment, fishUV(pIn + LF * dL), 2.0).rgb);
+    vec3 skinL = skinT(pigAt(pIn + LF * dL, 2.0));
     float cosT = dot(-L, V);
     float ph = mix(1.0, 4.0 * PI * hgPhase(cosT, 0.45), 0.55);
     back = Lc * exp(-tauL) * skinIn * skinL * ph * backW * uBackStrength * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
@@ -516,12 +574,17 @@ void main() {
 }
 `;
 
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect }) {
+/**
+ * @param {object} o  textures { albedo, normal, orm (older GLBs), pigment, capAlbedo, capPigment }; packed: the GLB keeps
+ *   its ambient occlusion in the colour map's alpha and its roughness in the pigment map's (extras.mahaze.channels);
+ *   morphs, morph: the マハゼ's morph layout (the looks' table and the fish's own: ../colourMorph.js)
+ */
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, packed = false, morphs = null, morph = null }) {
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
     uNormalMap: { value: textures.normal },
-    uORM: { value: textures.orm },
+    uORM: { value: textures.orm ?? null },
     uPigment: { value: textures.pigment },
     uCapAlbedo: { value: textures.capAlbedo },
     uCapPigment: { value: textures.capPigment },
@@ -537,9 +600,11 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
     uAmbThrough: shared.uAmbThrough ?? { value: 5.0 },
+    ...(morphs ? morphUniforms(morphs, morph) : {}),
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
+    defines: morphs ? { MORPH_CHANNELS: '' } : packed ? { PACKED_CHANNELS: '' } : {},
     uniforms,
     vertexShader,
     fragmentShader,

@@ -29,8 +29,6 @@ const PAT = pick(
   { mott: 0.27, blot: 0.33, pocket: 0.44, verm: 0.3, belly: [-0.34, -0.85], base: [0.7, 0.53, 0.14], dors: [0.45, 0.37, 0.08], spots: 1.4 },
 );
 const bellyOf = (hn) => smoothstep(PAT.belly[0], PAT.belly[1], hn);
-/** the pale belly's height ramp (hn) of this growth stage (the distance tiers' shader rebuilds the colour morphs with it) */
-export const BELLY_RAMP = PAT.belly;
 // Three patterns per growth stage: different individuals of the same species pattern. Each has its own random
 // seeds (blotch placement, marbling, melanophores) and a slight style difference:
 //   1: the reference pattern; 2: the midline blotches reach up the flank as saddles, coarser;
@@ -57,6 +55,48 @@ export const COLORS = [
 ];
 
 const TAU = Math.PI * 2;
+
+/**
+ * The colour morphs as the game rebuilds them from the morph layout's maps (body extras `morphs`; the shader is
+ * src/creatures/species/mahaze/colourMorph.js, its reference rebuildMorph() below): the ground of the standard colour
+ * (flank, back, belly), each morph's own and its pigment factors, and the height ramps of the back and the belly.
+ */
+export function morphTable() {
+  const r3 = (v) => v.map((x) => +x.toFixed(4));
+  return {
+    // the melanophore channels of the pigment map, in order
+    patterns: PATTERNS.map((_, i) => `pattern${i + 1}`),
+    // the back's and the belly's ramps over the height in the section (smoothstep edges, either order)
+    hn: { dorsal: [-0.2, 0.8], belly: [...PAT.belly] },
+    colors: COLORS.map((c) => ({
+      name: c.name, base: r3(c.base), dors: r3(c.dors), belly: r3(c.belly),
+      melK: +c.melK.toFixed(4), melAdd: +c.melAdd.toFixed(4), xanK: +c.xanK.toFixed(4), iriK: +c.iriK.toFixed(4),
+      fin: { tint: r3(c.fin.tint), melK: +c.fin.melK.toFixed(4) },
+    })),
+  };
+}
+
+/**
+ * One texel of a fish rebuilt from the morph layout (linear rgb albedo and the pigment the light passes): the
+ * standard's ground (linear), the pattern's melanophores, the iridophores and xanthophores, the height hn; `m` the
+ * morphTable(), `c` the colour (0-based). The shader does the same per pixel; shadeAt() is what it stands in for.
+ */
+export function rebuildMorph(ground, mel, iri, xan, hn, m, c) {
+  const ramp = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+  const dorsal = ramp(m.hn.dorsal[0], m.hn.dorsal[1], hn), belly = ramp(m.hn.belly[0], m.hn.belly[1], hn);
+  const S = m.colors[0], C = m.colors[c];
+  const g = (col, k) => mix(mix(col.base[k], col.dors[k], 0.6 * dorsal), col.belly[k], belly);
+  const ic = clamp(iri * C.iriK), xc = xan * C.xanK;
+  const XT = [0.012, -0.06, -0.27], CI = [0.78, 0.77, 0.7], MK = [2.0, 2.15, 2.35];
+  const mc = 1 - Math.pow(1 - clamp(mel), C.melK) * (1 - C.melAdd * (1 - belly));
+  const out = [0, 0, 0];
+  for (let k = 0; k < 3; k++) {
+    const vs = mix(g(S, k) * (1 + XT[k] * xan), CI[k], 0.4 * iri);
+    const vc = mix(g(C, k) * (1 + XT[k] * xc), CI[k], 0.4 * ic);
+    out[k] = ground[k] * vc / Math.max(vs, 1e-3) * Math.exp(-1.6 * mc * MK[k]);
+  }
+  return { albedo: out, pigment: [mc, ic, clamp(xc)] };
+}
 
 function distributeSections(NS) {
   // density of loft sections along the axis (denser at the snout/head and caudal insertion)
@@ -163,8 +203,11 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-// lod: the distance tiers' packed maps instead of the snout cap (see tools/lib/gobyLod.mjs)
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], lod = false, log = () => {} } = {}) {
+// The budget-sized GLBs (tools/models/mahaze/build.mjs) ship the patterns and colour morphs in channels: the standard
+// colour's ground (no melanophores) once, every pattern's melanophores, and the iridophores and xanthophores; the game
+// rebuilds each fish's colour from them (src/creatures/species/mahaze/colourMorph.js). `colors` may then be empty for the
+// patterns after the first (their colours are not baked; pass all three to compare the rebuilt colours with the baked).
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], cap = true, log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -201,7 +244,7 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
   }
   const TS = patterns.map((pattern) => {
     log(`  baking body textures (pattern ${pattern}) …`);
-    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors, lod });
+    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors: pattern === patterns[0] ? [1, ...colors.filter((c) => c !== 1)] : colors, cap });
   });
   // pattern 1 in colour 1 (normal, ORM and thickness are shared by all patterns and colours)
   const T = { ...TS[0], ...TS[0].colors[0] };
@@ -425,7 +468,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1], lod = false } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1], cap: withCap = true } = ctx;
   // pattern-dependent random streams (shape relief, pores and roughness keep their fixed seeds)
   const PS = (pattern - 1) * 1009;
   const ST = PATTERNS[pattern - 1];
@@ -970,9 +1013,11 @@ function bakeBodyTextures(ctx) {
   const orm = new Uint8Array(nT * 3);
   const volume = new Uint8Array(nT * 3);
   const morphs = colors.map(() => ({ albedo: new Uint8Array(nT * 3), pigment: new Uint8Array(nT * 3) }));
-  // distance tiers: the standard colour's albedo without the melanin and the raw pigment densities (the game
-  // darkens it by the melanin of the individual's pattern and colour morph)
-  const lodMaps = lod ? { albedo: new Uint8Array(nT * 3), mel: new Uint8Array(nT), iri: new Uint8Array(nT), xan: new Uint8Array(nT) } : null;
+  // what the game rebuilds every colour morph from: the standard colour's ground without the melanophores (the first
+  // pattern's only), and the pigment fields before the morphs scale them (see buildBody)
+  const first = pattern === 1;
+  const ground = first ? new Uint8Array(nT * 3) : null;
+  const raw = { mel: new Uint8Array(nT), iri: new Uint8Array(nT), xan: new Uint8Array(nT) };
   const srgb = (c) => {
     c = clamp(c, 0, 1);
     return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
@@ -999,6 +1044,13 @@ function bakeBodyTextures(ctx) {
       const cavity = clamp(lap * 0.35, 0, 0.35);
 
       const s = A.px[t], yy = A.py[t], z = A.pz[t];
+      raw.mel[t] = Math.round(clamp(MEL[t]) * 255);
+      raw.iri[t] = Math.round(clamp(IRI[t]) * 255);
+      raw.xan[t] = Math.round(clamp(XAN[t]) * 255);
+      if (ground) {
+        const C = shadeAt(s, yy, z, HN[t], HEAD[t], 0, clamp(IRI[t]), XAN[t], GILL[t], cavity, secs[x].w, COLORS[0]);
+        ground[t * 3] = srgb(C.r); ground[t * 3 + 1] = srgb(C.g); ground[t * 3 + 2] = srgb(C.b);
+      }
       colors.forEach((c, ci) => {
         const col = COLORS[c - 1], out = morphs[ci];
         const mel = morphMel(MEL[t], HN[t], col), X = morphXan(XAN[t], col), I = morphIri(IRI[t], col);
@@ -1007,11 +1059,6 @@ function bakeBodyTextures(ctx) {
         out.pigment[t * 3] = Math.round(mel * 255);
         out.pigment[t * 3 + 1] = Math.round(clamp(I) * 255);
         out.pigment[t * 3 + 2] = Math.round(clamp(X) * 255);
-        if (lodMaps && c === 1) {
-          const C0 = shadeAt(s, yy, z, HN[t], HEAD[t], 0, I, X, GILL[t], cavity, secs[x].w, col);
-          lodMaps.albedo[t * 3] = srgb(C0.r); lodMaps.albedo[t * 3 + 1] = srgb(C0.g); lodMaps.albedo[t * 3 + 2] = srgb(C0.b);
-          lodMaps.mel[t] = Math.round(clamp(MEL[t]) * 255); lodMaps.iri[t] = Math.round(clamp(IRI[t]) * 255); lodMaps.xan[t] = Math.round(clamp(XAN[t]) * 255);
-        }
         // roughness does not depend on the colour: taken from the first morph
         if (ci === 0) {
           const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
@@ -1028,14 +1075,19 @@ function bakeBodyTextures(ctx) {
       volume[t * 3 + 2] = 0;
     }
   }
+  const perColour = () => colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment }));
+  // (only the observed hero's volumetric material shades the snout from the cap: the lighter tiers skip it)
+  if (!withCap) return { width: texW, height: texH, normal: normalMap, orm, volume, ground, raw, hn: HN, colors: perColour(), cap: null };
   // ---------------------------------------------------------------------------
   // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
   // blends it over the loft UVs where they converge at the snout tip.
-  if (lodMaps) return { width: texW, height: texH, normal: normalMap, orm, volume, lod: lodMaps, colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: null })) };
   log('    snout cap …');
   const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.8, z0: -2.7, z1: 2.7 };
   const caps = colors.map(() => ({ albedo: new Uint8Array(CAP * CAP * 4), pigment: new Uint8Array(CAP * CAP * 3) }));
+  // the morph layout's cap: the standard's ground and roughness (first pattern), melanophores, xanthophores
+  const capGround = first ? new Uint8Array(CAP * CAP * 4) : null;
+  const capRaw = { mel: new Uint8Array(CAP * CAP), xan: new Uint8Array(CAP * CAP) };
   const valid = new Uint8Array(CAP * CAP);
   for (let j = 0; j < CAP; j++)
     for (let i = 0; i < CAP; i++) {
@@ -1053,6 +1105,13 @@ function bakeBodyTextures(ctx) {
       const halfW = section(Math.max(sp, 0.05)).w;
       const o = j * CAP + i;
       valid[o] = 1;
+      capRaw.mel[o] = Math.round(clamp(mel0) * 255);
+      capRaw.xan[o] = Math.round(clamp(P.xan) * 255);
+      if (capGround) {
+        const C = shadeAt(Math.max(sp, 0.02), yy, z, P.hn, P.head, 0, clamp(P.iri), P.xan, P.gill, 0, halfW, COLORS[0]);
+        capGround[o * 4] = srgb(C.r); capGround[o * 4 + 1] = srgb(C.g); capGround[o * 4 + 2] = srgb(C.b);
+        capGround[o * 4 + 3] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
+      }
       colors.forEach((c, ci) => {
         const col = COLORS[c - 1], out = caps[ci];
         const mel = morphMel(mel0, P.hn, col), X = morphXan(P.xan, col), I = morphIri(P.iri, col);
@@ -1078,6 +1137,8 @@ function bakeBodyTextures(ctx) {
             for (let c = 0; c < 4; c++) out.albedo[o * 4 + c] = out.albedo[q * 4 + c];
             for (let c = 0; c < 3; c++) out.pigment[o * 3 + c] = out.pigment[q * 3 + c];
           }
+          if (capGround) for (let c = 0; c < 4; c++) capGround[o * 4 + c] = capGround[q * 4 + c];
+          capRaw.mel[o] = capRaw.mel[q]; capRaw.xan[o] = capRaw.xan[q];
           next[o] = 1;
           break;
         }
@@ -1085,7 +1146,9 @@ function bakeBodyTextures(ctx) {
     valid.set(next);
   }
   return {
-    width: texW, height: texH, normal: normalMap, orm, volume,
+    width: texW, height: texH, normal: normalMap, orm, volume, ground, raw, hn: HN,
+    // the morph layout's snout cap
+    capMorph: { size: CAP, rect: capRect, ground: capGround, ...capRaw },
     // per colour morph: body albedo + pigment and the snout cap
     colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: { size: CAP, albedo: caps[ci].albedo, pigment: caps[ci].pigment, rect: capRect } })),
   };
