@@ -1,0 +1,20 @@
+// The project has no @types/node; tests that read built assets only need these few calls.
+declare module 'node:fs' {
+  interface FileBuffer {
+    readUInt32LE(offset: number): number;
+    subarray(start: number, end: number): FileBuffer;
+    toString(encoding?: string): string;
+  }
+  export function readFileSync(path: string, encoding: 'utf8'): string;
+  export function readFileSync(path: string): FileBuffer;
+  export function existsSync(path: string): boolean;
+  export function openSync(path: string, flags: string): number;
+  export function readSync(fd: number, buffer: Uint8Array, offset: number, length: number, position: number): number;
+  export function closeSync(fd: number): void;
+}
+declare module 'node:url' {
+  export function fileURLToPath(url: URL | string): string;
+}
+declare module 'pngjs' {
+  export const PNG: { sync: { read(buf: unknown): { width: number; height: number; data: Uint8Array } } };
+}

@@ -1,0 +1,101 @@
+{
+  "source": "Consensus spec of the 70-photo set (quality-weighted medians, 22 non-gravid + 9 gravid lateral records and 4 dorsal records; verified by 3 independent re-measurements). top/bot = dorsal/ventral outline height from the snout-tip → caudal-base axis; halfW = dorsal-view half-width (non-gravid consensus at s 0.3–0.6; gravid females reach ~0.10). Fractions of SL; s 0.95 = parallel-sided peduncle (landmarks).",
+  "stations": [
+    {
+      "s": 0.02,
+      "top": 0.0307,
+      "bot": -0.0467,
+      "halfW": 0.0403
+    },
+    {
+      "s": 0.05,
+      "top": 0.0491,
+      "bot": -0.056,
+      "halfW": 0.0558
+    },
+    {
+      "s": 0.1,
+      "top": 0.0667,
+      "bot": -0.0591,
+      "halfW": 0.0693
+    },
+    {
+      "s": 0.15,
+      "top": 0.07,
+      "bot": -0.0613,
+      "halfW": 0.0773
+    },
+    {
+      "s": 0.2,
+      "top": 0.0814,
+      "bot": -0.0622,
+      "halfW": 0.0771
+    },
+    {
+      "s": 0.25,
+      "top": 0.088,
+      "bot": -0.0619,
+      "halfW": 0.069
+    },
+    {
+      "s": 0.27,
+      "top": null,
+      "bot": null,
+      "halfW": 0.065
+    },
+    {
+      "s": 0.3,
+      "top": 0.095,
+      "bot": -0.064,
+      "halfW": 0.061
+    },
+    {
+      "s": 0.4,
+      "top": 0.0996,
+      "bot": -0.061,
+      "halfW": 0.0613
+    },
+    {
+      "s": 0.5,
+      "top": 0.0949,
+      "bot": -0.0546,
+      "halfW": 0.0517
+    },
+    {
+      "s": 0.6,
+      "top": 0.0903,
+      "bot": -0.055,
+      "halfW": 0.0502
+    },
+    {
+      "s": 0.7,
+      "top": 0.0752,
+      "bot": -0.0481,
+      "halfW": 0.0394
+    },
+    {
+      "s": 0.8,
+      "top": 0.0606,
+      "bot": -0.0474,
+      "halfW": 0.0315
+    },
+    {
+      "s": 0.9,
+      "top": 0.0465,
+      "bot": -0.0437,
+      "halfW": 0.0217
+    },
+    {
+      "s": 0.95,
+      "top": 0.039,
+      "bot": -0.041,
+      "halfW": 0.0163
+    },
+    {
+      "s": 1.0,
+      "top": 0.0377,
+      "bot": -0.04,
+      "halfW": 0.011
+    }
+  ]
+}

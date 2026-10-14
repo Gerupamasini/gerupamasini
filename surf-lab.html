@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" href="data:," />
+    <title>波打ち際ラボ</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1216; color: #e8eef0; font: 13px/1.45 system-ui, sans-serif; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+      #ui { position: fixed; top: 8px; left: 8px; background: rgba(8, 14, 17, 0.8); padding: 8px 10px; border-radius: 8px; width: 260px; max-height: calc(100vh - 32px); overflow: auto; }
+      #ui h1 { font-size: 14px; margin: 0 0 6px; }
+      #ui label { display: grid; grid-template-columns: 76px 1fr 44px; align-items: center; gap: 6px; margin: 3px 0; }
+      #ui label.row { grid-template-columns: 76px 1fr; }
+      #ui input[type=range] { width: 100%; }
+      #ui .btns { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+      #ui button { background: #18323a; color: #e8eef0; border: 1px solid #2c5560; border-radius: 5px; padding: 3px 7px; font: inherit; }
+      #ui button.on { background: #2a6f7c; }
+      #ui select { width: 100%; }
+      #hud { position: fixed; bottom: 8px; left: 8px; background: rgba(8, 14, 17, 0.7); padding: 5px 8px; border-radius: 6px; font: 12px ui-monospace, monospace; white-space: pre; }
+      #toggle { position: fixed; top: 8px; right: 8px; display: none; }
+      body.shot #ui, body.shot #hud, body.shot #toggle { display: none !important; }
+      body.folded #ui { display: none; }
+      @media (max-width: 640px) { #ui { width: calc(100vw - 36px); max-height: 46vh; } #toggle { display: block; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="view" aria-label="波打ち際"></canvas>
+    <button id="toggle">設定</button>
+    <div id="ui">
+      <h1>波打ち際ラボ</h1>
+      <label>潮位 <input type="range" id="tide" min="-1.2" max="1.2" step="0.01" value="0.3" /><span id="tideV"></span></label>
+      <label>波高 Hs <input type="range" id="hs" min="0.05" max="1.6" step="0.01" value="0.6" /><span id="hsV"></span></label>
+      <label>周期 <input type="range" id="period" min="2.5" max="13" step="0.1" value="7" /><span id="periodV"></span></label>
+      <label>波向 <input type="range" id="angle" min="-0.6" max="0.6" step="0.01" value="-0.25" /><span id="angleV"></span></label>
+      <label>向きのばらつき <input type="range" id="spread" min="0" max="0.5" step="0.01" value="0.14" /><span id="spreadV"></span></label>
+      <label>時刻 <input type="range" id="hour" min="4.5" max="19.5" step="0.05" value="8.5" /><span id="hourV"></span></label>
+      <label>雲 <input type="range" id="cloud" min="0" max="1" step="0.01" value="0" /><span id="cloudV"></span></label>
+      <label>時間の速さ <input type="range" id="speed" min="0" max="1.5" step="0.05" value="1" /><span id="speedV"></span></label>
+      <label class="row">画質 <select id="quality"><option value="minimal">超軽量</option><option value="low">低</option><option value="mid" selected>中</option><option value="high">高</option></select></label>
+      <label class="row">表示 <select id="debug"><option value="0">そのまま</option><option value="1">区分（深い・浅い・砕波帯・遡上帯）</option><option value="2">泡の種類</option><option value="3">位相・砕波・水膜</option></select></label>
+      <div class="btns" id="views">
+        <button data-view="beach" class="on">浜から沖</button><button data-view="feet">足元の遡上</button><button data-view="along">浜沿い</button>
+        <button data-view="side">波の横から</button><button data-view="reef">岩場</button><button data-view="drone">上空</button>
+      </div>
+      <div class="btns"><button id="pause">一時停止</button><button id="step">0.1 s 進める</button></div>
+    </div>
+    <div id="hud"></div>
+    <script type="module" src="/src/lab/surfLab.ts"></script>
+  </body>
+</html>

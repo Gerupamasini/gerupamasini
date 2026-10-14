@@ -1,0 +1,5 @@
+{
+  "id": "crab_burrow",
+  "tickHz": { "near": 1, "mid": 0.5, "far": 0.2 },
+  "root": { "type": "action", "name": "rest", "args": { "seconds": 30 } }
+}

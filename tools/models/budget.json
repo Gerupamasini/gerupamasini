@@ -1,0 +1,30 @@
+{
+  "$comment": "生きものモデルの容量予算（体の大きさの区分 × LOD）。docs/quality/model-budget.md が説明、tools/models/budget.mjs が照合する。数値はここが正。",
+  "classes": [
+    { "id": "S", "label": "小（全長・甲幅 35 mm まで）", "maxLength_mm": 35 },
+    { "id": "M", "label": "中（〜120 mm）", "maxLength_mm": 120 },
+    { "id": "L", "label": "大（〜300 mm）", "maxLength_mm": 300 },
+    { "id": "XL", "label": "特大（300 mm 超）", "maxLength_mm": null }
+  ],
+  "limits": {
+    "lod2": {
+      "S": { "tris": 300, "maps": 1, "mapPx": 128, "downloadMB": 0.05, "gpuMB": 0.1, "materials": 1, "joints": 4 },
+      "M": { "tris": 1500, "maps": 2, "mapPx": 256, "downloadMB": 0.3, "gpuMB": 0.5, "materials": 2, "joints": 12 },
+      "L": { "tris": 3000, "maps": 3, "mapPx": 512, "downloadMB": 0.8, "gpuMB": 1.5, "materials": 2, "joints": 16 },
+      "XL": { "tris": 4000, "maps": 3, "mapPx": 512, "downloadMB": 1.0, "gpuMB": 1.5, "materials": 3, "joints": 24 }
+    },
+    "lod1": {
+      "S": { "tris": 3000, "maps": 3, "mapPx": 256, "downloadMB": 0.3, "gpuMB": 0.5, "materials": 2, "joints": 16 },
+      "M": { "tris": 15000, "maps": 4, "mapPx": 1024, "downloadMB": 4, "gpuMB": 6, "materials": 4, "joints": 32 },
+      "L": { "tris": 25000, "maps": 4, "mapPx": 1024, "downloadMB": 4, "gpuMB": 6, "materials": 4, "joints": 48 },
+      "XL": { "tris": 30000, "maps": 4, "mapPx": 2048, "downloadMB": 12, "gpuMB": 22, "materials": 4, "joints": 64 }
+    },
+    "hero": {
+      "S": { "tris": 100000, "maps": 6, "mapPx": 1024, "downloadMB": 8, "gpuMB": 12, "materials": 4, "joints": 64 },
+      "M": { "tris": 150000, "maps": 8, "mapPx": 2048, "downloadMB": 20, "gpuMB": 40, "materials": 6, "joints": 96 },
+      "L": { "tris": 250000, "maps": 8, "mapPx": 2048, "downloadMB": 25, "gpuMB": 48, "materials": 6, "joints": 128 },
+      "XL": { "tris": 300000, "maps": 8, "mapPx": 2048, "downloadMB": 25, "gpuMB": 48, "materials": 6, "joints": 128 }
+    }
+  },
+  "map": { "lod2DownloadMB": 8, "lod2GpuMB": 16 }
+}

@@ -1,0 +1,185 @@
+{
+  "tools": {
+    "dig_mini": {
+      "tiers": {
+        "hero": {
+          "file": "dig_mini.hero.glb",
+          "triangles": 15080,
+          "vertices": 8215,
+          "bytes": 1031172
+        },
+        "lod1": {
+          "file": "dig_mini.lod1.glb",
+          "triangles": 3332,
+          "vertices": 2027,
+          "bytes": 310616
+        },
+        "lod2": {
+          "file": "dig_mini.lod2.glb",
+          "triangles": 842,
+          "vertices": 559,
+          "bytes": 97924
+        }
+      },
+      "ja": "ミニスコップ",
+      "en": "Mini trowel",
+      "use": "精密採集",
+      "spec": {
+        "blade_cm": [
+          7,
+          12
+        ],
+        "handle_cm": 15,
+        "total_cm": 27,
+        "maxDepth_cm": 12,
+        "mass_g": 150
+      },
+      "mass_g": 141,
+      "balancePoint_m": 0.079,
+      "overallLength_m": 0.28,
+      "buttZ_m": -0.075,
+      "tip_m": [
+        0,
+        -0.0084,
+        0.205
+      ]
+    },
+    "dig_trowel": {
+      "tiers": {
+        "hero": {
+          "file": "dig_trowel.hero.glb",
+          "triangles": 15292,
+          "vertices": 8656,
+          "bytes": 950760
+        },
+        "lod1": {
+          "file": "dig_trowel.lod1.glb",
+          "triangles": 3768,
+          "vertices": 2456,
+          "bytes": 309492
+        },
+        "lod2": {
+          "file": "dig_trowel.lod2.glb",
+          "triangles": 1046,
+          "vertices": 757,
+          "bytes": 98632
+        }
+      },
+      "ja": "スコップ",
+      "en": "Hand trowel",
+      "use": "万能",
+      "spec": {
+        "blade_cm": [
+          10,
+          18
+        ],
+        "handle_cm": 25,
+        "total_cm": 43,
+        "maxDepth_cm": 20,
+        "mass_g": 320
+      },
+      "mass_g": 322,
+      "balancePoint_m": 0.135,
+      "overallLength_m": 0.436,
+      "buttZ_m": -0.12,
+      "tip_m": [
+        0,
+        -0.0246,
+        0.316
+      ]
+    },
+    "dig_shovel": {
+      "tiers": {
+        "hero": {
+          "file": "dig_shovel.hero.glb",
+          "triangles": 19248,
+          "vertices": 11082,
+          "bytes": 1325656
+        },
+        "lod1": {
+          "file": "dig_shovel.lod1.glb",
+          "triangles": 4696,
+          "vertices": 3042,
+          "bytes": 412564
+        },
+        "lod2": {
+          "file": "dig_shovel.lod2.glb",
+          "triangles": 1372,
+          "vertices": 1036,
+          "bytes": 140000
+        }
+      },
+      "ja": "シャベル",
+      "en": "Round-point shovel",
+      "use": "深掘り・大量掘削",
+      "spec": {
+        "blade_cm": [
+          25,
+          30
+        ],
+        "handle_cm": 80,
+        "total_cm": 105,
+        "maxDepth_cm": 45,
+        "mass_g": 1400
+      },
+      "mass_g": 1433,
+      "balancePoint_m": 0.659,
+      "overallLength_m": 1.042,
+      "buttZ_m": -0.011,
+      "tip_m": [
+        0,
+        0.0961,
+        1.0299
+      ]
+    },
+    "dig_rake": {
+      "tiers": {
+        "hero": {
+          "file": "dig_rake.hero.glb",
+          "triangles": 8344,
+          "vertices": 5356,
+          "bytes": 1008392
+        },
+        "lod1": {
+          "file": "dig_rake.lod1.glb",
+          "triangles": 2844,
+          "vertices": 2108,
+          "bytes": 349804
+        },
+        "lod2": {
+          "file": "dig_rake.lod2.glb",
+          "triangles": 1254,
+          "vertices": 1087,
+          "bytes": 133472
+        }
+      },
+      "ja": "熊手",
+      "en": "Clam rake",
+      "use": "表層探索",
+      "spec": {
+        "blade_cm": [
+          18,
+          8
+        ],
+        "handle_cm": 25,
+        "total_cm": 33,
+        "maxDepth_cm": 8,
+        "mass_g": 350
+      },
+      "mass_g": 349,
+      "balancePoint_m": 0.118,
+      "overallLength_m": 0.328,
+      "buttZ_m": -0.115,
+      "tip_m": [
+        0,
+        -0.0478,
+        0.2103
+      ]
+    }
+  },
+  "lodDistances_m": {
+    "hero": 0,
+    "lod1": 2.5,
+    "lod2": 9
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "id": "euprymna_morsei",
+  "names": {
+    "ja": "ミミイカ",
+    "sci": "Euprymna morsei",
+    "en": "Mimika bobtail squid"
+  },
+  "taxon": {
+    "group": "mollusc",
+    "family": "Sepiolidae"
+  },
+  "locomotion": "swim",
+  "aquatic": true,
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "mimiika",
+    "modelLength_mm": 25,
+    "viewDistance_m": 8,
+    "driver": "mimiika",
+    "clips": {
+      "idle": "Rest",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": { "min": 4, "max": 40, "mean": 14, "sd": 5 },
+    "measure_ja": "外套長",
+    "weightCoef": { "a": 0.002, "b": 2.6 },
+    "minDepthFraction": 0.9
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "幼体", "maxLength_mm": 9 },
+    { "id": "young", "ja": "若い個体", "maxLength_mm": 13 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_mm>=26" },
+    { "id": "small", "ja": "小型個体", "when": "length_mm<=6" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {"tags": ["bare", "shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.2, 1.2], "season": ["spring"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.15, "group": [1, 1], "maxPopulation": 20, "length_mm": [24, 34]},
+    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["spring"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 1.9, "group": [1, 2], "maxPopulation": 20, "length_mm": [9, 24]},
+    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["summer"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 1.1, "group": [1, 1], "maxPopulation": 20, "length_mm": [11, 22]},
+    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["summer"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 1.0, "group": [1, 2], "maxPopulation": 20, "length_mm": [4, 10]},
+    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2.0, "group": [1, 2], "maxPopulation": 20, "length_mm": [6, 20]},
+    {"tags": ["bare", "shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.2, 1.2], "season": ["winter"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.8, "group": [1, 1], "maxPopulation": 20, "length_mm": [10, 28]}
+  ],
+  "brain": {
+    "tree": "squid_sand",
+    "params": {
+      "fleeDistance_m": 0.7,
+      "restMean_s": 14,
+      "buryDay_s": [60, 240],
+      "wanderDistance_m": [0.08, 0.5]
+    }
+  },
+  "capture": {
+    "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"],
+    "baseDifficulty": 0.55,
+    "alertPenalty": 0.45
+  },
+  "encyclopedia": {
+    "description": "外套長 1〜2 cm ほどが多い小さなダンゴイカの仲間（大きくても 4 cm）。夏から秋には外套長 1 cm に満たない幼体も見られる。胴（外套膜）は丸い袋のようで背側は頭とつながり、胴の中ほどの両脇に耳のような丸いヒレがある（名の由来）。頭の両側は大きな眼で占められ、虹彩は銀から金緑に光り、瞳孔は横長。腕は 8 本と短く第 3 腕がいちばん長い。2 本の長い触腕はふだん腕の間のポケットにしまわれ、獲物に向けて一瞬で撃ち出す。皮膚は半透明で、黄・赤橙・褐色の色素胞が伸び縮みして、砂に伏せると赤褐色のまだら、泳ぐときは透きとおるような淡い色に点を散らした姿、驚くと一瞬で濃くなる。背や眼の上には金緑の虹色素胞がきらめく。昼は浅い砂底に潜る。近縁のミミイカ類では、漏斗の水を後ろと前へ交互に吹いて体の下の砂を飛ばし、そのたびに少しずつ沈み、次に第 2 腕の 1 対をそろえて細く長く伸ばし、まわりの砂をすくっては頭の上へ引き寄せて頭と背にかけることが知られる。砂は粘液で体に付き、眼だけを出して潜む。夜はゆっくり砂から出て、底を離れる前に砂の衣を脱ぎ捨てる。それからヒレを細かく波打たせて底近くに浮かび、アミやヨコエビなどの小さな甲殻類をねらう。危険が迫ると墨を吐き、漏斗のジェットで胴を先にして急に後退し、少し離れた所に降りてまた潜る。",
+    "habitatHint": "春から秋、走水の浅い砂底やアマモ場の周りの裸地。昼は砂に潜って眼だけ出している。夜に水中ライトで探すと、底近くに浮かぶ姿が見つかる。夏から秋は外套長 1 cm に満たない幼体もいる。",
+    "behaviors": [
+      { "id": "rest", "ja": "底に伏せる", "hint": "砂の上に胴と腕を下ろし、呼吸に合わせて外套膜をふくらませる" },
+      { "id": "hover", "ja": "浮かぶ", "hint": "ヒレを細かく波打たせて底の少し上にとどまる。体色は淡い" },
+      { "id": "swim", "ja": "泳ぐ", "hint": "ヒレの波で腕の方へ静かに進み、ときどき漏斗の水流を足す" },
+      { "id": "crawl", "ja": "腕で這う", "hint": "底の上で腕を伸ばしては引き寄せ、少しずつ動く" },
+      { "id": "burrow", "ja": "砂に潜る", "hint": "漏斗を後ろ・前と交互に吹いて沈み、第 2 腕をそろえて伸ばしては砂を頭と背にかけ、眼だけ出す" },
+      { "id": "hunt", "ja": "狩り", "hint": "獲物を両眼で見つめ、近づいて触腕を撃ち出し、腕で抱えて食べる" },
+      { "id": "escape", "ja": "墨を吐いて逃げる", "hint": "体色を変え、墨を吐き、ジェットで胴から急に後退する" }
+    ],
+    "placeholderModel": false
+  }
+}
