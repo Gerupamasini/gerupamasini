@@ -250,6 +250,11 @@ export interface ArticleSpec {
   neck?: number;
   /** a flat blade (paddle, lanceolate dactylus): thin margins */
   blade?: boolean;
+  /**
+   * the section turned about the article's own axis (t, rad; + turns its anterior face towards the top): a leg is
+   * not a flat chain, it twists along its length (the joints' axes stay as they are)
+   */
+  twist?: [number, number][];
 }
 
 export type LegId = 'P1' | 'P2' | 'P3' | 'P4' | 'P5';
@@ -264,21 +269,29 @@ export interface LegSpec {
 const S = (t: number, hy: number, hz: number, cy = 0, cz = 0): SectionKnot => ({ t, hy, hz, cy, cz });
 
 /** a walking leg (P2–P4): article lengths (mm), `h` scales the height, `bladeW` the lanceolate dactylus's width */
-function walkingLeg(id: LegId, coxa: V3, yaw: number, me: number, ca: number, pr: number, da: number, h0: number, bladeW: number): LegSpec {
+function walkingLeg(id: LegId, coxa: V3, yaw: number, me: number, ca: number, pr: number, da: number, h0: number, bladeW: number, prW = 1): LegSpec {
   // (compressed and slender: 61 and 66 at 0.88 of the height and 0.92 of the breadth first drawn)
   const h = h0 * 0.88;
+  // The leg twists along its length (61, 47, 59): the coxa and basis sit obliquely in the body wall, the merus keeps
+  // its flat faces fore and aft (from above it is seen nearly edge-on, a narrow rod: 61), and through the carpus the
+  // leg turns, so that the propodus and the lanceolate dactylus lie nearly a quarter turn round and show their broad
+  // faces from above (61, 47) — and from the side, standing, the near legs' blades face the viewer (59). The last
+  // walking leg, nearest the paddle, twists the most and its propodus is a broad flattened blade, twice the merus's
+  // breadth seen from above (61: a step towards the paddle); P3's a little broader, P2's not.
+  const k = id === 'P4' ? 1.08 : id === 'P3' ? 1.0 : 0.92;
+  const tw = (pts: [number, number][]): [number, number][] => pts.map(([t, a]) => [t, a * k]);
   const S = (t: number, hy: number, hz: number, cy = 0, cz = 0): SectionKnot => ({ t, hy, hz: hz * 0.92, cy, cz });
   return {
     id, coxa, yaw,
     articles: [
-      { name: 'cx', length: 4.2, n: 2.4, sections: [S(0, 3.1 * h, 2.9), S(0.5, 3.3 * h, 3.0), S(1, 3.0 * h, 2.7)] },
-      { name: 'bi', length: 5.4, n: 2.6, neck: 0.12, sections: [S(0, 2.6 * h, 2.3), S(0.25, 2.8 * h, 2.35), S(1, 2.95 * h, 2.1)] },
+      { name: 'cx', length: 4.2, n: 2.4, twist: tw([[0, 0.12], [1, 0.18]]), sections: [S(0, 3.1 * h, 2.9), S(0.5, 3.3 * h, 3.0), S(1, 3.0 * h, 2.7)] },
+      { name: 'bi', length: 5.4, n: 2.6, neck: 0.12, twist: tw([[0, 0.18], [1, 0.25]]), sections: [S(0, 2.6 * h, 2.3), S(0.25, 2.8 * h, 2.35), S(1, 2.95 * h, 2.1)] },
       // merus: long and compressed (taller than broad), a low keel above and below, nearly parallel-sided (61, 6)
-      { name: 'me', length: me, n: 3.0, neck: 0.035, sections: [S(0, 2.7 * h, 1.75), S(0.06, 2.85 * h, 1.8), S(0.5, 3.05 * h, 1.75, 0.12), S(0.92, 2.8 * h, 1.6, 0.08), S(1, 2.55 * h, 1.5)], costae: [[0, 0.22, 0.22], [Math.PI, 0.16, 0.28]] },
-      { name: 'ca', length: ca, n: 2.8, neck: 0.09, sections: [S(0, 2.0 * h, 1.35), S(0.18, 2.4 * h, 1.55), S(0.85, 2.3 * h, 1.45), S(1, 2.05 * h, 1.3)], costae: [[0, 0.2, 0.22]] },
-      { name: 'pr', length: pr, n: 2.8, neck: 0.06, sections: [S(0, 1.75 * h, 1.15), S(0.08, 2.0 * h, 1.3), S(0.9, 1.75 * h, 1.15), S(1, 1.55 * h, 1.05)], costae: [[0, 0.16, 0.2], [Math.PI, 0.13, 0.24]] },
+      { name: 'me', length: me, n: 3.0, neck: 0.035, twist: tw([[0, 0.08], [1, 0.14]]), sections: [S(0, 2.7 * h, 1.75), S(0.06, 2.85 * h, 1.8), S(0.5, 3.05 * h, 1.75, 0.12), S(0.92, 2.8 * h, 1.6, 0.08), S(1, 2.55 * h, 1.5)], costae: [[0, 0.22, 0.22], [Math.PI, 0.16, 0.28]] },
+      { name: 'ca', length: ca, n: 2.8, neck: 0.09, twist: tw([[0, 0.25], [1, 0.85]]), sections: [S(0, 2.0 * h, 1.35), S(0.18, 2.4 * h, 1.55), S(0.85, 2.3 * h, 1.45), S(1, 2.05 * h, 1.3)], costae: [[0, 0.2, 0.22]] },
+      { name: 'pr', length: pr, n: 2.8, neck: 0.06, twist: tw([[0, 1.05], [1, 1.32]]), sections: [S(0, 1.75 * h, 1.15), S(0.08, 2.0 * h * (0.6 + 0.4 * prW), 1.3), S(0.5, 2.0 * h * prW, 1.2), S(0.9, 1.8 * h * prW, 1.1), S(1, 1.55 * h, 1.05)], costae: [[0, 0.16, 0.2], [Math.PI, 0.13, 0.24]] },
       // dactylus: a lanceolate blade, broadest at a third of its length, to a sharp tip (6, 61; P4 the broadest)
-      { name: 'da', length: da, n: 2.1, neck: 0.05, blade: true, sections: [S(0, 1.35 * h, 0.95), S(0.1, 1.7 * h * bladeW, 0.95), S(0.33, 1.9 * h * bladeW, 0.85), S(0.66, 1.3 * h * bladeW, 0.6, -0.1), S(0.9, 0.55 * h, 0.3, -0.3), S(1, 0.06, 0.06, -0.45)] },
+      { name: 'da', length: da, n: 2.1, neck: 0.05, blade: true, twist: tw([[0, 1.35], [1, 1.45]]), sections: [S(0, 1.35 * h, 0.95), S(0.1, 1.7 * h * bladeW, 0.95), S(0.33, 1.9 * h * bladeW, 0.85), S(0.66, 1.3 * h * bladeW, 0.6, -0.1), S(0.9, 0.55 * h, 0.3, -0.3), S(1, 0.06, 0.06, -0.45)] },
     ],
   };
 }
@@ -333,8 +346,8 @@ export function legSpecs(): LegSpec[] {
     ],
   };
   const P2 = walkingLeg('P2', [18.8, 5.0, 6.9], 0.42, 20.0, 7.6, 12.9, 15.0, 1.0, 1.0);
-  const P3 = walkingLeg('P3', [20.6, 5.0, 0.4], 0.04, 20.8, 7.9, 13.0, 15.2, 1.0, 1.05);
-  const P4 = walkingLeg('P4', [20.2, 5.2, -6.1], -0.36, 18.0, 7.0, 11.6, 13.6, 0.96, 1.25);
+  const P3 = walkingLeg('P3', [20.6, 5.0, 0.4], 0.04, 20.8, 7.9, 13.0, 15.2, 1.0, 1.08, 1.15);
+  const P4 = walkingLeg('P4', [20.2, 5.2, -6.1], -0.36, 18.0, 7.0, 11.6, 13.6, 0.96, 1.4, 1.6);
   // P5: the swimming leg — short, stout merus and carpus, the flat oval propodus and the dactylus paddle
   const P5: LegSpec = {
     id: 'P5', coxa: [16.6, 6.2, -12.4], yaw: -0.86,

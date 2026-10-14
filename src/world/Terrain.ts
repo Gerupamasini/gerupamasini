@@ -185,6 +185,25 @@ float rippleHeight(vec2 xz, float sandy, float pit) {
 }
 `;
 
+/** GLSL shared by the shading and the ripple sheet's relief: where an open shore's surf leaves the sand without ripples.
+ * Needs uSurf, tSurfZone, uSurfGrid, uWaterLevel and SURF_MEM_GLSL. */
+const RIPPLE_SURF_GLSL = /* glsl */ `
+// the bed's slope toward the sea, from the surf's zone (SurfZone)
+float surfSlopeAt(vec2 q) {
+  vec2 pc = clamp(q, vec2(-uSurfGrid.x), vec2(uSurfGrid.x));
+  return texture2D(tSurfZone, ((pc + uSurfGrid.x) / (2.0 * uSurfGrid.x) * (uSurfGrid.y - 1.0) + 0.5) / uSurfGrid.y).w;
+}
+// On an open shore the surf leaves the beach without ripples: the uprush and the backwash plane the swash's band
+// flat (from the inner surf zone, where the bores' sheet flow sweeps the bed, to the top of the run-up), and a steep
+// beach face carries none. 1 where the ripples may be, 0 where the surf has planed them away (at the sand's height y).
+float rippleSurfKeep(vec2 q, float y) {
+  if (uSurf.w <= 0.0) return 1.0;
+  float b = surfSlopeAt(q), R2 = surfRunup2(b), e = y - uWaterLevel;
+  float band = smoothstep(-0.5 * R2 - 0.45, -0.5 * R2 - 0.15, e) * (1.0 - smoothstep(1.05 * R2, 1.35 * R2 + 0.05, e));
+  return 1.0 - max(band, smoothstep(0.05, 0.08, b));
+}
+`;
+
 
 /** GLSL for the ripple sheet's vertex stage: the coarse mesh's own surface (its triangles, colours, normals) sampled at
  * any point from the grid textures, then the ripple field. */
@@ -611,13 +630,22 @@ uniform float uSheetDrop;
 uniform vec2 uRipRot;
 uniform float uRippleGain;
 uniform float uHalf;
-${kind === 'sheet' ? SHEET_VERTEX_GLSL : ''}`)
+${kind === 'sheet' ? `uniform vec4 uSurf;
+uniform sampler2D tSurfZone;
+uniform vec2 uSurfGrid;
+uniform float uWaterLevel;
+uniform sampler2D uSpillTex;
+${SHEET_VERTEX_GLSL}
+${SURF_MEM_GLSL}
+${RIPPLE_SURF_GLSL}` : ''}`)
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
 vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 ${kind === 'sheet' ? 'vSubstrateV = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrateV = substrate;\nvPit = pit;'}`);
       if (kind === 'sheet') {
         // the ripple sheet: a fine grid that follows the player, standing on the coarse mesh's own triangles and
-        // raised into the ripples' relief, so the troughs are real hollows the water can lie in
+        // raised into the ripples' relief, so the troughs are real hollows the water can lie in at its edge. Under the
+        // water (the tide's or a pool's) the ripples are only shaded, and where an open shore's surf planes the beach
+        // there are none
         shader.vertexShader = shader.vertexShader
           .replace('#include <color_vertex>', '#include <color_vertex>\nsheetSample(uSheetC + position.xz);\n#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )\nvColor.rgb = gSheetCol;\n#endif')
           .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = gSheetNrm;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3(tangent.xyz);\n#endif')
@@ -626,7 +654,10 @@ ${kind === 'sheet' ? 'vSubstrateV = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrate
   // the relief fades out toward the sheet's rim, where the coarse mesh takes over again
   float edge = 1.0 - smoothstep(uSheetR - 1.6, uSheetR - 0.5, length(position.xz));
   float sandy = 1.0 - smoothstep(1.5, 2.5, gSheetSub);
-  transformed.y += ${RIPPLE_H} * rippleAt(transformed.xz).x * (0.12 + 0.88 * sandy) * (1.0 - gSheetPit) * uRippleGain * edge;
+  float spill = texture2D(uSpillTex, (transformed.xz + uHalf) / (2.0 * uHalf)).r;
+  float lvl = (spill > uWaterLevel + 0.01 && spill > gSheetH + 0.003) ? spill : uWaterLevel;
+  float above = smoothstep(lvl - 0.03, lvl - 0.005, gSheetH);
+  transformed.y += ${RIPPLE_H} * rippleAt(transformed.xz).x * (0.12 + 0.88 * sandy) * (1.0 - gSheetPit) * uRippleGain * edge * above * rippleSurfKeep(transformed.xz, gSheetH);
 }`);
       } else if (kind === 'terrain') {
         // under the ripple sheet the coarse mesh steps down out of the way (it comes back up before the sheet's rim)
@@ -704,11 +735,9 @@ uniform sampler2D tSurfMem;
 uniform vec4 uMemBox;
 ${WAVES_GLSL}
 ${SURF_MEM_GLSL}
-// the bed's slope toward the sea, from the surf's zone (SurfZone)
-float surfSlopeAt(vec2 q) {
-  vec2 pc = clamp(q, vec2(-uSurfGrid.x), vec2(uSurfGrid.x));
-  return texture2D(tSurfZone, ((pc + uSurfGrid.x) / (2.0 * uSurfGrid.x) * (uSurfGrid.y - 1.0) + 0.5) / uSurfGrid.y).w;
-}
+${RIPPLE_SURF_GLSL}
+// where the ripples may be on an open shore (the colour stage sets it; the normal stage reads it)
+float gRipKeep = 1.0;
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
 // a mud flat at low water (uMudLook): how saturated the silt is, and the thin sheets of water lying on it
@@ -774,9 +803,10 @@ vec3 grains(vec2 p, out vec2 off) {
   diffuseColor.rgb *= mix(vec3(1.0), uMudTint, smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.0, 4.5, vSubstrate)));
   // the ripple field, baked round the player (RippleMap): ripple troughs hold a little more moisture and fines, so
   // they are faintly darker, following the same field as the normals (-1 in a trough, +1 on a crest, scaled by how
-  // well formed the ripples are here)
+  // well formed the ripples are here; none where an open shore's surf planes the beach)
+  gRipKeep = rippleSurfKeep(vWorldPos.xz, vWorldPos.y);
   gRippleAt = uRippleGain > 0.0 ? rippleAt(vWorldPos.xz) : vec4(0.0);
-  float ripple = gRippleAt.x * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
+  float ripple = gRippleAt.x * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain * gRipKeep;
   gRipple = ripple;
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 + ripple * 0.1;
   diffuseColor.rgb *= detail;
@@ -1065,7 +1095,7 @@ vec3 grains(vec2 p, out vec2 off) {
   // (where no ripple sheet raises them, the shading near the player also carries the tilt of the relief itself, about
   // RIPPLE_H × the wavenumber: as the sheet's facets would show it)
   float relief = uSheetR > 0.0 ? 0.0 : 0.94 * (1.0 - smoothstep(2.5, 4.5, distance(cameraPosition.xz, vWorldPos.xz)));
-  float strength = (0.12 + 0.88 * sandy) * (0.42 + relief) * (1.0 - vPit) * uRippleGain;
+  float strength = (0.12 + 0.88 * sandy) * (0.42 + relief) * (1.0 - vPit) * uRippleGain * gRipKeep;
   // a standing film fills in between the grains and over the lumps: the ripples still show through it
   vec2 nrmAdd = gNrmAdd * (1.0 - 0.8 * gWetFilm);
   vec3 worldPerturb = vec3(gRippleAt.y * strength + nrmAdd.x, 0.0, gRippleAt.z * strength + nrmAdd.y);
