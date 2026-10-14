@@ -7,8 +7,9 @@ import { makeCapMaterial, makeGroundDecalMaterial, makeShaftMaterial } from './S
  * A real hole is three things drawn in this order (renderOrder): the shaft (an oblique tube whose top is cut
  * exactly where it meets the sand, flared into a worn funnel) and the crabs; then a "depth cap" over the opening
  * that writes only depth; then the terrain, which fails the depth test inside the opening — so the flat shows a
- * hole without its shader knowing, and a crab down the shaft is seen through it. Farther away, plugged or in the
- * debug-less low quality, a burrow is a darkening decal (unlit, multiplied onto the sand).
+ * hole without its shader knowing, and a crab down the shaft is seen through it. The nearest holes have the fine,
+ * ragged shaft; the rest a plain one of a tenth the triangles (a hole a few pixels across). Farther away, plugged or
+ * past the quality's count, a burrow is a darkening decal (unlit, multiplied onto the sand).
  *
  * Instance space: the entrance centre on the ground, +Y the ground normal, the shaft leaning toward -Z, unit radius.
  */
@@ -17,6 +18,9 @@ export const SHAFT_TILTS = [0.35, 0.6, 0.85];      // rad from vertical: the thr
 const SHAFT_LEN = 9;                                 // in entrance radii (about 4–5 cm for a 1 cm hole)
 const MAX_OPEN = 40;
 const MAX_DECALS = 6000;
+const MAX_CONTACTS = 600;
+/** the shaft's segments around and rings down: fine (a hole near the camera) and plain */
+const SHAFT_RES = [[56, 22], [20, 8]];
 export const RENDER_ORDER = { shaft: -30, crab: -30, cap: -20 };
 
 const _m = new Matrix4(), _q = new Quaternion(), _q2 = new Quaternion(), _p = new Vector3(), _s = new Vector3(), _n = new Vector3();
@@ -77,8 +81,9 @@ function shaftGeometry(tilt, radial = 56, rings = 22) {
 }
 
 let SHAFTS = null;
+/** the shafts of each tilt: [fine, plain] (the fine one's axis is the plain one's too) */
 export function shaftVariants() {
-  if (!SHAFTS) SHAFTS = SHAFT_TILTS.map((t) => shaftGeometry(t));
+  if (!SHAFTS) SHAFTS = SHAFT_TILTS.map((t) => { const v = SHAFT_RES.map(([n, r]) => shaftGeometry(t, n, r)); return { ...v[0], plain: v[1] }; });
   return SHAFTS;
 }
 
@@ -89,85 +94,117 @@ export function shaftAxis(k, azimuth, normal, out = new Vector3()) {
   return out.copy(A).applyQuaternion(_q);
 }
 
+/** a mesh of ground decals (instanced quads; aDec = kind, strength, seed, extra) */
+function decalMesh(name, max, material) {
+  const plane = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const attr = new InstancedBufferAttribute(new Float32Array(max * 4), 4);
+  plane.setAttribute('aDec', attr);
+  const m = new InstancedMesh(plane, material, max);
+  m.name = name;
+  m.count = 0;
+  m.visible = false;
+  m.frustumCulled = false;
+  m.renderOrder = 2;
+  return { mesh: m, attr, n: 0, max };
+}
+
+/** only the instances in use go to the GPU (the buffers are sized for the most there can be) */
+function upload(attr, n) {
+  attr.clearUpdateRanges();
+  if (n > 0) attr.addUpdateRange(0, n * attr.itemSize);
+  attr.needsUpdate = true;
+}
+
 export class BurrowRenderer {
   constructor() {
     this.group = new Group();
     this.group.name = 'kg-burrows';
     const shaftMat = makeShaftMaterial();
     const capMat = makeCapMaterial();
-    this.shafts = shaftVariants().map((v, k) => {
-      const m = new InstancedMesh(v.shaft, shaftMat, MAX_OPEN);
-      m.name = `kg-shaft-${k}`;
+    const make = (geo, mat, name, order) => {
+      const m = new InstancedMesh(geo, mat, MAX_OPEN);
+      m.name = name;
       m.count = 0;
+      m.visible = false;
       m.frustumCulled = false;
-      m.renderOrder = RENDER_ORDER.shaft;
-      m.receiveShadow = true;
+      m.renderOrder = order;
       return m;
-    });
-    this.caps = shaftVariants().map((v, k) => {
-      const m = new InstancedMesh(v.cap, capMat, MAX_OPEN);
-      m.name = `kg-cap-${k}`;
-      m.count = 0;
-      m.frustumCulled = false;
-      m.renderOrder = RENDER_ORDER.cap;
-      return m;
-    });
-    const plane = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    this.decalAttr = new InstancedBufferAttribute(new Float32Array(MAX_DECALS * 4), 4);
-    plane.setAttribute('aDec', this.decalAttr);
-    this.decals = new InstancedMesh(plane, makeGroundDecalMaterial(), MAX_DECALS);
-    this.decals.name = 'kg-decals';
-    this.decals.count = 0;
-    this.decals.frustumCulled = false;
-    this.decals.renderOrder = 2;
-    this.group.add(...this.shafts, ...this.caps, this.decals);
-    this.nOpen = [0, 0, 0];
-    this.nDec = 0;
+    };
+    // [tilt][fine 0 / plain 1]
+    this.shafts = shaftVariants().map((v, k) => [v, v.plain].map((g, f) => { const m = make(g.shaft, shaftMat, `kg-shaft-${k}${f ? '-plain' : ''}`, RENDER_ORDER.shaft); m.receiveShadow = true; return m; }));
+    this.caps = shaftVariants().map((v, k) => [v, v.plain].map((g, f) => make(g.cap, capMat, `kg-cap-${k}${f ? '-plain' : ''}`, RENDER_ORDER.cap)));
+    const decalMat = makeGroundDecalMaterial();
+    this.static = decalMesh('kg-decals', MAX_DECALS, decalMat);
+    this.contacts = decalMesh('kg-contacts', MAX_CONTACTS, decalMat);
+    // (kept for the viewer and tests: the burrows' decal mesh)
+    this.decals = this.static.mesh;
+    this.group.add(...this.shafts.flat(), ...this.caps.flat(), this.static.mesh, this.contacts.mesh);
+    this.nOpen = [[0, 0], [0, 0], [0, 0]];
   }
 
   begin() {
-    this.nOpen = [0, 0, 0];
-    this.nDec = 0;
+    this.nOpen = [[0, 0], [0, 0], [0, 0]];
+    this.static.n = 0;
   }
 
-  /** an open burrow drawn as a real hole: entrance (world), radius (m), tilt variant, azimuth, ground normal */
-  addOpen(e, r, k, azimuth, normal) {
-    if (this.nOpen[k] >= MAX_OPEN) return false;
+  /** an open burrow drawn as a real hole: entrance (world), radius (m), tilt variant, azimuth, ground normal, fine */
+  addOpen(e, r, k, azimuth, normal, fine = true) {
+    const f = fine ? 0 : 1;
+    if (this.nOpen[k][f] >= MAX_OPEN) return false;
     _q.setFromUnitVectors(UP, normal).multiply(_q2.setFromAxisAngle(UP, azimuth));
     _m.compose(_p.copy(e), _q, _s.set(r, r, r));
-    const i = this.nOpen[k]++;
-    this.shafts[k].setMatrixAt(i, _m);
-    this.caps[k].setMatrixAt(i, _m);
+    const i = this.nOpen[k][f]++;
+    this.shafts[k][f].setMatrixAt(i, _m);
+    this.caps[k][f].setMatrixAt(i, _m);
     return true;
   }
 
   /**
-   * a ground decal: kind 0 mouth (strength = open 0..1, extra = collar wetness), 1 contact shadow, 2 scrape mark
-   * sx, sz: half sizes (m); yaw: rotation about the normal
+   * a ground decal: kind 0 mouth (strength = open 0..1, extra = collar wetness), 1 contact shadow, 2 scrape mark,
+   * 3 pellet field. sx, sz: half sizes (m); yaw: rotation about the normal
    */
   addDecal(p, normal, sx, sz, yaw, kind, strength, seed = 0, extra = 1) {
-    if (this.nDec >= MAX_DECALS) return;
-    _n.copy(normal);
-    _q.setFromUnitVectors(UP, _n).multiply(_q2.setFromAxisAngle(UP, yaw));
-    _m.compose(_p.copy(p).addScaledVector(_n, 0.0003), _q, _s.set(sx * 2, 1, sz * 2));
-    const i = this.nDec++;
-    this.decals.setMatrixAt(i, _m);
-    this.decalAttr.setXYZW(i, kind, strength, seed, extra);
+    put(this.static, p, normal, sx, sz, yaw, kind, strength, seed, extra);
   }
 
   end() {
-    for (let k = 0; k < 3; k++) {
-      this.shafts[k].count = this.caps[k].count = this.nOpen[k];
-      this.shafts[k].instanceMatrix.needsUpdate = true;
-      this.caps[k].instanceMatrix.needsUpdate = true;
+    for (let k = 0; k < 3; k++) for (let f = 0; f < 2; f++) {
+      const n = this.nOpen[k][f];
+      for (const m of [this.shafts[k][f], this.caps[k][f]]) {
+        m.count = n;
+        m.visible = n > 0;
+        upload(m.instanceMatrix, n);
+      }
     }
-    this.decals.count = this.nDec;
-    this.decals.instanceMatrix.needsUpdate = true;
-    this.decalAttr.needsUpdate = true;
+    finish(this.static);
   }
+
+  /** the per-frame decals (contact shadows, feet), apart from the burrows' */
+  beginContacts() { this.contacts.n = 0; }
+  addContact(p, normal, sx, sz, yaw, kind, strength, seed = 0, extra = 1) {
+    put(this.contacts, p, normal, sx, sz, yaw, kind, strength, seed, extra);
+  }
+  endContacts() { finish(this.contacts); }
 
   dispose() {
     this.group.removeFromParent();
-    for (const m of [...this.shafts, ...this.caps, this.decals]) m.dispose();
+    for (const m of [...this.shafts.flat(), ...this.caps.flat(), this.static.mesh, this.contacts.mesh]) m.dispose();
   }
+}
+
+function put(D, p, normal, sx, sz, yaw, kind, strength, seed, extra) {
+  if (D.n >= D.max) return;
+  _n.copy(normal);
+  _q.setFromUnitVectors(UP, _n).multiply(_q2.setFromAxisAngle(UP, yaw));
+  _m.compose(_p.copy(p).addScaledVector(_n, 0.0003), _q, _s.set(sx * 2, 1, sz * 2));
+  const i = D.n++;
+  D.mesh.setMatrixAt(i, _m);
+  D.attr.setXYZW(i, kind, strength, seed, extra);
+}
+
+function finish(D) {
+  D.mesh.count = D.n;
+  D.mesh.visible = D.n > 0;
+  upload(D.mesh.instanceMatrix, D.n);
+  upload(D.attr, D.n);
 }

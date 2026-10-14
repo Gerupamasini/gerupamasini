@@ -1,4 +1,4 @@
-import { Group, IcosahedronGeometry, Matrix4, Mesh, SkinnedMesh, Sphere, Vector3 } from 'three';
+import { Group, IcosahedronGeometry, Matrix4, Mesh, OctahedronGeometry, SkinnedMesh, Sphere, Vector3 } from 'three';
 import { crabGeometry } from './ScopimeraGlobosaGeometry.js';
 import { createRigInstance } from './ScopimeraGlobosaRig.js';
 import { crabPalette, makeExoskeletonMaterial, makePelletMaterial, makeSetaeMaterial } from './ScopimeraGlobosaMaterial.js';
@@ -9,8 +9,9 @@ const IDENT = new Matrix4();
 /** generous bounds in CW units (legs spread, chelae raised); the crab culls itself, not the skinning */
 const BOUNDS = new Sphere(new Vector3(0, 0.35, 0.1), 1.9);
 let PELLET_GEO = null;
-export function pelletGeometry(detail = 2) {
-  if (!PELLET_GEO) PELLET_GEO = [new IcosahedronGeometry(1, 0), new IcosahedronGeometry(1, 1), new IcosahedronGeometry(1, 2)];
+/** a pellet's ball: 0 an octahedron (8 triangles: a pixel or two), 1–3 icosahedra of 20, 80 and 180 */
+export function pelletGeometry(detail = 3) {
+  if (!PELLET_GEO) PELLET_GEO = [new OctahedronGeometry(1, 0), new IcosahedronGeometry(1, 0), new IcosahedronGeometry(1, 1), new IcosahedronGeometry(1, 2)];
   return PELLET_GEO[detail];
 }
 
@@ -72,7 +73,7 @@ export class CrabModel {
     // the pellet growing at the mouth and the one a cheliped carries away
     this.pelletMat = makePelletMaterial({ detail: 1 });
     this.pelletMat.userData.uniforms.uPelScale.value = cw_m * 0.12;
-    this.mouthPellet = new Mesh(pelletGeometry(2), this.pelletMat);
+    this.mouthPellet = new Mesh(pelletGeometry(3), this.pelletMat);
     this.mouthPellet.name = 'mouth-pellet';
     this.mouthPellet.visible = false;
     this.rig.mouth.add(this.mouthPellet);
