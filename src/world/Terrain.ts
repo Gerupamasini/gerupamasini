@@ -292,6 +292,8 @@ export class Terrain {
   /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
    * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
   private readonly uMudLook: IUniform<number> = { value: 0 };
+  /** no silt flat's look: its code compiled out (NO_MUD) until setSediment asks for one */
+  private noMud = true;
   /** the water's mirror of the land and sky (shared with the water pass, see shareMirror): the sheets of water on a
    * mud flat show it as the river does */
   private mirrorU: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> } = {
@@ -570,6 +572,7 @@ export class Terrain {
     // the depth whether the ground is above the swash's sheet of a few millimetres, sees it where it is)
     const over = kind === 'patch';
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: over, polygonOffsetFactor: over ? -1 : 0, polygonOffsetUnits: over ? -2 : 0 });
+    if (this.noMud) (mat.defines as Record<string, number>).NO_MUD = 1;
     const uWater = this.uWater, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -716,7 +719,12 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
 uniform float uSheetR;
+// (a sandy flat compiles the silt flat's look out: NO_MUD, setSediment)
+#ifdef NO_MUD
+const float uMudLook = 0.0;
+#else
 uniform float uMudLook;
+#endif
 uniform sampler2D tMirror;
 uniform mat4 uMirrorMat;
 uniform float uMirrorOn;
@@ -1279,8 +1287,20 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
   setSediment(rippleGain: number, mudLook: number): void {
     this.uRippleGain.value = rippleGain;
     this.uMudLook.value = mudLook;
+    this.setNoMud(mudLook <= 0);
     this.setRippleSheet(this.sheetWanted);
     this.setRippleMap(this.rippleMapWanted);
+  }
+
+  /** Without a silt flat's look (葛西, 走水) its code is compiled out of the terrain's shaders (the programs rebuilt). */
+  private setNoMud(on: boolean): void {
+    this.noMud = on;
+    for (const m of [this.material, this.patchMaterial, ...(this.sheetMaterial ? [this.sheetMaterial] : [])]) {
+      const d = m.defines as Record<string, number | string>;
+      if (('NO_MUD' in d) === on) continue;
+      if (on) d.NO_MUD = 1; else delete d.NO_MUD;
+      m.needsUpdate = true;
+    }
   }
 
 

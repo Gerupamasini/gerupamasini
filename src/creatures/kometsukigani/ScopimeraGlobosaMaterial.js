@@ -950,8 +950,9 @@ export function crabPalette(rand, sex = 'm') {
  * under water they slump and wash away. Instance attribute aPel = (seed, birth time s, kind 0 feed / 1 dig, wet0);
  * aPelCol the dry sand's colour where the pellet lies (0: the flat's mean, uPelSand).
  */
-export function makePelletMaterial({ detail = 1 } = {}) {
-  const uniforms = {
+export function makePelletMaterial({ detail = 1, simple = false, shared = null } = {}) {
+  // (shared: another pellet material's uniforms, so the two draw alike)
+  const uniforms = shared ?? {
     uPelTime: { value: 0 },
     uPelSand: { value: SAND_LINEAR.clone() },
     uPelDissolve: { value: 0 },
@@ -963,6 +964,9 @@ export function makePelletMaterial({ detail = 1 } = {}) {
   const mat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
   mat.name = 'kg-pellet';
   mat.userData.uniforms = uniforms;
+  // (simple: a pellet of a pixel or two, SandPellets' far ones: the flattened ball without its lumps, whose shape and
+  // normal took four noise evaluations a vertex)
+  if (simple) mat.defines = { ...mat.defines, PEL_SIMPLE: 1 };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -981,9 +985,13 @@ float pelDiss() { return max(uPelDissolve, aWash > 0.0 ? clamp((uPelTime - aWash
 // a lumpy, slightly flattened ball; excavation lumps are rougher; under water they slump
 vec3 pelDisp(vec3 p) {
   float uDiss = pelDiss();
+#ifdef PEL_SIMPLE
+  vec3 q = p;
+#else
   float s = aPel.x * 97.0;
   float lump = (kgN3(p * 2.6 + s) - 0.5) * mix(0.28, 0.55, aPel.z) + (kgN3(p * 6.0 + s * 1.7) - 0.5) * 0.12;
   vec3 q = p * (1.0 + lump);
+#endif
   q.y *= mix(0.82, 0.7, aPel.z);
   if (q.y < -0.35) q.y = mix(q.y, -0.35, 0.7);
   q.y = mix(q.y, -0.3 + q.y * 0.25, uDiss);
@@ -991,6 +999,10 @@ vec3 pelDisp(vec3 p) {
   return q;
 }`)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+#ifdef PEL_SIMPLE
+// (the flattened ball's own normal)
+objectNormal = normalize(normal * vec3(1.0, 1.0 / mix(0.82, 0.7, aPel.z), 1.0));
+#else
 {
   vec3 t1 = normalize(cross(abs(normal.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), normal));
   vec3 t2 = cross(normal, t1);
@@ -1000,7 +1012,8 @@ vec3 pelDisp(vec3 p) {
   vec3 a2 = pelDisp(normalize(normal + t2 * e)) - c0;
   vec3 nn = normalize(cross(a1, a2));
   objectNormal = dot(nn, normal) < 0.0 ? -nn : nn;
-}`)
+}
+#endif`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 transformed = pelDisp(position);
 vPelLocal = position + aPel.x * 97.0;
@@ -1051,7 +1064,7 @@ roughnessFactor = mix(0.92, 0.35, pelWet);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = kgPerturb(normal, -vViewPosition, pelH * uPelScale * uPelDetail);`);
   };
-  mat.customProgramCacheKey = () => 'kg-pellet-v4';
+  mat.customProgramCacheKey = () => (simple ? 'kg-pellet-v4-simple' : 'kg-pellet-v4');
   return mat;
 }
 

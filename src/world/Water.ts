@@ -209,6 +209,8 @@ export class WaterPass {
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
+      // a shore without surf (葛西, 漫湖) does without its code altogether (SURF_GLSL)
+      defines: surf.uSurf.value.w > 0 ? {} : { NO_SURF: 1 },
       depthTest: false,
       depthWrite: false,
       // (the water's level at the eye, which decides whether the view is under the surf, is the same for every

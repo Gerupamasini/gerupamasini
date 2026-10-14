@@ -36,3 +36,15 @@ describe('Terrain.colorAt: the sediment as drawn, for what takes the colour of t
     expect(mid).toBeLessThan(lum(tinted));
   });
 });
+
+describe('Terrain: what its shaders carry', () => {
+  it('compiles the silt flat\'s look out unless the map asks for it (NO_MUD)', () => {
+    const t = flat();
+    const defs = () => (t as unknown as { material: { defines: Record<string, unknown> } }).material.defines;
+    expect('NO_MUD' in defs()).toBe(true);
+    t.setSediment(1, 1);
+    expect('NO_MUD' in defs()).toBe(false);
+    t.setSediment(1, 0);
+    expect('NO_MUD' in defs()).toBe(true);
+  });
+});

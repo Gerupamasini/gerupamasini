@@ -62,6 +62,8 @@ export class SandPellets {
     this.buckets = new Map();
     this.material = makePelletMaterial({ detail: 1 });
     this.material.userData.uniforms.uPelScale.value = 0.001;
+    // the far pellets (8 and 20 triangles: a pixel or two) without the lumps; the same uniforms
+    this.materialFar = makePelletMaterial({ detail: 1, simple: true, shared: this.material.userData.uniforms });
     this.far = far;
     this.time = 0;
     this.total = 0;
@@ -231,7 +233,7 @@ export class SandPellets {
     // room for the pellets there are and some to come (a crab feeding next to the camera adds a few a minute)
     const n = idx ? idx.length : c.n;
     const cap = Math.min(MAX_PER_CELL, Math.max(64, 2 ** Math.ceil(Math.log2(n + 32))));
-    const mesh = new InstancedMesh(pelletGeometry(detail), this.material, cap);
+    const mesh = new InstancedMesh(pelletGeometry(detail), detail <= 1 ? this.materialFar : this.material, cap);
     mesh.name = 'kg-pellet-cell';
     // culled as a whole by the cell's own bounds (all its pellets lie in its square on the sand)
     mesh.frustumCulled = true;
@@ -319,6 +321,7 @@ export class SandPellets {
   dispose() {
     this.clear();
     this.material.dispose();
+    this.materialFar.dispose();
     this.group.removeFromParent();
   }
 }
