@@ -71,8 +71,12 @@ export const IRIS_RECT_2048 = { x: 1040, y: 1552, w: 480, h: 480 };
  * The fin atlas of one tier: the iris painted into its corner, then the atlas filtered down to `size`.
  * `atlas` is paintFinAtlas()'s 2048² result ({ size, color RGBA, normal RGB, data RGBA }); `iris` paintIris()'s
  * ({ size, rgb }). Returns the atlas at `size` and the iris rectangle in UV units [u, v, w, h].
+ * The iris is transparent (alpha and coverage 0) unless `opaqueIris`: the eyes are opaque materials that read only its
+ * colour, while a fin seen edge-on samples so coarse a mipmap that an opaque iris would bleed into it as a dark blot
+ * (the first dorsal fin's rectangle ends 22 pixels above it). The far tier's eyes share the alpha-tested fins'
+ * material: there it is opaque.
  */
-export function finAtlasForTier(atlas, iris, size) {
+export function finAtlasForTier(atlas, iris, size, { opaqueIris = false } = {}) {
   const S = atlas.size, R = IRIS_RECT_2048;
   const color = atlas.color.slice(), normal = atlas.normal.slice(), data = atlas.data.slice();
   // the iris, resampled (bilinear) into the rectangle; opaque, flat normal, full coverage
@@ -87,17 +91,17 @@ export function finAtlasForTier(atlas, iris, size) {
         const p = (xx, yy) => iris.rgb[(yy * iris.size + xx) * 3 + c];
         color[o * 4 + c] = Math.round((p(x0, y0) * (1 - fx) + p(x1, y0) * fx) * (1 - fy) + (p(x0, y1) * (1 - fx) + p(x1, y1) * fx) * fy);
       }
-      color[o * 4 + 3] = 255;
+      color[o * 4 + 3] = opaqueIris ? 255 : 0;
       normal[o * 3] = 128; normal[o * 3 + 1] = 128; normal[o * 3 + 2] = 255;
-      data[o * 4] = 0; data[o * 4 + 1] = 0; data[o * 4 + 2] = 0; data[o * 4 + 3] = 255;
+      data[o * 4] = 0; data[o * 4 + 1] = 0; data[o * 4 + 2] = 0; data[o * 4 + 3] = opaqueIris ? 255 : 0;
     }
-  // a one-pixel ring of the iris' own border colour round the rectangle, so the filtered tiers keep its edge clean
+  // a ring of the iris' own border colour round the rectangle, so the filtered tiers keep its edge clean
   for (let y = -8; y < R.h + 8; y++)
     for (let x = -8; x < R.w + 8; x++) {
       if (x >= 0 && y >= 0 && x < R.w && y < R.h) continue;
       const cx = Math.max(0, Math.min(R.w - 1, x)), cy = Math.max(0, Math.min(R.h - 1, y));
       const o = (R.y + y) * S + R.x + x, q = (R.y + cy) * S + R.x + cx;
-      if (color[o * 4 + 3] !== 0) continue; // a fin is there (never, in the goby atlases)
+      if (color[o * 4 + 3] !== 0 || data[o * 4 + 3] !== 0) continue; // a fin is there (never, in the goby atlases)
       for (let c = 0; c < 3; c++) color[o * 4 + c] = color[q * 4 + c];
     }
   return {

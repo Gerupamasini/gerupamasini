@@ -249,7 +249,7 @@ export function buildGobyTier(o) {
   // ------------------------------------------------------------------------------------------------ fin atlas (+ iris)
   log('fin atlas');
   const defs = F.finDefinitions();
-  const atlas = finAtlasForTier(F.paintFinAtlas(defs, log), E.paintIris(512), tier.atlas);
+  const atlas = finAtlasForTier(F.paintFinAtlas(defs, log), E.paintIris(512), tier.atlas, { opaqueIris: far });
   const finColor = far ? maskFinAlpha(atlas.color, atlas.data, atlas.size * atlas.size) : atlas.color;
   const tFinCol = gb.addTexture(image(gb, 'fin_basecolor_alpha', atlas.size, atlas.size, 4, finColor, 'png'), sClamp, 'fin_basecolor_alpha');
   let tFinNrm, tFinData;
