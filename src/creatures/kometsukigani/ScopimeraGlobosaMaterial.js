@@ -977,7 +977,7 @@ varying vec4 vPel;
 varying float vPelDiss;
 varying vec3 vPelCol;
 ${COMMON}
-float pelDiss() { return max(uPelDissolve, aWash > 0.0 ? clamp((uPelTime - aWash) / 150.0, 0.0, 1.0) : 0.0); }
+float pelDiss() { return max(uPelDissolve, aWash > 0.0 ? clamp((uPelTime - aWash) / 20.0, 0.0, 1.0) : 0.0); }
 // a lumpy, slightly flattened ball; excavation lumps are rougher; under water they slump
 vec3 pelDisp(vec3 p) {
   float uDiss = pelDiss();
