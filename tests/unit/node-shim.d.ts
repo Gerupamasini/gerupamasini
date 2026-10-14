@@ -12,6 +12,10 @@ declare module 'node:fs' {
   export function readSync(fd: number, buffer: Uint8Array, offset: number, length: number, position: number): number;
   export function closeSync(fd: number): void;
 }
+declare module 'node:child_process' {
+  export function execFileSync(file: string, args: string[], options: { cwd?: string; encoding: 'utf8'; maxBuffer?: number }): string;
+}
+declare const process: { execPath: string };
 declare module 'node:url' {
   export function fileURLToPath(url: URL | string): string;
 }

@@ -5,7 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
-import { isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
+import { gobyBodyReady, gobyLodVariant, isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -61,8 +61,8 @@ export function preloadModel(rel: string): Promise<GLTF> {
   let p = cache.get(rel);
   if (!p) {
     if (!ktx2) return Promise.reject(new Error('configureModelLoader(renderer) must run before a model loads'));
-    p = loader.loadAsync(modelUrl(rel)).then((gltf) => {
-      prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
+    p = loader.loadAsync(modelUrl(rel)).then(async (gltf) => {
+      await prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
       loaded.add(rel);
       return gltf;
     }).catch((error: unknown) => {
@@ -78,16 +78,18 @@ export function isModelLoaded(rel: string): boolean {
   return loaded.has(rel);
 }
 
-/** Tier-dependent material adjustments on the shared (cached) materials. */
-function prepareMaterials(gltf: GLTF, tier: Tier): void {
+/** Tier-dependent material adjustments on the shared (cached) materials; resolves once the maps they need are in. */
+function prepareMaterials(gltf: GLTF, tier: Tier): Promise<unknown> {
+  const ready: Promise<void>[] = [];
   gltf.scene.traverse((o) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) prepareMaterial(m, tier, gltf.parser);
+    for (const m of mats) { prepareMaterial(m, tier, gltf.parser); ready.push(gobyBodyReady(m)); }
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
+  return Promise.all(ready);
 }
 
 function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
@@ -99,7 +101,8 @@ function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
   }
   if (tier === 'lod2') {
     pm.clearcoat = 0;
-    if (pm.transparent && pm.alphaTest === 0) { pm.transparent = false; pm.alphaTest = 0.5; }
+    // (a goby body blends by the light through it, not by its map's alpha, which holds a pigment)
+    if (pm.transparent && pm.alphaTest === 0 && !isGobyBody(m)) { pm.transparent = false; pm.alphaTest = 0.5; }
   }
   const sm = m as MeshStandardMaterial;
   sm.envMapIntensity = 0.8;
@@ -148,6 +151,15 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
     }
   });
   await Promise.all(swaps);
+  // the goby distance tiers: every pattern and colour morph in one material, set apart per variant (gobyLodVariant)
+  if (variant !== undefined && pick < 0) {
+    for (const mesh of meshes) {
+      const own = gobyLodVariant(mesh.material as Material, mesh.name, variant, (mat) => prepareMaterial(mat, tier, gltf.parser));
+      if (own) mesh.material = own;
+    }
+  }
+  // (a goby body draws its pattern from its pigment map: not before it is in)
+  await Promise.all(meshes.map((mesh) => gobyBodyReady(mesh.material as Material)));
   for (const mesh of meshes) {
     // keep the species extras on the mesh so drivers still find them after a material swap
     const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;

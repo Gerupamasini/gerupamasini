@@ -2,7 +2,7 @@ import { closeSync, openSync, readSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MeshPhysicalMaterial, ShaderLib } from 'three';
-import { anatomyFor, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
+import { anatomyFor, gobyLodVariant, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
 
 // The gobies' bodies are translucent on the flat and in the tank, not only in the observation's hero material.
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -135,5 +135,82 @@ describe('the goby body material', GLB_READS, () => {
     // the large organs first (gut, peritoneum, liver): the far tier loops over only those
     const big = (compile(far).uniforms as unknown as { uGbOrgK: { value: { x: number }[] } }).uGbOrgK.value.slice(0, 3).map((k) => k.x).sort();
     expect(big).toEqual([1.0, 1.3, 3.8]);
+  });
+});
+
+describe('the goby distance tiers\' packed maps (one material for every pattern and colour)', GLB_READS, () => {
+  const material = (rel: string) => {
+    const m = new MeshPhysicalMaterial();
+    const b = body(rel);
+    m.name = b.name;
+    m.userData.mahaze = b.extras;
+    return m;
+  };
+  const uniforms = (m: MeshPhysicalMaterial) => {
+    const shader = { uniforms: {}, vertexShader: ShaderLib.physical.vertexShader, fragmentShader: ShaderLib.physical.fragmentShader } as unknown as Parameters<NonNullable<typeof m.onBeforeCompile>>[0];
+    m.onBeforeCompile(shader, null as never);
+    return { u: shader.uniforms as Record<string, { value: { x: number; y: number; z: number; w?: number } }>, fs: shader.fragmentShader };
+  };
+
+  it('the マハゼ tiers carry the nine variants as a table; the other gobies one', () => {
+    for (const stage of ['juvenile', 'subadult', 'adult']) {
+      const near = bodyExtras(`mahaze/mahaze_${stage}.lod1.glb`).lod!, far = bodyExtras(`mahaze/mahaze_${stage}.lod2.glb`).lod!;
+      expect(near).toMatchObject({ packing: 1, variants: 9, colours: 3, patternChannels: 3 });
+      expect(far).toMatchObject({ packing: 1, variants: 9, colours: 3, patternChannels: 1 });
+      expect(near.morphs!.map((c) => c.name)).toEqual(['standard', 'amber', 'dark']);
+      // the standard colour is the one the albedo map is baked in: its factors change nothing
+      expect(near.morphs![0]).toMatchObject({ melK: 1, melAdd: 0, xanK: 1, iriK: 1 });
+      expect(bodyExtras(`mahaze/mahaze_${stage}.lod1.glb`).pigmentTexture).toBeDefined();
+      expect(bodyExtras(`mahaze/mahaze_${stage}.lod2.glb`).pigmentTexture).toBeUndefined();
+    }
+    for (const g of ['edohaze/edohaze', 'edohaze/edohaze_gravid', 'himehaze/himehaze', 'himehaze/himehaze_male']) {
+      expect(bodyExtras(`${g}.lod1.glb`).lod, g).toMatchObject({ packing: 1, variants: 1, colours: 1 });
+      expect(bodyExtras(`${g}.lod1.glb`).lod!.morphs, g).toBeUndefined();
+    }
+  });
+
+  it('a variant gets its own copy of the material, with its pattern\'s melanin and its colour morph', () => {
+    const base = material('mahaze/mahaze_adult.lod1.glb');
+    const prepare = (m: unknown) => makeTranslucentBody(m as MeshPhysicalMaterial, 'lod1');
+    prepare(base);
+    expect(base.defines).toMatchObject({ GB_PACKED: '', GB_MORPH: '' });
+    expect(gobyLodVariant(base, 'Body', 0, prepare)).toBeNull();
+    expect(gobyLodVariant(base, 'Body', 9, prepare)).toBeNull();
+    // variant 5: pattern 2 in the dark morph
+    const v5 = gobyLodVariant(base, 'Body', 5, prepare) as MeshPhysicalMaterial;
+    expect(v5).not.toBe(base);
+    expect(gobyLodVariant(base, 'Body', 14, prepare)).toBe(v5);
+    expect(gobyLodVariant(base, 'Body', -4, prepare)).toBe(v5);
+    expect(v5.customProgramCacheKey()).toBe(base.customProgramCacheKey());
+    const { u, fs } = uniforms(v5);
+    expect([u.uGbPatSel.value.x, u.uGbPatSel.value.y, u.uGbPatSel.value.z]).toEqual([0, 1, 0]);
+    expect(u.uGbMorphK.value.x).toBeCloseTo(1.35);
+    expect(fs).toContain('vec3 gbMorphPig(');
+    expect(uniforms(base).u.uGbMorphK.value.x).toBe(1);
+  });
+
+  it('the far tier has the first pattern only, but every colour', () => {
+    const base = material('mahaze/mahaze_juvenile.lod2.glb');
+    const prepare = (m: unknown) => makeTranslucentBody(m as MeshPhysicalMaterial, 'lod2');
+    prepare(base);
+    const v8 = gobyLodVariant(base, 'Body', 8, prepare) as MeshPhysicalMaterial;
+    const { u } = uniforms(v8);
+    expect([u.uGbPatSel.value.x, u.uGbPatSel.value.y, u.uGbPatSel.value.z]).toEqual([1, 0, 0]);
+    expect(u.uGbMorphK.value.x).toBeCloseTo(1.35);
+    expect(u.uGbFarPig.value.x).toBeGreaterThan(0);
+    expect(v8.defines).toMatchObject({ GB_LOW: '', GB_PACKED: '' });
+  });
+
+  it('the fins take the colour morph\'s tint; the far tier\'s eyes, which share their material, do not', () => {
+    const fin = new MeshPhysicalMaterial();
+    fin.userData.mahaze = { role: 'fin', lodTints: [[1, 1, 1], [1, 0.88, 0.66], [0.68, 0.62, 0.52]] };
+    const amber = gobyLodVariant(fin, 'Fin_Caudal', 4, () => {}) as MeshPhysicalMaterial;
+    expect(amber.color.toArray()).toEqual([1, 0.88, 0.66]);
+    expect(gobyLodVariant(fin, 'Fin_Caudal', 3, () => {})).toBeNull();
+    expect(gobyLodVariant(fin, 'Eye_L', 4, () => {})).toBeNull();
+    // a species with one colour: nothing to make
+    const plain = new MeshPhysicalMaterial();
+    plain.userData.mahaze = { role: 'fin' };
+    expect(gobyLodVariant(plain, 'Fin_Caudal', 4, () => {})).toBeNull();
   });
 });
