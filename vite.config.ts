@@ -3,6 +3,7 @@ import preact from '@preact/preset-vite';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { shaderComments } from './tools/build/shaderComments.mjs';
 
 // GitHub Pages serves the site under /<repo>/. Override with VITE_BASE=/ for local or custom hosting.
 const base = process.env.VITE_BASE ?? '/gerupamasini/';
@@ -31,7 +32,8 @@ function versionFile(): Plugin {
 
 export default defineConfig({
   base,
-  plugins: [preact(), versionFile()],
+  // (shaderComments: the shipped shaders without their comments; tools/build/shaderComments.mjs)
+  plugins: [preact(), versionFile(), shaderComments()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_COMMIT__: JSON.stringify(commit),
