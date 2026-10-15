@@ -22,16 +22,3 @@ export function tideName(ms: number): TideName {
   if ((d >= 8 && d <= 10) || (d >= 22 && d <= 24)) return '小潮';
   return '中潮';
 }
-
-export function moonEmoji(ms: number): string {
-  const a = moonAge(ms);
-  if (a < 1) return '🌑';
-  if (a < 6.5) return '🌒';
-  if (a < 8.5) return '🌓';
-  if (a < 14) return '🌔';
-  if (a < 16) return '🌕';
-  if (a < 21.5) return '🌖';
-  if (a < 23.5) return '🌗';
-  if (a < 29) return '🌘';
-  return '🌑';
-}

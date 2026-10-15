@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { ui, t } from '../store';
 import { formatJst } from '../../core/Time';
 import { TrendIcon } from '../common/Icons';

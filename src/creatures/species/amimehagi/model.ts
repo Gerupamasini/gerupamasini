@@ -1,4 +1,4 @@
-import { Bone, Group, LOD, Matrix4, Object3D, Skeleton, SkinnedMesh, Sphere, Vector3, type Material } from 'three';
+import { Bone, Group, LOD, Matrix4, Skeleton, SkinnedMesh, Sphere, Vector3, type Material } from 'three';
 import { BONES, MODEL_TL } from './anatomy';
 import { amimehagiGeometry, rigRest, PART_KIND, type Lod, type PartName } from './geometry';
 import { AmimehagiLook } from './materials';
@@ -90,11 +90,4 @@ export function disposeModel(m: AmimehagiModel): void {
   m.root.removeFromParent();
   m.skeleton.dispose();
   m.look.dispose();
-}
-
-/** walk the tiers' meshes */
-export function meshesOf(m: AmimehagiModel): Object3D[] {
-  const out: Object3D[] = [];
-  m.lod.traverse((o) => { if ((o as SkinnedMesh).isSkinnedMesh) out.push(o); });
-  return out;
 }

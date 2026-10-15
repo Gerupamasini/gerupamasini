@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion, Vector3, type Bone } from 'three';
 import {
-  BONES, B_DORSAL, B_EYE_L, B_EYE_R, B_HEAD, B_JAW, B_PEC_L, B_PEC_R, B_SNOUT, DORSAL_BONES, MODEL_TL, NSEG, PIVOT_K, STATIONS,
+  B_DORSAL, B_EYE_L, B_EYE_R, B_HEAD, B_JAW, B_PEC_L, B_PEC_R, B_SNOUT, DORSAL_BONES, MODEL_TL, NSEG, PIVOT_K, STATIONS,
   dorsalBoneS, segmentOf, zOf,
 } from './anatomy';
 import { rigRest } from './geometry';
@@ -97,9 +97,6 @@ export function respace(pts: Vector3[]): void {
   }
 }
 
-/** The bones of one fish, by role. */
-export interface Rig { bones: Bone[] }
-
 const segQ: Quaternion[] = Array.from({ length: NSEG }, () => new Quaternion());
 const segUp: Vector3[] = Array.from({ length: NSEG }, () => new Vector3());
 const segDir: Vector3[] = Array.from({ length: NSEG }, () => new Vector3());
@@ -191,5 +188,3 @@ export function applyPose(bones: Bone[], pose: Pose, lod: 0 | 1 | 2 = 0): void {
     b.quaternion.copy(segQ[k]).multiply(qa.setFromAxisAngle(Z, pose.dorsal[i])).multiply(qb.setFromAxisAngle(X, -1.05 * (1 - pose.dorsalRaise)));
   }
 }
-
-export const BONE_COUNT = BONES.length;

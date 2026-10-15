@@ -137,8 +137,6 @@ const CURVE = buildCurve();
 
 /** the section's perimeter (SH) */
 export const SECTION_LEN = CURVE.len;
-/** ψ (arc fraction) of each SECTION point */
-export const SECTION_PSI: readonly number[] = CURVE.knot;
 export const PSI_PERIPHERY = CURVE.knot[SEC_PERIPHERY];
 export const PSI_CANAL = CURVE.knot[SEC_CANAL];
 

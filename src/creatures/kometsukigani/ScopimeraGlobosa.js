@@ -9,7 +9,6 @@ import { clamp, hashString, mulberry, rrange } from './util.js';
 
 export { STATE };
 
-const _v = new Vector3();
 
 /**
  * One コメツキガニ: model + animator + behaviour, fed by a perception snapshot each frame.

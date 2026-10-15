@@ -1,6 +1,6 @@
 import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { WaterPass } from '../world/Water';
-import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
+import { type QualityPreset } from '../core/Settings';
 import { renderSize } from './RenderSize';
 import { Taa } from './Taa';
 import { Upscaler } from './Upscaler';
@@ -20,7 +20,6 @@ export class FieldRenderer {
   private msaa = 4;
   private lastRenderMs = 0;
   private readonly screen = new Vector2();
-  private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
   private samples = 4;
   /** draw calls and triangles of the last scene render (before the water composite) */
@@ -29,7 +28,6 @@ export class FieldRenderer {
   constructor(private readonly gl: WebGLRenderer) {}
 
   setQuality(preset: QualityPreset): void {
-    this.preset = preset;
     this.msaa = preset.msaa;
     // (TAA takes the place of multisampling)
     this.setSamples(this.taaOn ? 0 : preset.msaa);

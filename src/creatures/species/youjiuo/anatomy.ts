@@ -12,8 +12,6 @@
 /** the model is built at 20 cm and scaled to the individual */
 export const MODEL_TL = 0.2;
 
-/** snout tip, front of the orbit (snout base), eye centre, back of the head (the opercle's free edge, the occiput) */
-export const S_MOUTH = 0.0;
 export const S_SNOUT = 0.062;
 export const S_EYE = 0.0745;
 export const S_HEAD = 0.115;
@@ -144,11 +142,6 @@ export const BONES: readonly string[] = [
   ...CHAIN_BONES, 'Head', 'Snout', 'Jaw', 'Eye_L', 'Eye_R', 'PectoralFin_L', 'PectoralFin_R',
   'DorsalFin', ...Array.from({ length: DORSAL_BONES - 1 }, (_, i) => `DorsalFin_${i + 1}`),
 ];
-export const boneIndex = (name: string): number => {
-  const i = BONES.indexOf(name);
-  if (i < 0) throw new Error(`no bone ${name}`);
-  return i;
-};
 export const B_HEAD = BONES.indexOf('Head');
 export const B_SNOUT = BONES.indexOf('Snout');
 export const B_JAW = BONES.indexOf('Jaw');

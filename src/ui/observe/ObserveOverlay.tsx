@@ -1,4 +1,4 @@
-import { h, Fragment } from 'preact';
+import { Fragment } from 'preact';
 import type { App } from '../../app/App';
 import { t } from '../store';
 import { SPEEDS } from '../../systems/Observation';

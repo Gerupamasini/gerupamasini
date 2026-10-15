@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import type { SpotDef } from '../../data/schemas';

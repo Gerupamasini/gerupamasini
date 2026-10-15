@@ -112,8 +112,6 @@ export const FORMS = {
     },
   },
 };
-/** the アサリ anatomy (kept for code that predates the form table) */
-export const ANATOMY = FORMS.asari.anatomy;
 
 /** the form whose geometry is being built (geometry building is synchronous) */
 let F = FORMS.asari;

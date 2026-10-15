@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { useRef, useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t } from '../store';

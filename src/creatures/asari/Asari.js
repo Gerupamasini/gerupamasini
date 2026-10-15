@@ -1,7 +1,6 @@
-import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3 } from 'three';
-import { AsariModel, FORMS, makeAsariPreview, sharedGeometry } from './AsariModel.js';
+import { Group, Quaternion, Vector3 } from 'three';
+import { AsariModel, FORMS, makeAsariPreview } from './AsariModel.js';
 import { AsariBehavior, STATE } from './AsariBehavior.js';
-import { makeShellOuterMaterial } from './AsariMaterial.js';
 import { bedPlane, bedTilt, fitBed } from '../physics/bed';
 
 export { STATE };
@@ -239,35 +238,4 @@ export class AsariDriver {
     this.detach();
     this.listeners.clear();
   }
-}
-
-/**
- * A dense bed of static shells (dead valves, distant clams lying on the sand): one InstancedMesh with the
- * LOD2 valve geometry and the shared shell shader; each instance gets its own shellPatternSeed /
- * shellColorSeed through the `aSeed` attribute. One draw call for the whole bed.
- *
- * @param {{ x: number, y: number, z: number, length_m: number, yaw?: number }[]} items
- */
-export function createAsariBed(items, lod = 2, form = FORMS.asari) {
-  const geo = sharedGeometry(form).valve[lod].clone();
-  const mat = makeShellOuterMaterial({ instanced: true, style: form.style });
-  mat.userData.uniforms.uSand.value.set(-1e9, 0.04, 0, 0.8);
-  const mesh = new InstancedMesh(geo, mat, items.length);
-  const seeds = new Float32Array(items.length * 4);
-  const o = new Object3D();
-  const m4 = new Matrix4();
-  items.forEach((it, i) => {
-    const r = mulberry(i * 7919 + 17);
-    // valves lie convex side up, half-sunk
-    o.position.set(it.x, it.y - it.length_m * 0.01, it.z);   // the margin rests on (just in) the sand
-    o.rotation.set(-Math.PI / 2 + (r() - 0.5) * 0.3, it.yaw ?? r() * Math.PI * 2, (r() - 0.5) * 0.3, 'YXZ');
-    o.scale.setScalar(it.length_m);
-    o.updateMatrix();
-    m4.copy(o.matrix);
-    mesh.setMatrixAt(i, m4);
-    seeds.set([r(), r(), 1, lod === 2 ? 0 : 0.5], i * 4);
-  });
-  geo.setAttribute('aSeed', new InstancedBufferAttribute(seeds, 4));
-  mesh.name = 'AsariBed';
-  return mesh;
 }

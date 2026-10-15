@@ -789,6 +789,3 @@ export function triangleCount(lod: Lod): number {
   for (const g of Object.values(amimehagiGeometry(lod))) if (g) n += (g.index?.count ?? 0) / 3;
   return n;
 }
-
-/** total length from the pivot to the tail tip and to the snout (metres at the model size) */
-export const REACH = { snout: S_PIVOT * TL, tail: (1 - S_PIVOT) * TL };

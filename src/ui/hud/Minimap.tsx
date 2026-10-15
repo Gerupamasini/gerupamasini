@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { ui } from '../store';
@@ -14,7 +13,7 @@ export function Minimap({ app }: { app: App }) {
     const canvas = ref.current;
     const world = app.world;
     if (!canvas || !world) return;
-    const t = world.terrain, n = t.n;
+    const t = world.terrain;
     const base = makeBaseImage(world);
     const waterLayer = new WaterLayer(world);
     const water = waterLayer.canvas;

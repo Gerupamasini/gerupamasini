@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute, Matrix4, Quaternion, SphereGeometry, Uint16BufferAttribute, Vector3 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute, Vector3 } from 'three';
 import { MORPH, dorsalHeight, eyeCentre, eyeFrame, halfWidth, tailFins, tailSection, tailZ, ventralDepth } from './morphology';
 
 /**

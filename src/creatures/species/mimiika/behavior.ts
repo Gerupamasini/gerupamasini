@@ -313,7 +313,6 @@ export function createSquidBehavior(opts: SquidOptions) {
   };
 
   let prey: Mysid | null = null;
-  let threatFrom: Vector3 | null = null;
   const fx: (FxEvent | PitEvent)[] = [];
   const P = emptyPose();
   const fwd = new Vector3(), right = new Vector3(), _v = new Vector3(), _w = new Vector3(), _q = new Quaternion(), _e = new Euler(0, 0, 0, 'YXZ');
@@ -505,7 +504,6 @@ export function createSquidBehavior(opts: SquidOptions) {
     /** flee from a point: ink, jets mantle first, glide, land */
     escape(from: Vector3 | null, to: Vector3 | null = null) {
       if (st.mode === 'ESCAPE' && st.phase !== 'land') return;
-      threatFrom = from ? from.clone() : null;
       const away = new Vector3();
       if (to) away.subVectors(to, st.pos);
       else if (from) away.subVectors(st.pos, from);

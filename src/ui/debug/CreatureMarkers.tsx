@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { ui } from '../store';
 
 /** Labels projected over every live creature (debug mode). */

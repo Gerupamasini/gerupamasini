@@ -25,10 +25,6 @@ type Args = Record<string, ArgVal>;
 
 const INTERRUPT_ONLY = 1, NORMAL = 0;
 
-export interface TickResult {
-  intent: Intent | null;
-}
-
 function resolveArgs(args: Args, params: Record<string, ArgVal>): Args {
   const out: Args = {};
   for (const [k, v] of Object.entries(args)) out[k] = typeof v === 'string' && v.startsWith('$') ? (params[v.slice(1)] ?? v) : v;

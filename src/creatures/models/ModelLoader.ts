@@ -75,10 +75,6 @@ export function preloadModel(rel: string): Promise<GLTF> {
   return p;
 }
 
-export function isModelLoaded(rel: string): boolean {
-  return loaded.has(rel);
-}
-
 /** Tier-dependent material adjustments on the shared (cached) materials; resolves when the maps they add are in. */
 function prepareMaterials(gltf: GLTF, tier: Tier): Promise<unknown> {
   const pending: Promise<void>[] = [];
@@ -161,9 +157,4 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
   const radius = Math.max(size.x, size.y, size.z) * 0.6 || 0.05;
   const extras = (root.children.find((c) => c.userData && Object.keys(c.userData).length)?.userData ?? gltf.scene.userData) as Record<string, unknown>;
   return { tier, root, bones, meshes, clips: gltf.animations, extras, radius, parser: gltf.parser };
-}
-
-export function disposeInstance(model: LoadedModel): void {
-  model.root.removeFromParent();
-  // geometries and materials are shared with the cache; nothing else to free per instance
 }

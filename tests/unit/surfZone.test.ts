@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SurfZone } from '../../src/world/SurfZone';
 import { abreu, breakerIndex, breakerType, breakingDepth, classifyDepth, iribarren, phaseSpeed, runup2, seaStateFor, swashEvent, swashFront, waveShape } from '../../src/world/surfPhysics';
-import { heightAt, offshore, REF_TIDE, RES, SIZE, ZERO_X } from '../../src/world/maps/hashirimizu/shape';
+import { heightAt, REF_TIDE, RES, SIZE, ZERO_X } from '../../src/world/maps/hashirimizu/shape';
 import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
 
 /** a terrain grid from a height function over SIZE m at RES points (the bake's input) */

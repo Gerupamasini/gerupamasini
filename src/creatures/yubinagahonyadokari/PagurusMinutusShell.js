@@ -966,7 +966,6 @@ export class ShellDynamics {
       pw.copy(this.hullA[i]).applyQuaternion(this.qOff).add(this.pOff).applyQuaternion(anchorQuat).add(anchorPos);
       this.groundY[i] = groundAt(pw.x, pw.z);
     }
-    const R = Math.max(1e-5, shell.radius);
     // contact: a stiff, well-damped spring per penetrating hull point, evaluated every sub-step so the
     // shell is lifted smoothly instead of being kicked once per frame [S]
     const wc = 1.7 * w0, zc = 1.1;

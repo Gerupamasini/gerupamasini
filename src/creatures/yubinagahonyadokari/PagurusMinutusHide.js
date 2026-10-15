@@ -102,7 +102,6 @@ function shellContext(crab) {
   const apA = (0.5 * sh.props.apertureHeight_mm) / crab.shieldLength_mm, apB = (0.5 * sh.props.apertureWidth_mm) / crab.shieldLength_mm;
   /** (a/A)² + (b/B)² of a point projected into the aperture plane (< 1: inside the outline) */
   const outline = (p) => (p.dot(eA) / apA) ** 2 + (p.dot(eB) / apB) ** 2;
-  const ip = new THREE.Vector3();
   /**
    * Where a shell-frame point (SL) ends up: 'out' outside the shell at the opening (or in its mouth closer
    * than `margin` to the aperture plane), 'poke' outside the shell anywhere else (seen through or beside
@@ -282,7 +281,7 @@ const _cp = Array.from({ length: 10 }, () => new THREE.Vector3());
 function chelaLid(ch, hp, body, isMajor) {
   const base = CHELA_POSES.block[isMajor ? 'R' : 'L'];
   const saved = [ch.coxa, ch.basis, ch.merus, ch.carpus, ch.propodus, ch.dactylus].map((b) => b.quaternion.clone());
-  const { H, n, apR } = hp;
+  const { H, n } = hp;
   const toS = (p, out) => out.copy(H.O).addScaledVector(H.L, p.x).addScaledVector(H.U, p.y).addScaledVector(H.F, p.z);
   _kM.copy(body.matrixWorld).invert();
   const local = (b, x, out) => out.set(x, 0, 0).applyMatrix4(b.matrixWorld).applyMatrix4(_kM);

@@ -28,7 +28,6 @@ function hashString(s: string): number {
 export class PagurusMinutusDriver implements Driver {
   private crab: HermitCrab | null = null;
   private ind: Individual | null = null;
-  private wrapper: Object3D | null = null;
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private saved: CrabState | null = null;
   private unsubCrab: (() => void) | null = null;
@@ -56,7 +55,6 @@ export class PagurusMinutusDriver implements Driver {
 
   attach(root: Object3D, individual: Individual): void {
     this.ind = individual;
-    this.wrapper = root;
     const preview = root.userData.pagurusPreview as HermitCrab | undefined;
     const seed = hashString(individual.id);
     const crab = new HermitCrab({
@@ -88,7 +86,6 @@ export class PagurusMinutusDriver implements Driver {
       this.crab.dispose();
     }
     this.crab = null;
-    this.wrapper = null;
   }
 
   setIntent(intent: Intent): void {

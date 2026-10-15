@@ -49,7 +49,7 @@ describe('sand dust', () => {
     expect(d.count).toBe(50);
     run(d, src, 0.6);
     const mid = particles(d);
-    const siltY = mid.y.filter((_, i) => mid.kind[i] < 0.5), grainY = mid.y.filter((_, i) => mid.kind[i] > 0.5);
+    const siltY = mid.y.filter((_, i) => mid.kind[i] < 0.5);
     // the cloud has risen a centimetre or two and no further (the water stops it at once)
     expect(Math.max(...siltY)).toBeGreaterThan(0.012);
     expect(Math.max(...siltY)).toBeLessThan(0.08);

@@ -103,5 +103,4 @@ export function isAquatic(sp: Pick<SpeciesDef, 'aquatic' | 'locomotion' | 'taxon
 export type SpawnRule = z.infer<typeof SpawnRuleSchema>;
 export type HabitatTag = z.infer<typeof HabitatTagSchema>;
 export type Substrate = z.infer<typeof SubstrateSchema>;
-export type TimeOfDay = z.infer<typeof TimeOfDaySchema>;
 export type TidePhase = z.infer<typeof TidePhaseSchema>;

@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { ui } from '../store';
 import { BUILD } from '../../core/Build';
 import type { App } from '../../app/App';
