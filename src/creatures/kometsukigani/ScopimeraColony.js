@@ -938,6 +938,8 @@ export class ScopimeraColony {
     crab.model.mouthPellet.visible = true;
     this.group.add(crab.root);
     this.pellets.add(crab.root.position.x, crab.root.position.y, crab.root.position.z, 0.001, 'feed', 0, 0.5);
+    // (and one far enough off for the far pellets' own program)
+    this.pellets.add(crab.root.position.x + 2, crab.root.position.y, crab.root.position.z, 0.001, 'feed', 0, 0.5);
     this.pellets.update(0, crab.root.position, null);
     // (the holes and decals are hidden while there are none: shown for the compile)
     for (const m of this.renderer.group.children) m.visible = true;
