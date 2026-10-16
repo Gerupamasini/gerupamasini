@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { SpeciesSchema } from '../../src/data/schemas';
 import { spawnsOnMap } from '../../src/creatures/Spawner';
-import { Matrix4, Vector3 } from 'three';
+import { Box3, Group, Matrix4, Vector3 } from 'three';
 import { ScopimeraColony } from '../../src/creatures/kometsukigani/ScopimeraColony.js';
-import { ScopimeraGlobosa, flatProbe, makeEnv, seasonFor } from '../../src/creatures/kometsukigani/ScopimeraGlobosa.js';
+import { ScopimeraDriver, ScopimeraGlobosa, flatProbe, makeEnv, seasonFor } from '../../src/creatures/kometsukigani/ScopimeraGlobosa.js';
+import { generateIndividual } from '../../src/creatures/Individual';
 import { breedingFactor, seasonalActivity, STATE } from '../../src/creatures/kometsukigani/ScopimeraGlobosaBehavior.js';
 import { createRigInstance } from '../../src/creatures/kometsukigani/ScopimeraGlobosaRig.js';
 import { crabTriangles } from '../../src/creatures/kometsukigani/ScopimeraGlobosaGeometry.js';
@@ -259,6 +260,42 @@ describe('コメツキガニ: where it lives', () => {
 
   it('is placed by its colony, not by the spawner', () => {
     expect(species.placement).toBe('world');
+  });
+
+  it('caught, it lies in the net at its own size: the net scales the preview\'s holder, never the crab\'s root', () => {
+    const g = ScopimeraDriver.makePreview();
+    // the net and the shovel set the holder's scale to length / modelLength (a 5 mm crab: 0.5)
+    expect(g.scale.x).toBe(1);
+    g.scale.setScalar(5 / species.model.modelLength_mm);
+    g.updateMatrixWorld(true);
+    const size = new Box3().setFromObject(g).getSize(new Vector3());
+    // a carapace 5 mm wide, its legs spread: about 1 cm across, nowhere near the 0.5 m of a root scaled to 0.5
+    expect(Math.max(size.x, size.z)).toBeGreaterThan(0.004);
+    expect(Math.max(size.x, size.z)).toBeLessThan(0.03);
+    g.userData.disposer();
+  });
+
+  it('in the field case it stays where it walks when the case keeps its root inside the walls', () => {
+    // the case's animals live in a group at the world origin; the case stands far from it and clamps each root
+    const animals = new Group(), root = new Group();
+    animals.add(root);
+    const ind = generateIndividual(species, 7, 0, 0, 0, 0, 0, [8, 8]);
+    ind.pos.set(40, 0.2, -25);
+    const d = new ScopimeraDriver();
+    d.attach(root, ind);
+    const B = { minX: 39.9, maxX: 40.1, minZ: -25.05, maxZ: -24.95 };
+    const ctx = { floor: { heightAt: () => 0.2, waterAt: () => 0.33 }, player: new Vector3(40, 1.5, -24), simScale: 1, nowMs: 0, bounds: B, canBurrow: false };
+    for (let i = 0; i < 90; i++) {
+      d.update(1 / 30, ctx);
+      root.position.x = Math.min(B.maxX, Math.max(B.minX, root.position.x));
+      root.position.z = Math.min(B.maxZ, Math.max(B.minZ, root.position.z));
+    }
+    animals.updateMatrixWorld(true);
+    const body = new Vector3().setFromMatrixPosition(d.crab!.model.lods[1].matrixWorld);
+    expect(body.distanceTo(ind.pos)).toBeLessThan(0.02);
+    expect(body.x).toBeGreaterThan(B.minX - 0.02);
+    expect(body.x).toBeLessThan(B.maxX + 0.02);
+    d.dispose();
   });
 });
 

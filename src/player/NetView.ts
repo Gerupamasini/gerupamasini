@@ -115,6 +115,8 @@ export class NetView {
   private splashed = false;
   private flopSeed = 0;
   private catchObj: Object3D | null = null;
+  /** the catch has had its warm-up draw (warmCatch) */
+  private catchWarm = false;
   private readonly tmpQ = new Quaternion();
   private readonly tmpV = new Vector3();
   private readonly rollQ = new Quaternion();
@@ -219,7 +221,8 @@ export class NetView {
 
   /** Put the caught animal's model in the bag (scaled to its real length). */
   setCatch(obj: Object3D | null, scale = 1): void {
-    if (this.catchObj) { this.catchObj.removeFromParent(); this.catchObj = null; }
+    // (a procedural preview's own materials go with it; a glTF instance shares the loader's)
+    if (this.catchObj) { this.catchObj.removeFromParent(); (this.catchObj.userData.disposer as (() => void) | undefined)?.(); this.catchObj = null; }
     if (!obj) return;
     obj.scale.setScalar(scale);
     // on its side at the bottom of the bag, tail toward the hand
@@ -227,7 +230,19 @@ export class NetView {
     obj.traverse((o) => { (o as Mesh).frustumCulled = false; (o as Mesh).castShadow = false; o.layers.set(NET_LAYER); });
     this.catchHolder.add(obj);
     this.catchObj = obj;
+    this.catchWarm = false;
     this.flopSeed = Math.random() * 100;
+  }
+
+  /**
+   * The catch is in but not shown yet: show it for one draw (App.renderNetOverlay draws it into a single pixel while
+   * the tool comes up). Returns the undo, or null when there is nothing to warm.
+   */
+  warmCatch(): (() => void) | null {
+    if (!this.catchObj || this.catchWarm || this.catchHolder.visible) return null;
+    this.catchWarm = true;
+    this.catchHolder.visible = true;
+    return () => { this.catchHolder.visible = false; };
   }
 
   /** The net is the tool in hand (shown at rest) or stowed. */
