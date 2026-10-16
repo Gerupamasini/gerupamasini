@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Color } from 'three';
 import { Terrain } from '../../src/world/Terrain';
+import { surfUniforms } from '../../src/world/Surf';
+import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
 
 /** a small flat: sand on the west half, mud on the east, the ground at 0 m */
 function flat(): Terrain {
@@ -46,5 +48,15 @@ describe('Terrain: what its shaders carry', () => {
     expect('NO_MUD' in defs()).toBe(false);
     t.setSediment(1, 0);
     expect('NO_MUD' in defs()).toBe(true);
+  });
+
+  it('compiles the surf out unless the shore has one (NO_SURF: the swash\'s memory, its foam, the planed sand)', () => {
+    const t = flat();
+    const defs = () => (t as unknown as { material: { defines: Record<string, unknown> } }).material.defines;
+    expect('NO_SURF' in defs()).toBe(true);
+    t.setSurf(surfUniforms(HASHIRIMIZU.surf));
+    expect('NO_SURF' in defs()).toBe(false);
+    t.setSurf(surfUniforms(null));
+    expect('NO_SURF' in defs()).toBe(true);
   });
 });

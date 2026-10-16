@@ -37,6 +37,8 @@ export class ShovelView {
   private shown = 0;
   private time = 0;
   private catchObj: Object3D | null = null;
+  /** the catch has had its warm-up draw (warmCatch) */
+  private catchWarm = false;
   /** the procedural parts (shown when the tool in hand has no GLB) */
   private readonly stock: Object3D[] = [];
   /** the digging tool's GLB, mounted with its blade centre at the group's origin */
@@ -149,13 +151,26 @@ export class ShovelView {
 
   /** Lay what was dug up on the scoop (scaled to its real size). */
   setCatch(obj: Object3D | null, scale = 1): void {
-    if (this.catchObj) { this.catchObj.removeFromParent(); this.catchObj = null; }
+    // (a procedural preview's own materials go with it; a glTF instance shares the loader's)
+    if (this.catchObj) { this.catchObj.removeFromParent(); (this.catchObj.userData.disposer as (() => void) | undefined)?.(); this.catchObj = null; }
     if (!obj) return;
     obj.scale.setScalar(scale);
     obj.rotation.set(0, Math.random() * Math.PI * 2, 0);
     obj.traverse((o) => { (o as Mesh).frustumCulled = false; (o as Mesh).castShadow = false; o.layers.set(NET_LAYER); });
     this.catchHolder.add(obj);
     this.catchObj = obj;
+    this.catchWarm = false;
+  }
+
+  /**
+   * The catch is in but not shown yet: show it for one draw (App.renderNetOverlay draws it into a single pixel while
+   * the tool comes up). Returns the undo, or null when there is nothing to warm.
+   */
+  warmCatch(): (() => void) | null {
+    if (!this.catchObj || this.catchWarm || this.catchHolder.visible) return null;
+    this.catchWarm = true;
+    this.catchHolder.visible = true;
+    return () => { this.catchHolder.visible = false; };
   }
 
   update(camera: PerspectiveCamera, dt: number, st: CaptureState | null): void {
