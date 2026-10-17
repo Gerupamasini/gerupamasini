@@ -2,13 +2,13 @@
 // The clay stage of the トビハゼ head: the sculpt meshed without textures, the eye globes in their sockets, written
 // as a GLB for the photo comparisons (render.mjs, shots-head.mjs). Nothing here ships: the output goes to
 // tools/models/tobihaze/out/.
-//   node tools/models/tobihaze/build-clay.mjs [--h <cell mm>] [--out <file>]
+//   node tools/models/tobihaze/build-clay.mjs [--h <cell mm>] [--out <file>] [--head <sculpt module>]
+// (--head: a staged copy of head.mjs, to build a candidate while head.mjs itself is being measured)
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { HL, HEAD, EYE_MM, toObject } from './anatomy.mjs';
-import { headSDFmm, HEAD_SCULPT } from './head.mjs';
 import { surfaceNets } from './mesher.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -16,6 +16,8 @@ const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const h = Number(arg('--h', 0.06));
 const outFile = path.resolve(arg('--out', path.join(here, 'out', 'head-clay.glb')));
+const headModule = arg('--head');
+const { headSDFmm, HEAD_SCULPT } = await import(headModule ? pathToFileURL(path.resolve(headModule)).href : './head.mjs');
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
 

@@ -15,11 +15,11 @@ export const SHOTS = [
   // matched to photos
   clay('m_B002_front30', { azim: 0, elev: 30, fov: 25 }),
   clay('m_B008_side', { azim: -62, elev: 8, fov: 25 }),
-  clay('m_B010_q34', { azim: 72, elev: 22, fov: 25 }),
-  clay('m_B050_top', { azim: 0, elev: 43, fov: 10 }),
-  clay('m_B051_top', { azim: 0, elev: 57, fov: 10 }),
+  clay('m_B010_q34', { azim: 66, elev: 34, fov: 25 }),
+  clay('m_B050_top', { azim: 0, elev: 55, fov: 10 }),
+  clay('m_B051_top', { azim: 0, elev: 62, fov: 10 }),
   clay('m_B070_rear', { azim: 180, elev: 35, fov: 25 }),
   // the macro photos' close cameras: the eye domes, nearest the lens, are magnified against the face
   clay('mc_B002_front30', { azim: 0, elev: 30, fov: 50, fit: 'face', margin: 0.02 }),
-  clay('mc_B010_q34', { azim: 72, elev: 22, fov: 50, fit: 'face', margin: 0.02 }),
+  clay('mc_B010_q34', { azim: 66, elev: 34, fov: 50, fit: 'face', margin: 0.02 }),
 ];

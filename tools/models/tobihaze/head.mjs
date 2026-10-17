@@ -18,35 +18,39 @@ export const HEAD_SCULPT = {
   // height yW of the widest point, and the exponents of the section above (nU) and below (nL) that height
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
-    w:  [0.000, 0.060, 0.102, 0.142, 0.175, 0.205, 0.234, 0.290, 0.314, 0.305, 0.290, 0.290, 0.290, 0.295, 0.310],
-    yT: [0.270, 0.320, 0.370, 0.412, 0.442, 0.470, 0.502, 0.552, 0.585, 0.600, 0.610, 0.615, 0.617, 0.620, 0.625],
+    w:  [0.000, 0.060, 0.102, 0.142, 0.175, 0.215, 0.255, 0.300, 0.325, 0.336, 0.318, 0.290, 0.290, 0.295, 0.310],
+    yT: [0.270, 0.320, 0.370, 0.414, 0.448, 0.492, 0.526, 0.562, 0.585, 0.600, 0.610, 0.615, 0.617, 0.620, 0.625],
     yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.095, 0.075, 0.055, 0.025, -0.005, -0.045, -0.045, -0.045, -0.035, -0.025],
     yW: [0.250, 0.250, 0.248, 0.246, 0.246, 0.246, 0.248, 0.250, 0.250, 0.235, 0.220, 0.220, 0.230, 0.245, 0.260],
-    nU: [2.00, 2.05, 2.10, 2.10, 2.05, 1.95, 1.85, 1.80, 1.72, 1.60, 1.40, 1.40, 1.45, 1.60, 1.75],
-    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.02, 2.05, 2.50, 3.00, 3.20, 3.00, 2.90, 2.85, 2.75, 2.50],
+    nU: [2.00, 2.05, 2.10, 2.10, 2.05, 1.95, 1.85, 1.80, 1.35, 1.60, 1.40, 1.40, 1.45, 1.60, 1.75],
+    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.02, 2.05, 2.40, 2.80, 3.40, 3.60, 3.60, 3.40, 3.10, 2.70],
   },
-  snoutBulb: { c: [0.168, 0.258], r: [0.168, 0.19, 0.25] },
-  cheekBalloon: { c: [0.73, 0.255], r: [0.62, 0.29, 0.35] },
+  snoutBulb: { c: [0.168, 0.258], r: [0.168, 0.19, 0.235] },
+  cheekBalloon: { c: [0.73, 0.245], r: [0.62, 0.29, 0.35] },
   // the balloon's rear stays full to the margin and ends in a rounded shoulder there
   cheekRear: { c: [0.90, 0.235], r: [0.16, 0.235, 0.33], blend: 0.06 },
   // the balloon ends at the opercle's margin in a rounded rim standing proud of the trunk (it does not fade out)
   cheekClip: { blend: 0.012 },
-  turret: { c: [0.34, 0.515], r: [0.15, 0.115, 0.16] },
+  turret: { c: [0.34, 0.515], r: [0.15, 0.115, 0.13] },
   // the fleshy column each globe stands on (B067, B008): no wider than the globe, flaring into the head at its base
-  pedestal: { c: [0.335, 0.50, 0.100], r: [0.11, 0.15, 0.09] },
-  chin: { c: [0.31, 0.08], r: [0.17, 0.045, 0.15] },
+  pedestal: { c: [0.335, 0.50, 0.085], r: [0.11, 0.15, 0.062] },
+  chin: { c: [0.27, 0.07], r: [0.18, 0.06, 0.17] },
   // the dermal cup: a fleshy shell round the globe, open on the side the eye looks out of (normal in the fish frame:
   // forward is −s; openCos: the opening's edge as the cosine of its half-angle), its rim rounded
-  cup: { thick: 0.022, taper: 0.9, gap: 0.0015, open: [-0.28, 0.88, 0.40], openCos: 0.05, rimRound: 0.017 },
-  // the crease between the two globes filled by a smooth web (the domes press together into one capped boss)
-  web: { k: 0.09 },
+  cup: { thick: 0.024, taper: 0.45, gap: 0.0015, open: [-0.30, 0.82, 0.52], openCos: 0.05, rimRound: 0.012 },
+  // the crease between the two globes filled by a smooth skin web (the domes press together into one capped boss),
+  // added after the sockets are carved so it stays a film over the inner domes running down into the bridge
+  // (the fillet is kept only where it stands `gap` off the globes; over the inner quarter of each dome, out to |z| =
+  // cover, a skin shell `thick` at the midline thinning to `edge` carries it on and ends in a rounded margin)
+  web: { k: 0.09, gap: 0.005, round: 0.004, cover: 0.05, thick: 0.008, edge: 0.003, rim: 0.006, join: 0.004 },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.34, 0.60], r: [0.09, 0.10, 0.06] },
   // upper lip roll (left half, mirrored) from the front midline to the corner, and its lateral lobe
   lip: {
     path: [[0.075, 0.125, 0.0], [0.085, 0.123, 0.06], [0.115, 0.118, 0.12], [0.165, 0.112, 0.165], [0.235, 0.106, 0.195], [0.300, 0.100, 0.21]],
-    radius: [0.034, 0.035, 0.035, 0.035, 0.036, 0.033],
-    lobe: { c: [0.235, 0.12, 0.19], r: [0.12, 0.074, 0.058] },
+    radius: [0.034, 0.035, 0.032, 0.028, 0.026, 0.022],
+    // the lobe: a plump oval pad at the face's lower front corner, proud of the face side above it
+    lobe: { c: [0.225, 0.120, 0.193], r: [0.12, 0.076, 0.060] },
   },
   lowerLip: {
     path: [[0.200, 0.074, 0.0], [0.210, 0.073, 0.08], [0.243, 0.067, 0.14], [0.293, 0.060, 0.18], [0.333, 0.056, 0.198]],
@@ -59,15 +63,16 @@ export const HEAD_SCULPT = {
   },
   // grooves drawn roughly in the fish frame and snapped onto the surface (snapToSurface) before they are carved
   labialGroove: {
-    path: [[0.070, 0.165, 0.0], [0.080, 0.168, 0.10], [0.110, 0.178, 0.19], [0.180, 0.188, 0.245], [0.255, 0.182, 0.268], [0.305, 0.158, 0.270], [0.335, 0.125, 0.264]],
-    radius: [0.004, 0.005, 0.007, 0.008, 0.008, 0.006, 0.002],
+    path: [[0.070, 0.165, 0.0], [0.080, 0.170, 0.10], [0.110, 0.182, 0.19], [0.180, 0.198, 0.245], [0.255, 0.195, 0.258], [0.305, 0.168, 0.258], [0.335, 0.125, 0.250]],
+    radius: [0.004, 0.004, 0.005, 0.005, 0.005, 0.004, 0.002],
   },
   opercle: { path: [[1.012, 0.44, 0.29], [1.032, 0.36, 0.325], [1.032, 0.26, 0.34], [1.007, 0.15, 0.33], [0.962, 0.06, 0.29], [0.912, 0.02, 0.24]], radius: [0.0024, 0.006, 0.0078, 0.0078, 0.0066, 0.0036] },
-  nostril: { base: [0.050, 0.338, 0.087], tip: [0.011, 0.313, 0.092], r: [0.012, 0.010], hole: 0.0045 },
-  furrow: { c: [0.21, 0.53], r: [0.10, 0.05, 0.03] },
+  // the anterior nostril: a short tube on the upper front of the snout bulb, about 3/4 of the way from the eye to the
+  // snout tip (B012, B013), lying along the surface and pointing forward and down
+  nostril: { base: [0.075, 0.385, 0.083], tip: [0.034, 0.360, 0.089], r: [0.010, 0.0085], hole: 0.004 },
   floorY: -0.010,
   cutS: 1.3,
-  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.028, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.04, lowerLip: 0.015, groove: 0.014, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
+  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.020, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.03, lowerLip: 0.015, groove: 0.008, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
@@ -166,7 +171,6 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
   const septum = el(K.septum);
   const nostril = tube([K.nostril.base, K.nostril.tip], K.nostril.r);
   const nostrilHole = sphere(K.nostril.tip, K.nostril.hole);
-  const furrow = el(K.furrow);
   const b = K.blend;
 
   // the additive mass (what the grooves are snapped onto)
@@ -180,9 +184,6 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     d = smin(d, pedestalL(x, y, za), b.pedestal);
     d = smin(d, cupL(x, y, za), b.cups);
     d = smin(d, septum(x, y, z), b.septum);
-    // the web: the two globes' smooth union (the sockets carve the globes out again, leaving the filled crease)
-    const gl = Math.hypot(x - eyeL[0], y - eyeL[1], z - eyeL[2]) - re, gr = Math.hypot(x - eyeL[0], y - eyeL[1], z + eyeL[2]) - re;
-    d = Math.min(d, smin(gl, gr, K.web.k));
     d = smin(d, smin(lipRoll(x, y, za), lobe(x, y, za), b.lobe), b.lip);
     d = smin(d, lowerLip(x, y, za), b.lowerLip);
     return d;
@@ -199,6 +200,11 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     d = smin(d, nostril(x, y, za), b.nostril);
     d = ssub(d, nostrilHole(x, y, za), 0.003);
     d = ssub(d, cavityL(x, y, za), b.cavity);
+    // the web: the two globes' smooth union outside the bare globes, a skin film that thins to nothing on each dome
+    const gl = Math.hypot(x - eyeL[0], y - eyeL[1], za - eyeL[2]) - re, gr = Math.hypot(x - eyeL[0], y - eyeL[1], za + eyeL[2]) - re;
+    const W = K.web, rl = gl + re;
+    const shell = smax(rl - (re + W.edge + (W.thick - W.edge) * smoothstep(W.cover, 0, za)), za - W.cover, W.rim);
+    d = Math.min(d, smin(smax(smin(gl, gr, W.k), W.gap - Math.min(gl, gr), W.round), shell, W.join));
     d = smax(d, K.floorY - y, b.floor);
     if (cut) d = smax(d, x - K.cutS, b.cut);
     return d;
