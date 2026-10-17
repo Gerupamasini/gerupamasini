@@ -8,7 +8,7 @@
 // the small features that read at macro range (labial groove, gape, tubular anterior nostrils, the arch over the
 // snout bulb, the opercle's soft margin).
 import { HEAD } from './anatomy.mjs';
-import { ellipsoid, sphere, smin, smax, ssub, tube, smoothPath, clamp } from './sdf.mjs';
+import { ellipsoid, sphere, smin, smax, ssub, tube, smoothPath, clamp, smoothstep } from './sdf.mjs';
 
 const nrm = (v) => { const l = Math.hypot(...v); return v.map((c) => c / l); };
 
@@ -18,50 +18,50 @@ export const HEAD_SCULPT = {
   // height yW of the widest point, and the exponents of the section above (nU) and below (nL) that height
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
-    w:  [0.000, 0.065, 0.112, 0.158, 0.196, 0.228, 0.256, 0.300, 0.345, 0.350, 0.350, 0.346, 0.330, 0.315, 0.305],
-    yT: [0.270, 0.340, 0.400, 0.458, 0.502, 0.536, 0.562, 0.580, 0.592, 0.612, 0.632, 0.640, 0.642, 0.645, 0.650],
-    yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.085, 0.045, 0.012, -0.004, -0.008, -0.010, -0.010, -0.008, -0.004, 0.000],
+    w:  [0.000, 0.065, 0.112, 0.158, 0.196, 0.228, 0.256, 0.300, 0.322, 0.326, 0.326, 0.324, 0.318, 0.308, 0.300],
+    yT: [0.270, 0.310, 0.355, 0.400, 0.440, 0.480, 0.525, 0.565, 0.590, 0.612, 0.632, 0.640, 0.642, 0.645, 0.650],
+    yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.085, 0.045, 0.012, -0.025, -0.045, -0.045, -0.045, -0.045, -0.035, -0.025],
     yW: [0.250, 0.250, 0.248, 0.246, 0.246, 0.246, 0.248, 0.250, 0.250, 0.250, 0.250, 0.255, 0.265, 0.280, 0.300],
-    nU: [2.00, 2.10, 2.20, 2.25, 2.25, 2.15, 2.00, 1.80, 1.60, 1.50, 1.50, 1.55, 1.70, 1.90, 2.00],
-    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.05, 2.10, 2.20, 2.40, 2.70, 3.00, 3.00, 2.80, 2.50, 2.30],
+    nU: [2.00, 2.05, 2.10, 2.10, 2.10, 2.10, 2.10, 2.10, 2.30, 2.30, 2.30, 2.30, 2.25, 2.20, 2.20],
+    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.05, 2.10, 2.20, 3.20, 3.60, 3.60, 3.60, 3.40, 3.00, 2.60],
   },
-  snoutBulb: { c: [0.17, 0.30], r: [0.17, 0.19, 0.25] },
-  cheekBalloon: { c: [0.66, 0.24], r: [0.37, 0.235, 0.36] },
+  snoutBulb: { c: [0.165, 0.285], r: [0.165, 0.17, 0.25] },
+  cheekBalloon: { c: [0.62, 0.245], r: [0.44, 0.235, 0.36] },
   turret: { c: [0.33, 0.515], r: [0.16, 0.115, 0.15] },
   chin: { c: [0.29, 0.045], r: [0.16, 0.045, 0.15] },
   // the dermal cup: a fleshy shell round the globe, open on the side the eye looks out of (normal in the fish frame:
   // forward is −s; openCos: the opening's edge as the cosine of its half-angle), its rim rounded
-  cup: { thick: 0.03, gap: 0.003, open: [-0.33, 0.80, 0.50], openCos: 0.06, rimRound: 0.025 },
+  cup: { thick: 0.036, taper: 0.22, gap: 0.0015, open: [-0.25, 0.80, 0.55], openCos: 0.03, rimRound: 0.035 },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.32, 0.60], r: [0.06, 0.06, 0.035] },
   // upper lip roll (left half, mirrored) from the front midline to the corner, and its lateral lobe
   lip: {
     path: [[0.110, 0.122, 0.0], [0.116, 0.119, 0.08], [0.138, 0.114, 0.15], [0.180, 0.110, 0.200], [0.240, 0.106, 0.220], [0.290, 0.100, 0.225]],
-    radius: [0.016, 0.019, 0.026, 0.032, 0.035, 0.032],
+    radius: [0.020, 0.022, 0.027, 0.033, 0.036, 0.033],
     lobe: { c: [0.245, 0.124, 0.208], r: [0.105, 0.066, 0.056] },
   },
   lowerLip: {
-    path: [[0.140, 0.072, 0.0], [0.150, 0.071, 0.09], [0.185, 0.064, 0.16], [0.240, 0.056, 0.20], [0.295, 0.050, 0.215]],
+    path: [[0.160, 0.072, 0.0], [0.170, 0.071, 0.09], [0.205, 0.064, 0.16], [0.260, 0.056, 0.20], [0.310, 0.050, 0.215]],
     radius: [0.012, 0.012, 0.012, 0.012, 0.011],
   },
   // along the lip's lower edge, the corners a little lower than the front (the pout)
   gape: {
-    path: [[0.100, 0.090, 0.0], [0.108, 0.088, 0.09], [0.132, 0.082, 0.165], [0.195, 0.072, 0.218], [0.300, 0.062, 0.236]],
+    path: [[0.115, 0.088, 0.0], [0.122, 0.086, 0.09], [0.140, 0.080, 0.165], [0.195, 0.072, 0.218], [0.300, 0.062, 0.236]],
     radius: [0.0065, 0.0065, 0.0065, 0.006, 0.005],
   },
   // grooves drawn roughly in the fish frame and snapped onto the surface (snapToSurface) before they are carved
   labialGroove: {
     path: [[0.070, 0.165, 0.0], [0.080, 0.168, 0.10], [0.110, 0.180, 0.19], [0.180, 0.195, 0.245], [0.265, 0.188, 0.275], [0.320, 0.158, 0.278], [0.350, 0.115, 0.268], [0.360, 0.075, 0.252]],
-    radius: [0.009, 0.009, 0.010, 0.010, 0.010, 0.010, 0.009, 0.008],
+    radius: [0.004, 0.005, 0.008, 0.010, 0.010, 0.010, 0.009, 0.008],
   },
   // the faint valley each side of the snout bulb, from below the eye's front down to the lip corner
   bulbArch: { path: [[0.20, 0.445, 0.18], [0.235, 0.40, 0.225], [0.25, 0.32, 0.25], [0.265, 0.24, 0.262], [0.285, 0.17, 0.262]], radius: [0.002, 0.003, 0.003, 0.003, 0.002] },
   opercle: { path: [[1.0, 0.44, 0.29], [1.02, 0.36, 0.325], [1.02, 0.26, 0.34], [0.995, 0.15, 0.33], [0.95, 0.06, 0.29], [0.90, 0.02, 0.24]], radius: [0.001, 0.002, 0.003, 0.003, 0.003, 0.002] },
-  nostril: { base: [0.075, 0.172, 0.070], tip: [0.050, 0.158, 0.072], r: [0.0095, 0.008], hole: 0.0045 },
+  nostril: { base: [0.030, 0.330, 0.082], tip: [0.008, 0.318, 0.086], r: [0.0085, 0.0075], hole: 0.004 },
   furrow: { c: [0.21, 0.53], r: [0.10, 0.05, 0.03] },
-  floorY: -0.015,
+  floorY: -0.010,
   cutS: 1.3,
-  blend: { bulb: 0.06, cheek: 0.05, chin: 0.05, turret: 0.045, cups: 0.04, septum: 0.02, lip: 0.022, lobe: 0.05, lowerLip: 0.015, groove: 0.014, fold: 0.012, arch: 0.02, gape: 0.006, nostril: 0.008, cavity: 0.006, floor: 0.04, cut: 0.02 },
+  blend: { bulb: 0.03, cheek: 0.05, chin: 0.05, turret: 0.045, cups: 0.025, septum: 0.02, lip: 0.022, lobe: 0.05, lowerLip: 0.015, groove: 0.014, fold: 0.012, arch: 0.012, gape: 0.006, nostril: 0.008, cavity: 0.010, floor: 0.04, cut: 0.02 },
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
@@ -127,8 +127,12 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
   // the cup for the left eye (z > 0); the right one is the mirror image
   const cupL = (x, y, z) => {
     const px = x - eyeL[0], py = y - eyeL[1], pz = z - eyeL[2];
-    const shell = Math.hypot(px, py, pz) - rc;
-    const open = px * g[0] + py * g[1] + pz * g[2] - K.cup.openCos * rc;
+    const r = Math.hypot(px, py, pz) || 1e-9;
+    const c = (px * g[0] + py * g[1] + pz * g[2]) / r;
+    // the shell thins from its full thickness below to nothing at the rim: the skin runs onto the globe without a step
+    const k = smoothstep(K.cup.openCos, K.cup.openCos - K.cup.taper, c);
+    const shell = r - (re + K.cup.gap + (rc - re - K.cup.gap) * k);
+    const open = c * r - K.cup.openCos * rc;
     return smax(shell, open, K.cup.rimRound);
   };
   const cavityL = sphere(eyeL, re + K.cup.gap);
