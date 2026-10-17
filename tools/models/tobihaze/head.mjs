@@ -18,15 +18,15 @@ export const HEAD_SCULPT = {
   // height yW of the widest point, and the exponents of the section above (nU) and below (nL) that height
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
-    w:  [0.000, 0.060, 0.102, 0.142, 0.175, 0.205, 0.234, 0.276, 0.295, 0.300, 0.285, 0.285, 0.285, 0.290, 0.310],
+    w:  [0.000, 0.060, 0.102, 0.142, 0.175, 0.205, 0.234, 0.290, 0.314, 0.305, 0.290, 0.290, 0.290, 0.295, 0.310],
     yT: [0.270, 0.320, 0.370, 0.412, 0.442, 0.470, 0.502, 0.552, 0.585, 0.600, 0.610, 0.615, 0.617, 0.620, 0.625],
     yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.095, 0.075, 0.055, 0.025, -0.005, -0.045, -0.045, -0.045, -0.035, -0.025],
     yW: [0.250, 0.250, 0.248, 0.246, 0.246, 0.246, 0.248, 0.250, 0.250, 0.235, 0.220, 0.220, 0.230, 0.245, 0.260],
     nU: [2.00, 2.05, 2.10, 2.10, 2.05, 1.95, 1.85, 1.80, 1.72, 1.60, 1.40, 1.40, 1.45, 1.60, 1.75],
-    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.02, 2.05, 2.10, 2.70, 3.00, 3.00, 2.90, 2.85, 2.75, 2.50],
+    nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.02, 2.05, 2.50, 3.00, 3.20, 3.00, 2.90, 2.85, 2.75, 2.50],
   },
-  snoutBulb: { c: [0.165, 0.27], r: [0.165, 0.185, 0.235] },
-  cheekBalloon: { c: [0.72, 0.255], r: [0.62, 0.29, 0.34] },
+  snoutBulb: { c: [0.168, 0.258], r: [0.168, 0.19, 0.25] },
+  cheekBalloon: { c: [0.73, 0.255], r: [0.62, 0.29, 0.35] },
   // the balloon's rear stays full to the margin and ends in a rounded shoulder there
   cheekRear: { c: [0.90, 0.235], r: [0.16, 0.235, 0.33], blend: 0.06 },
   // the balloon ends at the opercle's margin in a rounded rim standing proud of the trunk (it does not fade out)
@@ -37,14 +37,16 @@ export const HEAD_SCULPT = {
   chin: { c: [0.31, 0.08], r: [0.17, 0.045, 0.15] },
   // the dermal cup: a fleshy shell round the globe, open on the side the eye looks out of (normal in the fish frame:
   // forward is −s; openCos: the opening's edge as the cosine of its half-angle), its rim rounded
-  cup: { thick: 0.024, taper: 0.55, gap: 0.0015, open: [-0.24, 0.84, 0.50], openCos: 0.26, rimRound: 0.02 },
+  cup: { thick: 0.022, taper: 0.9, gap: 0.0015, open: [-0.28, 0.88, 0.40], openCos: 0.05, rimRound: 0.017 },
+  // the crease between the two globes filled by a smooth web (the domes press together into one capped boss)
+  web: { k: 0.09 },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.34, 0.60], r: [0.09, 0.10, 0.06] },
   // upper lip roll (left half, mirrored) from the front midline to the corner, and its lateral lobe
   lip: {
     path: [[0.075, 0.125, 0.0], [0.085, 0.123, 0.06], [0.115, 0.118, 0.12], [0.165, 0.112, 0.165], [0.235, 0.106, 0.195], [0.300, 0.100, 0.21]],
     radius: [0.034, 0.035, 0.035, 0.035, 0.036, 0.033],
-    lobe: { c: [0.23, 0.122, 0.185], r: [0.12, 0.07, 0.05] },
+    lobe: { c: [0.235, 0.12, 0.19], r: [0.12, 0.074, 0.058] },
   },
   lowerLip: {
     path: [[0.200, 0.074, 0.0], [0.210, 0.073, 0.08], [0.243, 0.067, 0.14], [0.293, 0.060, 0.18], [0.333, 0.056, 0.198]],
@@ -61,11 +63,11 @@ export const HEAD_SCULPT = {
     radius: [0.004, 0.005, 0.007, 0.008, 0.008, 0.006, 0.002],
   },
   opercle: { path: [[1.012, 0.44, 0.29], [1.032, 0.36, 0.325], [1.032, 0.26, 0.34], [1.007, 0.15, 0.33], [0.962, 0.06, 0.29], [0.912, 0.02, 0.24]], radius: [0.0024, 0.006, 0.0078, 0.0078, 0.0066, 0.0036] },
-  nostril: { base: [0.040, 0.322, 0.090], tip: [0.014, 0.310, 0.098], r: [0.011, 0.0075], hole: 0.0035 },
+  nostril: { base: [0.050, 0.338, 0.087], tip: [0.011, 0.313, 0.092], r: [0.012, 0.010], hole: 0.0045 },
   furrow: { c: [0.21, 0.53], r: [0.10, 0.05, 0.03] },
   floorY: -0.010,
   cutS: 1.3,
-  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.03, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.04, lowerLip: 0.015, groove: 0.014, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
+  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.028, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.04, lowerLip: 0.015, groove: 0.014, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
@@ -178,6 +180,9 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     d = smin(d, pedestalL(x, y, za), b.pedestal);
     d = smin(d, cupL(x, y, za), b.cups);
     d = smin(d, septum(x, y, z), b.septum);
+    // the web: the two globes' smooth union (the sockets carve the globes out again, leaving the filled crease)
+    const gl = Math.hypot(x - eyeL[0], y - eyeL[1], z - eyeL[2]) - re, gr = Math.hypot(x - eyeL[0], y - eyeL[1], z + eyeL[2]) - re;
+    d = Math.min(d, smin(gl, gr, K.web.k));
     d = smin(d, smin(lipRoll(x, y, za), lobe(x, y, za), b.lobe), b.lip);
     d = smin(d, lowerLip(x, y, za), b.lowerLip);
     return d;
