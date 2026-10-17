@@ -16,6 +16,6 @@ export const SHOTS = [
   clay('m_B002_front30', { azim: 0, elev: 30, fov: 25 }),
   clay('m_B008_side', { azim: -62, elev: 8, fov: 25 }),
   clay('m_B010_q34', { azim: 72, elev: 22, fov: 25 }),
-  clay('m_B050_top', { azim: 0, elev: 65, fov: 25 }),
+  clay('m_B050_top', { azim: 0, elev: 65, fov: 10 }),
   clay('m_B070_rear', { azim: 180, elev: 35, fov: 25 }),
 ];
