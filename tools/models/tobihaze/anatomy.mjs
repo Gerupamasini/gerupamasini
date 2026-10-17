@@ -21,10 +21,10 @@ export const HEAD = {
   snoutTipY: 0.24,        // the snout's most anterior point, above the flat underside
   faceAngle: 70,          // the face front rises at about 70° from the snout to the eyes
   eye: {
-    d: 0.215,             // globe diameter (ED): the bare globe, without the cup's rim
+    d: 0.207,             // globe diameter (ED): the bare globe, without the cup's rim
     s: 0.33,              // centre, back from the snout tip
     y: 0.625,             // centre height: the top stands about 0.43 ED above the nape at rest
-    z: 0.1085,            // centres just over one ED apart: the raised globes touch over the midline
+    z: 0.100,             // centres just under one ED apart: the globes meet under the skin web over the midline
   },
   turretWidth: 0.34,      // the block the eyes sit on (0.48 W); the globes overhang it at the sides
   mouthCornerS: 0.31,     // the jaw's corner, under the front half of the eye
