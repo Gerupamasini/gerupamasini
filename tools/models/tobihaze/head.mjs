@@ -19,10 +19,10 @@ export const HEAD_SCULPT = {
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
     w:  [0.000, 0.060, 0.102, 0.142, 0.175, 0.215, 0.255, 0.300, 0.325, 0.336, 0.318, 0.290, 0.290, 0.295, 0.310],
-    yT: [0.270, 0.320, 0.370, 0.414, 0.448, 0.492, 0.526, 0.562, 0.585, 0.600, 0.610, 0.615, 0.617, 0.620, 0.625],
+    yT: [0.270, 0.320, 0.362, 0.404, 0.450, 0.490, 0.526, 0.562, 0.585, 0.603, 0.615, 0.620, 0.622, 0.625, 0.628],
     yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.095, 0.075, 0.055, 0.025, -0.005, -0.045, -0.045, -0.045, -0.035, -0.025],
     yW: [0.250, 0.250, 0.248, 0.246, 0.246, 0.246, 0.248, 0.250, 0.250, 0.235, 0.220, 0.220, 0.230, 0.245, 0.260],
-    nU: [2.00, 2.05, 2.10, 2.10, 2.05, 1.95, 1.85, 1.80, 1.35, 1.60, 1.40, 1.40, 1.45, 1.60, 1.75],
+    nU: [2.00, 2.05, 2.10, 2.10, 2.05, 1.95, 1.85, 1.80, 1.35, 1.70, 1.70, 1.70, 1.70, 1.70, 1.75],
     nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.02, 2.05, 2.40, 2.80, 3.40, 3.60, 3.60, 3.40, 3.10, 2.70],
   },
   snoutBulb: { c: [0.168, 0.258], r: [0.168, 0.19, 0.235] },
@@ -37,42 +37,45 @@ export const HEAD_SCULPT = {
   chin: { c: [0.27, 0.07], r: [0.18, 0.06, 0.17] },
   // the dermal cup: a fleshy shell round the globe, open on the side the eye looks out of (normal in the fish frame:
   // forward is −s; openCos: the opening's edge as the cosine of its half-angle), its rim rounded
-  cup: { thick: 0.024, taper: 0.45, gap: 0.0015, open: [-0.30, 0.82, 0.52], openCos: 0.05, rimRound: 0.012 },
+  cup: { thick: 0.027, taper: 0.45, taperOuter: 0.22, outerFrom: -0.02, outerTo: 0.07, gap: 0.0015, open: [-0.30, 0.82, 0.52], openCos: 0.05, rimRound: 0.012 },
   // the crease between the two globes filled by a smooth skin web (the domes press together into one capped boss),
   // added after the sockets are carved so it stays a film over the inner domes running down into the bridge
   // (the fillet is kept only where it stands `gap` off the globes; over the inner quarter of each dome, out to |z| =
   // cover, a skin shell `thick` at the midline thinning to `edge` carries it on and ends in a rounded margin)
   web: { k: 0.09, gap: 0.005, round: 0.004, cover: 0.05, thick: 0.008, edge: 0.003, rim: 0.006, join: 0.004 },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
-  septum: { c: [0.34, 0.60], r: [0.09, 0.10, 0.06] },
+  septum: { c: [0.33, 0.625], r: [0.105, 0.077, 0.10] },
   // upper lip roll (left half, mirrored) from the front midline to the corner, and its lateral lobe
   lip: {
-    path: [[0.075, 0.125, 0.0], [0.085, 0.123, 0.06], [0.115, 0.118, 0.12], [0.165, 0.112, 0.165], [0.235, 0.106, 0.195], [0.300, 0.100, 0.21]],
-    radius: [0.034, 0.035, 0.032, 0.028, 0.026, 0.022],
-    // the lobe: a plump oval pad at the face's lower front corner, proud of the face side above it
-    lobe: { c: [0.225, 0.120, 0.193], r: [0.12, 0.076, 0.060] },
+    path: [[0.075, 0.125, 0.0], [0.077, 0.1245, 0.06], [0.115, 0.118, 0.12], [0.165, 0.112, 0.172], [0.235, 0.108, 0.215], [0.295, 0.102, 0.240]],
+    radius: [0.038, 0.038, 0.036, 0.034, 0.038, 0.032],
+    // capsules along the roll (dense enough that the hard union of capsules shows no ribs)
+    samples: 72,
+    // the lobe: a plump oval pad at the face's lower front corner, proud of the face side above it; yawed (deg, about
+    // the vertical) so its front end turns in along the jaw's curve and runs on into the front of the roll
+    lobe: { c: [0.225, 0.110, 0.178], r: [0.125, 0.074, 0.058], yaw: 25 },
   },
   lowerLip: {
-    path: [[0.200, 0.074, 0.0], [0.210, 0.073, 0.08], [0.243, 0.067, 0.14], [0.293, 0.060, 0.18], [0.333, 0.056, 0.198]],
-    radius: [0.007, 0.007, 0.007, 0.007, 0.006],
+    path: [[0.200, 0.074, 0.0], [0.210, 0.073, 0.08], [0.243, 0.067, 0.14], [0.280, 0.061, 0.172], [0.305, 0.058, 0.182]],
+    radius: [0.007, 0.007, 0.007, 0.006, 0.004],
   },
   // along the lip's lower edge, the corners a little lower than the front (the pout); snapped onto the surface
   gape: {
-    path: [[0.090, 0.088, 0.0], [0.100, 0.086, 0.07], [0.128, 0.081, 0.13], [0.185, 0.075, 0.18], [0.290, 0.068, 0.215]],
-    radius: [0.004, 0.004, 0.004, 0.004, 0.0035],
+    path: [[0.090, 0.088, 0.0], [0.100, 0.086, 0.07], [0.128, 0.081, 0.13], [0.185, 0.075, 0.18], [0.265, 0.070, 0.205]],
+    radius: [0.004, 0.004, 0.004, 0.0038, 0.003],
   },
   // grooves drawn roughly in the fish frame and snapped onto the surface (snapToSurface) before they are carved
   labialGroove: {
-    path: [[0.070, 0.165, 0.0], [0.080, 0.170, 0.10], [0.110, 0.182, 0.19], [0.180, 0.198, 0.245], [0.255, 0.195, 0.258], [0.305, 0.168, 0.258], [0.335, 0.125, 0.250]],
-    radius: [0.004, 0.004, 0.005, 0.005, 0.005, 0.004, 0.002],
+    path: [[0.070, 0.168, 0.0], [0.085, 0.165, 0.10], [0.120, 0.146, 0.183], [0.180, 0.141, 0.225], [0.225, 0.131, 0.250], [0.262, 0.126, 0.266], [0.290, 0.108, 0.272], [0.305, 0.080, 0.262]],
+    radius: [0.004, 0.004, 0.005, 0.005, 0.005, 0.0048, 0.0042, 0.0035],
   },
   opercle: { path: [[1.012, 0.44, 0.29], [1.032, 0.36, 0.325], [1.032, 0.26, 0.34], [1.007, 0.15, 0.33], [0.962, 0.06, 0.29], [0.912, 0.02, 0.24]], radius: [0.0024, 0.006, 0.0078, 0.0078, 0.0066, 0.0036] },
   // the anterior nostril: a short tube on the upper front of the snout bulb, about 3/4 of the way from the eye to the
   // snout tip (B012, B013), lying along the surface and pointing forward and down
-  nostril: { base: [0.075, 0.385, 0.083], tip: [0.034, 0.360, 0.089], r: [0.010, 0.0085], hole: 0.004 },
+  nostril: { base: [0.072, 0.383, 0.083], tip: [0.050, 0.370, 0.087], r: [0.0085, 0.007], hole: 0.0035 },
   floorY: -0.010,
   cutS: 1.3,
-  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.020, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.03, lowerLip: 0.015, groove: 0.008, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
+  blend: { bulb: 0.03, cheek: 0.04, chin: 0.05, turret: 0.045, cups: 0.020, septum: 0.04, pedestal: 0.04, lip: 0.012, lobe: 0.04, lowerLip: 0.015, groove: 0.008, fold: 0.012, gape: 0.006, nostril: 0.012, cavity: 0.010, floor: 0.04, cut: 0.02 },
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
@@ -157,15 +160,20 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     const r = Math.hypot(px, py, pz) || 1e-9;
     const c = (px * g[0] + py * g[1] + pz * g[2]) / r;
     // the shell thins from its full thickness below to nothing at the rim: the skin runs onto the globe without a step
-    const k = smoothstep(K.cup.openCos, K.cup.openCos - K.cup.taper, c);
+    // (on the outer side the taper is shorter, so the lid ends there in a rounded fleshy rim; the inner side, toward
+    // the bridge, keeps the long taper and runs thinly onto the globe)
+    const tp = K.cup.taper + ((K.cup.taperOuter ?? K.cup.taper) - K.cup.taper) * smoothstep(K.cup.outerFrom ?? 0, K.cup.outerTo ?? 1, pz);
+    const k = smoothstep(K.cup.openCos, K.cup.openCos - tp, c);
     const shell = r - (re + K.cup.gap + (rc - re - K.cup.gap) * k);
     const open = c * r - K.cup.openCos * rc;
     return smax(shell, open, K.cup.rimRound);
   };
   const cavityL = sphere(eyeL, re + K.cup.gap);
-  const lipP = smoothPath(K.lip.path, K.lip.radius, 24);
+  const lipP = smoothPath(K.lip.path, K.lip.radius, K.lip.samples);
   const lipRoll = tube(lipP.points, lipP.radii);
-  const lobe = ellipsoid(K.lip.lobe.c, K.lip.lobe.r);
+  const lobeE = ellipsoid([0, 0, 0], K.lip.lobe.r), [lc, ly, lz] = K.lip.lobe.c;
+  const ya = ((K.lip.lobe.yaw ?? 0) * Math.PI) / 180, yc = Math.cos(ya), ys = Math.sin(ya);
+  const lobe = (x, y, z) => { const px = x - lc, pz = z - lz; return lobeE(px * yc + pz * ys, y - ly, -px * ys + pz * yc); };
   const llP = smoothPath(K.lowerLip.path, K.lowerLip.radius, 20);
   const lowerLip = tube(llP.points, llP.radii);
   const septum = el(K.septum);
@@ -188,7 +196,8 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     d = smin(d, lowerLip(x, y, za), b.lowerLip);
     return d;
   };
-  const snapped = (p) => { const q = smoothPath(snapToSurface(base, p.path), p.radius, 40); return tube(q.points, q.radii); };
+  // the control points and then the densified curve between them are snapped, so a groove never tunnels under a bulge
+  const snapped = (p) => { const q = smoothPath(snapToSurface(base, p.path), p.radius, 40); return tube(snapToSurface(base, q.points), q.radii); };
   const groove = snapped(K.labialGroove), opercle = snapped(K.opercle), gape = snapped(K.gape);
 
   return (x, y, z) => {
