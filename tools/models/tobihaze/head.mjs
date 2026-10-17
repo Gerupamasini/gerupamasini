@@ -5,8 +5,8 @@
 // the superellipse exponents that make the bell seen from the front: flat-floored and wide low at the cheeks, narrower
 // up to the turret). On it, in order of importance: the eye turret with its two dermal cups and the sockets the globes
 // sit in; the snout bulb over a low mouth with a thick upper-lip roll ending in lateral lobes; the cheek balloons; then
-// the small features that read at macro range (labial groove, gape, tubular anterior nostrils, the crease over the
-// snout bulb, the forehead's median furrow).
+// the small features that read at macro range (labial groove, gape, tubular anterior nostrils, the arch over the
+// snout bulb, the opercle's soft margin).
 import { HEAD } from './anatomy.mjs';
 import { ellipsoid, sphere, smin, smax, ssub, tube, smoothPath, clamp } from './sdf.mjs';
 
@@ -18,48 +18,50 @@ export const HEAD_SCULPT = {
   // height yW of the widest point, and the exponents of the section above (nU) and below (nL) that height
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
-    w:  [0.000, 0.060, 0.100, 0.142, 0.178, 0.212, 0.245, 0.285, 0.315, 0.332, 0.340, 0.336, 0.322, 0.305, 0.300],
+    w:  [0.000, 0.060, 0.100, 0.142, 0.178, 0.212, 0.245, 0.285, 0.305, 0.310, 0.312, 0.310, 0.305, 0.300, 0.298],
     yT: [0.260, 0.320, 0.375, 0.430, 0.475, 0.512, 0.545, 0.570, 0.592, 0.612, 0.632, 0.640, 0.642, 0.645, 0.650],
     yB: [0.250, 0.205, 0.175, 0.145, 0.120, 0.085, 0.045, 0.012, -0.004, -0.008, -0.010, -0.010, -0.008, -0.004, 0.000],
     yW: [0.250, 0.250, 0.248, 0.246, 0.246, 0.246, 0.248, 0.250, 0.250, 0.250, 0.250, 0.255, 0.265, 0.280, 0.300],
-    nU: [2.00, 2.00, 2.00, 2.00, 2.00, 1.95, 1.85, 1.75, 1.70, 1.70, 1.70, 1.75, 1.85, 1.95, 2.00],
+    nU: [2.00, 2.00, 2.00, 2.00, 2.00, 1.95, 1.85, 1.75, 1.65, 1.55, 1.55, 1.60, 1.75, 1.95, 2.00],
     nL: [2.00, 2.00, 2.00, 2.00, 2.00, 2.05, 2.10, 2.20, 2.40, 2.70, 3.00, 3.00, 2.80, 2.50, 2.30],
   },
   snoutBulb: { c: [0.165, 0.275], r: [0.165, 0.165, 0.245] },
-  cheekBalloon: { c: [0.68, 0.23], r: [0.36, 0.23, 0.345] },
-  turret: { c: [0.33, 0.515], r: [0.16, 0.115, 0.20] },
-  chin: { c: [0.24, 0.05], r: [0.17, 0.05, 0.20] },
+  cheekBalloon: { c: [0.66, 0.24], r: [0.36, 0.235, 0.355] },
+  turret: { c: [0.33, 0.515], r: [0.16, 0.115, 0.15] },
+  chin: { c: [0.26, 0.05], r: [0.16, 0.05, 0.19] },
   // the dermal cup: a fleshy shell round the globe, open on the side the eye looks out of (normal in the fish frame:
   // forward is −s; openCos: the opening's edge as the cosine of its half-angle), its rim rounded
-  cup: { thick: 0.02, gap: 0.004, open: [-0.22, 0.85, 0.48], openCos: 0.40, rimRound: 0.03 },
+  cup: { thick: 0.03, gap: 0.003, open: [-0.45, 0.70, 0.55], openCos: -0.05, rimRound: 0.025 },
+  // the skin between the two cups: the domes press together along the midline down to a shallow notch
+  septum: { c: [0.32, 0.62], r: [0.075, 0.085, 0.035] },
   // upper lip roll (left half, mirrored) from the front midline to the corner, and its lateral lobe
   lip: {
-    path: [[0.110, 0.110, 0.0], [0.116, 0.107, 0.08], [0.138, 0.101, 0.15], [0.180, 0.095, 0.205], [0.240, 0.090, 0.235], [0.300, 0.086, 0.245]],
-    radius: [0.016, 0.019, 0.026, 0.035, 0.041, 0.040],
-    lobe: { c: [0.265, 0.098, 0.238], r: [0.10, 0.064, 0.07] },
+    path: [[0.110, 0.122, 0.0], [0.116, 0.119, 0.08], [0.138, 0.114, 0.15], [0.180, 0.110, 0.200], [0.240, 0.106, 0.220], [0.290, 0.100, 0.225]],
+    radius: [0.016, 0.019, 0.026, 0.032, 0.035, 0.032],
+    lobe: { c: [0.245, 0.124, 0.208], r: [0.105, 0.066, 0.056] },
   },
   lowerLip: {
-    path: [[0.150, 0.052, 0.0], [0.158, 0.052, 0.09], [0.190, 0.053, 0.16], [0.245, 0.056, 0.20], [0.300, 0.058, 0.215]],
+    path: [[0.140, 0.072, 0.0], [0.150, 0.071, 0.09], [0.185, 0.064, 0.16], [0.240, 0.056, 0.20], [0.295, 0.050, 0.215]],
     radius: [0.012, 0.012, 0.012, 0.012, 0.011],
   },
+  // along the lip's lower edge, the corners a little lower than the front (the pout)
   gape: {
-    path: [[0.100, 0.074, 0.0], [0.108, 0.073, 0.09], [0.132, 0.071, 0.165], [0.195, 0.069, 0.218], [0.310, 0.067, 0.240]],
-    radius: [0.004, 0.004, 0.0045, 0.0045, 0.0035],
+    path: [[0.100, 0.090, 0.0], [0.108, 0.088, 0.09], [0.132, 0.082, 0.165], [0.195, 0.072, 0.218], [0.300, 0.062, 0.236]],
+    radius: [0.0065, 0.0065, 0.0065, 0.006, 0.005],
   },
   // grooves drawn roughly in the fish frame and snapped onto the surface (snapToSurface) before they are carved
   labialGroove: {
-    path: [[0.075, 0.140, 0.0], [0.085, 0.143, 0.10], [0.115, 0.155, 0.19], [0.185, 0.168, 0.255], [0.275, 0.155, 0.300], [0.345, 0.125, 0.305], [0.390, 0.085, 0.290], [0.400, 0.045, 0.262]],
+    path: [[0.070, 0.165, 0.0], [0.080, 0.168, 0.10], [0.110, 0.180, 0.19], [0.180, 0.195, 0.245], [0.265, 0.188, 0.275], [0.320, 0.158, 0.278], [0.350, 0.115, 0.268], [0.360, 0.075, 0.252]],
     radius: [0.009, 0.009, 0.010, 0.010, 0.010, 0.010, 0.009, 0.008],
   },
-  cheekFold: { path: [[0.36, 0.47, 0.22], [0.385, 0.38, 0.29], [0.385, 0.28, 0.32], [0.365, 0.19, 0.31], [0.345, 0.13, 0.29]], radius: [0.003, 0.006, 0.007, 0.006, 0.004] },
-  opercle: { path: [[1.0, 0.52, 0.27], [1.02, 0.42, 0.32], [1.02, 0.30, 0.34], [0.995, 0.17, 0.33], [0.95, 0.07, 0.29], [0.90, 0.02, 0.24]], radius: [0.002, 0.006, 0.008, 0.009, 0.008, 0.004] },
-  // a soft transverse crease where the snout bulb meets the bridge under the eyes
-  bulbCrease: { c: [0.085, 0.448], r: [0.03, 0.012, 0.15] },
+  // the arch over the snout bulb: apex in the saddle under the turret, the sides falling outward to the lip corners
+  bulbArch: { path: [[0.13, 0.525, 0.0], [0.14, 0.515, 0.06], [0.165, 0.49, 0.12], [0.20, 0.445, 0.18], [0.235, 0.40, 0.225], [0.25, 0.32, 0.25], [0.265, 0.24, 0.262], [0.285, 0.17, 0.262]], radius: [0.008, 0.009, 0.010, 0.010, 0.009, 0.008, 0.007, 0.005] },
+  opercle: { path: [[1.0, 0.44, 0.29], [1.02, 0.36, 0.325], [1.02, 0.26, 0.34], [0.995, 0.15, 0.33], [0.95, 0.06, 0.29], [0.90, 0.02, 0.24]], radius: [0.001, 0.004, 0.007, 0.008, 0.007, 0.004] },
   nostril: { base: [0.075, 0.172, 0.070], tip: [0.050, 0.158, 0.072], r: [0.0095, 0.008], hole: 0.0045 },
   furrow: { c: [0.21, 0.53], r: [0.10, 0.05, 0.03] },
   floorY: -0.015,
   cutS: 1.3,
-  blend: { bulb: 0.06, cheek: 0.08, chin: 0.05, turret: 0.06, cups: 0.06, lip: 0.022, lobe: 0.035, lowerLip: 0.015, groove: 0.014, fold: 0.02, gape: 0.006, crease: 0.03, furrow: 0.045, nostril: 0.008, cavity: 0.006, floor: 0.04, cut: 0.02 },
+  blend: { bulb: 0.06, cheek: 0.08, chin: 0.05, turret: 0.045, cups: 0.04, septum: 0.02, lip: 0.022, lobe: 0.05, lowerLip: 0.015, groove: 0.014, fold: 0.03, arch: 0.03, gape: 0.006, nostril: 0.008, cavity: 0.006, floor: 0.04, cut: 0.02 },
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
@@ -137,7 +139,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
   const lowerLip = tube(llP.points, llP.radii);
   const gP = smoothPath(K.gape.path, K.gape.radius, 20);
   const gape = tube(gP.points, gP.radii);
-  const crease = el(K.bulbCrease);
+  const septum = el(K.septum);
   const nostril = tube([K.nostril.base, K.nostril.tip], K.nostril.r);
   const nostrilHole = sphere(K.nostril.tip, K.nostril.hole);
   const furrow = el(K.furrow);
@@ -152,19 +154,19 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
     d = smin(d, chin(x, y, z), b.chin);
     d = smin(d, turret(x, y, z), b.turret);
     d = smin(d, cupL(x, y, za), b.cups);
+    d = smin(d, septum(x, y, z), b.septum);
     d = smin(d, smin(lipRoll(x, y, za), lobe(x, y, za), b.lobe), b.lip);
     d = smin(d, lowerLip(x, y, za), b.lowerLip);
     return d;
   };
   const snapped = (p) => { const q = smoothPath(snapToSurface(base, p.path), p.radius, 40); return tube(q.points, q.radii); };
-  const groove = snapped(K.labialGroove), fold = snapped(K.cheekFold), opercle = snapped(K.opercle);
+  const groove = snapped(K.labialGroove), arch = snapped(K.bulbArch), opercle = snapped(K.opercle);
 
   return (x, y, z) => {
     const za = Math.abs(z);
     let d = base(x, y, z);
-    d = ssub(d, crease(x, y, z), b.crease);
     d = ssub(d, groove(x, y, za), b.groove);
-    d = ssub(d, fold(x, y, za), b.fold);
+    d = ssub(d, arch(x, y, za), b.arch);
     d = ssub(d, opercle(x, y, za), b.fold);
     d = ssub(d, gape(x, y, za), b.gape);
     d = smin(d, nostril(x, y, za), b.nostril);
