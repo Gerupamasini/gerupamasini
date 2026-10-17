@@ -11,7 +11,9 @@ export const ready = Promise.all([MeshoptSimplifier.ready, MeshoptTangents.ready
 /**
  * @param f        distance (fish frame, mm)
  * @param box      { min, max } (mm)
- * @param o        { h: cell (mm), target: triangles, charts, prefer, uvWeight?, normalWeight?, log? }
+ * @param o        { h: cell (mm), target: triangles, charts, prefer, uvWeight?, normalWeight?, permissive?, log? }
+ *                 (permissive: collapses may cross the charts' seams where the error allows, for the far tier, whose
+ *                 budget the seams alone would otherwise exceed)
  * @returns { position, normal, tangent, uv, indices, chart, dense } (fish frame mm; dense = the unsimplified mesh)
  */
 export function tierMesh(f, box, o) {
@@ -27,7 +29,7 @@ export function tierMesh(f, box, o) {
   const nw = o.normalWeight ?? 0.5, uw = o.uvWeight ?? 2;
   let idx = ch.indices;
   if (idx.length / 3 > o.target) {
-    [idx] = MeshoptSimplifier.simplifyWithAttributes(ch.indices, ch.position, 3, attrs, 5, [nw, nw, nw, uw, uw], null, o.target * 3, 0.02, []);
+    [idx] = MeshoptSimplifier.simplifyWithAttributes(ch.indices, ch.position, 3, attrs, 5, [nw, nw, nw, uw, uw], null, o.target * 3, 0.02, o.permissive ? ['Permissive'] : []);
   }
   // keep only the vertices the simplified triangles use
   const remap = new Int32Array(n).fill(-1);
