@@ -79,7 +79,7 @@ export const HEAD_SCULPT = {
 };
 
 /** Sample the loft's station tables into dense arrays (Catmull-Rom between stations). */
-function loftTables(L, n = 2048) {
+export function loftTables(L, n = 2048) {
   const keys = ['w', 'yT', 'yB', 'yW', 'nU', 'nL'];
   const sMax = L.s[L.s.length - 1];
   const out = Object.fromEntries(keys.map((k) => [k, new Float64Array(n + 1)]));
@@ -103,7 +103,7 @@ function loftTables(L, n = 2048) {
 }
 
 /** Distance to the loft (approximate: the section's superellipse distance, the front closed by its own shrinking). */
-function loftSDF(T) {
+export function loftSDF(T) {
   const { n, sMax, s0 } = T;
   return (x, y, z) => {
     const sc = clamp(x, s0 + 2e-3, sMax);

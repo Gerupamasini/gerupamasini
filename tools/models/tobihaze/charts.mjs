@@ -33,6 +33,20 @@ export function cylinder(s0, s1, axisY) {
 }
 
 /**
+ * Cylinder about a limb's axis from a to b: u along the axis (t from t0 to t1 of the segment), v round it, counter-
+ * clockwise about the axis, with v = 0.5 toward `ref` (its part perpendicular to the axis) and the seam opposite.
+ */
+export function limb(a, b, ref, t0 = -0.2, t1 = 1.25) {
+  const ax = sub(b, a), L = Math.hypot(ax[0], ax[1], ax[2]), u = scale(ax, 1 / L);
+  const e0 = norm(sub(ref, scale(u, dot(ref, u)))), e1 = cross(u, e0);
+  return (p) => {
+    const d = sub(p, a), t = dot(d, u) / L;
+    const ang = Math.atan2(dot(d, e1), dot(d, e0)); // 0 at the seam
+    return [(t - t0) / (t1 - t0), (ang + Math.PI) / TAU];
+  };
+}
+
+/**
  * Split a mesh into charts.
  * @param mesh    { position, normal, indices } (fish frame)
  * @param charts  [{ name, rect: [x0, y0, x1, y1] (atlas share), project(p) → [a, b] in 0..1, wrapV? }]

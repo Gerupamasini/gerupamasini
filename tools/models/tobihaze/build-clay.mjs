@@ -2,8 +2,9 @@
 // The clay stage of the トビハゼ head: the sculpt meshed without textures, the eye globes in their sockets, written
 // as a GLB for the photo comparisons (render.mjs, shots-head.mjs). Nothing here ships: the output goes to
 // tools/models/tobihaze/out/.
-//   node tools/models/tobihaze/build-clay.mjs [--h <cell mm>] [--out <file>] [--head <sculpt module>]
-// (--head: a staged copy of head.mjs, to build a candidate while head.mjs itself is being measured)
+//   node tools/models/tobihaze/build-clay.mjs [--h <cell mm>] [--out <file>] [--head <sculpt module>] [--body]
+// (--head: a staged copy of head.mjs, to build a candidate while head.mjs itself is being measured; --body: the whole
+// fish of body.mjs instead of the head alone)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -18,11 +19,15 @@ const h = Number(arg('--h', 0.06));
 const outFile = path.resolve(arg('--out', path.join(here, 'out', 'head-clay.glb')));
 const headModule = arg('--head');
 const { headSDFmm, HEAD_SCULPT } = await import(headModule ? pathToFileURL(path.resolve(headModule)).href : './head.mjs');
+const whole = args.includes('--body');
+const { fishSDFmm } = whole ? await import('./body.mjs') : {};
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
 
-const f = headSDFmm(HL, HEAD_SCULPT);
-const box = { min: [-0.08 * HL, -0.08 * HL, -0.5 * HL], max: [(HEAD_SCULPT.cutS + 0.05) * HL, 0.85 * HL, 0.5 * HL] };
+const f = whole ? fishSDFmm(HL) : headSDFmm(HL, HEAD_SCULPT);
+const box = whole
+  ? { min: [-0.08 * HL, -0.16 * HL, -0.62 * HL], max: [4.32 * HL, 0.85 * HL, 0.62 * HL] }
+  : { min: [-0.08 * HL, -0.08 * HL, -0.5 * HL], max: [(HEAD_SCULPT.cutS + 0.05) * HL, 0.85 * HL, 0.5 * HL] };
 const mesh = surfaceNets(f, box, h, { log });
 
 // to the object frame (metres)
@@ -76,6 +81,7 @@ const region = (s0, s1, y0, y1, z) => {
 const regions = {
   head: region(-0.02, HEAD_SCULPT.cutS, -0.02, HEAD.eye.y + HEAD.eye.d / 2 + 0.02, 0.38),
   face: region(-0.02, 0.5, -0.02, HEAD.eye.y + HEAD.eye.d / 2 + 0.02, 0.36),
+  body: region(-0.02, 4.3, -0.12, HEAD.eye.y + HEAD.eye.d / 2 + 0.02, 0.55),
 };
 const root = gb.addNode({ name: 'Tobihaze_Clay', children: nodes, extras: { regions, HLmm: HL } });
 gb.addScene('Tobihaze_Clay', [root]);
