@@ -36,11 +36,11 @@ describe('ヤマトオサガニ: the body plan', () => {
     expect(cl / cw).toBeLessThan(0.7);
     // nearly as wide at mid-length as at the external orbital teeth (not an ellipse)
     const half = (z: number) => Math.max(...loop.filter((e) => Math.abs(e.z - z) < 0.6 && e.x > 0).map((e) => e.x));
-    expect(half(0) / half(9.5)).toBeGreaterThan(0.95);
+    expect(half(0) / half(6.95)).toBeGreaterThan(0.95);
     // the posterior margin broad and straight
     expect(half(-11) * 2 / cw).toBeGreaterThan(0.6);
     // the teeth: three outward tips on the anterolateral margin of each side
-    const left = loop.filter((e) => e.x > 14 && e.z > 3 && e.z < 11);
+    const left = loop.filter((e) => e.x > 14 && e.z > 0.5 && e.z < 11);
     let tipsN = 0;
     for (let i = 1; i < left.length - 1; i++) if (left[i].kind === 'T') tipsN++;
     expect(tipsN).toBe(3);

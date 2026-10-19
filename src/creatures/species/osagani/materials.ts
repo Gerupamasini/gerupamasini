@@ -203,28 +203,59 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0;
     osCol = mix(osCol, uPale, smoothstep(0.03, 0.08, g) * 0.18);
     if (part == 0) {
       // the grooves (cavity from the geometry's relief) dark and muddy; the margin's rim and the orbital beading pale
-      float rim = smoothstep(0.55, 0.99, vSeg.x) * (1.0 - step(0.999, vSeg.x));
+      // (the beaded rim only along the front and the anterolateral margins: behind them the shoulder rolls over)
+      float rim = smoothstep(0.55, 0.99, vSeg.x) * (1.0 - step(0.999, vSeg.x)) * smoothstep(-2.5, 1.5, P.z);
       osCol = mix(osCol, uPale * 0.9, rim * 0.35);
       osRough = 0.46 + 0.25 * smoothstep(0.03, 0.08, g);
     } else {
-      // under the margin and the body wall: paler, the orbits' trenches in shadow and muddy
-      osCol = mix(osCol, uVentral * 0.75, part == 1 ? 0.45 : 0.15);
-      osCol *= part == 13 ? 0.45 : 1.0;
-      osRough = 0.6;
-      lowMud = part == 13 ? 0.55 : 0.25;
+      // under the margin: the branchiostegal walls and the pterygostomian faces under a felt of short setae that holds
+      // the mud — dark brown and matt in every field photograph (A45, A47, B7, B29), grey-blue only when washed (B60,
+      // B61); darker down towards the coxae; the orbits' trenches in shadow
+      // (the orbits' trenches by their cavity weight, which the geometry ramps up into them)
+      float down = smoothstep(0.1, 0.9, vSeg.x);
+      float orb = part == 13 ? 1.0 : smoothstep(0.62, 0.78, cav);
+      vec3 felt = mix(uDark * 1.9, uMud * 0.55, 0.35 + 0.3 * osFbm(X * 0.9 + sd * 3.0));
+      osCol = mix(osCol, felt, mix(0.62 + 0.25 * down, 0.4, orb));
+      osCol = mix(osCol, uVentral * 0.7, 0.12 * (1.0 - uMudCoat) * (1.0 - orb));
+      osCol *= mix(1.0 - 0.18 * down, 0.3, orb);
+      // (where the wall's foot turns under towards the coxae it is the pale pleural and sternal edge: B61, B64, B67)
+      float under = smoothstep(-0.25, -0.75, normalize(vRestN).y) * (1.0 - orb);
+      osCol = mix(osCol, uVentral * 0.82, under * 0.85);
+      osHgt *= 0.5;
+      osRough = 0.82;
+      lowMud = mix(0.35, 0.55, orb);
     }
   } else if (part == 2) {
     // sternum and abdomen: cream-yellow, the sutures darker
     osCol = uVentral * (0.85 + 0.25 * osFbm(P.xz * 0.5 + sd));
-    float sut = smoothstep(0.82, 0.98, abs(sin(P.z * 0.95 + 0.4)));
+    // the sternites: sutures running out from the abdomen's cavity to the gaps between the coxae, a little curved
+    // (B61, B64, B67); the abdomen's own somites across it (its flag: vAux.y 1 or 2)
+    float ax = abs(P.x);
+    float sut = 0.0;
+    if (vAux.y > 0.5 && vAux.y < 2.5) sut = smoothstep(0.8, 0.97, abs(sin(P.z * 1.05 + 0.4)));
+    else {
+      for (int k = 0; k < 4; k++) {
+        float z0 = k == 0 ? 5.0 : k == 1 ? 1.3 : k == 2 ? -2.7 : -6.4;
+        float d = abs(P.z - (z0 + 0.012 * ax * ax * (k == 0 ? 1.0 : -0.6)));
+        sut = max(sut, smoothstep(0.22, 0.04, d) * smoothstep(3.5, 6.0, ax));
+      }
+    }
     osCol = mix(osCol, uVentral * 0.5, sut * 0.5);
     osRough = 0.5;
     lowMud = 0.35;
   } else if (part == 3) {
     // third maxillipeds: pale cream, a fine pitting, the ischio-meral suture
     osCol = uMxp * (0.9 + 0.15 * osNoise(vSeg * 9.0 + sd));
-    osCol = mix(osCol, uMxp * 0.6, smoothstep(0.03, 0.0, abs(vSeg.y - 0.38)) * 0.6);
+    // the merus the white oval of the field photographs (A47, A45, B29); the ischium below greyer and muddier, the
+    // plates' edges shaded
+    osCol = mix(osCol, mix(uMxp * 0.62, uMud * 0.8, 0.45), smoothstep(0.42, 0.56, vSeg.y) * 0.7);
+    osCol *= 0.78 + 0.22 * smoothstep(0.0, 0.12, min(vSeg.x, 1.0 - vSeg.x)) * smoothstep(0.0, 0.08, min(vSeg.y, 1.0 - vSeg.y));
+    osCol = mix(osCol, uMxp * 0.6, smoothstep(0.03, 0.0, abs(vSeg.y - 0.42)) * 0.6);
     osCol = mix(osCol, uDark * 4.0, osSpeckle(vSeg * vec2(9.0, 12.0), 0.25, 0.25, fwL * 0.5, sd.x) * 0.15);
+    // the merus's outer upper corner grey, finely speckled dark (B61, B64, B67)
+    float mg = smoothstep(0.75, 0.2, length(vSeg * vec2(1.0, 2.2)));
+    osCol = mix(osCol, uMxp * 0.5 * (0.8 + 0.4 * osNoise(vSeg * 23.0 + sd)), mg * 0.55);
+    osCol = mix(osCol, uDark * 2.5, osSpeckle(vSeg * vec2(26.0, 34.0), 0.3, 0.3, fwL * 0.5, sd.y) * mg * 0.5);
     osRough = 0.38;
   } else if (part == 10 || part == 11) {
     // eyestalk and cornea (vSeg.x: signed distance from the cornea's edge, > 0 on the cornea)

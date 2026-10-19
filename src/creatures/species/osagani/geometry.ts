@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import {
-  ABDOMEN, BIND, CARAPACE, CHELA_FEMALE, CHELA_MALE, EYE, MXP3, OUTLINE, dorsalRelief, legSpecs, marginHeight, vault,
+  ABDOMEN, BIND, CARAPACE, CHELA_FEMALE, CHELA_MALE, EYE, MXP3, OUTLINE, dorsalRelief, curveAt, legSpecs, marginHeight, sternumY, vault,
   type ArticleName, type ArticleSpec, type LegId, type LegSpec, type V2,
 } from './anatomy';
 import { GeoBuilder, knotLerp, noise2, smooth } from '../gazami/mesh';
@@ -24,7 +24,7 @@ export const PART = {
   CORNEA: 10,
   STALK: 11,      // eyestalks, antennae, antennules
   SPINE: 12,      // spines and spinules on the limbs
-  ORBIT: 13,      // the orbits' trenches (in shadow, where the folded eyestalks lie)
+  ORBIT: 13,      // (unused: the orbits' trenches are the body wall's, darkened by their cavity weight `aAux.x`)
   TOOTH: 14,      // the teeth of the fingers' cutting edges
   FIXED: 15,      // the chela's fixed finger (its own piece on the propodus)
 } as const;
@@ -167,7 +167,7 @@ export function rigDefinition(): RigDef {
     const down = new Vector3(0, MXP3.y1 - MXP3.y0, MXP3.z1 - MXP3.z0).normalize();
     const face = new Vector3(0, down.z, -down.y);
     const mq = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(new Vector3(1, 0, 0), face, new Vector3().crossVectors(new Vector3(1, 0, 0), face)));
-    add(`J_mxp_${side}`, 'J_body', new Vector3(sg * MXP3.halfWidth, MXP3.y0, MXP3.z0), mq);
+    add(`J_mxp_${side}`, 'J_body', new Vector3(sg * MXP3.hinge, MXP3.y0, MXP3.z0), mq);
   }
   return { defs, byName, legs };
 }
@@ -265,8 +265,11 @@ export function outline(lod: Lod): EnvSample[] {
 
 const C = CARAPACE;
 
-/** the sternum's edge (left half, front to back): broad over the coxae, narrowing to the buccal frame and the abdomen */
-const STERNUM_EDGE: V2[] = [[0, 7.6], [4.6, 7.4], [9.2, 6.6], [13.2, 5.2], [15.4, 3.0], [15.9, -0.8], [15.7, -4.8], [14.8, -7.9], [12.6, -9.6], [8.0, -10.4], [0, -10.5]];
+/**
+ * The sternum's edge in plan (left half, front to back): narrow at the maxillipeds' foot, broad over the coxae of the
+ * walking legs, narrowing to the abdomen's hinge (B61, B64, B67; the scan's horizontal sections)
+ */
+const STERNUM_EDGE: V2[] = [[0, 6.4], [4.4, 6.3], [8.6, 5.9], [12.6, 4.7], [15.1, 2.8], [15.7, -0.8], [15.5, -4.8], [14.4, -7.8], [12.2, -9.5], [8.0, -10.2], [0, -10.3]];
 
 /** where a ray from the outline's centre at angle `a` (from +z towards +x) crosses a closed half-polygon mirrored in x */
 function rayHit(poly: V2[], a: number): V2 {
@@ -287,18 +290,41 @@ function rayHit(poly: V2[], a: number): V2 {
   return best;
 }
 
+/** rows of the skin between the margin's bead and the sternum's edge (the lighter tiers take every 2nd, every 4th) */
+const UNDER_ROWS = 12;
+
 /**
- * The carapace and the body as one closed skin: the dorsal surface (rings over the outline, the vault and the regional
- * relief), the free margin's thin shelf with its teeth, and under it, sample for sample, the body: on the sides the
- * branchiostegal wall falling steeply to the pleural line over the coxae and in to the sternum's edge; at the front
- * the orbit's trench under the dorsal orbital margin, the crenulate infraorbital margin, and the pterygostomian
- * regions and the buccal frame below them; then the sternum.
+ * The front's rows under the margin, as (inward of the margin, down from it) in mm, rows 1 … 6 then 7 … 11 (row 12 is
+ * the sternum's edge), read off B60, B66, B61, B67 and the scan's sagittal sections:
+ *  - the orbit: the long trench under the dorsal orbital margin, from the frontal lobe out to the external orbital
+ *    tooth, ≈ 3 mm high and 2.3 deep, its floor the infraorbital margin standing a little proud of the dorsal margin
+ *  - the frontal lobe bent down between the eyestalks' sockets, the antennular fossae under its tip, the epistome
+ *  - below: the pterygostomian face sloping back to the cheliped's base, and in the middle the buccal cavern recessed
+ *    behind the third maxillipeds (the face slopes back ≈ 30° from the vertical: the scan)
+ */
+/** the face's line in plan (|x|, z): how far forward the body under the margin may come — flat across the
+ *  maxillipeds, falling back towards the corners and round into the side walls (the scan's front map) */
+const FACE_LINE: V2[] = [[0, 10.6], [5, 10.5], [7.5, 10.05], [9.5, 8.9], [11.5, 7.0], [13.2, 5.2], [14.6, 3.7], [15.8, 2.2], [16.8, 0.4], [17.4, -1.6], [17.8, -4]];
+
+const ORBIT_ROWS: V2[] = [[0.45, -0.5], [1.5, -0.9], [2.3, -1.6], [2.25, -2.35], [1.1, -2.8], [-0.35, -3.1]];
+const LOBE_ROWS: V2[] = [[0.3, -0.55], [0.7, -1.05], [1.3, -1.3], [1.65, -1.7], [1.35, -2.05], [1.2, -2.35]];
+const PTERY_ROWS: V2[] = [[-0.05, -3.6], [0.35, -5.0], [0.95, -6.8], [1.7, -8.7], [2.6, -10.4]];
+const BUCCAL_ROWS: V2[] = [[1.0, -3.4], [1.8, -4.4], [2.6, -5.9], [3.6, -7.9], [4.4, -9.8]];
+
+/**
+ * The carapace and the body as one closed skin over the outline: the dorsal surface (rings over the outline: the vault,
+ * the regional relief), the margin's rounded, beaded edge (no shelf: the side walls drop straight from it), and under
+ * it, sample for sample, the body down to the sternum's edge — on the sides the branchiostegal wall falling straight
+ * down and turning in at its foot over the coxae (the scan's transverse sections: a box with rounded edges, no bulge);
+ * behind, the posterior face swelling a little beyond the posterior margin and rolling under to the abdomen's hinge
+ * (the egg of the scan's sagittal sections); in front the orbits' trenches, the frontal lobe and the antennular fossae,
+ * the infraorbital margins, the pterygostomian faces and the buccal cavern; then the sternum, rising fore and aft.
+ * The teeth are wedges: the rows under them run from the toothed outline into the smooth wall over the first few mm.
  */
 export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
   const loop = outline(lod);
   const N = loop.length;
   const c = C.centre;
-  const e = C.edge;
   const ang = loop.map((E) => { const a = Math.atan2(E.x - c[0], E.z - c[1]); return a < 0 ? a + 2 * Math.PI : a; });
   ang[0] = 0;
   const rad = loop.map((E) => Math.hypot(E.x - c[0], E.z - c[1]));
@@ -322,9 +348,10 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const f = Math.max(0, Math.min(1, (a - ang[i0]) / Math.max(1e-9, a1 - ang[i0])));
     return [radS[i0] + (radS[i1] - radS[i0]) * f, ymS[i0] + (ymS[i1] - ymS[i0]) * f];
   };
-  // the dorsal surface as a function of (x, z) over the smoothed outline (the teeth and notches do not crease it): the
-  // vault, drawn down to the margin's height in the margin's band, the relief fading out over the band; the shell's
-  // own small unevenness. Beyond the smoothed outline (the teeth) it keeps the margin's height
+  // the dorsal surface as a function of (x, z) over the smoothed outline: the vault, drawn down to the margin's height
+  // in the margin's band and rounded over at the edge, the relief fading out over the band; the shell's own small
+  // unevenness. Beyond the smoothed outline (the teeth) it keeps the margin's height
+  const BEAD = 0.05;
   const H = (x: number, z: number) => {
     let a = Math.atan2(x - c[0], z - c[1]);
     if (a < 0) a += 2 * Math.PI;
@@ -334,9 +361,12 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const zRim = c[1] + (z - c[1]) / Math.max(d / Rs, 1e-4);
     const base = vault(z, q);
     const rim = vault(zRim, 1);
-    const w = smooth(0.6, 1.0, q);
+    const w = smooth(0.58, 1.0, q);
+    const round = 0.16 * smooth(0.9, 1.0, q) ** 2;
     const unev = (noise2(x * 0.35 + 3.1, z * 0.35, 23) - 0.5) * 0.12 * (1 - q * q);
-    return base + (yms - rim) * w * w + (dorsalRelief(x, z) + unev) * (1 - smooth(0.84, 0.985, q)) + e / 2;
+    // (a deep drop to the margin — the posterolateral shoulder — falls late and steep: rounded over, not sloped)
+    const drop = yms - rim;
+    return base + drop * Math.pow(w, drop < -1 ? 2.6 : 2) + (dorsalRelief(x, z) + unev) * (1 - smooth(0.84, 0.985, q)) + BEAD + 0.16 - round;
   };
   const hN = 0.06;
   const domeV = (x: number, z: number, s: number, u: number) => {
@@ -358,7 +388,7 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
       const E = loop[i];
       const x = c[0] + s * (E.x - c[0]), z = c[1] + s * (E.z - c[1]);
       if (r < rings.length - 1) row.push(domeV(x, z, s, i / N));
-      else { const vi = gb.v(x, E.ym + e / 2, z, body, 1, body, PART.DORSUM, 1, i / N, 0); row.push(vi); }
+      else { const vi = gb.v(x, E.ym + BEAD, z, body, 1, body, PART.DORSUM, 1, i / N, 0); gb.setMm(vi, x, z); row.push(vi); }
     }
     grid.push(row);
   }
@@ -367,97 +397,151 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const j = (i + 1) % N;
     gb.quad(grid[r][i], grid[r + 1][i], grid[r + 1][j], grid[r][j]);
   }
-  // ---- under the margin: rows from the shelf's underside down to the sternum's edge
-  // per sample: the smoothed outline point, its inward direction, how much of the front (orbit) it is
-  const Es: V2[] = [], inw: V2[] = [], front: number[] = [], stern: V2[] = [];
-  for (let i = 0; i < N; i++) {
-    const a = ang[i];
-    Es.push([c[0] + Math.sin(a) * radS[i], c[1] + Math.cos(a) * radS[i]]);
-  }
+  // ---- per sample: the smoothed outline point, its inward direction, the sternum's edge under it, the regions
+  const Es: V2[] = [], inw: V2[] = [], stern: V2[] = [];
+  for (let i = 0; i < N; i++) Es.push([c[0] + Math.sin(ang[i]) * radS[i], c[1] + Math.cos(ang[i]) * radS[i]]);
   for (let i = 0; i < N; i++) {
     const p = Es[(i + N - 1) % N], q = Es[(i + 1) % N];
     const tx = q[0] - p[0], tz = q[1] - p[1], l = Math.hypot(tx, tz) || 1;
     // (the loop runs clockwise seen from above: left side front to back, then the right back to front)
     inw.push([-tz / l, tx / l]);
-    const E = Es[i];
-    front.push(smooth(6.6, 9.0, E[1]) * (1 - smooth(15.0, 17.0, Math.abs(E[0]))));
     stern.push(rayHit(STERNUM_EDGE, ang[i]));
   }
   // check the inward sense once: it must point to the centre at the front centre
   if (inw[0][1] > 0) for (const v of inw) { v[0] = -v[0]; v[1] = -v[1]; }
-  type Row = (i: number) => { x: number; y: number; z: number; part: number; cav: number };
-  const at = (i: number, d: number): V2 => [Es[i][0] + inw[i][0] * d, Es[i][1] + inw[i][1] * d];
   const mix = (a: number, b: number, k: number) => a + (b - a) * k;
-  /** the side's profile (branchiostegal wall, pleural line, body wall) and the front's (orbit, infraorbital margin, face) */
-  const sideAt = (i: number, t: number): [number, number, number] => {
-    // t: 0 just under the shelf … 1 the sternum's edge: the branchiostegal wall falls almost straight down (the scan's
-    // transverse sections: a deep box), turns in at its foot over the coxae and meets the sternum
-    const ym = ymS[i] - e;
-    const top = at(i, 0.3), S = stern[i];
-    const h = smooth(0.5, 1.0, t) * (0.85 + 0.15 * t) + 0.04 * t;
-    const y = mix(ym - 0.25, 0.9, t);
-    // the branchial regions swell out under the margin (B7, A13: the side seen from the side is rounded, not a flat
-    // wall), most at mid-length, less towards the front and the back
-    const zz = Es[i][1];
-    const bulge = 1.5 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * smooth(-11.5, -4, zz) * (1 - smooth(4, 9, zz));
-    return [mix(top[0], S[0], h) - inw[i][0] * bulge, y, mix(top[1], S[1], h) - inw[i][1] * bulge];
+  /** the side's profile at row parameter t (0 the bead … 1 the sternum's edge): (inward, y) — a cubic from the margin
+   *  straight down the wall and in under its foot to the sternum's edge; behind, swelling out past the posterior margin
+   *  and rolling under (the egg) */
+  const sideRD = (i: number, t: number): V2 => {
+    const ym = ymS[i] - BEAD;
+    const S = stern[i], yS = sternumY(S[0], S[1]);
+    const D = Math.max(0.3, Math.hypot(S[0] - Es[i][0], S[1] - Es[i][1]));
+    const Hh = ym - yS;
+    const back = smooth(-5.5, -10.3, Es[i][1]);
+    // (behind the teeth the wall leaves the margin rounding over, not from a crease: the shoulder of B7, A47)
+    const shoulder = smooth(1.5, -2.5, Es[i][1]) * (1 - back);
+    const p1: V2 = [mix(mix(0.1, -0.22, shoulder), -0.85, back), ym - Hh * mix(mix(0.9, 0.5, shoulder), 0.5, back)];
+    const p2: V2 = [mix(0.25 * D, 0.05 * D - 0.35, back), yS + Hh * mix(0.0, 0.22, back)];
+    const u = 1 - t;
+    return [3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * D, u * u * u * ym + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * yS];
   };
-  const centreFront = (i: number) => 1 - smooth(3.6, 6.0, Math.abs(Es[i][0]));
-  const frontAt = (i: number, k: number): [number, number, number] => {
-    const ym = ymS[i] - e;
-    // k: the front's rows: 0 under the shelf, 1 the orbit's roof, 2 its floor and back wall, 3 the infraorbital margin
-    // (standing a little proud of the dorsal margin: the scan's sagittal sections), 4 and 5 the face below it — the
-    // pterygostomian regions, and in the middle the buccal frame recessed behind the maxillipeds — 6 the sternum's front
-    const lobe = 1 - smooth(2.4, 4.0, Math.abs(Es[i][0]));
-    const deep = 1 - 0.85 * lobe;
+  const rows = lod.tier === 0 ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : lod.tier === 1 ? [2, 4, 6, 8, 10, 12] : [4, 8, 12];
+  const knots = (tab: V2[], k: number, first: number): V2 => tab[Math.max(0, Math.min(tab.length - 1, k - first))];
+  /** one row's point for sample i */
+  const rowAt = (i: number, k: number): { x: number; y: number; z: number; part: number; cav: number } => {
+    const E = loop[i], es = Es[i];
+    const ax = Math.abs(es[0]);
+    const ym = ymS[i] - BEAD;
+    const t = k / UNDER_ROWS;
+    // the toothed outline running into the smooth wall over the first rows (the teeth are wedges, not flaps)
+    const tooth = smooth(0, 0.1, t);
+    const bx = mix(E.x, es[0], tooth), bz = mix(E.z, es[1], tooth);
     const S = stern[i];
-    const buccal = centreFront(i);
-    switch (k) {
-      case 0: { const p = at(i, 0.3); return [p[0], ym - 0.25, p[1]]; }
-      case 1: { const p = at(i, 2.2 * deep); return [p[0], ym - 0.65, p[1]]; }
-      case 2: { const p = at(i, 2.4 * deep); return [p[0], ym - 1.9, p[1]]; }
-      case 3: { const p = at(i, -0.25 + 0.6 * lobe); return [p[0], ym - 2.6, p[1]]; }
-      case 4: { const p = at(i, 0.6 + 1.6 * buccal); return [p[0], ym - 4.6, p[1]]; }
-      case 5: { const p = at(i, 2.6 + 1.6 * buccal); return [p[0], mix(4.6, 3.6, buccal), p[1]]; }
-      default: return [S[0], 1.9 * buccal + 0.9 * (1 - buccal), S[1]];
+    if (k === UNDER_ROWS) return { x: S[0], y: sternumY(S[0], S[1]), z: S[1], part: PART.UNDER, cav: 0.45 };
+    let [r, y] = sideRD(i, t);
+    // (the last rows under the side walls' foot are the sternum's own edge, pale up to the coxae: B61, B64, B67)
+    let part: number = k >= 11 && smooth(5.0, 7.5, es[1]) < 0.5 ? PART.STERNUM : PART.UNDER, cav = t > 0.75 ? 0.35 : 0.1;
+    // the front: the orbit, the lobe, the faces below
+    const f = smooth(5.6, 8.0, es[1] + 0.12 * ax) * (1 - smooth(14.0, 17.4, ax));
+    if (f > 0) {
+      let fr: number, fy: number;
+      // the face below the dorsal orbital margin falls back towards the corners — the orbits deeper, the infraorbital
+      // margin and the pterygostomian faces 3 mm behind the margin by the external orbital angle, the margin
+      // overhanging them (the scan's front map; A47, A45, B60)
+      const rec = 3.0 * smooth(7.5, 14.0, ax);
+      if (k <= 6) {
+        const orbW = smooth(2.3, 3.4, ax) * (1 - smooth(13.6, 16.0, ax));
+        const lobeW = 1 - smooth(1.8, 3.0, ax);
+        const rest = Math.max(0, 1 - orbW - lobeW);
+        // (between the frontal lobe and the orbit — the orbit's inner corner — the rows are the orbit's, not the side
+        // wall's: the side's profile only where the orbit ends at the external orbital angle)
+        const inner = 1 - smooth(6.0, 10.0, ax);
+        const oW = orbW + rest * inner, sW = rest * (1 - inner);
+        const o = knots(ORBIT_ROWS, k, 1), l = knots(LOBE_ROWS, k, 1);
+        fr = oW * (o[0] + rec * [0, 0.3, 0.9, 0.95, 1, 1][k - 1]) + lobeW * l[0] + sW * r;
+        fy = ym + oW * o[1] + lobeW * l[1] + sW * (y - ym);
+        // (the trench in shadow by its cavity weight, not by a part of its own: a part number is interpolated across
+        // the triangles between two rows and would pass through the others' on the way)
+        if (k <= 5) cav = mix(cav, 0.8, orbW);
+        if (lobeW > 0.4 && k >= 3 && k <= 5) cav = Math.max(cav, 0.6);
+      } else {
+        const bucW = 1 - smooth(6.6, 8.2, ax);
+        // (handing over to the side wall at the external orbital angle as the orbit's rows above do, so that the
+        // rows run down the corner in order: no fold where the face turns into the side)
+        const faceW = 1 - smooth(13.6, 16.0, ax);
+        const pt = knots(PTERY_ROWS, k, 7), bc = knots(BUCCAL_ROWS, k, 7);
+        // (the face convex in plan: flat across the maxillipeds, falling back beyond them towards the corners)
+        fr = mix(r, mix(pt[0] + rec, bc[0], bucW), faceW);
+        fy = mix(y, ym + mix(pt[1], bc[1], bucW), faceW);
+        if (bucW > 0.5 && k >= 8) cav = 0.55;
+      }
+      r = mix(r, fr, f); y = mix(y, fy, f);
     }
+    const x = bx + inw[i][0] * r;
+    let z = bz + inw[i][1] * r;
+    // under the margin the body keeps behind the face's line in plan: flat across the maxillipeds, falling back to the
+    // corners, where the margin and its teeth overhang a surface running in and back to the first legs' coxae (the
+    // scan's front map: the face 3–4 mm behind the external orbital angle; A47, A45, B60). A soft limit, so that the
+    // surface that meets it rounds into it
+    if (t > 0.02) {
+      const zc = curveAt(FACE_LINE, Math.abs(x)) - 0.8 * smooth(0.45, 0.9, t);
+      const w = 0.9, d = (zc - z) / w;
+      // (graded in from the margin: the corner's underside a thick wedge sloping in and back, not an overhanging sheet)
+      // (the far tier's three rows take it more gently: one row there spans a third of the wall)
+      if (d < 30) z = mix(z, zc - w * Math.log1p(Math.exp(d)), smooth(0.02, lod.tier === 2 ? 0.6 : 0.3, t));
+    }
+    return { x, y, z, part, cav };
   };
-  const nRows = lod.fineUnder ? 7 : 3;
-  const rows: Row[] = [];
-  for (let k = 0; k < nRows; k++) {
-    const kk = lod.fineUnder ? k : [0, 3, 6][k];
-    const t = kk / 6;
-    rows.push((i) => {
-      const f = front[i];
-      const sp = sideAt(i, t), fp = frontAt(i, kk);
-      const part = f > 0.5 && (kk === 1 || kk === 2) ? PART.ORBIT : PART.UNDER;
-      const cav = f * (kk === 1 || kk === 2 ? 0.8 : kk === 5 ? 0.35 : 0) + (1 - f) * (kk === 6 ? 0.5 : 0.12);
-      return { x: mix(sp[0], fp[0], f), y: mix(sp[1], fp[1], f), z: mix(sp[2], fp[2], f), part, cav };
-    });
-  }
+  // ---- the margin's bead (a little proud of the wall) and the rows under it
   const top = grid[grid.length - 1];
-  const shelf: number[] = [];
+  const bead: number[] = [];
+  // behind the teeth the margin is a fine beaded line on a surface running on round into the swelling wall — no
+  // groove under it, no overhanging lid (B7, B60; the scan's transverse sections)
+  const roll = (i: number) => smooth(2.0, -1.5, Es[i][1]);
   for (let i = 0; i < N; i++) {
     const E = loop[i];
-    const vi = gb.v(E.x + inw[i][0] * 0.08, E.ym - e / 2, E.z + inw[i][1] * 0.08, body, 1, body, PART.UNDER, 1, i / N, 0.2);
+    const o = 0.05 - 0.02 * roll(i);
+    const vi = gb.v(E.x - inw[i][0] * o, E.ym - 0.14, E.z - inw[i][1] * o, body, 1, body, PART.UNDER, 0, i / N, 0.1);
     gb.setMm(vi, E.x, E.z);
-    shelf.push(vi);
+    bead.push(vi);
   }
-  for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(top[i], shelf[i], shelf[j], top[j]); }
-  let prev = shelf;
-  for (const R of rows) {
+  for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(top[i], bead[i], bead[j], top[j]); }
+  let prev = bead;
+  // the margin's underside: just under the bead the skin is already on the smooth outline, so that the teeth are thin
+  // flat wedges standing out from the margin, not ridges running down the wall (the far tier has no teeth to keep thin);
+  // behind them it is the wall's own start, a little out from the bead
+  if (lod.tier < 2) {
+    const row: number[] = [], wall: number[] = [];
+    for (let i = 0; i < N; i++) {
+      const E = loop[i], es = Es[i];
+      const w = roll(i), [rw, yw] = sideRD(i, 0.04);
+      const r = mix(0.12, rw, w);
+      const x = es[0] + inw[i][0] * r, y = mix(E.ym - 0.5, yw, w), z = es[1] + inw[i][1] * r;
+      const vi = gb.v(x, y, z, body, 1, body, PART.UNDER, 0.02, i / N, 0.15);
+      gb.setMm(vi, x, z);
+      row.push(vi);
+      // (where the margin is a toothed edge the wall below is shaded on its own, so that the teeth's slanted
+      // undersides do not streak down it: a crease along the margin's underside)
+      if (w > 0.5) wall.push(vi);
+      else { const wi = gb.v(x, y, z, body, 1, body, PART.UNDER, 0.02, i / N, 0.15); gb.setMm(wi, x, z); wall.push(wi); }
+    }
+    for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(prev[i], row[i], row[j], prev[j]); }
+    prev = wall;
+  }
+  for (const k of rows) {
     const row: number[] = [];
     for (let i = 0; i < N; i++) {
-      const p = R(i);
-      const vi = gb.v(p.x, p.y, p.z, body, 1, body, p.part, 0, i / N, p.cav);
+      const p = rowAt(i, k);
+      const vi = gb.v(p.x, p.y, p.z, body, 1, body, p.part, k / UNDER_ROWS, i / N, p.cav);
       gb.setMm(vi, p.x, p.z);
       row.push(vi);
     }
     for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(prev[i], row[i], row[j], prev[j]); }
     prev = row;
   }
-  // ---- the sternum: rings in to its centre, a little convex below
-  const sc: V2 = [0, -1.5];
+  // ---- the sternum: rings in to its centre, on its plane rising fore and aft, a little convex below
+  const sc: V2 = [0, -1.8];
   const sRings = lod.sternum;
   for (let r = 1; r <= sRings; r++) {
     const k = 1 - r / (sRings + 1);
@@ -465,14 +549,14 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     for (let i = 0; i < N; i++) {
       const S = stern[i];
       const x = sc[0] + (S[0] - sc[0]) * k, z = sc[1] + (S[1] - sc[1]) * k;
-      const vi = gb.v(x, 0.9 * k * k - 0.1 * (1 - k * k), z, body, 1, body, PART.STERNUM, k, i / N, 0.1);
+      const vi = gb.v(x, sternumY(x, z) - 0.25 * (1 - k * k), z, body, 1, body, PART.STERNUM, k, i / N, 0.1);
       gb.setMm(vi, x, z);
       row.push(vi);
     }
     for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(prev[i], row[i], row[j], prev[j]); }
     prev = row;
   }
-  const sp = gb.v(sc[0], -0.12, sc[1], body, 1, body, PART.STERNUM, 0, 0, 0.1);
+  const sp = gb.v(sc[0], sternumY(sc[0], sc[1]) - 0.25, sc[1], body, 1, body, PART.STERNUM, 0, 0, 0.1);
   for (let i = 0; i < N; i++) gb.tri(prev[i], sp, prev[(i + 1) % N]);
 }
 
@@ -500,16 +584,18 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
     cy: knotLerp(spec.sections, t, (k) => k.cy ?? 0), cz: knotLerp(spec.sections, t, (k) => k.cz ?? 0),
   });
   const twistAt = (t: number) => (spec.twist ? knotLerp(spec.twist.map(([tt, v]) => ({ t: tt, v })), Math.max(0, t), (k) => k.v) : 0);
+  const rEnd = Math.min(knotLerp(spec.sections, 1, (k) => k.hy), knotLerp(spec.sections, 1, (k) => k.hz));
+  const endLobe = (a: number) => (last ? 0 : rEnd * (0.45 * Math.max(0, Math.cos(a)) - 0.22 * Math.max(0, -Math.cos(a))));
   const radial = (t: number, a: number) => {
     const s = sec(t);
     const ca = Math.cos(a), sa = Math.sin(a);
-    const pw = 2 / n;
+    const pw = 2 / n, pz = 2 / (spec.nz ?? n);
     let y = s.hy * Math.sign(ca) * Math.pow(Math.abs(ca), pw);
-    let z = s.hz * Math.sign(sa) * Math.pow(Math.abs(sa), pw);
+    let z = s.hz * Math.sign(sa) * Math.pow(Math.abs(sa), pz);
     let k = 1;
     if (spec.tri) k *= 1 + spec.tri[0] * Math.cos(3 * (a - spec.tri[1]));
     // the neck inside the parent's socket (a clear waist: B65, B70) and the rim at the distal end
-    if (neck > 0) k *= 0.62 + 0.38 * smooth(0.0, neck, t);
+    if (neck > 0) k *= 0.8 + 0.2 * smooth(0.0, neck, t);
     else if (t < 0.02) k *= 0.85 + 7.5 * Math.max(0, t);
     if (!last && t > 0.95) k *= 1 + 0.05 * Math.sin(Math.PI * Math.min(1, (t - 0.95) / 0.05));
     y *= k; z *= k;
@@ -518,7 +604,9 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
     if (rid) { const l = Math.hypot(ca * s.hz, sa * s.hy) || 1; const f = Math.min(1, Math.min(s.hy, s.hz) / 0.5) * (neck > 0 ? smooth(0, neck, t) : 1); y += ((ca * s.hz) / l) * rid * f; z += ((sa * s.hy) / l) * rid * f; }
     const th = twistAt(t);
     if (th) { const c = Math.cos(th), si = Math.sin(th); const y2 = y * c + z * si; z = -y * si + z * c; y = y2; }
-    return new Vector3(t * L, s.cy + y, s.cz + z);
+    // the distal end cut obliquely: a dorsal lobe overhanging the next article, the flexor side open (where the
+    // articular membrane is) — articles that overlap at their joints, not tubes on rings
+    return new Vector3(t * L + endLobe(a) * smooth(0.82, 1.0, t), s.cy + y, s.cz + z);
   };
   const angAt = (j: number, t: number) => j / nA - twistAt(t) / (Math.PI * 2);
   // stations along the article (finer at the neck and the tip)
@@ -566,13 +654,17 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
       for (let j = 0; j <= nA; j++) {
         const a = (j / nA) * Math.PI * 2;
         const p = radial(1, a);
-        row.push(gb.v(L + capX * dx, s1.cy + (p.y - s1.cy) * k, s1.cz + (p.z - s1.cz) * k, bone, 1, parent, part, 1, angAt(j, 1), 0.35, flag));
+        row.push(gb.v(p.x + capX * dx, s1.cy + (p.y - s1.cy) * k, s1.cz + (p.z - s1.cz) * k, bone, 1, parent, part, 1, angAt(j, 1), 0.35, flag));
       }
       gb.twin(row[0], row[nA]);
       for (let j = 0; j < nA; j++) gb.quad(prevRow[j], prevRow[j + 1], row[j + 1], row[j]);
       prevRow = row;
     }
-    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[j + 1], gb.vn(L + capX, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0.3, flag));
+    // (the cap's centre beyond its rim, wherever the oblique cut puts the rim: a low dome, never a cup read as a hole)
+    let mx = 0;
+    for (let j = 0; j < nA; j++) mx += gb.p[prevRow[j] * 3] / nA;
+    const cc = gb.v(mx + 0.4 * capX, s1.cy, s1.cz, bone, 1, parent, part, 1, 0, 0.3, flag);
+    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[j + 1], cc);
   }
   return {
     surface(t: number, a: number) {
@@ -836,42 +928,89 @@ function buildEye(gb: GeoBuilder, lod: Lod, bone: number, sg: number): void {
   for (let j = 0; j < sides; j++) gb.tri(prev![j], prev![j + 1], gb.vn(xt, 0, 0, 1, 0, 0, bone, 1, bone, PART.CORNEA, xt - xs, (j + 0.5) / sides, 0, 3));
 }
 
-/** the third maxilliped: a bulging oval plate (ischium and merus, the suture a third of the way down: the shader) */
+/**
+ * The third maxilliped in its bone's frame (x the crab's left, y out of the face, z down the plate; the plate runs
+ * from its outer edge at the hinge towards the midline, −sg·x): one plate with a rim, made of rings in from its
+ * outline — the merus above (its outer upper corner broadly rounded), the ischium below (its outer lower corner
+ * rounded, its inner edge straight where it meets the other), the suture between them a groove, the exopod a raised
+ * strip along the outer edge, the plate a little convex (B60, B61, B67) — and the palp, three short articles folded
+ * at the merus's inner upper corner.
+ */
 function buildMxp(gb: GeoBuilder, lod: Lod, bone: number, sg: number): void {
-  const nx = lod.tier === 0 ? 8 : 3, nz = lod.tier === 0 ? 12 : 4;
-  const W = MXP3.halfWidth - 0.15;
-  const Ld = Math.hypot(MXP3.y1 - MXP3.y0, MXP3.z1 - MXP3.z0);
-  // in the bone's frame: x the crab's left (the plate runs from its hinge at the outer edge to the midline: −sg·x),
-  // y out of the face, z down the plate
-  const g: number[][] = [], b: number[][] = [];
+  const W = MXP3.width, L = MXP3.length;
+  const suture = 0.42 * L;
+  // the outline's rounded corners (X out from the hinge edge towards the midline, Z down): the merus's outer upper
+  // corner broad, the palp's inner upper corner small, the ischium's outer lower corner rounded, its inner lower small
+  // (all four well rounded: the plates read as glossy ovals in the field (A47, A45), the meri's inner upper corners
+  // cut back obliquely so that the gap between the plates opens upwards (B61, B64))
+  const corners: [number, number, number][] = [[2.2, 2.2, 2.2], [W - 1.7, 1.7, 1.7], [W - 0.9, L - 0.9, 0.9], [1.6, L - 1.6, 1.6]];
+  const inside = (X: number, Z: number) => {
+    if (X < 0 || X > W || Z < 0 || Z > L) return false;
+    for (const [cx, cz, r] of corners) if ((cx < W / 2 ? X < cx : X > cx) && (cz < L / 2 ? Z < cz : Z > cz) && Math.hypot(X - cx, Z - cz) > r) return false;
+    return true;
+  };
+  /** the rectangle's grid drawn in onto the rounded outline along rays from the plate's centre (no folds at the corners) */
+  const toOutline = (X: number, Z: number): V2 => {
+    const dx = X - W / 2, dz = Z - L / 2;
+    if (Math.abs(dx) + Math.abs(dz) < 1e-9) return [X, Z];
+    const tr = Math.min(Math.abs(dx) > 1e-9 ? W / 2 / Math.abs(dx) : Infinity, Math.abs(dz) > 1e-9 ? L / 2 / Math.abs(dz) : Infinity);
+    let lo = 0, hi = tr;
+    for (let it = 0; it < 28; it++) { const m = (lo + hi) / 2; if (inside(W / 2 + dx * m, L / 2 + dz * m)) lo = m; else hi = m; }
+    const f = lo / tr;
+    return [W / 2 + dx * f, L / 2 + dz * f];
+  };
+  // a low, smooth dome over the plate, fuller over the merus; the suture a groove; the exopod a raised strip along
+  // the outer edge; a shallow groove down the ischium
+  const height = (X: number, Z: number, u: number, v: number) => {
+    const ex = Math.sin(Math.PI * u), ez = Math.sin(Math.PI * v);
+    let h = 0.18 + 0.95 * Math.pow(ex, 0.65) * Math.pow(ez, 0.55);
+    h += 0.12 * (1 - smooth(suture - 0.6, suture + 0.2, Z)) * Math.pow(ex, 0.5);
+    h -= 0.2 * Math.exp(-(((Z - suture) / 0.22) ** 2)) * smooth(0.2, 0.8, X);
+    h += 0.14 * Math.exp(-(((X - 0.38) / 0.22) ** 2)) * smooth(suture - 1.0, suture, Z);
+    h -= 0.08 * Math.exp(-(((X - W * 0.68) / 0.35) ** 2)) * smooth(suture + 0.4, suture + 1.2, Z);
+    return h;
+  };
+  const nx = lod.tier === 0 ? 10 : 3, nz = lod.tier === 0 ? 16 : 4;
+  const front: number[][] = [], back: number[][] = [];
   for (let i = 0; i <= nx; i++) {
-    const u = i / nx;
     const row: number[] = [], brow: number[] = [];
     for (let k = 0; k <= nz; k++) {
-      const v = k / nz;
-      // an oval: the corners rounded off
-      const half = Math.sqrt(Math.max(0, 1 - Math.pow(2 * v - 1, 4)));
-      const x = -sg * W * (0.8 + 0.2 * half) * u;
-      const bulge = 0.75 * Math.sin(Math.PI * u) * Math.sin(Math.PI * v) + 0.15 * Math.sin(Math.PI * u);
-      row.push(gb.v(x, 0.25 + bulge, Ld * v * (0.94 + 0.06 * half), bone, 1, bone, PART.MXP, u, v, 0.1, 0));
-      brow.push(gb.v(x, -0.35, Ld * v, bone, 1, bone, PART.MXP, u, v, 0.9, 0));
+      const [X, Z] = toOutline((W * i) / nx, (L * k) / nz);
+      const rim = i === 0 || i === nx || k === 0 || k === nz;
+      const vi = gb.v(-sg * X, rim ? 0.12 : height(X, Z, i / nx, k / nz), Z, bone, 1, bone, PART.MXP, X / W, Z / L, rim ? 0.3 : 0.1, 0);
+      gb.setMm(vi, X, Z);
+      row.push(vi);
+      brow.push(gb.v(-sg * X * 0.98, -0.3, Z, bone, 1, bone, PART.MXP, X / W, Z / L, 0.9, 0));
     }
-    g.push(row); b.push(brow);
+    front.push(row); back.push(brow);
   }
   // (faces out of the face on the front and into the body on the back: the winding follows the side)
-  const q = (a: number, c: number, d: number, e: number, out: boolean) => (out === sg > 0 ? gb.quad(a, e, d, c) : gb.quad(a, c, d, e));
+  const quad = (a: number, b: number, c: number, d: number, out: boolean) => (out === sg > 0 ? gb.quad(a, b, c, d) : gb.quad(a, d, c, b));
   for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
-    q(g[i][k], g[i][k + 1], g[i + 1][k + 1], g[i + 1][k], true);
-    q(b[i][k], b[i][k + 1], b[i + 1][k + 1], b[i + 1][k], false);
+    quad(front[i][k], front[i + 1][k], front[i + 1][k + 1], front[i][k + 1], true);
+    quad(back[i][k], back[i][k + 1], back[i + 1][k + 1], back[i + 1][k], true);
   }
   // the rim all round
   const ring: [number, number][] = [];
-  for (let k = 0; k <= nz; k++) ring.push([g[0][k], b[0][k]]);
-  for (let i = 1; i <= nx; i++) ring.push([g[i][nz], b[i][nz]]);
-  for (let k = nz - 1; k >= 0; k--) ring.push([g[nx][k], b[nx][k]]);
-  for (let i = nx - 1; i >= 1; i--) ring.push([g[i][0], b[i][0]]);
+  for (let k = 0; k <= nz; k++) ring.push([front[0][k], back[0][k]]);
+  for (let i = 1; i <= nx; i++) ring.push([front[i][nz], back[i][nz]]);
+  for (let k = nz - 1; k >= 0; k--) ring.push([front[nx][k], back[nx][k]]);
+  for (let i = nx - 1; i >= 1; i--) ring.push([front[i][0], back[i][0]]);
   ring.push(ring[0]);
-  for (let j = 0; j < ring.length - 1; j++) q(ring[j][0], ring[j][1], ring[j + 1][1], ring[j + 1][0], sg > 0);
+  for (let j = 0; j < ring.length - 1; j++) quad(ring[j][0], ring[j][1], ring[j + 1][1], ring[j + 1][0], false);
+  // the palp: carpus, propodus, dactylus from the merus's inner upper corner, up against the epistome and curling in
+  // towards the midline (B61, B67)
+  if (lod.tier === 0) {
+    const p0 = new Vector3(-sg * (W - 0.5), 0.3, 0.55);
+    const d1 = new Vector3(-sg * 0.15, 0.12, -0.98).normalize(), d2 = new Vector3(-sg * 0.35, 0.18, -0.9).normalize(), d3 = new Vector3(-sg * 0.6, 0.3, -0.6).normalize();
+    const r0 = gb.count;
+    rod(gb, p0, d1, 0.7, 0.3, 0.25, 6, 2, bone, PART.MXP);
+    const p1 = p0.clone().addScaledVector(d1, 0.65);
+    rod(gb, p1, d2, 0.55, 0.23, 0.17, 5, 2, bone, PART.MXP);
+    rod(gb, p1.clone().addScaledVector(d2, 0.5), d3, 0.45, 0.15, 0.04, 4, 2, bone, PART.MXP);
+    // (the palp coloured as the merus's pale inner corner it lies on, not by the rods' own coordinates)
+    for (let i = r0; i < gb.count; i++) { gb.seg[i * 2] = 0.9; gb.seg[i * 2 + 1] = 0.12; }
+  }
 }
 
 /** the abdomen folded under the sternum: both the male's and the female's (the material keeps the individual's) */
@@ -890,9 +1029,11 @@ function buildAbdomen(gb: GeoBuilder, lod: Lod, body: number): void {
         const u = (j / nw) * 2 - 1;
         const x = u * Math.max(0.05, half);
         // a low dome across; the somites' edges small steps (six somites and the telson: the shader draws the sutures)
-        const y = -0.35 - 0.4 * (1 - u * u) * Math.min(1, half / 2.5) - 0.08 * Math.max(0, Math.sin(t * Math.PI * 7)) * (1 - u * u);
+        // (lying on the sternum's plane, which rises towards the hinge: the egg's underside)
+        const ys = sternumY(x, z);
+        const y = ys - 0.45 - 0.4 * (1 - u * u) * Math.min(1, half / 2.5) - 0.08 * Math.max(0, Math.sin(t * Math.PI * 7)) * (1 - u * u);
         row.push(gb.v(x, y, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.2, flag));
-        irow.push(gb.v(x, 0.05, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.9, flag));
+        irow.push(gb.v(x, ys + 0.05, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.9, flag));
       }
       outer.push(row); inner.push(irow);
     }
@@ -930,12 +1071,22 @@ function rod(gb: GeoBuilder, start: Vector3, dir: Vector3, len: number, r0: numb
   for (let j = 0; j < sides; j++) gb.tri(prev![j], prev![j + 1], ti);
 }
 
-/** the antennules (a small "Y" folded between the eyestalks' bases: B66, B60) and the short antennae beside them */
+/**
+ * the antennules, folded in their fossae under the frontal lobe with their small forked flagella up and forward
+ * between the eyestalks (B66, B60), and the antennae, short and slender, from the orbits' inner corners (B66)
+ */
 function buildAntennae(gb: GeoBuilder, body: number): void {
   for (const sg of [1, -1]) {
-    rod(gb, new Vector3(sg * 1.1, 11.6, 10.9), new Vector3(sg * 0.3, 0.85, 0.35), 0.9, 0.18, 0.13, 5, 2, body, PART.STALK);
-    rod(gb, new Vector3(sg * 1.35, 12.45, 11.2), new Vector3(sg * 0.45, 0.85, 0.15), 0.9, 0.11, 0.05, 4, 3, body, PART.STALK, new Vector3(sg * 0.15, 0, 0.05));
-    rod(gb, new Vector3(sg * 3.3, 11.7, 10.75), new Vector3(sg * 0.55, 0.75, 0.35), 1.8, 0.13, 0.04, 4, 4, body, PART.STALK, new Vector3(sg * 0.3, -0.1, 0));
+    // antennule: the stout basal article across its fossa, then up, the two rami of its flagellum diverging
+    rod(gb, new Vector3(sg * 0.35, 12.35, 9.95), new Vector3(sg * 0.85, 0.15, 0.5), 1.0, 0.28, 0.22, 6, 2, body, PART.STALK);
+    const b = new Vector3(sg * 1.15, 12.55, 10.4);
+    rod(gb, b, new Vector3(sg * 0.15, 0.9, 0.42), 1.05, 0.17, 0.12, 5, 2, body, PART.STALK);
+    const fk = b.clone().add(new Vector3(sg * 0.15, 0.95, 0.44));
+    rod(gb, fk, new Vector3(sg * 0.4, 0.85, 0.25), 0.75, 0.1, 0.03, 4, 3, body, PART.STALK, new Vector3(sg * 0.08, 0, 0.05));
+    rod(gb, fk, new Vector3(-sg * 0.15, 0.9, 0.35), 0.65, 0.09, 0.03, 4, 3, body, PART.STALK, new Vector3(0, 0, 0.06));
+    // antenna: peduncle in the orbit's inner corner, the slender flagellum out and up
+    rod(gb, new Vector3(sg * 2.6, 12.2, 10.1), new Vector3(sg * 0.5, 0.55, 0.6), 0.9, 0.16, 0.11, 5, 2, body, PART.STALK);
+    rod(gb, new Vector3(sg * 3.05, 12.7, 10.6), new Vector3(sg * 0.55, 0.8, 0.2), 2.4, 0.09, 0.025, 4, 5, body, PART.STALK, new Vector3(sg * 0.35, -0.15, 0.05));
   }
 }
 

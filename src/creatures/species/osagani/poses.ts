@@ -36,9 +36,9 @@ export const CHELA_TUCK: Partial4 = { promo: -0.3, pitch: -0.1, lev: 0.0, roll: 
  * splay further; in alarm they stand tall.
  */
 export const STANCE: Record<string, { ang: number; r: number }> = {
-  P2: { ang: 0.26, r: 21.0 }, P3: { ang: 0.04, r: 24.0 }, P4: { ang: -0.08, r: 24.5 }, P5: { ang: -0.15, r: 18.0 },
+  P2: { ang: 0.26, r: 20.5 }, P3: { ang: 0.04, r: 25.5 }, P4: { ang: -0.08, r: 26.0 }, P5: { ang: -0.15, r: 17.0 },
 };
-export const DACTYL_ANGLE = -1.42;
+export const DACTYL_ANGLE = -1.38;
 
 const _t = new Vector3();
 /** a walking leg's neutral foot (body frame, mm) for a body height `lift` over the ground and a spread factor */
