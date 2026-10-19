@@ -51,6 +51,9 @@ export function headWeights(pos, index, head, o = {}) {
       if (lipJ.has(k) && !onPad) continue;
       d[k] = Math.max(0, groups[k](x, y, z));
     }
+    // the lower jaw carries only its own flesh (lips, chin, the rami's sides); the floor between the rami belongs to
+    // the hyoid, which balloons it down in buccal pumping
+    if (d[idx.J_hyoid] < Infinity) for (const k of jawJ) if (d[k] < Infinity) d[k] += Math.max(0, d[k] - 0.03) * 2.5;
     let dm = Infinity;
     for (let k = 0; k < J; k++) dm = Math.min(dm, d[k]);
     let sum = 0;
@@ -100,7 +103,7 @@ export const HEAD_POSES = {
   gapeFull: { J_jaw: { angle: 70 }, J_imj: { angle: 15 }, J_premax: { angle: 12, slide: 0.07 }, J_maxL: { angle: 25 }, J_maxR: { angle: 25 }, J_hyoid: { angle: 14 }, J_suspL: { angle: 6 }, J_suspR: { angle: 6 }, J_opercL: { angle: 8 }, J_opercR: { angle: 8 } },
   gapeHalf: { J_jaw: { angle: 32 }, J_premax: { angle: 6, slide: 0.035 }, J_maxL: { angle: 12 }, J_maxR: { angle: 12 }, J_hyoid: { angle: 6 } },
   // buccal pumping: the hyoid down, the cheeks out, the mouth shut
-  gulp: { J_hyoid: { angle: 16 }, J_suspL: { angle: 10 }, J_suspR: { angle: 10 }, J_opercL: { angle: 6 }, J_opercR: { angle: 6 } },
+  gulp: { J_hyoid: { angle: 8 }, J_suspL: { angle: 8 }, J_suspR: { angle: 8 }, J_opercL: { angle: 5 }, J_opercR: { angle: 5 } },
   // venting through the gill slits: the gill covers swing out
   vent: { J_opercL: { angle: 18 }, J_opercR: { angle: 18 }, J_suspL: { angle: 4 }, J_suspR: { angle: 4 } },
   // the eyes raised (alert) and pulled down into the orbits (blink)
