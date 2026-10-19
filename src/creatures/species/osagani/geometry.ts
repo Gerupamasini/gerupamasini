@@ -396,7 +396,11 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const top = at(i, 0.3), S = stern[i];
     const h = smooth(0.5, 1.0, t) * (0.85 + 0.15 * t) + 0.04 * t;
     const y = mix(ym - 0.25, 0.9, t);
-    return [mix(top[0], S[0], h), y, mix(top[1], S[1], h)];
+    // the branchial regions swell out under the margin (B7, A13: the side seen from the side is rounded, not a flat
+    // wall), most at mid-length, less towards the front and the back
+    const zz = Es[i][1];
+    const bulge = 1.5 * Math.sin(Math.PI * Math.min(1, t * 1.25)) * smooth(-11.5, -4, zz) * (1 - smooth(4, 9, zz));
+    return [mix(top[0], S[0], h) - inw[i][0] * bulge, y, mix(top[1], S[1], h) - inw[i][1] * bulge];
   };
   const centreFront = (i: number) => 1 - smooth(3.6, 6.0, Math.abs(Es[i][0]));
   const frontAt = (i: number, k: number): [number, number, number] => {
