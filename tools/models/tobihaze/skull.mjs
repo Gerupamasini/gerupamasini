@@ -68,9 +68,34 @@ const n3 = v3.norm;
 // margin. The bones are drawn in the CT's s and placed into the head by this map (y and z already fitted, see above).
 export const CT_S = { shift: 0.045, scale: 0.948 };
 const toModel = (p) => [CT_S.shift + CT_S.scale * p[0], p[1], p[2]];
+
+// The lower jaw closed into the head: the CT puts the dentary's tip 0.04 HL under the premaxilla's (Michel et al.
+// 2014 Fig. 2A: upper-jaw tip y 0.29, lower 0.25), but the landmarks above, refitted to the soft tissue, had the
+// symphysis level with it, above the gape and inside the upper lip, so the lower teeth stood out of the lower lip
+// as soon as the jaw dropped. The lower jaw's bones are drawn turned JAW_FIT degrees down about the quadrate
+// condyles: the symphysis sits at y 0.07–0.09, inside the chin under the gape, the coronoid process 0.018 forward
+// (the maxillo-mandibular ligament keeps its length).
+// It is also drawn JAW_FIT_S shorter along s (from the condyles), so its tip lies under the sculpt's receding chin
+// (s 0.07–0.08, set back under the upper lip: anat_soft.md §1.2) instead of 0.02 HL in front of the lower lip.
+// (Merged round n14: 3° and 0.97, down from 6° and 0.93. The mouth's sculpt now closes lower, its gape 0.100 at the
+// front under a median lip that hangs to y 0.083, its slit 0.01 HL wide: at 6° the dentary's tooth row lay in that slit
+// at rest, 88 tooth samples of the left side visible from outside; at 3° / 0.97 none are, the dentary stands out of the
+// skin by at most 0.0056 HL (0.0063 at 6°), the gape views are unchanged and the maxillo-mandibular ligament still keeps
+// its length, the maxilla at 26.75° for the jaw at 70 + 15°.)
+export const JAW_FIT = 3, JAW_FIT_S = 0.97;
+const QMJ_CT = [LM.quadCondyle[0], LM.quadCondyle[1], 0];
+const jawFitPoint = (p) => {
+  const a = (JAW_FIT * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), x = p[0] - QMJ_CT[0], y = p[1] - QMJ_CT[1];
+  return [QMJ_CT[0] + (x * c - y * sn) * JAW_FIT_S, QMJ_CT[1] + x * sn + y * c, p[2]];
+};
+const jawFitField = (f) => {
+  const a = (-JAW_FIT * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+  return (x, y, z) => { const dx = (x - QMJ_CT[0]) / JAW_FIT_S, dy = y - QMJ_CT[1]; return f(QMJ_CT[0] + dx * c - dy * sn, QMJ_CT[1] + dx * sn + dy * c, z) * JAW_FIT_S; };
+};
 const fieldToModel = (f) => (x, y, z) => f((x - CT_S.shift) / CT_S.scale, y, z) * CT_S.scale;
 /** A landmark in the head's frame (HL). */
-export const lm = (name) => toModel(LM[name]);
+const JAW_LM = new Set(['dentSymTop', 'dentSymBottom', 'dentVentral', 'coronoid', 'jawSocket', 'retroart', 'imj']);
+export const lm = (name) => toModel(JAW_LM.has(name) ? jawFitPoint(LM[name]) : LM[name]);
 
 // Joint pivots in the CT's frame and axes; parents first. Ranges (degrees or HL) are the measured ones (Michel 2014).
 const JOINTS_CT = [
@@ -78,18 +103,22 @@ const JOINTS_CT = [
   { name: 'J_head', parent: null, pivot: L.condyle, axis: [0, 0, 1], range: [-5, 5] },
   // protrusion: a slide along the ascending process (anteroventral) and a tilt about its tip (+16°, front up)
   { name: 'J_premax', parent: 'J_head', pivot: L.pmxAscTip, axis: [0, 0, -1], slide: n3([-0.36, -0.93, 0]), range: [0, 16], slideRange: [0, 0.08] },
-  // the maxilla swings its posterior end down and forward (+29°) and twists about its shaft (up to 90°)
-  { name: 'J_maxL', parent: 'J_head', pivot: L.maxHead, axis: [0, 0, 1], twist: n3([0.80, -0.40, 0.46]), range: [0, 29] },
-  { name: 'J_maxR', parent: 'J_head', pivot: [L.maxHead[0], L.maxHead[1], -L.maxHead[2]], axis: [0, 0, 1], twist: n3([0.80, -0.40, -0.46]), range: [0, 29] },
+  // the maxilla swings its posterior end down and forward (+29°) and twists about its shaft (up to 90°): about −z, so a
+  // positive angle turns the shaft (which runs back and down from its head) steeper, its tip toward the coronoid
+  // process it is tied to (the maxillo-mandibular ligament)
+  { name: 'J_maxL', parent: 'J_head', pivot: L.maxHead, axis: [0, 0, -1], twist: n3([0.80, -0.40, 0.46]), range: [0, 29] },
+  { name: 'J_maxR', parent: 'J_head', pivot: [L.maxHead[0], L.maxHead[1], -L.maxHead[2]], axis: [0, 0, -1], twist: n3([0.80, -0.40, -0.46]), range: [0, 29] },
   // abduction: the ventral suspensorium swings out (−3 … +12°) about the palatine–hyomandibular line
   { name: 'J_suspL', parent: 'J_head', pivot: L.hyoCondA, axis: n3([-0.976, -0.085, -0.20]), range: [-3, 12] },
   { name: 'J_suspR', parent: 'J_head', pivot: [L.hyoCondA[0], L.hyoCondA[1], -L.hyoCondA[2]], axis: n3([0.976, 0.085, -0.20]), range: [-3, 12] },
   // the lower jaw drops about the line through both quadrate condyles (0 … 70°), the dentaries a further 0 … 30°
   { name: 'J_jaw', parent: 'J_head', pivot: [L.quadCondyle[0], L.quadCondyle[1], 0], axis: [0, 0, 1], range: [0, 70] },
-  { name: 'J_imj', parent: 'J_jaw', pivot: [L.imj[0], L.imj[1], 0], axis: [0, 0, 1], range: [0, 30] },
-  // the gill cover swings out (−6 … +20°) about its anterior margin and rises (0 … 8°) on the opercular process
-  { name: 'J_opercL', parent: 'J_suspL', pivot: L.hyoOpProc, axis: n3([-0.26, 0.965, -0.03]), lift: n3([0.15, 0.10, 0.98]), range: [-6, 20] },
-  { name: 'J_opercR', parent: 'J_suspR', pivot: [L.hyoOpProc[0], L.hyoOpProc[1], -L.hyoOpProc[2]], axis: n3([0.26, -0.965, -0.03]), lift: n3([0.15, 0.10, -0.98]), range: [-6, 20] },
+  { name: 'J_imj', parent: 'J_jaw', pivot: jawFitPoint([L.imj[0], L.imj[1], 0]), axis: [0, 0, 1], range: [0, 30] },
+  // the gill cover swings out (−6 … +20°) about its anterior margin and rises (0 … 8°) on the opercular process: the
+  // axis runs down the anterior margin (opercular facet → apex), so a positive angle carries the posterior margin out;
+  // the right side's axes are the left's mirrored as axial vectors (−s, −y, +z)
+  { name: 'J_opercL', parent: 'J_suspL', pivot: L.hyoOpProc, axis: n3([0.26, -0.965, 0.03]), lift: n3([0.15, 0.10, 0.98]), range: [-6, 20] },
+  { name: 'J_opercR', parent: 'J_suspR', pivot: [L.hyoOpProc[0], L.hyoOpProc[1], -L.hyoOpProc[2]], axis: n3([-0.26, 0.965, 0.03]), lift: n3([-0.15, -0.10, 0.98]), range: [-6, 20] },
   // the hyoid bars drop about the transverse line through the interhyal joints (0 … 18°)
   { name: 'J_hyoid', parent: 'J_head', pivot: [L.interhyal[0], L.interhyal[1], 0], axis: [0, 0, 1], range: [-3, 18] },
   // the eyes: rotation about the globe's centre; raised +0.03, lowered −0.13 (into the orbit) along y
@@ -160,7 +189,9 @@ export function skullBones() {
     rod([0.040, 0.27, 0.025], [0.05, 0.25, 0.04], 0.008, 0.006),                                          // articular process
   ], 0.004));
   // a single row of conical teeth, the front ones enlarged canines (Murdy 1989; Saberi et al. 2024)
-  sided('Teeth_Premaxilla', 'J_premax', () => teeth(pmxArm.map((p) => off(p, [0.002, -0.016, 0.002])), 13, 0.024, 0.0045, [0, -1, 0.15], 0.5));
+  // the teeth stand on the arm's inner edge, behind the median lip's front (Murdy 1989: the upper lip overlaps both
+  // rows when the mouth is closed), their tips at the gape
+  sided('Teeth_Premaxilla', 'J_premax', () => teeth(pmxArm.map((p, i) => off(p, [0.020 - 0.003 * i, -0.001, -0.006 * Math.min(1, i)])), 13, 0.012, 0.0036, [0.1, -1, 0.1], 0.55));
   add('Cart_Rostral', 'J_premax', 'M', ellipsoidF(F(L.rostral, [0.3, 1, 0], [1, 0, 0]), [0.03, 0.02, 0.028]), true);
   // the maxilla: a slender rod from its twisted anterior loop (on the palatine and the premaxilla's articular
   // process) down and back to the rictus, its posterior end a flattened blade tied to the coronoid process
@@ -199,19 +230,20 @@ export function skullBones() {
   // diverge ≈28° from the midline; a single row of conical teeth
   const dentTop = [L.dentSymTop, [0.020, 0.130, 0.040], [0.060, 0.127, 0.075], [0.120, 0.125, 0.105], [0.190, 0.130, 0.135], [0.250, 0.150, 0.155]];
   const dentBot = [L.dentSymBottom, [0.040, 0.088, 0.040], [0.085, 0.066, 0.075], [0.150, 0.048, 0.103], L.dentVentral, [0.275, 0.045, 0.150]];
-  sided('Dentary', 'J_imj', () => unionOf([
+  sided('Dentary', 'J_imj', () => jawFitField(unionOf([
     sheet(dentTop, dentBot, 0.016),
     plateFromPoints([[0.245, 0.135, 0.155], [0.285, 0.13, 0.165], L.coronoid, [0.30, 0.25, 0.168], [0.25, 0.16, 0.157]], 0.012),   // coronoid process
-  ], 0.006));
-  sided('Teeth_Dentary', 'J_imj', () => teeth(dentTop.slice(0, 5).map((p) => off(p, [0.004, 0.004, 0.0])), 12, 0.02, 0.004, [0, 1, 0.1], 0.55));
+  ], 0.006)));
+  // the lower teeth stand on the dentary's inner (lingual) edge, behind the lower lip, their tips at the gape
+  sided('Teeth_Dentary', 'J_imj', () => jawFitField(teeth(dentTop.slice(0, 5).map((p, i) => off(p, [0.010 - 0.0015 * i, -0.007 + 0.001 * Math.min(4, i), -0.006 * Math.min(1, i)])), 12, 0.013, 0.0034, [-0.05, 1, -0.05], 0.55)));
   // the anguloarticular: a triangular block with the C-shaped socket behind and the retroarticular knob below
-  sided('Anguloarticular', 'J_jaw', () => unionOf([
+  sided('Anguloarticular', 'J_jaw', () => jawFitField(unionOf([
     plateFromPoints([[0.26, 0.06, 0.155], [0.31, 0.04, 0.168], L.jawSocket, [0.33, 0.135, 0.172], [0.27, 0.15, 0.158]], 0.022),
     ellipsoidF(F(L.retroart, [1, 0, 0], [0, 1, 0]), [0.025, 0.018, 0.016]),
     rod(L.retroart, [0.325, 0.07, 0.172], 0.012, 0.016),
-  ], 0.008));
+  ], 0.008)));
   // Meckel's cartilage inside the dentary
-  sided('Cart_Meckel', 'J_jaw', () => polyRod([[0.06, 0.10, 0.07], [0.15, 0.09, 0.115], [0.29, 0.09, 0.165]], [0.006, 0.007, 0.008]), true);
+  sided('Cart_Meckel', 'J_jaw', () => jawFitField(polyRod([[0.06, 0.10, 0.07], [0.15, 0.09, 0.115], [0.29, 0.09, 0.165]], [0.006, 0.007, 0.008])), true);
 
   // ------------------------------------------------------------------ opercular series (J_opercL/R)
   // the opercle: a thin, laterally convex inverted triangle hinged on the opercular process
