@@ -13,21 +13,29 @@
 // cameras are 15–18° above the fish, and the lobe stands forward of the near dome by the 0.2 ED that the inter-ocular
 // distance gives at that yaw, as the renders at the same cameras show.)
 //
-// The window, measured on the photos at their cameras (the dark window with its gold ring): 0.56–0.71 ED wide and
-// 0.33–0.61 ED tall face-on (u1 0.66×0.33, B009 0.56×0.36 dark, 0.80 h/w with the iris, B010 0.71×0.49, B064
-// 0.68×0.49, B007 0.72×0.61; u5, the eyes raised in display, 0.34×0.57 ED front-on, from 0.29 ED above the centre to
-// 0.28 under it); the clay shows the whole window dark, iris and all, where the photos' iris ring reads light; its centre
-// 0.53–0.6 ED under the near dome's top in side view (u1, B009 with the camera 15–18° up: the axis 5–11° above the
-// equator; B007 −10°; u5 +8°); from the front (u5) only a crescent on the outer edge of each dome, ≈0.3 of the dome's
-// width: it faces about 27° forward of lateral.
+// The window, measured on the photos at their cameras: the dark pupil a horizontal bean (u1 h/w ≈0.55, B009, B010 with
+// a notch in its top edge; 0.6–0.68 ED wide, 0.34 tall face-on, anat_soft) in a thin gold iris ring, wider under it
+// (B010), the clear window round both 0.56–0.72 ED wide and 0.33–0.61 tall face-on (u1 0.73×0.41, B009 0.80 h/w,
+// B010 0.71×0.49, B064 0.68×0.49, B007 0.72×0.61); its centre 0.53–0.6 ED under the near dome's top in side view (u1,
+// B009 with the camera 15–18° up: the axis 5–11° above the equator; B007 −10°; u5 +8°); from the front (u5, the cheeks
+// blown) only a tall crescent on the outer edge of each dome, reaching its outline, narrow at the top where the hood's
+// pale margin comes down over the window's upper front and wide at the bottom: it faces about 27° forward of lateral.
+// The mesh splits the window into the pupil and the iris (eyeGlobe), so the clay and the textured eye show the iris ring
+// light and only the pupil dark.
 
 import { HEAD } from './anatomy.mjs';
 
 /** Eye-mesh tunables (angles in degrees, heights as fractions of the globe's radius). */
 export const EYE_SCULPT = {
-  // the clear window: its half-angles about its axis (horizontal, vertical); the height a compromise between u5 (0.57 ED
-  // tall front-on, the eyes raised), B010 / B064 / B007 / B009 (h/w 0.78–0.85 with the iris ring) and u1 (0.52)
-  windowHalf: [40, 31],
+  // the clear window (cornea over the iris and pupil): its half-angles about its axis [behind it, above it, below it,
+  // in front of it] (seen face-on 0.59 ED wide and 0.49 tall past the lid margin, about n15's; it reaches back over
+  // the dome's outline from the front, u5, and keeps in front within the blink's closing hood and the ±30° turn),
+  // its upper front clipped by `clip` (`depth` of the bound at `at` degrees round from the back edge through the top,
+  // `width` the spread): the hood's skin coming down over it, so from the front (u5) the window is a crescent reaching
+  // the dome's outline over 0.68 of its height, its top quarter 0.46 of its bottom quarter's width (u5 0.47), and
+  // from the side its top edge runs level (u1, B010)
+  windowHalf: [46, 33, 32, 41],
+  clip: { at: 145, width: 45, depth: 0.5 },
   // the window's axis in the eye's rest frame (fish frame: forward is −s, up +y, lateral +z for the left eye): 27°
   // forward of lateral, 4° above the equator
   axis: [-0.4529, 0.0698, 0.8889],
@@ -40,28 +48,60 @@ export const EYE_SCULPT = {
   // swell follows a crescent over the window's upper front (`hood`: its centre, degrees round from the window's back
   // edge through the top; `hoodPow` its narrowness), the single pale crescent of u5 and B020 on the upper-medial edge,
   // light under the window, where B064 and B007 show the window running down to the cup with no ring
-  lid: { round: 4.0, width: 10, swell: [0.034, 0.012], hood: 120, hoodPow: 1.5 },
+  lid: { round: 4.0, width: 10, swell: [0.034, 0.012], hood: 140, hoodPow: 1.5 },
   // the fold outlining the lid: a soft groove `at` degrees out from the window's edge, `width` wide, `depth` deep,
   // along the hood only (`hood`: weighted by the lid's crescent), an arch over the window in side view (B064, B009,
   // u1), none under it (no porthole ring)
   fold: { at: 11, width: 2.6, depth: 0.020, hood: true, hoodPow: 1.0 },
-  // the pupil inside the window (the rest of the window is the iris, gold-brown under the clear cornea): its edge at
-  // `half` [horizontal, vertical] fractions of the window's half-angles, a horizontal oval with a notch `dent` deep
-  // and `dentWidth` degrees wide in its top edge (B009, B010: a kidney- or heart-shaped dark pupil, h/w 0.53–0.66,
-  // 0.63 / 0.53 of the window's width / height in B009, 0.80 / 0.69 in B010); a ring of the mesh runs along it
-  pupil: { half: [0.78, 0.62], dent: 0.10, dentWidth: 32 },
+  // the pupil inside the window (the rest of the window is the iris, gold-brown under the clear cornea): an oval of
+  // `half` [horizontal, vertical] fractions of the window's half-angles (behind and above the axis), centred `lift` of
+  // the same above the axis (a thin ring over it, a wider one under it: B010), with a notch `dent` deep and
+  // `dentWidth` degrees wide in its top edge, and kept `ring` of the window's radius inside its edge (under the clip
+  // it follows the window's edge down, so its upper front is cut too): a bean 0.56 ED wide and 0.34 tall face-on
+  // (h/w 0.61; anat_soft 0.6–0.68 × 0.34), h/w 0.56 at the u1 camera (u1 0.55); a ring of the mesh runs along it
+  pupil: { half: [0.88, 0.66], lift: 0.14, dent: 0.12, dentWidth: 28, ring: 0.06 },
 };
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const D2R = Math.PI / 180;
 
-/** The pupil's edge as a fraction ρ of the window's bound at the azimuth φ about the window's axis (φ = 90° its top). */
+const wrapPi = (x) => ((((x + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+
+/**
+ * The window's bound: its half-angle θb(φ) about the axis at the azimuth φ (φ = 0 its back edge, 90° its top, 180° its
+ * front, on either eye): an oval of the half-angles `windowHalf` [behind the axis, above it, below it, in front of it],
+ * with the upper front clipped (`clip`: the hood's skin coming down over the window's upper front, u5, B010).
+ */
+export function windowBound(K = EYE_SCULPT) {
+  const WH = Array.isArray(K.windowHalf) ? K.windowHalf : [K.windowHalf, K.windowHalf];
+  const hh = WH[0] * D2R, hv = WH[1] * D2R, hb = (WH[2] ?? WH[1]) * D2R, hf = (WH[3] ?? WH[0]) * D2R, CL = K.clip;
+  return (ph) => {
+    const sn = Math.sin(ph), cs = Math.cos(ph);
+    let b = 1 / Math.hypot(cs / (cs < 0 ? hf : hh), sn / (sn < 0 ? hb : hv));
+    if (CL && CL.depth) b *= 1 - CL.depth * Math.exp(-((wrapPi(ph - CL.at * D2R) / (CL.width * D2R)) ** 2));
+    return b;
+  };
+}
+
+/**
+ * The pupil's edge as a fraction ρ of the window's bound at the azimuth φ about the window's axis (φ = 90° its top):
+ * an oval of `half` [horizontal, vertical] fractions of the window's half-angles (above the axis), its centre `lift`
+ * (a fraction of the same) above the axis, so the iris ring is wider under it (B010), with a notch `dent` deep and
+ * `dentWidth` degrees wide in its top edge (the bean of B009, B010); never closer than `ring` (of ρ) to the window's
+ * edge.
+ */
 export function pupilEdge(ph, K = EYE_SCULPT) {
   const PU = K.pupil ?? { half: [0.7, 0.7], dent: 0, dentWidth: 30 };
-  const e = 1 / Math.hypot(Math.cos(ph) / PU.half[0], Math.sin(ph) / PU.half[1]);
-  const dphi = (((ph - Math.PI / 2 + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
-  return e * (1 - (PU.dent ?? 0) * Math.exp(-((dphi / ((PU.dentWidth ?? 30) * D2R)) ** 2)));
+  const WH = Array.isArray(K.windowHalf) ? K.windowHalf : [K.windowHalf, K.windowHalf];
+  const A = PU.half[0] * WH[0] * D2R, B = PU.half[1] * WH[1] * D2R, c = (PU.lift ?? 0) * WH[1] * D2R;
+  const cs = Math.cos(ph), sn = Math.sin(ph);
+  // the distance t from the axis along φ to the oval (|t cos φ / A|² + |(t sin φ − c) / B|² = 1)
+  const qa = (cs * cs) / (A * A) + (sn * sn) / (B * B), qb = (sn * c) / (B * B), qc = (c * c) / (B * B) - 1;
+  const t = (qb + Math.sqrt(Math.max(0, qb * qb - qa * qc))) / qa;
+  const dphi = wrapPi(ph - Math.PI / 2);
+  const e = (t * (1 - (PU.dent ?? 0) * Math.exp(-((dphi / ((PU.dentWidth ?? 30) * D2R)) ** 2)))) / windowBound(K)(ph);
+  return Math.min(1 - (PU.ring ?? 0.06), e);
 }
 
 /**
@@ -72,10 +112,13 @@ export function pupilEdge(ph, K = EYE_SCULPT) {
 export function eyeSurface({ side = 1, K = EYE_SCULPT } = {}) {
   const a = norm([K.axis[0], K.axis[1], K.axis[2] * side]);
   const up = Math.abs(a[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
-  const u = norm([up[1] * a[2] - up[2] * a[1], up[2] * a[0] - up[0] * a[2], up[0] * a[1] - up[1] * a[0]]);
-  const v = [a[1] * u[2] - a[2] * u[1], a[2] * u[0] - a[0] * u[2], a[0] * u[1] - a[1] * u[0]];
-  const [hh, hv] = (Array.isArray(K.windowHalf) ? K.windowHalf : [K.windowHalf, K.windowHalf]).map((d) => d * D2R);
-  const thB = (ph) => 1 / Math.hypot(Math.cos(ph) / hh, Math.sin(ph) / hv);
+  const u0 = norm([up[1] * a[2] - up[2] * a[1], up[2] * a[0] - up[0] * a[2], up[0] * a[1] - up[1] * a[0]]);
+  // v up on both eyes, u toward the back edge on both (the right eye's frame is the left's mirror image, so the hood
+  // and the fold lie over the window's upper front on both; its (u, v, a) is left-handed and eyeGlobe winds it the
+  // other way)
+  const v = [a[1] * u0[2] - a[2] * u0[1], a[2] * u0[0] - a[0] * u0[2], a[0] * u0[1] - a[1] * u0[0]];
+  const u = u0.map((c) => c * side);
+  const thB = windowBound(K);
   const L = K.lid, F = K.fold;
   // the radius at the polar angle θ from the axis and the azimuth φ about it (φ = 90° straight up)
   const R = (th, ph) => {
@@ -121,9 +164,11 @@ export function eyeSurface({ side = 1, K = EYE_SCULPT } = {}) {
  * normal, uv, skin, cornea, pupil, iris } with skin and cornea index arrays (cornea: the whole window; pupil and iris:
  * its two parts, for a clay or a material that shows the iris ring); uv: (azimuth about the axis, ρ / 2 inside the
  * window and 0.5 … 1 beyond), for the
- * iris texture (the pupil at the centre) and the skin's speckle.
+ * iris texture (the pupil at the centre) and the skin's speckle. (nt 56 rings: over the dome's top the facets keep
+ * within 0.00022 HL of the sphere, under the head's band that meets the eye's skin there, 0.0004 HL under it:
+ * head.mjs cup.neck; 48 rings left 0.00028 and the band showed through in specks)
  */
-export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 48, np = 96, side = 1, K = EYE_SCULPT } = {}) {
+export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = EYE_SCULPT } = {}) {
   const S = eyeSurface({ side, K });
   const { a, u, v, thB } = S;
   const nw = Math.round(nt * 0.3), no = nt - nw;
@@ -189,8 +234,9 @@ export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 48, np = 96, side = 1, K = E
   for (let j = 0; j + 1 < nr; j++)
     for (let i = 0; i < np; i++) {
       const p = j * (np + 1) + i, q = p + 1, s = p + np + 1, t = s + 1;
-      (j + 1 <= nw ? cornea : skin).push(p, s, t, p, t, q);
-      if (j + 1 <= nw) (j + 1 <= nwp ? pupil : iris).push(p, s, t, p, t, q);
+      const tri = side > 0 ? [p, s, t, p, t, q] : [p, t, s, p, q, t];
+      (j + 1 <= nw ? cornea : skin).push(...tri);
+      if (j + 1 <= nw) (j + 1 <= nwp ? pupil : iris).push(...tri);
     }
   // smooth normals from the geometry (the bulge, the lid margin and the fold tilt them); the seam at φ = 0 / 2π is
   // welded by summing its two columns
@@ -215,7 +261,7 @@ export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 48, np = 96, side = 1, K = E
   }
   const Nf = new Float32Array(N.length);
   for (let i = 0; i < N.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1; Nf[i] = N[i] / l; Nf[i + 1] = N[i + 1] / l; Nf[i + 2] = N[i + 2] / l; }
-  // (p, s, t) runs along the polar angle, then the azimuth: counter-clockwise seen from outside, as (u, v, a) is
-  // right-handed
+  // (p, s, t) runs along the polar angle, then the azimuth: counter-clockwise seen from outside on the left eye, as its
+  // (u, v, a) is right-handed (the right eye's mirrored frame is wound (p, t, s))
   return { position: new Float32Array(pos), normal: Nf, uv: new Float32Array(uv), skin: new Uint32Array(skin), cornea: new Uint32Array(cornea), pupil: new Uint32Array(pupil), iris: new Uint32Array(iris) };
 }

@@ -42,10 +42,12 @@ export const INFLATE = {
   margin: { back: 0.03, blend: 0.06, y0: 0.02, lean: 0.5 },
   // the balloon onto the head: `blend` in front, `rear` behind the eyes (the skin taut from the nape to the balloon)
   blend: 0.06, rear: { blend: 0.09, from: 0.45, to: 0.70 },
-  // the preopercular groove: a soft crease down the balloon's side between the cheek and the gill cover (u5's one inner
-  // contour per side), [s, y, depth] from the shoulder to the throat, `width` its Gaussian half-width in s, on the
-  // lateral face only (|z| between z[0] and z[1] the crease fades in)
-  crease: { path: [[0.620, 0.440, 0.0060], [0.580, 0.360, 0.0130], [0.560, 0.270, 0.0100], [0.552, 0.150, 0.0000], [0.560, 0.060, 0.0090], [0.580, -0.020, 0.0130], [0.620, -0.090, 0.0060]], width: 0.030, z: [0.26, 0.36] },
+  // the preopercular groove: a broad soft crease down the balloon's side between the cheek and the gill cover (u5's one
+  // inner contour per side; A070: the front edge of the gill cover's bulge, a forward-convex arc), [s, y, depth] from
+  // the shoulder down, `width` its Gaussian half-width in s, on the lateral face only (|z| between z[0] and z[1] the
+  // crease fades in). It fades out through the widest height and is gone below y 0.04: B024's cheek is smooth there,
+  // and a crease carried round the ventral outline pinched it into a V (valley 0.011 HL at y −0.05 in round n15).
+  crease: { path: [[0.630, 0.460, 0.0070], [0.590, 0.380, 0.0160], [0.566, 0.300, 0.0135], [0.555, 0.220, 0.0075], [0.553, 0.150, 0.0018], [0.560, 0.090, 0.0005], [0.575, 0.040, 0.0000]], width: 0.042, z: [0.26, 0.36] },
   // the loft's tables smoothed along s by a Gaussian of this width (HL)
   smooth: 0.035,
 };

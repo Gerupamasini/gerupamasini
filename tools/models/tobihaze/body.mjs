@@ -20,16 +20,19 @@ const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 
 /** Every tunable of the body (HL units, fish frame). */
 export const BODY_SCULPT = {
-  // the trunk loft: it starts inside the head behind the opercle with the head loft's own section there, and runs to the
-  // caudal base (SL = 4.17 HL); same columns as the head loft
+  // the trunk loft: it starts inside the head behind the opercle with the head loft's own section there (w and nL at
+  // s 1.05–1.30 as head.mjs's loft has them, yW and nU close to it, so the head's morph into the trunk adds no waist), and
+  // runs to the caudal base (SL = 4.17 HL); same columns as the head loft. Seen from above the body behind the gill
+  // margin is 0.92 W at 1.3 HL (B047) and tapers from there without a step (0.87 W at 1.5, 0.81 W at 1.75: A036,
+  // measurements.md §4.2)
   trunk: {
     s:  [1.05, 1.15, 1.30, 1.50, 1.75, 2.00, 2.25, 2.50, 2.80, 3.10, 3.40, 3.70, 3.95, 4.10, 4.20],
-    w:  [0.291, 0.293, 0.292, 0.288, 0.275, 0.255, 0.235, 0.218, 0.200, 0.172, 0.145, 0.114, 0.088, 0.074, 0.068],
+    w:  [0.320, 0.322, 0.321, 0.305, 0.283, 0.255, 0.235, 0.218, 0.200, 0.172, 0.145, 0.114, 0.088, 0.074, 0.068],
     yT: [0.623, 0.626, 0.628, 0.630, 0.630, 0.628, 0.622, 0.605, 0.580, 0.550, 0.515, 0.475, 0.445, 0.438, 0.435],
     yB: [-0.042, -0.050, -0.062, -0.070, -0.070, -0.062, -0.050, -0.032, -0.005, 0.030, 0.065, 0.100, 0.130, 0.135, 0.135],
-    yW: [0.235, 0.228, 0.215, 0.210, 0.210, 0.212, 0.216, 0.222, 0.235, 0.250, 0.265, 0.278, 0.288, 0.288, 0.285],
-    nU: [1.70, 1.75, 1.85, 2.00, 2.05, 2.05, 2.05, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00],
-    nL: [3.30, 3.00, 2.60, 2.30, 2.20, 2.15, 2.10, 2.10, 2.05, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00],
+    yW: [0.235, 0.236, 0.232, 0.218, 0.210, 0.212, 0.216, 0.222, 0.235, 0.250, 0.265, 0.278, 0.288, 0.288, 0.285],
+    nU: [2.10, 1.95, 1.95, 2.00, 2.05, 2.05, 2.05, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00],
+    nL: [2.60, 2.50, 2.40, 2.30, 2.20, 2.15, 2.10, 2.10, 2.05, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00],
   },
   // behind the opercle the head's field morphs into the trunk's over this range (the head's own features end at the
   // opercle; a cut and a union would leave a ring where the two sections differ)

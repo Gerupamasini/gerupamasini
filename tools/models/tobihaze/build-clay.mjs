@@ -66,8 +66,11 @@ export function sphereMesh(r, nt = 48, np = 96) {
 
 const gb = new GLBBuilder('tobihaze-clay');
 const mat = gb.addMaterial({ name: 'Clay', pbrMetallicRoughness: { baseColorFactor: [0.72, 0.7, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.6 } });
-// the eye's clear window (cornea over the iris) dark and glossy; the rest of the globe is skin (clay)
+// the eye's clear window: the pupil dark and glossy; the rest of the globe is skin (clay)
 const cornea = gb.addMaterial({ name: 'Cornea', pbrMetallicRoughness: { baseColorFactor: [0.08, 0.09, 0.08, 1], metallicFactor: 0, roughnessFactor: 0.12 } });
+// the iris ring round the pupil under the same clear cornea: gold-brown (B010, u1), so only the pupil reads dark (its
+// name carries 'Cornea' too, so a viewer that knows only the cornea still draws the whole window dark)
+const iris = gb.addMaterial({ name: 'Iris (Cornea)', pbrMetallicRoughness: { baseColorFactor: [0.52, 0.40, 0.17, 1], metallicFactor: 0, roughnessFactor: 0.12 } });
 const headMesh = gb.addMesh('Head', [gb.primitive({ ...head, material: mat })]);
 const nodes = [gb.addNode({ name: 'Head', mesh: headMesh })];
 for (const side of [1, -1]) {
@@ -80,7 +83,8 @@ for (const side of [1, -1]) {
   }
   const mesh = gb.addMesh(side > 0 ? 'Eye_L' : 'Eye_R', [
     gb.primitive({ position: p, normal: nn, indices: g.skin, material: mat }),
-    gb.primitive({ position: p, normal: nn, indices: g.cornea, material: cornea }),
+    gb.primitive({ position: p, normal: nn, indices: g.pupil, material: cornea }),
+    gb.primitive({ position: p, normal: nn, indices: g.iris, material: iris }),
   ]);
   const c = toObject([EYE_MM.center[0], EYE_MM.center[1], EYE_MM.center[2] * side]);
   nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh, translation: c }));
