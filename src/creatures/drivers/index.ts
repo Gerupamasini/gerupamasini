@@ -21,6 +21,7 @@ import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
 import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 import { MimiikaDriver } from '../species/mimiika/MimiikaDriver';
 import { GazamiDriver } from '../species/gazami/GazamiDriver';
+import { OsaganiDriver } from '../species/osagani/OsaganiDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -81,6 +82,9 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // ガザミ: the swimming crab of the sandy shallows (its own tiers in the placeholder view; near within 4 m). Its
   // contact body is the carapace with the legs spread (CW is its length)
   gazami: { create: () => new GazamiDriver(), placeholder: () => GazamiDriver.makeModel(), preview: (seed) => GazamiDriver.makePreview(seed), nearDistance: 4, keep: (parent) => GazamiDriver.keep(parent), body: { width: 1.2, height: 0.3, core: 0.9 } },
+  // ヤマトオサガニ: the burrowing crab of the muddy flat (its own tiers in the placeholder view, chosen by the quality;
+  // near within 3 m). Its contact body is the carapace with the legs spread (CW is its length)
+  osagani: { create: () => new OsaganiDriver(), placeholder: () => OsaganiDriver.makeModel(), preview: (seed) => OsaganiDriver.makePreview(seed), nearDistance: 3, keep: (parent) => OsaganiDriver.keep(parent), body: { width: 1.6, height: 0.45, core: 0.9 } },
   akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent), body: { width: 0.41, height: 0.07, core: 0.38 } },
   // コメツキガニ: the procedural crab of the Kasai flat, placed and driven by its colony (ScopimeraColony)
   kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview(), body: { width: 1.3, height: 0.5, core: 0.9 } },

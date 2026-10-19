@@ -1,0 +1,61 @@
+{
+  "id": "macrophthalmus_japonicus",
+  "names": { "ja": "ヤマトオサガニ", "sci": "Macrophthalmus japonicus", "en": "Japanese sentinel crab" },
+  "taxon": { "group": "crustacean", "family": "Macrophthalmidae" },
+  "locomotion": "walk",
+  "digDepth_cm": 12,
+  "aquatic": false,
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "osagani",
+    "modelLength_mm": 35,
+    "viewDistance_m": 18,
+    "observeDistance_m": 0.16,
+    "driver": "osagani",
+    "clips": { "idle": "Idle", "move": "Walk", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 8, "max": 40, "mean": 26, "sd": 6 },
+    "measure_ja": "甲幅",
+    "weightCoef": { "a": 0.00028, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": true },
+  "stages": [
+    { "id": "juvenile", "ja": "稚ガニ", "maxLength_mm": 15 },
+    { "id": "young", "ja": "若いカニ", "maxLength_mm": 24 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    { "tags": ["exposed_mud", "waterline", "shallow", "small_pool"], "substrate": ["mud", "muddy_sand"], "depth_m": [-0.7, 0.06], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 5, "group": [1, 2], "maxPopulation": 22, "length_mm": [10, 40] },
+    { "tags": ["exposed_mud", "waterline"], "substrate": ["mud", "muddy_sand"], "depth_m": [-0.5, 0.04], "season": ["winter"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 1, "group": [1, 1], "maxPopulation": 6, "length_mm": [18, 40] }
+  ],
+  "brain": {
+    "tree": "mud_crab_burrow",
+    "params": { "fleeDistance_m": 1.6, "restMean_s": 8, "wanderDistance_m": [0.08, 0.5], "burrowStay_s": [8, 40] }
+  },
+  "capture": {
+    "tools": ["net_small", "net_shallow", "net_fine", "net_dframe", "shovel", "dig_mini", "dig_rake", "dig_shovel"],
+    "baseDifficulty": 0.66,
+    "alertPenalty": 0.55
+  },
+  "encyclopedia": {
+    "description": "内湾の泥干潟にすむスナガニ上科オサガニ科のカニ。甲は横長の長方形で、甲幅は甲長の 1.5 倍ほど、前側縁には外眼窩歯を含めて 3 つの歯がある。いちばんの特徴は細長い眼柄で、ふだんは甲から高く立てて潜望鏡のようにあたりを見張り、危ないときは甲の前縁の溝（眼窩）に横に倒してしまい込む。歩脚は平たく、長節が幅広い。成熟した雄のはさみ脚は甲幅ほどもある大きな白っぽいはさみで、指は下へ曲がり、不動指の中ほどに大きな歯がある。雌のはさみは小さい。干潮になると泥の上に斜めに掘った巣穴から出てきて、はさみで泥の表面をすくい取り、口で有機物や珪藻をこし取って食べる。巣穴の近くを離れず、人や鳥が近づくと横走りで巣穴に駆け込み、眼柄から先に入る。しばらくすると眼柄だけを穴から出してようすをうかがい、それから出てくる。雄ははさみを振り上げてほかの雄を威嚇する。",
+    "habitatHint": "春から秋の干潮時、葛西の泥や砂泥の干潟。水際やしめった泥の上に斜めの巣穴がたくさんある。立ったまま近づくとみな巣穴に逃げ込むので、離れたところでしゃがんで待つ。巣穴から眼柄だけが出ていたら、もうすぐ出てくる。",
+    "behaviors": [
+      { "id": "idle", "ja": "巣穴のそばで見張る", "hint": "眼柄を立て、はさみを顔の前に構えて静止する" },
+      { "id": "walk", "ja": "横歩き", "hint": "左右 4 対の歩脚を交互に運び、泥の上を横向きに歩く" },
+      { "id": "forage", "ja": "泥の表面を食べる", "hint": "はさみで交互に泥の表面をすくい、口へ運ぶ" },
+      { "id": "burrow_entry", "ja": "巣穴に入る", "hint": "巣穴の口で横向きになり、斜めの穴に滑り込む" },
+      { "id": "burrow_exit", "ja": "巣穴から出る", "hint": "眼柄だけを先に出してようすを見てから出てくる" },
+      { "id": "defend", "ja": "威嚇", "hint": "体を起こし、はさみを振り上げて開く" },
+      { "id": "escape", "ja": "巣穴へ逃げる", "hint": "危険を感じると横走りで巣穴に駆け込む" }
+    ],
+    "placeholderModel": false
+  }
+}

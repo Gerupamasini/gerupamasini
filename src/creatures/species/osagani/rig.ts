@@ -246,22 +246,29 @@ export function solveLeg(leg: LegRig, PL: PlanarLeg, target: Vector3, th: number
   const sg = leg.sg;
   _v.copy(target).sub(leg.coxa);
   const ang = Math.atan2(_v.z, sg * _v.x);
-  const Rt = Math.hypot(_v.x, _v.z), Ht = _v.y;
+  let Rt = Math.hypot(_v.x, _v.z);
+  const Ht = _v.y;
   const ky = BIND[leg.id].mcYaw ?? 0;
   P.pitch = PL.pitch;
   P.mcYaw = ky;
-  let r = Rt, h = Ht, off = 0, miss = 0;
-  for (let it = 0; it < (ky ? 4 : 1); it++) {
-    miss = solvePlanar(PL, r, h, th, P, mode);
-    if (!ky) break;
-    swungTip(PL, P, ky, _k);
-    const R = Math.hypot(_k.r, _k.z);
-    off = Math.atan2(_k.z, _k.r);
-    r += Rt - R; h += Ht - _k.h;
+  let off = 0, miss = 0;
+  // (a foot out of reach is drawn in towards the coxa at the same height, not left to swing below the ground: the
+  // gait then steps it)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let r = Rt, h = Ht;
+    for (let it = 0; it < (ky ? 4 : 1); it++) {
+      miss = solvePlanar(PL, r, h, th, P, mode);
+      if (!ky) break;
+      swungTip(PL, P, ky, _k);
+      off = Math.atan2(_k.z, _k.r);
+      r += Rt - Math.hypot(_k.r, _k.z); h += Ht - _k.h;
+    }
+    if (ky) { swungTip(PL, P, ky, _k); miss = Math.hypot(Math.hypot(_k.r, _k.z) - Rt, _k.h - Ht); }
+    if (miss < 0.25 || Rt < 4) break;
+    Rt -= miss + 0.3;
   }
   P.promo = Math.max(-1.1, Math.min(1.1, ang - leg.yaw - off));
-  if (ky) { swungTip(PL, P, ky, _k); miss = Math.max(miss, Math.abs(Math.hypot(_k.r, _k.z) - Rt) + Math.abs(_k.h - Ht)); }
-  return miss;
+  return miss + Math.hypot(_v.x, _v.z) - Rt;
 }
 
 /** forward kinematics of a walking leg's tip in the body's frame (mm) from a pose */

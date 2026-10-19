@@ -97,6 +97,11 @@
       "id": "portunus_trituberculatus",
       "name": "ガザミ",
       "file": "portunus_trituberculatus.jpg"
+    },
+    {
+      "id": "macrophthalmus_japonicus",
+      "name": "ヤマトオサガニ",
+      "file": "macrophthalmus_japonicus.jpg"
     }
   ]
 }

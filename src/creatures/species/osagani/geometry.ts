@@ -26,6 +26,7 @@ export const PART = {
   SPINE: 12,      // spines and spinules on the limbs
   ORBIT: 13,      // the orbits' trenches (in shadow, where the folded eyestalks lie)
   TOOTH: 14,      // the teeth of the fingers' cutting edges
+  FIXED: 15,      // the chela's fixed finger (its own piece on the propodus)
 } as const;
 
 /** `aAux.y` flags: parts only one form has (the material folds the other away) */
@@ -244,7 +245,8 @@ function halfOutline(side: Side, lod: Lod): EnvSample[] {
       for (let s = 1; s <= n; s++) out.push([a[0] + ((b[0] - a[0]) * s) / n, a[1] + ((b[1] - a[1]) * s) / n]);
       return out;
     })();
-    pts.forEach((p, j) => push(p, j === pts.length - 1 ? k.kind : knots[i - 1].kind));
+    // (the samples between the knots are plain edge: only the knots keep their kind)
+    pts.forEach((p, j) => push(p, j === pts.length - 1 ? k.kind : 'E'));
     run = [k.p];
   }
   env[env.length - 1].x = 0;
@@ -660,7 +662,7 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
       const parent = rig.byName[def.parent!];
       const start = gb.count, triStart = gb.idx.length;
       const last = pc.da;
-      const art = buildArticle(gb, spec, L, lod, pc.finger ? bone : bone, pc.finger ? bone : parent, legPart(leg.id, pc.finger ? 'pr' : spec.name), last, flag);
+      const art = buildArticle(gb, spec, L, lod, bone, pc.finger ? bone : parent, pc.finger ? PART.FIXED : legPart(leg.id, spec.name), last, flag);
       if (lod.spines && spec.spines) for (const s of spec.spines) {
         const { p, n } = art.surface(s.t, s.a);
         const dir = n.clone().multiplyScalar(Math.cos(s.lean)).addScaledVector(AX, Math.sin(s.lean)).normalize();
@@ -766,7 +768,8 @@ function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
     const L = ch.palm.length, h = ch.palm.sections[3].hy;
     const fa = ch.fingerAngle, fl = ch.finger.length;
     const fx = ch.fingerAt[0] + Math.cos(fa) * fl, fy = ch.fingerAt[1] + Math.sin(fa) * fl;
-    tube([P('pr'), P('pr', L * 0.45), P('pr', L), P('pr', ch.fingerAt[0] + Math.cos(fa) * fl * 0.5, ch.fingerAt[1] + Math.sin(fa) * fl * 0.5), P('pr', fx, fy)], [h * 0.45, h * 0.9, h * 0.85, h * 0.32, 0.1], PART.PALM, flag);
+    tube([P('pr'), P('pr', L * 0.45), P('pr', L)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
+    tube([P('pr', ch.fingerAt[0], ch.fingerAt[1]), P('pr', ch.fingerAt[0] + Math.cos(fa) * fl * 0.5, ch.fingerAt[1] + Math.sin(fa) * fl * 0.5), P('pr', fx, fy)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
     tube([P(daBone), P(daBone, ch.da.length * 0.5, -0.3), P(daBone, ch.da.length, -1.0)], [h * 0.36, h * 0.28, 0.1], PART.FINGER, flag);
   }
 }

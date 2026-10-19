@@ -1,0 +1,24 @@
+{
+  "id": "mud_crab_burrow",
+  "tickHz": { "near": 3, "mid": 1, "far": 0.3 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 0.6, "urgency": 1, "param": "escape" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_above", "args": { "m": 0.1 } },
+      { "type": "action", "name": "burrow", "args": { "seconds": [40, 120] } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.45 } },
+      { "type": "cooldown", "seconds": 8, "child": { "type": "action", "name": "display", "args": { "param": "defend", "seconds": [2, 4] } } }
+    ]},
+    { "type": "random", "weights": [0.28, 0.36, 0.2, 0.16], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [6, 16] } },
+      { "type": "action", "name": "wander", "args": { "distance_m": "$wanderDistance_m", "stayNearHome_m": 0.9 } },
+      { "type": "action", "name": "burrow", "args": { "seconds": "$burrowStay_s" } }
+    ]}
+  ]}
+}

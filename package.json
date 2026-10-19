@@ -37,6 +37,7 @@
     "render:akaei": "node tools/models/akaei/render.mjs",
     "render:mimiika": "node tools/models/mimiika/render.mjs",
     "render:gazami": "node tools/models/gazami/render.mjs",
+    "render:osagani": "node tools/models/osagani/render.mjs",
     "render:sand-dust": "node tools/models/akaei/render.mjs --shots tools/models/akaei/dust-shots.mjs --out docs/creatures/sand-dust --width 960 --height 600 && node tools/models/ishigarei/render.mjs --shots tools/models/ishigarei/dust-shots.json --out docs/creatures/sand-dust --width 960 --height 600 && node tools/models/mimiika/render.mjs --shots tools/models/mimiika/dust-shots.json --out docs/creatures/sand-dust --width 960 --height 600",
     "model:pagurus-hide": "node tools/models/pagurus/bake-hide-table.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",

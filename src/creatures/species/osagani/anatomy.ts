@@ -372,8 +372,8 @@ export interface ChelaSpec {
  */
 export const CHELA_MALE: ChelaSpec & { tooth: { t: number; h: number } } = {
   palm: {
-    name: 'pr', length: 19.5, n: 2.7, neck: 0.035,
-    sections: [S(0, 2.1, 1.45), S(0.06, 3.1, 1.7), S(0.22, 4.3, 1.9, 0.1), S(0.5, 4.85, 1.98), S(0.85, 4.9, 1.92, -0.1), S(1, 4.55, 1.78, -0.2)],
+    name: 'pr', length: 19.5, n: 2.25, neck: 0.035,
+    sections: [S(0, 2.1, 1.35), S(0.06, 3.1, 1.5), S(0.22, 4.4, 1.62, 0.1), S(0.5, 4.95, 1.66), S(0.85, 5.0, 1.6, -0.1), S(1, 4.6, 1.5, -0.2)],
     // the palm's upper margin a blunt crest, its lower margin rounded (B33)
     costae: [[0.0, 0.3, 0.2], [Math.PI, 0.16, 0.32]],
   },

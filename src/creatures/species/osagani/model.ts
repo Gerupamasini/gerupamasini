@@ -50,7 +50,7 @@ const SPHERE = new Sphere(new Vector3(0, 0.01, 0.005), 0.065);
  *   ├── Armature: J_root ─ J_body ─ legs (P1…P5 × L/R × 6 articles, the female chela's dactylus), eyestalks, maxillipeds
  *   └── OsaganiLOD
  *       ├── LOD0 (hero): Shell (carapace with its teeth, grooves and ridges, body, segmented legs with spinules, both
- *       │                chelae, eyestalks, maxillipeds, antennules), Setae          — skeleton of every bone (69)
+ *       │                chelae, eyestalks, maxillipeds, antennules), Setae          — 67 bones (all but the root)
  *       ├── LOD1: Shell, coarser                                                    — 31 bones
  *       └── LOD2: Shell, one tube a leg                                             — 11 bones
  */
