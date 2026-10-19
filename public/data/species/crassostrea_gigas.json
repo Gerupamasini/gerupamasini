@@ -32,6 +32,7 @@
     {
       "tags": ["waterline", "shallow", "exposed_sand"],
       "substrate": ["rock", "gravel"],
+      "maps": ["kasai_west"],
       "tide": "any",
       "density_per_100m2": 1,
       "group": [1, 1],
