@@ -30,7 +30,7 @@ export const HEAD_SCULPT = {
   // the rictus the face is narrow low down (the pads stand out from it) and widest under the eyes.
   loft: {
     s:  [0.030, 0.038, 0.050, 0.070, 0.095, 0.125, 0.170, 0.250, 0.350, 0.450, 0.620, 0.800, 1.000, 1.150, 1.300],
-    w:  [0.000, 0.060, 0.100, 0.138, 0.168, 0.200, 0.235, 0.278, 0.318, 0.336, 0.318, 0.290, 0.290, 0.295, 0.310],
+    w:  [0.000, 0.060, 0.100, 0.138, 0.168, 0.200, 0.235, 0.278, 0.318, 0.336, 0.318, 0.290, 0.272, 0.282, 0.310],
     yT: [0.250, 0.300, 0.345, 0.392, 0.440, 0.482, 0.522, 0.560, 0.585, 0.603, 0.615, 0.620, 0.622, 0.625, 0.628],
     yB: [0.200, 0.170, 0.150, 0.128, 0.110, 0.095, 0.080, 0.060, 0.025, -0.005, -0.045, -0.045, -0.045, -0.035, -0.025],
     yW: [0.230, 0.235, 0.245, 0.260, 0.275, 0.290, 0.305, 0.310, 0.290, 0.250, 0.220, 0.220, 0.230, 0.245, 0.260],
@@ -39,62 +39,69 @@ export const HEAD_SCULPT = {
   },
   // the near-vertical rounded front of the face, its most anterior point just above the pads' front ends
   snoutBulb: { c: [0.185, 0.240], r: [0.185, 0.185, 0.210] },
-  cheekBalloon: { c: [0.73, 0.245], r: [0.62, 0.29, 0.35] },
+  cheekBalloon: { c: [0.73, 0.235], r: [0.62, 0.30, 0.35] },
   cheekRear: { c: [0.90, 0.235], r: [0.16, 0.235, 0.33], blend: 0.06 },
-  cheekClip: { blend: 0.012 },
+  cheekClip: { blend: 0.008 },
   // the block the eyes stand on, and its low front face (the "fleshy ridge anterior to the eyes", Murdy)
   turret: { c: [0.335, 0.525], r: [0.16, 0.12, 0.15] },
   // the window axis of the eye at rest (55° out, 15° up), kept here for the charts of the socket
   cup: {
-    open: [-0.554, 0.259, 0.791],
+    open: [-0.4134, 0.2079, 0.8865],
     gap: 0.0015,
     // the rim: its height above the globe's centre against the azimuth about the vertical (Δ from the low point,
     // which lies under the window, `low` degrees forward of lateral): h = A − B cos Δ − C cos 2Δ; low under the
     // window (−0.075), at the pupil's level front and back (−0.012), well above the centre medially (+0.065), where
     // the two cups fill the notch between the domes
-    low: 35, A: -0.0085, B: 0.070, C: -0.0035,
+    low: 25, A: -0.025, B: 0.039, C: 0.004,
+    // the bead tapers away from the window (a real lip only under it; front, back and medially the skin runs onto
+    // the dome), and the head is filleted onto the globe front and back
+    taper: { from: 60, to: 120, thickMin: 0.2, roundMax: 0.018 },
+    fillet: { k: 0.03, from: 60, to: 110, inset: 0.003 },
+    // the web between the domes: the smooth union of the two globes (a dumbbell neck), capped at the notch
+    neck: { k: 0.09, inset: 0.003, top: 0.715, cap: 0.03 },
     // the bead of the rim: a shell `thick` proud of the globe, its edge rounded by `round`
     thick: 0.020, round: 0.010,
     // the collar under the bead: a fleshy column about the globe's vertical axis, radius r at the top flaring to rBase
     // at the infraorbital crease (y0), starting `drop` below the rim, blended into the bead
     // the collar: a fleshy ring round the lower globe, wider than the globe, sitting on the head; its underside curls
     // in to the infraorbital crease (y0: its centre, r: horizontal and vertical radii)
-    collar: { y0: 0.530, r: [0.124, 0.052], blend: 0.030 },
-    crease: { r: 0.007, k: 0.006 },
+    collar: { y0: 0.528, r: [0.124, 0.054, 0.110], blend: 0.030 },
+    crease: { r: 0.005, k: 0.008 },
   },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.33, 0.60], r: [0.10, 0.07, 0.045] },
   // ---- mouth
   // the gape: the closed mouth's line (y at the front, at the rictus), the slit's half-width, the rictus (where the
   // slit closes into the rictal fold)
-  gape: { yFront: 0.104, yBack: 0.110, half: 0.0045, rictus: 0.315, close: 0.045 },
+  // lean: the cut behind the rictus tilts back along the crease (no wall across the throat)
+  gape: { yFront: 0.108, yBack: 0.092, half: 0.0025, rictus: 0.315, close: 0.060, lean: 1.3 },
   // the upper lip (left half, mirrored): a swept roll from the thin median lip at the front midline along the
   // premaxilla's arm to the pad's rounded rear end over the maxilla's tip; round in section, widest at 55–60 % of its
   // length, standing out from the face above it
   pad: {
     // the median lip: thin, from the front midline under the snout bulb to the pad's front end
-    median: { path: [[0.050, 0.110, 0.000], [0.054, 0.111, 0.040], [0.070, 0.117, 0.078], [0.096, 0.130, 0.108]], radius: [0.016, 0.016, 0.018, 0.026] },
+    median: { path: [[0.064, 0.120, 0.000], [0.067, 0.121, 0.040], [0.082, 0.126, 0.080], [0.104, 0.136, 0.118]], radius: [0.013, 0.013, 0.015, 0.022] },
     // the pad: a bean along the premaxilla's arm, its front end rounded and tucked under the bulb, its rear end the
     // fattest part, over the maxilla's tip at the rictus
-    path: [[0.105, 0.156, 0.122], [0.145, 0.162, 0.152], [0.192, 0.165, 0.180], [0.236, 0.163, 0.200], [0.268, 0.158, 0.212]],
-    radius: [0.046, 0.055, 0.056, 0.050, 0.038],
+    path: [[0.105, 0.138, 0.122], [0.145, 0.136, 0.152], [0.192, 0.133, 0.180], [0.236, 0.129, 0.200], [0.268, 0.124, 0.212]],
+    radius: [0.036, 0.050, 0.057, 0.056, 0.048],
     samples: 64,
     // the labial groove: the crease where the snout's sheath meets the pad (along its top and round its rear end)
-    seam: { r: 0.0085, k: 0.006 },
+    seam: { r: 0.006, k: 0.010 },
   },
   // the lower jaw's tissue (left half): the mandible's flesh round the dentary rami, the floor between them, the
   // thin lower lip along the dentary's outer edge (just under the pads), and the narrow chin knob
   jaw: {
-    ramus: { path: [[0.078, 0.090, 0.000], [0.092, 0.088, 0.046], [0.136, 0.082, 0.092], [0.204, 0.076, 0.134], [0.276, 0.076, 0.166], [0.340, 0.084, 0.186]], radius: [0.020, 0.021, 0.024, 0.028, 0.032, 0.036] },
-    floor: { c: [0.250, 0.058], r: [0.190, 0.058, 0.185] },
-    lip: { path: [[0.062, 0.090, 0.000], [0.066, 0.090, 0.040], [0.092, 0.092, 0.074], [0.140, 0.096, 0.102], [0.198, 0.099, 0.128], [0.255, 0.102, 0.150], [0.295, 0.105, 0.164]], radius: [0.0065, 0.0065, 0.006, 0.0055, 0.005, 0.0045, 0.004] },
-    chin: { c: [0.095, 0.068], r: [0.040, 0.030, 0.050] },
-    blend: 0.035, fuse: 0.03,
+    ramus: { path: [[0.090, 0.104, 0.000], [0.102, 0.103, 0.040], [0.140, 0.099, 0.084], [0.204, 0.092, 0.126], [0.276, 0.087, 0.158], [0.340, 0.084, 0.182]], radius: [0.012, 0.013, 0.015, 0.018, 0.022, 0.028] },
+    floor: { c: [0.34, 0.060], r: [0.25, 0.060, 0.15] },
+    lip: { path: [[0.078, 0.104, 0.000], [0.082, 0.104, 0.040], [0.098, 0.102, 0.070], [0.142, 0.100, 0.094], [0.198, 0.098, 0.116], [0.255, 0.095, 0.136], [0.295, 0.092, 0.150]], radius: [0.0065, 0.0065, 0.006, 0.0055, 0.005, 0.0045, 0.004] },
+    chin: { c: [0.112, 0.086], r: [0.034, 0.024, 0.042] },
+    blend: 0.05, fuse: 0.05,
   },
   // the rictal fold: the web joining the pad's rear end to the lower lip at the corner, and its crease running on down
   // and back onto the cheek
-  rictal: { c: [0.300, 0.120, 0.215], r: [0.026, 0.030, 0.024], blend: 0.03 },
-  rictalCrease: { path: [[0.310, 0.112, 0.226], [0.335, 0.086, 0.228], [0.365, 0.060, 0.218], [0.400, 0.040, 0.198]], radius: [0.0045, 0.0045, 0.004, 0.003] },
+  rictal: { c: [0.305, 0.098, 0.222], r: [0.026, 0.030, 0.026], blend: 0.03 },
+  rictalCrease: { path: [[0.318, 0.095, 0.235], [0.340, 0.075, 0.240], [0.370, 0.055, 0.232], [0.405, 0.035, 0.212]], radius: [0.0045, 0.0045, 0.004, 0.003] },
   // the mouth cavity behind the gape (left half of a symmetric volume): it reaches forward to the lips' inner faces,
   // up under the palate and back into the pharynx, between the jaws
   cavity: { front: { c: [0.122, 0.128, 0], r: [0.052, 0.020, 0.072] }, mid: { c: [0.235, 0.152, 0], r: [0.140, 0.045, 0.125] }, back: { c: [0.430, 0.172, 0], r: [0.150, 0.060, 0.135] }, blend: 0.03 },
@@ -102,7 +109,7 @@ export const HEAD_SCULPT = {
   // the anterior nostril: a short tube on the front of the snout pointing forward and down (B012: y 0.35–0.40); the
   // posterior nostril a small pore just in front of the eye
   nostril: { base: [0.044, 0.372, 0.074], tip: [0.034, 0.366, 0.077], r: [0.0068, 0.006], hole: 0.0035 },
-  nostrilPost: { c: [0.205, 0.520, 0.118], r: 0.0055 },
+  nostrilPost: { c: [0.190, 0.500, 0.119], r: 0.0045 },
   // the opercle's margin: a soft fold standing proud of the trunk behind it
   opercle: { path: [[1.012, 0.44, 0.29], [1.032, 0.36, 0.325], [1.032, 0.26, 0.34], [1.007, 0.15, 0.33], [0.962, 0.06, 0.29], [0.912, 0.02, 0.24]], radius: [0.0024, 0.006, 0.0078, 0.0078, 0.0066, 0.0036] },
   // the gill slit: the only part of the margin that opens, y 0.17–0.38 (Michel 2014 Fig. 1A; B010), a thin slot
@@ -175,19 +182,22 @@ export function cupField(K = HEAD_SCULPT, eyeDy = 0) {
   // azimuth about the vertical through the globe's centre: 0 lateral (+z), +90° forward (−s)
   const rimH = (px, pz) => { const D = Math.atan2(-px, pz) - lo; return C.A - C.B * Math.cos(D) - C.C * Math.cos(2 * D); };
   const col = C.collar;
-  const collarE = ellipsoid([c[0], col.y0, c[2]], [col.r[0], col.r[1], col.r[0]]);
+  const collarE = ellipsoid([c[0], col.y0, c[2]], [col.r[0], col.r[1], col.r[2] ?? col.r[0]]);
   return {
     rimH,
     field: (x, y, z) => {
       const px = x - c[0], py = y - c[1], pz = z - c[2];
       const r = Math.hypot(px, py, pz), h = rimH(px, pz);
-      // the bead: a shell hugging the globe
-      const bead = r - (re + C.gap + C.thick);
+      // the bead: a shell hugging the globe, thinning away from the window
+      const T = C.taper, cD = Math.cos(Math.atan2(-px, pz) - lo);
+      const tw = T ? smoothstep(Math.cos((T.from * Math.PI) / 180), Math.cos((T.to * Math.PI) / 180), cD) : 0;
+      const thick = C.thick * (1 - (1 - (T ? T.thickMin : 1)) * tw), round = C.round + ((T ? T.roundMax : C.round) - C.round) * tw;
+      const bead = r - (re + C.gap + thick);
       // the collar ring (an oblate ellipsoid about the globe's vertical axis)
       const ring = collarE(x, y, z);
       const body = smin(bead, ring, col.blend);
       // everything above the rim is cut away, the edge rounded into a lip
-      return smax(body, py - h, C.round);
+      return smax(body, py - h, round);
     },
   };
 }
@@ -241,7 +251,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
   const G = K.gape;
   const gapeY = (x) => G.yFront + (G.yBack - G.yFront) * smoothstep(0.03, G.rictus, x);
   // in front of the rictus the outer mass ends at the gape: the lower jaw's own tissue is below it
-  const front = (x) => 1 - smoothstep(G.rictus - G.close * 0.4, G.rictus + G.close * 0.6, x);
+  const front = (x, y = 1) => 1 - smoothstep(G.rictus - G.close * 0.4, G.rictus + G.close * 0.6, x - (G.lean ?? 0) * Math.max(0, gapeY(x) - y));
   const padP = smoothPath(K.pad.path, K.pad.radius, K.pad.samples), medP = smoothPath(K.pad.median.path, K.pad.median.radius, 24);
   const bean = tube(padP.points, padP.radii, 0.2), median = tube(medP.points, medP.radii, 0.2);
   const pad = (x, y, z) => smin(bean(x, y, z), median(x, y, z), 0.02);
@@ -264,7 +274,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
   // the upper head: the outer mass, cut at the gape in front of the rictus, with the upper lip on it (the labial
   // groove where they meet), and the rictal fold at the corner
   const upper = (x, y, z) => {
-    const za = Math.abs(z), w = front(x);
+    const za = Math.abs(z), w = front(x, y);
     let m = mass(x, y, z);
     if (w > 0) m += (smax(m, gapeY(x) - y, 0.008) - m) * w;
     const p = pad(x, y, za);
@@ -294,7 +304,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
   };
 
   const f = (x, y, z) => {
-    const za = Math.abs(z), w = front(x);
+    const za = Math.abs(z), w = front(x, y);
     const m0 = mass(x, y, z);
     let u = withCups(x, y, z, upper(x, y, z));
     u = ssub(u, rictalCrease(x, y, za), b.groove);
@@ -302,13 +312,26 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     // behind the rictus it fuses into the cheek and the throat
     let j = jawTissue(x, y, z);
     if (w > 0) j = smax(j, G.half * 2 * w * w * w - u, 0.002);
-    let d = w > 0.999 ? Math.min(u, j) : smin(u, j, J.fuse * (1 - w));
+    // behind the rictus, and everywhere low down on the throat, the jaw's tissue fuses into the head
+    const kf = J.fuse * Math.max(1 - w, 1 - smoothstep(0.03, 0.06, y));
+    let d = kf > 1e-4 ? smin(u, j, kf) : Math.min(u, j);
     // the mouth cavity, reached through the slit
     d = ssub(d, cavity(x, y, z), b.cavity);
+    // the head filleted onto the globes front and back, and the neck between the two domes
+    const C = K.cup, FL = C.fillet, NK = C.neck, epx = x - eyeL[0], epy = y - eyeL[1];
+    if (FL) {
+      const az = Math.atan2(-epx, za - eyeL[2]) - (C.low * Math.PI) / 180;
+      const wf = smoothstep(Math.cos((FL.from * Math.PI) / 180), Math.cos((FL.to * Math.PI) / 180), Math.cos(az)) * smoothstep(0, 0.03, za - 0.02);
+      if (wf > 0) d = smin(d, Math.hypot(epx, epy, za - eyeL[2]) - (re - FL.inset), FL.k * wf);
+    }
+    if (NK) {
+      const dl = Math.hypot(epx, epy, z - eyeL[2]) - (re - NK.inset), dr = Math.hypot(epx, epy, z + eyeL[2]) - (re - NK.inset);
+      d = smin(d, smax(smin(dl, dr, NK.k), y - NK.top, NK.cap), 0.01);
+    }
     // the eye sockets (the globes sit in them)
     d = ssub(d, socketL(x, y, za), b.socket);
     // the gill margin's fold, the slit through it and the chamber behind
-    d = ssub(d, opercle(x, y, za), b.fold);
+    d = smin(d, opercle(x, y, za), b.fold);
     const slot = gillSlit(x, y, za, m0);
     d = smax(d, -Math.min(slot, chamber(x, y, za)), GS.round * 0.5);
     // the nostrils
