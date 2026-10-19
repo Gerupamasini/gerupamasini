@@ -28,6 +28,7 @@ import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
 import './mobile.css';
 import './tank/room.css';
+import './zukan/zukan.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;

@@ -74,6 +74,7 @@ try {
   assert.deepEqual(qualities, { home: 'minimal', field: 'high', dpr: 0.67 });
   const glbs = []; page.on('request', r => { if (/\.glb(?:$|\?)/.test(r.url())) glbs.push(r.url()); });
   await page.evaluate(() => { const app = window.__higata; app.closeOverlay(); app.openOverlay('zukan'); });
+  await page.locator('.zukan-item[data-species="acanthogobius_flavimanus"]').click();
   await page.locator('.zukan-photo').waitFor();
   await page.waitForFunction(() => document.querySelector('.zukan-photo')?.naturalWidth === 640);
   assert.equal(await page.locator('.zukan-preview canvas, canvas.zukan-preview').count(), 0);
@@ -90,6 +91,7 @@ try {
   let attempts = 0;
   await page.route('**/*mahaze_subadult.lod1*.glb', route => ++attempts === 1 ? route.abort() : route.continue());
   await page.evaluate(() => window.__higata.openOverlay('zukan'));
+  await page.locator('.zukan-item[data-species="acanthogobius_flavimanus"]').click();
   await page.locator('.preview-error').waitFor();
   await page.locator('.preview-error').getByRole('button', { name: '再読み込み' }).click();
   try { await page.waitForFunction(() => !document.querySelector('.preview-error') && !document.querySelector('.zukan-detail [role="status"]')); }
@@ -133,6 +135,7 @@ try {
     await page.evaluate(() => window.__higata.updateSettings({ homeQuality: 'high' }));
     assert.deepEqual(await page.evaluate(() => { const a = window.__higata; return { samples: a.hero.mainRT.samples, waterLite: !!a.world.water.material.defines.WATER_LITE, tankLite: a.tank.lite }; }), { samples: 0, waterLite: true, tankLite: false });
     await page.evaluate(() => window.__higata.openOverlay('zukan'));
+    await page.locator('.zukan-item[data-species="acanthogobius_flavimanus"]').click();
     await page.locator('.zukan-photo').waitFor();
     assert.equal(await page.locator('canvas.zukan-preview').count(), 0);
     await page.evaluate(() => window.__higata.closeOverlay());
