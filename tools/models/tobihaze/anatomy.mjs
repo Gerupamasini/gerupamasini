@@ -23,8 +23,8 @@ export const HEAD = {
   eye: {
     d: 0.207,             // globe diameter (ED): the bare globe, without the cup's rim
     s: 0.33,              // centre, back from the snout tip
-    y: 0.625,             // centre height: the top stands about 0.43 ED above the nape at rest
-    z: 0.100,             // centres just under one ED apart: the globes meet under the skin web over the midline
+    y: 0.640,             // centre height: on top of the skull, the lens ≈0.03 HL above the frontal arch (ZK 2024)
+    z: 0.106,             // centres ≈1.02 ED apart, either side of the narrow frontal bridge (Michel 2014, Aiello 2023)
   },
   turretWidth: 0.34,      // the block the eyes sit on (0.48 W); the globes overhang it at the sides
   mouthCornerS: 0.31,     // the jaw's corner, under the front half of the eye

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The head skeleton (skull.mjs) meshed inside the clay skin, for the x-ray comparisons with cleared and stained
 // specimens (viewer modes 'xray' and 'bones'). Optionally posed: --pose '{"J_jaw": {"angle": 30}, ...}' (degrees about
-// the joint's axis, or "slide": HL along J_premax's slide direction, or "t": [ds, dy, dz]).
+// the joint's axis, "lift": degrees about its second axis, "slide": HL along J_premax's slide direction, or "t": [ds, dy, dz]).
 //   node tools/models/tobihaze/build-skeleton.mjs [--head <sculpt module>] [--h <mm>] [--hb <mm>] [--out <glb>] [--pose <json>]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { GLBBuilder } from '../../lib/glb.mjs';
 import { HL, HEAD, EYE_MM, toObject } from './anatomy.mjs';
 import { surfaceNets } from './mesher.mjs';
 import { skullBones, HEAD_JOINTS } from './skull.mjs';
-import { worldTransforms, axisAngle, posed, movePoint, v3 } from './skel.mjs';
+import { worldTransforms, axisAngle, posed, movePoint, boundedUnion, v3 } from './skel.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -29,7 +29,7 @@ for (const j of HEAD_JOINTS) {
   const p = poseArg[j.name];
   if (!p) continue;
   local[j.name] = {
-    R: p.angle && j.axis ? axisAngle(j.axis, (p.angle * Math.PI) / 180) : undefined,
+    R: p.angle && j.axis ? axisAngle(j.axis, (p.angle * Math.PI) / 180) : p.lift && j.lift ? axisAngle(j.lift, (p.lift * Math.PI) / 180) : undefined,
     t: p.slide && j.slide ? v3.mul(j.slide, p.slide) : p.t,
   };
 }
@@ -58,7 +58,8 @@ const bones = skullBones();
 for (const group of [{ name: 'Bone_Skeleton', pick: (b) => !b.cart }, { name: 'Cart_Skeleton', pick: (b) => b.cart }]) {
   const fs_ = bones.filter(group.pick).map((b) => posed(b.field, W[b.joint]));
   if (!fs_.length) continue;
-  const f = (x, y, z) => { let d = Infinity; for (const g of fs_) d = Math.min(d, g(x, y, z)); return d; };
+  const f = boundedUnion(fs_, { min: box.min.map((v) => v / HL), max: box.max.map((v) => v / HL) });
+  log(`${group.name}: ${fs_.length} bones bounded`);
   const m = surfaceNets(toMM(f), box, hb, { log });
   nodes.push(gb.addNode({ name: group.name, mesh: gb.addMesh(group.name, [gb.primitive({ ...toObj(m), material: red })]) }));
   log(`${group.name}: ${m.indices.length / 3} tris`);

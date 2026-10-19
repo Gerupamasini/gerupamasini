@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { HL, HEAD, EYE_MM, toObject } from './anatomy.mjs';
 import { surfaceNets } from './mesher.mjs';
+import { eyeGlobe } from './eye.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -45,7 +46,7 @@ function toObj(m) {
 }
 const head = toObj(mesh);
 
-function sphereMesh(r, nt = 48, np = 96) {
+export function sphereMesh(r, nt = 48, np = 96) {
   const pos = [], nrm = [], idx = [];
   for (let j = 0; j <= nt; j++) {
     const th = (j / nt) * Math.PI;
@@ -65,13 +66,24 @@ function sphereMesh(r, nt = 48, np = 96) {
 
 const gb = new GLBBuilder('tobihaze-clay');
 const mat = gb.addMaterial({ name: 'Clay', pbrMetallicRoughness: { baseColorFactor: [0.72, 0.7, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.6 } });
+// the eye's clear window (cornea over the iris) dark and glossy; the rest of the globe is skin (clay)
+const cornea = gb.addMaterial({ name: 'Cornea', pbrMetallicRoughness: { baseColorFactor: [0.08, 0.09, 0.08, 1], metallicFactor: 0, roughnessFactor: 0.12 } });
 const headMesh = gb.addMesh('Head', [gb.primitive({ ...head, material: mat })]);
-const eye = sphereMesh(EYE_MM.radius * 0.001);
-const eyeMesh = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mat })]);
 const nodes = [gb.addNode({ name: 'Head', mesh: headMesh })];
 for (const side of [1, -1]) {
+  const g = eyeGlobe(EYE_MM.radius * 0.001, { side });
+  // the globe's frame is the fish frame (s, y, z) about its centre: to the object frame like the head
+  const n = g.position.length / 3, p = new Float32Array(n * 3), nn = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    p[i * 3] = g.position[i * 3 + 2]; p[i * 3 + 1] = g.position[i * 3 + 1]; p[i * 3 + 2] = -g.position[i * 3];
+    nn[i * 3] = g.normal[i * 3 + 2]; nn[i * 3 + 1] = g.normal[i * 3 + 1]; nn[i * 3 + 2] = -g.normal[i * 3];
+  }
+  const mesh = gb.addMesh(side > 0 ? 'Eye_L' : 'Eye_R', [
+    gb.primitive({ position: p, normal: nn, indices: g.skin, material: mat }),
+    gb.primitive({ position: p, normal: nn, indices: g.cornea, material: cornea }),
+  ]);
   const c = toObject([EYE_MM.center[0], EYE_MM.center[1], EYE_MM.center[2] * side]);
-  nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh: eyeMesh, translation: c }));
+  nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh, translation: c }));
 }
 // regions for the viewer's framing (object frame)
 const region = (s0, s1, y0, y1, z) => {

@@ -38,6 +38,8 @@ controls.enableDamping = !capture;
 
 const clayMat = new THREE.MeshStandardMaterial({ color: 0xb9b2a8, roughness: 0.62, metalness: 0 });
 const clayEye = new THREE.MeshStandardMaterial({ color: 0x9c958c, roughness: 0.35, metalness: 0 });
+// the eye's clear window (a primitive with the material 'Cornea') stays dark in clay, so the skin cap reads
+const clayCornea = new THREE.MeshStandardMaterial({ color: 0x3a342a, roughness: 0.12, metalness: 0 });
 const silMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 // x-ray: the skeleton opaque (alizarin red, as a cleared and stained specimen) inside a faint skin
 const boneMat = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5, metalness: 0 });
@@ -52,12 +54,14 @@ function applyMode(m) {
   model.traverse((o) => {
     if (!o.isMesh) return;
     if (!original.has(o)) original.set(o, o.material);
-    const eye = /eye/i.test(o.name);
+    const eye = /eye/i.test(o.name), cornea = /cornea/i.test(original.get(o)?.name ?? '');
     // bones are the meshes named Bone_* (Cart_* for cartilage); in 'xray' the rest is a faint skin, in 'bones' hidden
     const bone = /^Bone_/.test(o.name), cart = /^Cart_/.test(o.name);
     o.visible = !(m === 'bones' && !bone && !cart) && !((m === 'clay' || m === 'silhouette' || m === 'textured') && (bone || cart));
     if (m === 'xray' || m === 'bones') o.material = bone ? boneMat : cart ? cartMat : ghostMat;
-    else o.material = m === 'clay' ? (eye ? clayEye : clayMat) : m === 'silhouette' ? silMat : original.get(o);
+    // a globe with a window has a skin cap (clay like the head); a bare globe keeps the eye clay
+    const capped = eye && o.parent?.children.some((c) => /cornea/i.test((original.get(c) ?? c.material)?.name ?? ''));
+    if (m !== 'xray' && m !== 'bones') o.material = m === 'clay' ? (cornea ? clayCornea : eye && !capped ? clayEye : clayMat) : m === 'silhouette' ? silMat : original.get(o);
   });
 }
 
