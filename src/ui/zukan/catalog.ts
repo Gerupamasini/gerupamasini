@@ -11,7 +11,7 @@ export const TAXA = [
   { id: 'other', ja: 'その他' },
 ] as const;
 
-export type CatalogFilters = { query: string; taxon: string; map: string; status: string };
+export type CatalogFilters = { query: string; taxon: string; map: string; status: string; mapMode?: 'habitat' | 'encounters' };
 export const EMPTY_FILTERS: CatalogFilters = { query: '', taxon: '', map: '', status: '' };
 export const isKnown = (p?: SpeciesProgress) => !!(p?.discovered || p?.captured);
 const normalize = (s: string) => s.normalize('NFKC').toLocaleLowerCase('ja').replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
@@ -28,11 +28,16 @@ export function filterCatalog(species: SpeciesDef[], progress: Record<string, Sp
     if (filters.taxon && sp.taxon.group !== filters.taxon) return false;
     if (filters.map) {
       const map = maps.get(filters.map);
-      if (!map || !livesOnMap(sp, map)) return false;
+      if (!map) return false;
+      if (filters.mapMode === 'encounters') {
+        const record = p?.encounters?.[map.id];
+        if (!record || !(record.observations || record.captures)) return false;
+      } else if (!livesOnMap(sp, map)) return false;
     }
     if (filters.status === 'known' && !known) return false;
     if (filters.status === 'unknown' && known) return false;
     if (filters.status === 'captured' && !p?.captured) return false;
+    if (filters.status === 'behaviors' && (!known || !sp.encyclopedia.behaviors.some(b => !p?.behaviors[b.id]))) return false;
     // Undiscovered entries reveal only their Japanese name, even through search.
     return !query || normalize(known ? `${sp.names.ja} ${sp.names.sci} ${sp.names.en ?? ''}` : sp.names.ja).includes(query);
   });

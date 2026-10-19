@@ -21,6 +21,8 @@ export interface IndividualRecord {
   dress?: boolean;
   caughtAt: number;
   caughtWhere: [number, number];
+  /** Absent on older records: coordinates alone cannot identify a flat. */
+  caughtMap?: string;
   tideLevel: number;
 }
 
@@ -146,9 +148,9 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
   };
 }
 
-export function toRecord(ind: Individual, number: number, nowMs: number, tideLevel: number): IndividualRecord {
+export function toRecord(ind: Individual, number: number, nowMs: number, tideLevel: number, mapId?: string): IndividualRecord {
   return {
     id: ind.id, speciesId: ind.species.id, number, length_mm: ind.length_mm, weight_g: ind.weight_g, sex: ind.sex, stage: ind.stage,
-    traits: [...ind.traits], ...(ind.gravid ? { gravid: true } : {}), ...(ind.dress ? { dress: true } : {}), caughtAt: nowMs, caughtWhere: [Math.round(ind.pos.x), Math.round(ind.pos.z)], tideLevel,
+    traits: [...ind.traits], ...(ind.gravid ? { gravid: true } : {}), ...(ind.dress ? { dress: true } : {}), ...(mapId ? { caughtMap: mapId } : {}), caughtAt: nowMs, caughtWhere: [Math.round(ind.pos.x), Math.round(ind.pos.z)], tideLevel,
   };
 }

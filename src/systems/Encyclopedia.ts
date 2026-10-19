@@ -142,15 +142,33 @@ export class Encyclopedia {
     return this.data.species.get(id);
   }
 
+  /** A bookmark never discovers a species or awards research. */
+  toggleBookmark(speciesId: string): boolean {
+    if (!this.data.species.has(speciesId)) return false;
+    const bookmarked = !this.entry(speciesId).bookmarked;
+    this.touch(speciesId, { bookmarked });
+    return bookmarked;
+  }
+
+  private encounterPatch(speciesId: string, nowMs: number, mapId: string | undefined, kind: 'observations' | 'captures'): Partial<SpeciesProgress> {
+    if (!mapId || !this.data.maps.get(mapId)?.animals) return {};
+    const encounters = this.entry(speciesId).encounters ?? {};
+    const previous = encounters[mapId];
+    // The tide ticket can move game time backwards. These are the first and last actions' game dates.
+    return { encounters: { ...encounters, [mapId]: {
+      firstSeen: previous?.firstSeen ?? nowMs, lastSeen: nowMs,
+      observations: (previous?.observations ?? 0) + (kind === 'observations' ? 1 : 0),
+      captures: (previous?.captures ?? 0) + (kind === 'captures' ? 1 : 0),
+    } } };
+  }
+
   /** Locking a creature in observation mode counts as discovery (and registration for non-collectable species). */
-  onObserved(ind: Individual, nowMs: number): void {
+  onObserved(ind: Individual, nowMs: number, mapId?: string): void {
     const sp = ind.species;
     const e = this.entry(sp.id);
     this.stats.observations++;
-    if (!e.discovered) {
-      this.touch(sp.id, { discovered: nowMs, observed: nowMs });
-      this.award(REWARDS.discover, `${t('toast.newSpecies')}: ${sp.names.ja}`);
-    } else if (!e.observed) this.touch(sp.id, { observed: nowMs });
+    this.touch(sp.id, { ...this.encounterPatch(sp.id, nowMs, mapId, 'observations'), discovered: e.discovered ?? nowMs, observed: e.observed ?? nowMs });
+    if (!e.discovered) this.award(REWARDS.discover, `${t('toast.newSpecies')}: ${sp.names.ja}`);
     if (sp.sex.dimorphic) this.noteSex(sp, ind.sex, nowMs);
   }
 
@@ -173,15 +191,15 @@ export class Encyclopedia {
   }
 
   /** Register a captured individual; returns the record or null when the case is full. */
-  onCaptured(ind: Individual, nowMs: number, tideLevel: number): IndividualRecord | null {
+  onCaptured(ind: Individual, nowMs: number, tideLevel: number, mapId?: string): IndividualRecord | null {
     if (this.caseItems.value.length >= this.caseMax) return null;
     const sp = ind.species;
     const e = this.entry(sp.id);
-    const rec = toRecord(ind, e.nextNumber, nowMs, tideLevel);
+    const rec = toRecord(ind, e.nextNumber, nowMs, tideLevel, mapId && this.data.maps.get(mapId)?.animals ? mapId : undefined);
     const individuals = [...e.individuals, rec];
     const first = !e.captured;
     const wasDiscovered = !!e.discovered;
-    this.touch(sp.id, { individuals, nextNumber: e.nextNumber + 1, captured: e.captured ?? nowMs, discovered: e.discovered ?? nowMs });
+    this.touch(sp.id, { ...this.encounterPatch(sp.id, nowMs, mapId, 'captures'), individuals, nextNumber: e.nextNumber + 1, captured: e.captured ?? nowMs, discovered: e.discovered ?? nowMs });
     this.stats.captures++;
     if (!wasDiscovered) this.award(REWARDS.discover, `${t('toast.newSpecies')}: ${sp.names.ja}`);
     if (first) this.award(REWARDS.capture, `${t('toast.captured')}: ${sp.names.ja}`);

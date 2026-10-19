@@ -990,7 +990,7 @@ export class App {
     if (!this.creatures) return;
     this.lockedId = ind.id;
     this.observation.enter(ind);
-    this.encyclopedia.onObserved(ind, this.clock.nowGame());
+    this.encyclopedia.onObserved(ind, this.clock.nowGame(), this.world?.map.id);
     this.setMode('observe');
   }
 
@@ -1354,7 +1354,7 @@ export class App {
     if (!this.creatures || !this.world) return;
     this.net?.hide();
     this.shovel?.hide();
-    for (const ind of caught) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
+    for (const ind of caught) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel, this.world.map.id);
     if (caught.length && this.lastTool) this.encyclopedia.addSkill(skillKeyOf(this.lastTool), this.lastTool.type === 'capture' ? t('tools.nets') : this.lastTool.ja, caught.length);
     this.setMode('field');
     this.requestSave();

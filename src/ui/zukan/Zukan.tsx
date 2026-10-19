@@ -5,6 +5,7 @@ import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { CardHead } from '../common/Icons';
 import { formatJst } from '../../core/Time';
+import { BookmarkIcon, EncounterConditions, EncounterHistory, recordDate } from './FieldNotes';
 import { EMPTY_FILTERS, filterCatalog, isKnown, livesOnMap, TAXA, type CatalogFilters } from './catalog';
 
 /** A filtered field guide; compact screens navigate between its index and specimen plate. */
@@ -15,15 +16,18 @@ export function Zukan({ app }: { app: App }) {
   const [sel, setSel] = useState(species.find(s => isKnown(progress[s.id]))?.id ?? species[0]?.id ?? '');
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_FILTERS);
   const [section, setSection] = useState('overview');
+  const [tab, setTab] = useState<'catalog' | 'bookmarks'>('catalog');
   const [selected, setSelected] = useState(false);
   const compactQuery = '(max-width: 720px), (pointer: coarse) and (max-width: 1100px)';
   const [compact, setCompact] = useState(() => window.matchMedia(compactQuery).matches);
   const dialogRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const visible = filterCatalog(species, progress, app.data.maps, filters);
-  const changeFilter = (patch: Partial<CatalogFilters>) => { setFilters(f => ({ ...f, ...patch })); setSelected(false); if (listRef.current) listRef.current.scrollTop = 0; };
+  const bookmarkedTotal = species.filter(s => progress[s.id]?.bookmarked).length;
+  const visible = filterCatalog(species, progress, app.data.maps, filters).filter(s => tab !== 'bookmarks' || progress[s.id]?.bookmarked);
+  const changeFilter = (patch: Partial<CatalogFilters>) => { setFilters(f => { const next = { ...f, ...patch }; if (!next.map) next.mapMode = undefined; return next; }); setSelected(false); if (listRef.current) listRef.current.scrollTop = 0; };
   const showDetail = !compact || selected;
+  const showPreview = showDetail && (section === 'overview' || section === 'behaviors');
   useEffect(() => {
     const media = window.matchMedia(compactQuery);
     const resize = () => setCompact(media.matches);
@@ -54,7 +58,7 @@ export function Zukan({ app }: { app: App }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<ModelPreview | null>(null);
   useEffect(() => {
-    if (!showDetail || photo || !known || !canvasRef.current) return;
+    if (!showPreview || photo || !known || !canvasRef.current) return;
     try {
       const pv = new ModelPreview(canvasRef.current, quality);
       previewRef.current = pv;
@@ -62,11 +66,11 @@ export function Zukan({ app }: { app: App }) {
       observer.observe(canvasRef.current);
       return () => { observer.disconnect(); pv.dispose(); previewRef.current = null; };
     } catch (e) { console.warn('[preview] unavailable', e); setPreviewError(true); }
-  }, [showDetail, photo, quality, known, retry]);
+  }, [showPreview, photo, quality, known, retry]);
   useEffect(() => {
     const pv = previewRef.current;
     setLoading(false);
-    if (!showDetail || photo || !sp || !known) { setPreviewError(false); return; }
+    if (!showPreview || photo || !sp || !known) { setPreviewError(false); return; }
     if (!pv) { setPreviewError(true); return; }
     setPreviewError(false);
     setPlaying(null);
@@ -76,8 +80,9 @@ export function Zukan({ app }: { app: App }) {
       if (!cancelled) { console.warn('[preview] failed', e); setPreviewError(true); }
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; pv.clear(); };
-  }, [sp?.id, known, showDetail, photo, quality, retry]);
+  }, [sp?.id, known, showPreview, photo, quality, retry]);
   useEffect(() => { setSection('overview'); setPlaying(null); if (detailRef.current) detailRef.current.scrollTop = 0; }, [sp?.id]);
+  useLayoutEffect(() => { if (detailRef.current) detailRef.current.scrollTop = 0; }, [section]);
   // a recorded behaviour plays its clip in the plate (species whose shapes have no clips just show the note)
   const play = (b: { id: string; clip?: string }) => {
     const pv = previewRef.current;
@@ -98,7 +103,7 @@ export function Zukan({ app }: { app: App }) {
           e.stopPropagation();
           if (e.key === 'Escape') { e.preventDefault(); app.closeOverlay(); }
           if (e.key === 'Tab') {
-            const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
+            const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, summary, [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
             const first = controls[0], last = controls[controls.length - 1];
             if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
@@ -111,17 +116,23 @@ export function Zukan({ app }: { app: App }) {
           onClose={() => app.closeOverlay()}
           closeKey="Esc"
         />
+        <div class="guide-toolbar"><nav class="guide-tabs" aria-label="図鑑の一覧切り替え">
+          <button class={`btn guide-tab ${tab === 'catalog' ? 'on' : ''}`} aria-pressed={tab === 'catalog'} onClick={() => { setTab('catalog'); setSelected(false); }}>図鑑</button>
+          <button class={`btn guide-tab guide-bookmark-tab ${tab === 'bookmarks' ? 'on' : ''}`} aria-pressed={tab === 'bookmarks'} onClick={() => { setTab('bookmarks'); setSelected(false); }}><BookmarkIcon />しおり <span class="num">{bookmarkedTotal}</span></button>
+        </nav>
         <div class="zukan-discovery">
-          <span>出会ったいきもの <b class="num">{found}</b><span class="dim"> / {species.length} 種</span></span>
+          <span><span class="discovery-label">出会ったいきもの </span><b class="num">{found}</b><span class="dim"> / {species.length} 種</span></span>
           <progress value={found} max={species.length || 1} aria-label="図鑑の発見状況" />
           <span class="num dim">{species.length ? Math.round(found / species.length * 100) : 0}%</span>
+        </div>
         </div>
         <div class="zukan-tools">
           <label class="zukan-search"><span>名前で探す</span><input type="search" aria-label="生物名を検索" placeholder="名前を入力…" value={filters.query} onInput={e => changeFilter({ query: e.currentTarget.value })} /></label>
           <label><span>分類</span><select aria-label="生物の分類" value={filters.taxon} onChange={e => changeFilter({ taxon: e.currentTarget.value })}><option value="">すべての分類</option>{TAXA.filter(taxon => species.some(s => s.taxon.group === taxon.id)).map(taxon => <option key={taxon.id} value={taxon.id}>{taxon.ja}</option>)}</select></label>
           <label><span>干潟</span><select aria-label="干潟で絞り込む" value={filters.map} onChange={e => changeFilter({ map: e.currentTarget.value })}><option value="">すべての干潟</option>{[...app.data.maps.values()].map(map => <option key={map.id} value={map.id}>{map.names.ja}</option>)}</select></label>
-          <label><span>記録</span><select aria-label="発見状況" value={filters.status} onChange={e => changeFilter({ status: e.currentTarget.value })}><option value="">すべての記録</option><option value="known">発見済み</option><option value="unknown">未発見</option><option value="captured">採集済み</option></select></label>
+          <label><span>記録</span><select aria-label="発見状況" value={filters.status} onChange={e => changeFilter({ status: e.currentTarget.value })}><option value="">すべての記録</option><option value="known">発見済み</option><option value="unknown">未発見</option><option value="captured">採集済み</option><option value="behaviors">行動未完了</option></select></label>
         </div>
+        {filters.map && <div class="zukan-map-mode" aria-label="干潟の表示対象"><span>この干潟の</span><button class="btn sm" aria-pressed={filters.mapMode !== 'encounters'} onClick={() => changeFilter({ mapMode: 'habitat' })}>出現する生物</button><button class="btn sm" aria-pressed={filters.mapMode === 'encounters'} onClick={() => changeFilter({ mapMode: 'encounters' })}>出会った生物</button></div>}
         <div class="zukan-body">
           <section class="zukan-index" aria-label="生物の一覧">
             <div class="zukan-index-head"><span aria-live="polite">{visible.length} 種を表示</span>{Object.values(filters).some(Boolean) && <button class="btn ghost sm" onClick={() => changeFilter(EMPTY_FILTERS)}>絞り込み解除</button>}</div>
@@ -136,7 +147,7 @@ export function Zukan({ app }: { app: App }) {
                       const pp = progress[s.id], k = isKnown(pp);
                       return <li key={s.id}><button class={`zukan-item ${s.id === sp?.id ? 'on' : ''} ${k ? 'is-known' : 'is-unknown'}`} aria-pressed={s.id === sp?.id} data-species={s.id} onClick={() => { setSel(s.id); setSelected(true); }}>
                         {k && <img class="zukan-thumb" src={`${import.meta.env.BASE_URL}data/photos/${s.id}.jpg`} alt="" loading="lazy" width="64" height="48" />}
-                        <span class="zukan-item-text"><span class={`name ${k ? '' : 'unknown'}`}>{s.names.ja}</span>
+                        <span class="zukan-item-text"><span class={`name ${k ? '' : 'unknown'}`}>{s.names.ja}{pp?.bookmarked && <span class="zukan-saved-mark" aria-label="しおり登録済み"><BookmarkIcon /></span>}</span>
                           {k && <span class="status-dots"><i class={pp?.discovered ? 'on' : ''}>{t('zukan.discovered')}</i><i class={pp?.observed ? 'on' : ''}>{t('zukan.observed')}</i>{s.collectable && <i class={pp?.captured ? 'on' : ''}>{t('zukan.captured')}</i>}</span>}
                         </span>
                         <span class="zukan-item-arrow" aria-hidden="true">›</span>
@@ -145,7 +156,7 @@ export function Zukan({ app }: { app: App }) {
                   </ul>
                 </section>;
               })}
-              {!visible.length && <div class="zukan-no-results"><h3>該当するいきものがいません</h3><p>名前や絞り込み条件を変えて探してみましょう。</p><button class="btn sm" onClick={() => changeFilter(EMPTY_FILTERS)}>すべて表示</button></div>}
+              {!visible.length && tab === 'bookmarks' && !bookmarkedTotal ? <div class="zukan-no-results bookmark-empty"><BookmarkIcon /><h3>しおりはまだありません</h3><p>生物のページでしおりを挟むと、<br />ここからすぐに開けます。</p><button class="btn sm" onClick={() => { setTab('catalog'); changeFilter(EMPTY_FILTERS); }}>図鑑を見る</button></div> : !visible.length && <div class="zukan-no-results"><h3>該当するいきものがいません</h3><p>名前や絞り込み条件を変えて探してみましょう。</p><button class="btn sm" onClick={() => changeFilter(EMPTY_FILTERS)}>すべて表示</button></div>}
             </div>
           </section>
           {sp && showDetail && (
@@ -153,21 +164,23 @@ export function Zukan({ app }: { app: App }) {
               <button class="btn ghost sm zukan-back" onClick={() => setSelected(false)}>‹ 一覧に戻る</button>
               <div class="zukan-detail-heading">
                 {known && <span class="eyebrow">{TAXA.find(taxon => taxon.id === sp.taxon.group)?.ja}{sp.taxon.family ? ` / ${sp.taxon.family}` : ''}</span>}
-                <h3>{sp.names.ja}</h3>
+                <div class="zukan-specimen-title"><h3>{sp.names.ja}</h3><button class={`icon-btn bookmark-toggle ${p?.bookmarked ? 'on' : ''}`} aria-label={p?.bookmarked ? 'しおりを外す' : 'しおりを挟む'} aria-pressed={!!p?.bookmarked} onClick={() => { const saved = enc.toggleBookmark(sp.id); if (tab === 'bookmarks' && !saved) setSelected(false); }}><BookmarkIcon /><span>{p?.bookmarked ? 'しおり登録済み' : 'しおりを挟む'}</span></button></div>
                 {known && <div class="sci">{sp.names.sci}</div>}
               </div>
               {known && <>
-              <div class="zukan-plate">
-                {photo ? <img class="zukan-preview zukan-photo" src={`${import.meta.env.BASE_URL}data/photos/${sp.id}.jpg`} alt={`${sp.names.ja}の3Dモデルの静止画像`} width="640" height="400" /> : <canvas key={`${quality}-${retry}`} ref={canvasRef} class="zukan-preview" aria-label={`${sp.names.ja}の3Dモデル。ドラッグで回転、ピンチで拡大縮小`} />}
-                <span class="zukan-plate-caption">{photo ? 'モデルの静止画像' : 'ドラッグで回転 · 拡大縮小'}</span>
-                {loading && <p class="small dim" role="status">モデルを読み込み中…</p>}
-                {previewError && !photo && <div class="preview-error" role="alert">表示できませんでした。<button class="btn sm" onClick={() => setRetry(retry + 1)}>再読み込み</button></div>}
-              </div>
               <div class="zukan-sections" aria-label="記録の種類">
                 <button class={`btn sm ${section === 'overview' ? 'on' : ''}`} aria-pressed={section === 'overview'} onClick={() => setSection('overview')}>生態</button>
                 <button class={`btn sm ${section === 'behaviors' ? 'on' : ''}`} aria-pressed={section === 'behaviors'} onClick={() => setSection('behaviors')}>行動 <span class="num">{recordedCount}/{sp.encyclopedia.behaviors.length}</span></button>
                 {sp.collectable && <button class={`btn sm ${section === 'individuals' ? 'on' : ''}`} aria-pressed={section === 'individuals'} onClick={() => setSection('individuals')}>採集 <span class="num">{inds.length}</span></button>}
+                <button class={`btn sm ${section === 'history' ? 'on' : ''}`} aria-pressed={section === 'history'} onClick={() => setSection('history')}>履歴</button>
               </div>
+              {showPreview && <div class="zukan-plate">
+                {photo ? <img class="zukan-preview zukan-photo" src={`${import.meta.env.BASE_URL}data/photos/${sp.id}.jpg`} alt={`${sp.names.ja}の3Dモデルの静止画像`} width="640" height="400" /> : <canvas key={`${quality}-${retry}`} ref={canvasRef} class="zukan-preview" aria-label={`${sp.names.ja}の3Dモデル。ドラッグで回転、ピンチで拡大縮小`} />}
+                <span class="zukan-plate-caption">{photo ? 'モデルの静止画像' : 'ドラッグで回転 · 拡大縮小'}</span>
+                {loading && <p class="small dim" role="status">モデルを読み込み中…</p>}
+                {previewError && !photo && <div class="preview-error" role="alert">表示できませんでした。<button class="btn sm" onClick={() => setRetry(retry + 1)}>再読み込み</button></div>}
+              </div>}
+              {section === 'history' && <EncounterHistory progress={p!} maps={app.data.maps} />}
               {section === 'overview' && <section class="zukan-notes" aria-label="生態の記録">
               <div class="tags">
                 {!sp.collectable && <span class="tag">{t('zukan.notCollectable')}</span>}
@@ -175,6 +188,7 @@ export function Zukan({ app }: { app: App }) {
                 {sp.sex.dimorphic && <span class={`tag ${p?.maleSeen ? 'on' : ''}`}>{t('zukan.male')}</span>}
                 {sp.sex.dimorphic && <span class={`tag ${p?.femaleSeen ? 'on' : ''}`}>{t('zukan.female')}</span>}
               </div>
+              <EncounterConditions key={`${sp.id}-${filters.map}`} species={sp} maps={app.data.maps} selectedMap={filters.map} />
               <p class="desc">{sp.encyclopedia.description}</p>
               <div class="habitat">{t('zukan.habitat')} ・ {sp.encyclopedia.habitatHint}</div>
               <div class="zukan-locations"><span>出現する干潟</span><div>{[...app.data.maps.values()].filter(map => livesOnMap(sp, map)).map(map => <span class="tag" key={map.id}>{map.names.ja}</span>)}</div><small class="dim">季節・潮位・時間によって出会いやすさは変わります。</small></div>
@@ -214,7 +228,7 @@ export function Zukan({ app }: { app: App }) {
                   {!inds.length && <p class="dim small">採集すると、体長や重さを記録できます。</p>}
                   {inds.length > 0 && (
                     <div class="zukan-table-wrap"><table class="ind-table">
-                      <thead><tr><th>個体番号</th><th>体長</th><th>重さ</th><th>性別</th><th>成長・特徴</th></tr></thead>
+                      <thead><tr><th>個体番号</th><th>体長</th><th>重さ</th><th>性別</th><th>成長・特徴</th><th>採集日時・干潟</th></tr></thead>
                       <tbody>
                         {inds.slice().reverse().slice(0, 30).map((r) => (
                           <tr key={r.id}>
@@ -223,6 +237,7 @@ export function Zukan({ app }: { app: App }) {
                             <td class="num">{r.weight_g.toFixed(1)} g</td>
                             <td>{t(`sex.${r.sex}`)}</td>
                             <td class="dim">{stageName(r.stage)} {r.traits.map(traitName).join(' ')}</td>
+                            <td class="dim">{recordDate(r.caughtAt)}<br />{r.caughtMap ? app.data.maps.get(r.caughtMap)?.names.ja ?? '不明な干潟' : '干潟不明'}</td>
                           </tr>
                         ))}
                       </tbody>

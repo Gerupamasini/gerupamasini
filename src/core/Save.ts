@@ -11,7 +11,17 @@ import { normalizeEquipment } from '../aquarium/state';
 import { MAX_TANK_ANIMALS, tankAnimalCapacity, tankUnlocked } from '../aquarium/progression';
 import { progressionOf } from '../aquarium/catalog';
 
+/** Aggregated field encounters, recorded once per observe/capture action, never per frame. */
+export interface MapEncounters {
+  firstSeen: number;
+  lastSeen: number;
+  observations: number;
+  captures: number;
+}
+
 export interface SpeciesProgress {
+  bookmarked?: boolean;
+  encounters?: Record<string, MapEncounters>;
   discovered?: number;
   observed?: number;
   captured?: number;
@@ -59,9 +69,11 @@ const recordSchema = z.object({
   length_mm: finite.positive().max(10000), weight_g: finite.nonnegative(),
   sex: z.enum(['m', 'f', 'unknown']), stage: z.string().min(1), traits: z.array(z.string()),
   gravid: z.boolean().optional(), dress: z.boolean().optional(), caughtAt: finite,
-  caughtWhere: z.tuple([finite, finite]), tideLevel: finite,
+  caughtWhere: z.tuple([finite, finite]), caughtMap: z.string().min(1).optional(), tideLevel: finite,
 });
 const progressSchema = z.object({
+  bookmarked: z.boolean().optional(),
+  encounters: z.record(z.string().min(1), z.object({ firstSeen: finite, lastSeen: finite, observations: count, captures: count })).optional(),
   discovered: finite.optional(), observed: finite.optional(), captured: finite.optional(),
   maleSeen: finite.optional(), femaleSeen: finite.optional(),
   behaviors: z.record(z.string(), finite), individuals: z.array(recordSchema), nextNumber: count.min(1),
