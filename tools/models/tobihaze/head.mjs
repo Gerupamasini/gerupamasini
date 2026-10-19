@@ -169,9 +169,9 @@ export function loftSDF(T) {
 }
 
 /** The dermal cup of the left eye (z > 0) as a field, and the rim's height for an azimuth (exported for the rig). */
-export function cupField(K = HEAD_SCULPT) {
+export function cupField(K = HEAD_SCULPT, eyeDy = 0) {
   const E = HEAD.eye, re = E.d / 2, C = K.cup, lo = (C.low * Math.PI) / 180;
-  const c = [E.s, E.y, E.z];
+  const c = [E.s, E.y + eyeDy, E.z];
   // azimuth about the vertical through the globe's centre: 0 lateral (+z), +90° forward (−s)
   const rimH = (px, pz) => { const D = Math.atan2(-px, pz) - lo; return C.A - C.B * Math.cos(D) - C.C * Math.cos(2 * D); };
   const col = C.collar;
@@ -192,8 +192,8 @@ export function cupField(K = HEAD_SCULPT) {
   };
 }
 
-/** The head's distance function in HL units (s, y, z). opts.parts: also return the parts (for the section plots). */
-export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
+/** The head's distance function in HL units (s, y, z); f.parts gives the parts (for the section plots and the rig). */
+export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
   const E = HEAD.eye, re = E.d / 2;
   const el = (p, zc = 0) => ellipsoid([p.c[0], p.c[1], zc], p.r);
   const loft = loftSDF(loftTables(K.loft));
@@ -210,8 +210,9 @@ export function headSDF(K = HEAD_SCULPT, { cut = true } = {}) {
   };
   const rear = el(K.cheekRear);
   const cheek = (x, y, z) => smax(smin(balloon(x, y, z), rear(x, y, z), K.cheekRear.blend), (x - sOp(y)) * 0.9, K.cheekClip.blend);
-  const cup = cupField(K), cupL = cup.field;
-  const eyeL = [E.s, E.y, E.z];
+  // eyeDy: the globe moved along y (the blink's morph target is the head built round a retracted eye)
+  const cup = cupField(K, eyeDy), cupL = cup.field;
+  const eyeL = [E.s, E.y + eyeDy, E.z];
   const socketL = sphere(eyeL, re + K.cup.gap);
   const septum = el(K.septum);
   const b = K.blend;

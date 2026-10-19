@@ -103,10 +103,13 @@ const F = (o, u, v) => frame(o, u, v);
 const mid = (a, b, t = 0.5) => v3.lerp(a, b, t);
 const off = (p, d) => v3.add(p, d);
 
-/** Bone list: { name, joint, side: 'L'|'R'|'M', field, cart? } (cart: cartilage, drawn blue in the x-ray view). */
+/**
+ * Bone list: { name, joint, side: 'L'|'R'|'M', field, cart, tooth } (cart: cartilage, drawn blue in the x-ray view;
+ * tooth: the teeth, which also show in the open mouth of the skin builds).
+ */
 export function skullBones() {
   const bones = [];
-  const add = (name, joint, side, field, cart = false) => bones.push({ name, joint, side, field, cart });
+  const add = (name, joint, side, field, cart = false) => bones.push({ name, joint, side, field, cart, tooth: name.startsWith('Teeth_') });
   // the right side is the left one mirrored (z → −z), so every frame, bend and winding stays consistent
   const sided = (name, joint, make, cart = false) => {
     const fL = make();
@@ -155,8 +158,9 @@ export function skullBones() {
     strap([L.pmxFront, [0.012, 0.19, 0.004], off(L.pmxAscBase, [0, 0, 0.006])], 0.03, 0.012, [1, 0, 0]),  // the body at the symphysis
     sheet(pmxArm.map((p, i) => off(p, [0, 0.022 - i * 0.002, 0])), pmxArm.map((p) => off(p, [0, -0.012, 0])), 0.012),
     rod([0.040, 0.27, 0.025], [0.05, 0.25, 0.04], 0.008, 0.006),                                          // articular process
-    teeth(pmxArm.map((p) => off(p, [0.002, -0.016, 0.002])), 13, 0.024, 0.0045, [0, -1, 0.15], 0.5),    // a single row, the front canines largest
   ], 0.004));
+  // a single row of conical teeth, the front ones enlarged canines (Murdy 1989; Saberi et al. 2024)
+  sided('Teeth_Premaxilla', 'J_premax', () => teeth(pmxArm.map((p) => off(p, [0.002, -0.016, 0.002])), 13, 0.024, 0.0045, [0, -1, 0.15], 0.5));
   add('Cart_Rostral', 'J_premax', 'M', ellipsoidF(F(L.rostral, [0.3, 1, 0], [1, 0, 0]), [0.03, 0.02, 0.028]), true);
   // the maxilla: a slender rod from its twisted anterior loop (on the palatine and the premaxilla's articular
   // process) down and back to the rictus, its posterior end a flattened blade tied to the coronoid process
@@ -198,8 +202,8 @@ export function skullBones() {
   sided('Dentary', 'J_imj', () => unionOf([
     sheet(dentTop, dentBot, 0.016),
     plateFromPoints([[0.245, 0.135, 0.155], [0.285, 0.13, 0.165], L.coronoid, [0.30, 0.25, 0.168], [0.25, 0.16, 0.157]], 0.012),   // coronoid process
-    teeth(dentTop.slice(0, 5).map((p) => off(p, [0.004, 0.004, 0.0])), 12, 0.02, 0.004, [0, 1, 0.1], 0.55),
   ], 0.006));
+  sided('Teeth_Dentary', 'J_imj', () => teeth(dentTop.slice(0, 5).map((p) => off(p, [0.004, 0.004, 0.0])), 12, 0.02, 0.004, [0, 1, 0.1], 0.55));
   // the anguloarticular: a triangular block with the C-shaped socket behind and the retroarticular knob below
   sided('Anguloarticular', 'J_jaw', () => unionOf([
     plateFromPoints([[0.26, 0.06, 0.155], [0.31, 0.04, 0.168], L.jawSocket, [0.33, 0.135, 0.172], [0.27, 0.15, 0.158]], 0.022),
