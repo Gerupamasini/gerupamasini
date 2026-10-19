@@ -28,6 +28,7 @@
 - 形とマテリアルは種・形態ごとに共有し、個体差はユニフォームか頂点色で。小さい種と貝は遠景を InstancedMesh で 1 種 1 回の描画に。
 - 手続き生成の種も同じ予算と、画質の設定（`lod1Count`、`hero`、`modelTier`、`viewScale`、`creatureScale`）に従う。
 - モデルを入れる前に `npm run models:budget` で確かめる（手続き生成の種は数えて [容量予算](docs/quality/model-budget.md) の §5 に書く）。
+- モデルを頼むときは [依頼の手引き](docs/quality/model-request.md)（納品の形、段階の作り分け、透過、砂煙、確かめ方、依頼書のひな形）を渡す。
 
 ## 確かめ方
 
