@@ -39,17 +39,25 @@ controls.enableDamping = !capture;
 const clayMat = new THREE.MeshStandardMaterial({ color: 0xb9b2a8, roughness: 0.62, metalness: 0 });
 const clayEye = new THREE.MeshStandardMaterial({ color: 0x9c958c, roughness: 0.35, metalness: 0 });
 const silMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+// x-ray: the skeleton opaque (alizarin red, as a cleared and stained specimen) inside a faint skin
+const boneMat = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5, metalness: 0 });
+const cartMat = new THREE.MeshStandardMaterial({ color: 0x3f7fd0, roughness: 0.5, metalness: 0 });
+const ghostMat = new THREE.MeshStandardMaterial({ color: 0xe8dc8a, roughness: 0.6, metalness: 0, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
 let model = null, original = new Map(), mode = 'clay', box = new THREE.Box3(), regions = {};
 
 function applyMode(m) {
   mode = m;
   if (!model) return;
-  scene.background = new THREE.Color(m === 'silhouette' ? 0xffffff : 0x6f6f6f);
+  scene.background = new THREE.Color(m === 'silhouette' || m === 'xray' || m === 'bones' ? 0xffffff : 0x6f6f6f);
   model.traverse((o) => {
     if (!o.isMesh) return;
     if (!original.has(o)) original.set(o, o.material);
     const eye = /eye/i.test(o.name);
-    o.material = m === 'clay' ? (eye ? clayEye : clayMat) : m === 'silhouette' ? silMat : original.get(o);
+    // bones are the meshes named Bone_* (Cart_* for cartilage); in 'xray' the rest is a faint skin, in 'bones' hidden
+    const bone = /^Bone_/.test(o.name), cart = /^Cart_/.test(o.name);
+    o.visible = !(m === 'bones' && !bone && !cart) && !((m === 'clay' || m === 'silhouette' || m === 'textured') && (bone || cart));
+    if (m === 'xray' || m === 'bones') o.material = bone ? boneMat : cart ? cartMat : ghostMat;
+    else o.material = m === 'clay' ? (eye ? clayEye : clayMat) : m === 'silhouette' ? silMat : original.get(o);
   });
 }
 
