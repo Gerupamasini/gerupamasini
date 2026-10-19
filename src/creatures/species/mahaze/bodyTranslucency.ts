@@ -2,6 +2,7 @@ import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type 
 import type { GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { createProfileTexture } from './hero/BodyMaterial.js';
 import { morphGLSL, morphUniforms, type MorphPick, type MorphTable } from './colourMorph.js';
+import { COLUMN, COLUMN_GLSL, COLUMN_PLAIN, columnHn } from './skeleton.js';
 
 /**
  * The goby's translucent body on the flat and in the tank (every tier but the observed hero, which has the volumetric
@@ -41,6 +42,8 @@ const ORGANS: { s: number; y: number; z: number; rs: number; ry: number; rz: num
 const N_ORGANS = ORGANS.length;
 /** the standard length the hero's fixed millimetre figures (head, gills, column) were set for */
 const REF_SL = 41;
+/** the マハゼ's vent (the body cavity's hind end): tools/models/mahaze/anatomy.mjs anus, at its 41 mm SL */
+const MAHAZE_VENT = 22.45 / 41;
 
 type V3 = [number, number, number];
 interface Profile { n: number; data: number[] }
@@ -94,6 +97,9 @@ export interface GobyAnatomy {
   /** the vertebral column: first centrum, last; its radius is scaled by this */
   column: [number, number];
   columnScale: number;
+  /** its shape (./skeleton.js): height in the section along it, radius at its ends, the vent where the cavity ends; ct:
+   * the マハゼ's, from a goby skeleton's CT (high over the cavity, haemal spines behind the vent, ribs) */
+  skeleton: { hn: [number, number, number, number]; radius: [number, number]; vent: number; ct: boolean };
   jaws: [number, number, number, number];
   organs: Organ[];
 }
@@ -141,6 +147,15 @@ const DEFAULT_JAWS: [number, number, number, number] = [3.0, 4.6, 2.4, 3.2];
 const GILL_K: V3 = [0.0077, 0.1285, 0.109];
 const GILL_HN: [number, number, number, number] = [-1.0, -0.6, -0.1, 0.45];
 
+/** the column's height (./skeleton.js) and radius at s mm in one body */
+export function columnAt(an: GobyAnatomy, p: Profile, f: Frame, s: number): { y: number; r: number } {
+  const q = sectionAt(p, f, s);
+  const k = an.skeleton, u = Math.min(Math.max((s - an.column[0]) / (an.column[1] - an.column[0]), 0), 1);
+  return { y: q.yc + columnHn(s, an.column[0], k.vent, f.SL, k.hn) * q.t, r: (k.radius[0] + (k.radius[1] - k.radius[0]) * u) * an.columnScale };
+}
+/** the earlier column of the other gobies (level, thinning to the tail; the vent only shapes the マハゼ's) */
+const plainSkeleton = (f: Frame): GobyAnatomy['skeleton'] => ({ hn: [...COLUMN_PLAIN.hn], radius: [...COLUMN_PLAIN.radius], vent: 0.55 * f.SL, ct: false });
+
 /** The tissue and organs of one goby body: its GLB's own anatomy where it ships one, else its species' or the マハゼ's. */
 export function anatomyFor(name: string, x: GobyBodyExtras): GobyAnatomy {
   const f = x.fishFrame!, p = x.profile!, sc = f.SL / REF_SL;
@@ -148,6 +163,7 @@ export function anatomyFor(name: string, x: GobyBodyExtras): GobyAnatomy {
   const a = x.anatomy;
   if (a?.organs?.length) {
     return {
+      skeleton: plainSkeleton(f),
       sigS: a.sigS ?? 1.35, sigA: a.sigA ?? [0.02, 0.048, 0.12], head: a.headWin ?? [8.5 * sc, 11.5 * sc],
       gill: a.gillWin ?? [7.2 * sc, 8.6 * sc, 10.3 * sc, 11.3 * sc], gillHn: a.gillHn ?? GILL_HN, gillK: a.gillK ?? GILL_K,
       column: [vStart, a.spine?.[1] ?? 0.99 * f.SL], columnScale: sc, jaws: a.jaw ?? (f.jaws as typeof DEFAULT_JAWS | undefined) ?? DEFAULT_JAWS,
@@ -156,14 +172,22 @@ export function anatomyFor(name: string, x: GobyBodyExtras): GobyAnatomy {
   }
   if (/^Himehaze/i.test(name)) {
     return {
+      skeleton: plainSkeleton(f),
       sigS: HIMEHAZE.sigS, sigA: HIMEHAZE.sigA, head: HIMEHAZE.head, gill: HIMEHAZE.gill, gillHn: GILL_HN, gillK: GILL_K,
       column: [vStart, HIMEHAZE.columnEnd], columnScale: sc, jaws: DEFAULT_JAWS, organs: HIMEHAZE.organs(),
     };
   }
-  return {
+  const an: GobyAnatomy = {
     sigS: 1.35, sigA: [0.02, 0.048, 0.12], head: [8.5 * sc, 11.5 * sc], gill: [7.2 * sc, 8.6 * sc, 10.3 * sc, 11.3 * sc], gillHn: GILL_HN, gillK: GILL_K,
     column: [vStart, 40.6 * sc], columnScale: sc, jaws: (f.jaws as typeof DEFAULT_JAWS | undefined) ?? DEFAULT_JAWS, organs: organsFor(p, f),
+    skeleton: { hn: [...COLUMN.hn], radius: [...COLUMN.radius], vent: MAHAZE_VENT * f.SL, ct: true },
   };
+  // the kidney and the peritoneum on the cavity's roof lie right under the column, high over the cavity (./skeleton.js)
+  const roof = an.organs[2], kidney = an.organs[3];
+  const col = columnAt(an, p, f, kidney.c.x);
+  kidney.c.y = col.y - col.r - kidney.r.y;
+  roof.c.y = kidney.c.y - kidney.r.y - 0.6 * roof.r.y;
+  return an;
 }
 
 const VERT_PARS = /* glsl */ `
@@ -181,6 +205,8 @@ uniform sampler2D uGbPigment;
 uniform vec4 uGbFrame;        // S0, Y0, SL, SEND (mm)
 uniform vec4 uGbJaws;         // dense lip and jaw tissue: s ramp (x → y), height ramp (z → w)
 uniform vec4 uGbColumn;       // vertebral column: first centrum, last (mm), radius scale, length of a vertebra (mm)
+uniform vec4 uGbColHn;        // … its height in the section: first centrum, over the cavity, at the vent, caudal base
+uniform vec3 uGbColShape;     // … the vent (mm), its radius at the first centrum and the last (mm at 41 mm SL)
 uniform vec3 uGbSigE;         // extinction of the background per mm: absorption + scattering out of the forward cone
 uniform vec3 uGbSigL;         // diffusion attenuation of the light per mm
 uniform vec2 uGbHead;         // the dense head fades out over s
@@ -304,22 +330,26 @@ float gbEll(vec3 o, vec3 d, float L, vec3 c, vec3 r, inout float tFirst) {
   float h2 = clamp(cc + 1.0 - b * b / a, 0.0, 1.0);
   return (a1 - a0) * sqrt(1.0 - h2);
 }
+${COLUMN_GLSL}
+// the column's height at s mm (./skeleton.js)
+float gbColumnY(float s) {
+  GbSec q = gbSection(s);
+  return q.yc + gobyColumnHn(s, uGbColumn.x, uGbColShape.x, uGbFrame.z, uGbColHn) * q.t;
+}
 // Gaussian tube along the vertebral column, denser at the centrum rims
 float gbSpine(vec3 o, vec3 d, float L, inout float tFirst) {
-  GbSec q = gbSection(clamp(o.x, uGbColumn.x, uGbColumn.y));
-  float spineY = q.yc + 0.06 * q.t;
+  float spineY = gbColumnY(clamp(o.x, uGbColumn.x, uGbColumn.y));
   vec2 dp = d.yz;
   float dd = max(dot(dp, dp), 0.02);
   float tc = 0.0, sc = 0.0;
   for (int k = 0; k < 2; k++) {
     tc = -dot(o.yz - vec2(spineY, 0.0), dp) / dd;
     sc = o.x + d.x * clamp(tc, 0.0, L);
-    GbSec qs = gbSection(clamp(sc, uGbColumn.x, uGbColumn.y));
-    spineY = qs.yc + 0.06 * qs.t;
+    spineY = gbColumnY(clamp(sc, uGbColumn.x, uGbColumn.y));
   }
   vec2 cpt = o.yz - vec2(spineY, 0.0) + dp * tc;
   float u = clamp((sc - uGbColumn.x) / (uGbColumn.y - uGbColumn.x), 0.0, 1.0);
-  float r = mix(0.34, 0.17, u) * uGbColumn.z;
+  float r = mix(uGbColShape.y, uGbColShape.z, u) * uGbColumn.z;
   float sig = r / sqrt(dd);
   float g = exp(-dot(cpt, cpt) / (r * r)) * sig * 0.8862 * (gbErf((L - tc) / sig) - gbErf(-tc / sig));
   float win = smoothstep(uGbColumn.x - 0.4, uGbColumn.x + 0.4, sc) * (1.0 - smoothstep(uGbColumn.y - 0.4, uGbColumn.y + 0.4, sc));
@@ -613,6 +643,8 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbFrame: { value: new Vector4(f.S0, f.Y0, f.SL, f.SEND) },
     uGbJaws: { value: new Vector4(...an.jaws) },
     uGbColumn: { value: new Vector4(an.column[0], an.column[1], an.columnScale, (f.SL - an.column[0]) / (x.vertebrae?.count ?? 31)) },
+    uGbColHn: { value: new Vector4(...an.skeleton.hn) },
+    uGbColShape: { value: new Vector3(an.skeleton.vent, ...an.skeleton.radius) },
     uGbSigE: { value: sigE },
     uGbSigL: { value: sigL },
     uGbHead: { value: new Vector2(...an.head) },

@@ -2,8 +2,9 @@ import { closeSync, openSync, readSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MeshPhysicalMaterial, MeshStandardMaterial, ShaderLib } from 'three';
-import { anatomyFor, gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
+import { anatomyFor, columnAt, gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody, organsFor, type GobyBodyExtras } from '../../src/creatures/species/mahaze/bodyTranslucency';
 import { morphPick } from '../../src/creatures/species/mahaze/colourMorph.js';
+import { createBodyMaterial } from '../../src/creatures/species/mahaze/hero/BodyMaterial.js';
 
 // The gobies' bodies are translucent on the flat and in the tank, not only in the observation's hero material.
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -91,6 +92,50 @@ describe('the goby organs mapped onto each body', GLB_READS, () => {
     expect(ma.organs.every((o) => o.s === 0)).toBe(true);
     expect(ma.organs[2].k.x).toBe(3.8);
     expect(ma.jaws).toEqual(bodyExtras('mahaze/mahaze_adult.lod1.glb').fishFrame!.jaws);
+  });
+
+  it('the マハゼ\'s column lies as a goby skeleton\'s CT has it, its kidney and peritoneum right under it; the others keep theirs', () => {
+    for (const stage of ['juvenile', 'subadult', 'adult']) {
+      const { name, extras: x } = body(`mahaze/mahaze_${stage}.lod1.glb`);
+      const an = anatomyFor(name, x), p = x.profile!, f = x.fishFrame!;
+      expect(an.skeleton.ct, stage).toBe(true);
+      // the vent at 55 % SL (the build tool's anus)
+      expect(an.skeleton.vent / f.SL).toBeCloseTo(0.548, 3);
+      // height above the belly as a fraction of the depth: 70 % over the body cavity, about the middle in the peduncle
+      const frac = (s: number) => {
+        const k = Math.round((s / f.SEND) * (p.n - 1));
+        const [yc, t, b] = p.data.slice(k * 6, k * 6 + 3);
+        return (columnAt(an, p, f, s).y - (yc - b)) / (t + b);
+      };
+      expect(frac(0.5 * (an.column[0] + an.skeleton.vent)), stage).toBeCloseTo(0.69, 1);
+      expect(frac(0.9 * f.SL), stage).toBeCloseTo(0.5, 1);
+      // the kidney touches the column from below, the peritoneum the kidney
+      const roof = an.organs[2], kidney = an.organs[3], col = columnAt(an, p, f, kidney.c.x);
+      expect(kidney.c.y + kidney.r.y).toBeCloseTo(col.y - col.r, 5);
+      expect(roof.c.y + roof.r.y).toBeGreaterThan(kidney.c.y - kidney.r.y);
+      expect(roof.c.y).toBeLessThan(kidney.c.y);
+    }
+    for (const g of ['edohaze/edohaze', 'edohaze/edohaze_gravid', 'himehaze/himehaze', 'himehaze/himehaze_male']) {
+      const an = anatomyFor(body(`${g}.lod1.glb`).name, bodyExtras(`${g}.lod1.glb`));
+      expect(an.skeleton, g).toMatchObject({ ct: false, hn: [0.06, 0.06, 0.06, 0.06], radius: [0.34, 0.17] });
+    }
+  });
+
+  it('the observed マハゼ draws that skeleton (ribs, haemal spines behind the vent); the other gobies\' heroes as before', () => {
+    const hero = (rel: string) => {
+      const { name, extras: x } = body(rel);
+      return createBodyMaterial({
+        textures: {}, profileTexture: null, frame: x.fishFrame, vertebrae: x.vertebrae, shared: {}, capRect: { y0: 0, y1: 1, z0: 0, z1: 1 },
+        anatomy: anatomyFor(name, x),
+      });
+    };
+    const ma = hero('mahaze/mahaze_adult.hero.glb'), edo = hero('edohaze/edohaze.hero.glb');
+    expect(ma.defines).toHaveProperty('GOBY_CT_SKELETON');
+    expect(edo.defines).not.toHaveProperty('GOBY_CT_SKELETON');
+    expect(ma.fragmentShader).toContain('pleural ribs');
+    // the エドハゼ's hero keeps the organs and column it was first given
+    expect((edo.uniforms.uOrgC.value as { toArray(): number[] }[])[3].toArray()).toEqual([16.8, 3.2, 0]);
+    expect((edo.uniforms.uColHn.value as { toArray(): number[] }).toArray()).toEqual([0.06, 0.06, 0.06, 0.06]);
   });
 });
 
