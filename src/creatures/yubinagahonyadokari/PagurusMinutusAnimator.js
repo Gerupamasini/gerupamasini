@@ -13,13 +13,13 @@
 //  * chelipeds: rest/alert poses and IK tasks (pick, scoop sediment, bring to mouth, probe an aperture)
 //  * the hidden abdomen: bones laid along the whorl centre line of the shell actually carried
 import * as THREE from 'three';
-import { Rig, solveChelipedIK, quatFromDir, yawFor } from './PagurusMinutusRig.js';
+import { Rig, solveChelipedIK, quatFromDir } from './PagurusMinutusRig.js';
 import { MORPH, abdomenRadius } from './PagurusMinutusMorphology.js';
 import { CHELA_POSES, JOINT_KEYS, hiddenPoseFor, legFoldsFor, chelaLidsFor } from './PagurusMinutusHide.js';
 import { clamp, damp, lerp, smoothstep, fbm1, noise1, Twitch, SeededRandom } from './PagurusMinutusUtil.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qi = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
 const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 
@@ -299,7 +299,6 @@ export class Animator {
 
   // ─────────────────────────────────────────────────────────────────────────────────────────────
   updateChelipeds(dt, cmd, env) {
-    const crab = this.crab;
     const tw = this.twitchChela.update(dt, cmd.restless ? 2 : 1);
     const block = smoothstep(0, 1, this.ch.chelipeds);
     for (const side of ['L', 'R']) {

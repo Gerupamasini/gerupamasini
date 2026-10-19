@@ -14,12 +14,11 @@
 import * as THREE from 'three';
 import { Rig, solveLegIK } from './PagurusMinutusRig.js';
 import { MORPH } from './PagurusMinutusMorphology.js';
-import { clamp, damp, lerp, smoothstep, wrapAngle, fbm1 } from './PagurusMinutusUtil.js';
+import { clamp, damp, lerp, smoothstep, wrapAngle } from './PagurusMinutusUtil.js';
 
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
 const _Z = new THREE.Vector3(0, 0, 1);
-const UP = new THREE.Vector3(0, 1, 0);
 
 /** neutral foot positions in the body frame (SL units, x lateral (left +), z forward) [P][S] */
 export const NEUTRAL_FEET = {
@@ -399,9 +398,4 @@ export class Locomotion {
       legs: Object.values(this.legs).map((l) => ({ key: l.key, contact: l.contact, planted: l.planted.clone(), target: l.footTarget.clone(), foot: l.footWorld.clone(), progress: l.stepProgress })),
     };
   }
-}
-
-/** non-periodic idle weight shift for standing crabs (noise, not sine) */
-export function idleSway(t, seed) {
-  return fbm1(t * 0.35, seed) * 0.02;
 }

@@ -465,6 +465,3 @@ export function sandColour(sub: string | undefined, drawn: Readonly<Color> | nul
   const l = drawn ? (drawn.r + drawn.g + drawn.b) / 3 : 0;
   return l > 1e-4 ? out.set(drawn!.r, drawn!.g, drawn!.b).multiplyScalar((c[0] + c[1] + c[2]) / 3 / l) : out;
 }
-
-/** the sand's colour as a Color (for a viewer's bed) */
-export const sandColor = (sub = 'sand') => new Color(...(SUBSTRATE_TINT[sub] ?? SUBSTRATE_TINT.sand));

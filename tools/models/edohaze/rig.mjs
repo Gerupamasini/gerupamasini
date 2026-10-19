@@ -383,3 +383,6 @@ export function buildClips() {
   });
   return [idle, swim, yawn];
 }
+
+// the rest pose (perched, fins at their resting fold): the far tier's merged fins are posed at it
+export const REST_POSE = computePose(defaultPose(), AXES);

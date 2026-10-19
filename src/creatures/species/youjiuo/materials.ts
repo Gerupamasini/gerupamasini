@@ -1,5 +1,5 @@
 import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial, Vector4, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
-import { DORSAL, EYE, MODEL_TL, S_CAUDAL, S_EYE, S_HEAD, S_PIVOT, S_SNOUT } from './anatomy';
+import { EYE, MODEL_TL, S_CAUDAL, S_EYE, S_HEAD, S_PIVOT, S_SNOUT } from './anatomy';
 
 const f = (x: number): string => x.toFixed(5);
 
@@ -679,5 +679,3 @@ export function tickYoujiuoMaterials(seconds: number): void {
   lastTick = seconds;
   YJ_UNIFORMS.uYjTime.value = seconds % 3600;
 }
-
-export const DORSAL_SPAN = DORSAL.s1 - DORSAL.s0;

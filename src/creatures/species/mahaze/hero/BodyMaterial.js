@@ -12,6 +12,7 @@
 //   * skin chromatophores (melanin / iridophores / xanthophores) filter light at entry and exit
 import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
+import { morphGLSL, morphUniforms } from '../colourMorph.js';
 
 // Skinned: the volume is evaluated in the rest pose (vObjPos) and world directions are mapped into
 // that rest space with the per-vertex skinning rotation (vObjToWorld).
@@ -60,24 +61,16 @@ ${commonGLSL}
 uniform mat4 modelMatrix;
 uniform mat4 projectionMatrix;
 
-// the packed maps (tools/lib/gobyLod.mjs): one set for every pattern and colour morph of the growth stage
-uniform sampler2D uAlbedo;      // rgb: the standard colour without the melanin, a: xanthophores
+uniform sampler2D uAlbedo;
 uniform sampler2D uNormalMap;
 uniform sampler2D uORM;
-uniform sampler2D uPigment;     // rgb: melanin of patterns 1…3 (MEL_DENSITY: its density; else its darkening
-                                // exp(-mel · uMelRGB.g), an sRGB map), a: iridophores
-uniform sampler2D uCap;         // snout cap (planar y/z projection), three panels side by side: albedo without the
-                                // melanin (sRGB-encoded) + roughness | melanin of patterns 1…3 (as in uPigment, the
-                                // darkening sRGB-encoded) + iridophores | xanthophores
-uniform vec3 uCapPanels;        // panel count, panel size, gutter (texels)
+uniform sampler2D uPigment;
+#ifdef MORPH_CHANNELS
+${morphGLSL}
+#endif
+uniform sampler2D uCapAlbedo;   // snout cap: rgb albedo, a roughness (planar y/z projection)
+uniform sampler2D uCapPigment;
 uniform vec4 uCapRect;          // y0, y1, z0, z1 (mm)
-uniform vec3 uPatSel;           // the individual's pattern: its channel of the melanin maps
-uniform vec3 uMelRGB;           // how the melanin darkens the albedo: exp(-mel · this), as the bake applies it
-uniform float uMorph;           // 1: rebuild the individual's colour morph (マハゼ); 0: the species has one colour
-uniform vec3 uMorphC[3];        // the colour morph's tissue: flank, back, belly
-uniform vec3 uStdC[3];          // … and the standard colour's, which the albedo map is baked in
-uniform vec4 uMorphK;           // melanophore factor, dusky layer over the back, xanthophore and iridophore factors
-uniform vec2 uBelly;            // the pale belly's height ramp
 uniform sampler2D uProfile;
 uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a, viewer) or depth texture (game)
 uniform sampler2D uBgDepth;     // depth of the opaque scene (game pipeline); uCamNearFar.x < 0 disables it
@@ -181,60 +174,25 @@ vec2 fishUV(vec3 p) {
   return vec2(clamp(p.x / uFrame.w, 0.0, 1.0), phi / (2.0 * PI));
 }
 
-// chromatophore filter of the skin layer (melanin, iridophores, xanthophores)
-vec3 srgbDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
-#ifdef MEL_DENSITY
-// the observed fish's maps store the melanin density (its translucency averages density, as the bake's does)
-float melOf(float m) { return m; }
-float capMel(float m) { return m; }
-#else
-// the melanin density from the darkening the maps store it as (a texture filter averages darkening, as it did when the
-// melanin was baked into the albedo)
-float melOf(float dark) { return clamp(-log(max(dark, 0.002)) / uMelRGB.y, 0.0, 1.0); }
-float capMel(float dark) { return melOf(srgbDecode(vec3(dark)).x); }
-#endif
-// height in the section (-1 belly … 1 back) of a point (fish frame), as the bake's hn
-float hnAt(vec3 p) {
+// height in the section (−1 the keel, 1 the back) of a fish-space point
+float heightIn(vec3 p) {
   Sec q = section(clamp(p.x, 0.05, uFrame.w - 0.05));
-  float dy = p.y - q.yc;
-  return clamp(dy / max(dy > 0.0 ? q.t : q.b, 1e-3), -1.2, 1.2);
+  return (p.y - q.yc) / max(p.y > q.yc ? q.t : q.b, 1e-3);
 }
-// raw pigment densities (melanin, iridophores, xanthophores) in the individual's colour morph, as the bake's morph
-vec3 morphPig(vec3 raw, float hn) {
-  float belly = smoothstep(uBelly.x, uBelly.y, hn);
-  float mel = 1.0 - pow(1.0 - clamp(raw.x, 0.0, 1.0), uMorphK.x) * (1.0 - uMorphK.y * (1.0 - belly));
-  return vec3(mel, clamp(raw.y * uMorphK.w, 0.0, 1.0), raw.z * uMorphK.z);
-}
-#ifdef MEL_DENSITY
-// the albedo's darkening by the individual's melanin, averaged over four taps one mip finer: a texture filter averages
-// the density, but the albedo averaged the darkening when the melanin was baked into it (dots stay as fine and as pale)
-vec3 melDark(vec2 uv, vec2 gdx, vec2 gdy, float hn) {
-  vec3 d = vec3(0.0);
-  for (int i = 0; i < 4; i++) {
-    vec2 o = vec2(i == 1 || i == 3 ? 0.25 : -0.25, i >= 2 ? 0.25 : -0.25);
-    float m = dot(textureGrad(uPigment, uv + gdx * o.x + gdy * o.y, gdx * 0.5, gdy * 0.5).rgb, uPatSel);
-    d += exp(-morphPig(vec3(m, 0.0, 0.0), hn).x * uMelRGB);
-  }
-  return d * 0.25;
-}
+
+// the skin's pigment where the light leaves or enters the body at a fish-space point (coarse mip); the morph layout's
+// is the fish's look (its pattern's melanophores, scaled by its colour morph: ../colourMorph.js)
+vec3 pigAt(vec3 p, float lod) {
+  vec2 uv = fishUV(p);
+#ifdef MORPH_CHANNELS
+  vec4 m = textureLod(uPigment, uv, lod);
+  return gbMorphPig(m.rgb, m.a, textureLod(uAlbedo, uv, lod).a, heightIn(p));
+#else
+  return textureLod(uPigment, uv, lod).rgb;
 #endif
-// the tissue's colour under the melanin: flank, darker back, milky belly, yellowed by the xanthophores and silvered by
-// the iridophores (the bake's shading before the melanin)
-vec3 tissue(vec3 flank, vec3 back, vec3 belly, float hn, float X, float I) {
-  vec3 c = mix(mix(flank, back, smoothstep(-0.2, 0.8, hn) * 0.6), belly, smoothstep(uBelly.x, uBelly.y, hn));
-  c *= mix(vec3(1.0), vec3(1.02, 0.9, 0.55), X * 0.6);
-  return mix(c, vec3(0.78, 0.77, 0.7), I * 0.4);
 }
-// the individual's pigments at a point of the body (fish frame) from the maps at its skin UV
-vec3 pigAt(vec3 p, vec2 uv, float lod) {
-  vec4 B = textureLod(uPigment, uv, lod);
-  return morphPig(vec3(melOf(dot(B.rgb, uPatSel)), B.a, textureLod(uAlbedo, uv, lod).a), hnAt(p));
-}
-// UV of a snout cap panel (0 albedo, 1 melanin, 2 xanthophores)
-vec2 capPanel(vec2 uv, float k) {
-  float P = uCapPanels.y + 2.0 * uCapPanels.z;
-  return vec2((k * P + uCapPanels.z + uv.x * uCapPanels.y) / (uCapPanels.x * P), (uCapPanels.z + uv.y * uCapPanels.y) / P);
-}
+
+// chromatophore filter of the skin layer (melanin, iridophores, xanthophores)
 vec3 skinT(vec3 pig) {
   vec3 t = exp(-pig.r * vec3(3.4, 3.8, 4.3));
   t *= exp(-pig.b * vec3(0.02, 0.12, 0.5));
@@ -395,7 +353,14 @@ void main() {
 
   vec3 Tw = normalize(vWorldTangent.xyz - Ng * dot(Ng, vWorldTangent.xyz));
   vec3 Bw = cross(Ng, Tw) * vWorldTangent.w;
+#ifdef MORPH_CHANNELS
+  // the normal's x and y (z rebuilt); ambient occlusion and roughness in the other two
+  vec4 n4 = textureGrad(uNormalMap, vUv, gdx, gdy);
+  vec3 nm = vec3(n4.xy * 2.0 - 1.0, 0.0);
+  nm.z = sqrt(clamp(1.0 - dot(nm.xy, nm.xy), 0.0, 1.0));
+#else
   vec3 nm = textureGrad(uNormalMap, vUv, gdx, gdy).xyz * 2.0 - 1.0;
+#endif
   nm.xy *= uNormalStrength * (1.0 - capW);
   vec3 N = normalize(mat3(Tw, Bw, Ng) * nm);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -403,38 +368,48 @@ void main() {
   if (nv < 0.02) N = normalize(N + V * (0.02 - nv));
   vec3 L = normalize(uLightDir);
 
-  vec4 albA = textureGrad(uAlbedo, vUv, gdx, gdy);
-  vec4 pigB = textureGrad(uPigment, vUv, gdx, gdy);
-  vec3 orm = textureGrad(uORM, vUv, gdx, gdy).rgb;
-  vec3 albedo = albA.rgb;
-  vec3 raw = vec3(melOf(dot(pigB.rgb, uPatSel)), pigB.a, albA.a);
-  float ao = orm.r;
-  float rough = orm.g;
-  float hnS = hnAt(pF);
-#ifdef MEL_DENSITY
-  vec3 dark = melDark(vUv, gdx, gdy, hnS);
-#endif
+  vec4 albedo4 = textureGrad(uAlbedo, vUv, gdx, gdy);
+  vec3 albedo = albedo4.rgb;
+  vec4 pig4 = textureGrad(uPigment, vUv, gdx, gdy);
+  vec3 pig = pig4.rgb;
+#if defined(MORPH_CHANNELS)
+  // the マハゼ's look: the standard's ground (a: xanthophores), every pattern's melanophores (a: iridophores); the snout
+  // cap's ground (a: roughness) and melanophores (a: xanthophores), its iridophores the loft's
+  float ao = n4.b;
+  float rough = n4.a;
+  vec3 mel3 = pig4.rgb;
+  float iri = pig4.a, xan = albedo4.a;
   if (capW > 0.001) {
-    vec2 cuv = clamp(capUV, 0.0, 1.0);
-    vec4 ca = texture(uCap, capPanel(cuv, 0.0));
-    vec4 cb = texture(uCap, capPanel(cuv, 1.0));
-    vec3 capRaw = vec3(capMel(dot(cb.rgb, uPatSel)), cb.a, texture(uCap, capPanel(cuv, 2.0)).r);
-    albedo = mix(albedo, srgbDecode(ca.rgb), capW);
+    vec4 ca = texture(uCapAlbedo, capUV);
+    vec4 cp = texture(uCapPigment, capUV);
+    albedo = mix(albedo, ca.rgb, capW);
     rough = mix(rough, ca.a, capW);
-    raw = mix(raw, capRaw, capW);
-#ifdef MEL_DENSITY
-    dark = mix(dark, exp(-morphPig(capRaw, hnS).x * uMelRGB), capW);
-#endif
+    mel3 = mix(mel3, cp.rgb, capW);
+    xan = mix(xan, cp.a, capW);
     ao = mix(ao, 1.0, capW * 0.5);
   }
-  rough = clamp(rough, 0.06, 1.0);
-  // the individual's pattern and colour morph: the albedo maps hold the standard colour without the melanin
-  vec3 pig = morphPig(raw, hnS);
-#ifndef MEL_DENSITY
-  vec3 dark = exp(-pig.r * uMelRGB);
+  float hnSkin = heightIn(pF);
+  albedo = gbMorphAlbedo(albedo, mel3, iri, xan, hnSkin);
+  pig = gbMorphPig(mel3, iri, xan, hnSkin);
+#elif defined(PACKED_CHANNELS)
+  // budget-sized GLBs: ambient occlusion in the colour map's alpha, roughness in the pigment map's (no ORM map)
+  float ao = albedo4.a;
+  float rough = pig4.a;
+#else
+  vec3 orm = textureGrad(uORM, vUv, gdx, gdy).rgb;
+  float ao = orm.r;
+  float rough = orm.g;
 #endif
-  if (uMorph > 0.5) albedo *= tissue(uMorphC[0], uMorphC[1], uMorphC[2], hnS, pig.b, pig.g) / max(tissue(uStdC[0], uStdC[1], uStdC[2], hnS, raw.z, raw.y), vec3(1e-3));
-  albedo *= dark;
+#ifndef MORPH_CHANNELS
+  if (capW > 0.001) {
+    vec4 ca = texture(uCapAlbedo, capUV);
+    albedo = mix(albedo, ca.rgb, capW);
+    rough = mix(rough, ca.a, capW);
+    pig = mix(pig, texture(uCapPigment, capUV).rgb, capW);
+    ao = mix(ao, 1.0, capW * 0.5);
+  }
+#endif
+  rough = clamp(rough, 0.06, 1.0);
 
   // ---- fish space
   vec3 NF = worldDirToFish(N);
@@ -496,7 +471,7 @@ void main() {
   tauS += jaws * 9.0;
   vec3 xE = pIn + R * tExit;
   vec3 skinIn = skinT(pig);
-  vec3 skinOut = skinT(pigAt(xE, fishUV(xE), 2.0));
+  vec3 skinOut = skinT(pigAt(xE, 2.0));
 
   // refraction back into the water at the far surface
   vec3 nE = gradR(xE);
@@ -543,7 +518,7 @@ void main() {
     }
     float tOrgL;
     tauL += organTau(pIn, LF, dL, tOrgL) * organK;
-    vec3 skinL = skinT(pigAt(pIn + LF * dL, fishUV(pIn + LF * dL), 2.0));
+    vec3 skinL = skinT(pigAt(pIn + LF * dL, 2.0));
     float cosT = dot(-L, V);
     float ph = mix(1.0, 4.0 * PI * hgPhase(cosT, 0.45), 0.55);
     back = Lc * exp(-tauL) * skinIn * skinL * ph * backW * uBackStrength * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
@@ -600,30 +575,20 @@ void main() {
 `;
 
 /**
- * `lod`: the GLB body's packing table (extras.mahaze.lod: melRGB, the melanin's encoding, the colour morphs, the belly
- * ramp); `pattern` (0…2) and `colour` (0…) the individual's; `capPanels` the snout cap's panel layout
- * (extras.mahaze.snoutCap.panels).
+ * @param {object} o  textures { albedo, normal, orm (older GLBs), pigment, capAlbedo, capPigment }; packed: the GLB keeps
+ *   its ambient occlusion in the colour map's alpha and its roughness in the pigment map's (extras.mahaze.channels);
+ *   morphs, morph: the マハゼ's morph layout (the looks' table and the fish's own: ../colourMorph.js)
  */
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, capPanels, lod, pattern = 0, colour = 0 }) {
-  const morphs = lod.morphs ?? null;
-  const c = morphs ? morphs[colour % morphs.length] : null, std = morphs ? morphs[0] : null;
-  const v3 = (a) => new THREE.Vector3(...a);
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, packed = false, morphs = null, morph = null }) {
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
     uNormalMap: { value: textures.normal },
-    uORM: { value: textures.orm },
+    uORM: { value: textures.orm ?? null },
     uPigment: { value: textures.pigment },
-    uCap: { value: textures.cap },
-    uCapPanels: { value: new THREE.Vector3(capPanels.count, capPanels.size, capPanels.gutter) },
+    uCapAlbedo: { value: textures.capAlbedo },
+    uCapPigment: { value: textures.capPigment },
     uCapRect: { value: new THREE.Vector4(capRect.y0, capRect.y1, capRect.z0, capRect.z1) },
-    uPatSel: { value: new THREE.Vector3(pattern === 0 ? 1 : 0, pattern === 1 ? 1 : 0, pattern === 2 ? 1 : 0) },
-    uMelRGB: { value: v3(lod.melRGB) },
-    uMorph: { value: c ? 1 : 0 },
-    uMorphC: { value: c ? [c.base, c.dors, c.belly].map(v3) : [v3([1, 1, 1]), v3([1, 1, 1]), v3([1, 1, 1])] },
-    uStdC: { value: std ? [std.base, std.dors, std.belly].map(v3) : [v3([1, 1, 1]), v3([1, 1, 1]), v3([1, 1, 1])] },
-    uMorphK: { value: c ? new THREE.Vector4(c.melK, c.melAdd, c.xanK, c.iriK) : new THREE.Vector4(1, 0, 1, 1) },
-    uBelly: { value: new THREE.Vector2(...(lod.bellyRamp ?? [-0.4, -0.88])) },
     uProfile: { value: profileTexture },
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
     uJaws: { value: new THREE.Vector4(...(frame.jaws || [3.0, 4.6, 2.4, 3.2])) },
@@ -635,10 +600,11 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
     uAmbThrough: shared.uAmbThrough ?? { value: 5.0 },
+    ...(morphs ? morphUniforms(morphs, morph) : {}),
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
-    defines: lod.melanin === 'density' ? { MEL_DENSITY: '' } : {},
+    defines: morphs ? { MORPH_CHANNELS: '' } : packed ? { PACKED_CHANNELS: '' } : {},
     uniforms,
     vertexShader,
     fragmentShader,

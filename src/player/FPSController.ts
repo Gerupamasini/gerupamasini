@@ -5,7 +5,6 @@ import type { Habitat } from '../world/Habitat';
 import type { MapDef } from '../data/schemas';
 
 export const EYE_HEIGHT = 1.5;
-export const CROUCH_HEIGHT = 0.55;
 /** the low, near-the-water view the flat starts in */
 export const LOW_HEIGHT = 0.45;
 export const BOOT_DEPTH = 0.35;

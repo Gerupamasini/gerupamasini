@@ -133,5 +133,3 @@ export interface Driver {
   debugLabel?(): string;
   dispose(): void;
 }
-
-export type DriverFactory = () => Driver;

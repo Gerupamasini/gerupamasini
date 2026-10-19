@@ -9,7 +9,6 @@ import { clamp, hashString, mulberry, rrange } from './util.js';
 
 export { STATE };
 
-const _v = new Vector3();
 
 /**
  * One コメツキガニ: model + animator + behaviour, fed by a perception snapshot each frame.
@@ -176,16 +175,22 @@ export class ScopimeraDriver {
     return { root, parts: {}, length: 0.01 };
   }
 
-  /** the 図鑑 / net preview: a male at modelLength (10 mm), standing, chelae folded */
+  /**
+   * the 図鑑 / net preview: a male at modelLength (10 mm), standing, chelae folded. The crab's own root carries its
+   * size (a scale of the carapace width), so it sits in a holder of unit scale: the net and the shovel scale the
+   * holder to the animal's length. The geometry is every crab's: only the materials are the preview's own.
+   */
   static makePreview() {
     const crab = new ScopimeraGlobosa({ seed: 20261003, sex: 'm', cw_mm: 10 });
     crab.setLod(0);
     crab.model.setShadows(false);
     poseStanding(crab);
     crab.model.setSurface(0.5, 0.3, 0.2, 0.5);
-    const g = crab.root;
-    g.userData.disposable = true;
+    const g = new Group();
+    g.name = 'ScopimeraGlobosa_preview';
+    g.add(crab.root);
     g.userData.crab = crab;
+    g.userData.disposer = () => crab.dispose();
     return g;
   }
 
@@ -241,7 +246,14 @@ export class ScopimeraDriver {
     if (!crab || !ind) return;
     const sdt = Math.min(0.05, dt * ctx.simScale);
     // a colony crab is updated by its colony (it lives on when the creature system drops its view)
-    if (this.owned) this.updateOwned(sdt, ctx);
+    if (this.owned) {
+      this.updateOwned(sdt, ctx);
+      // the host keeps its animals inside its walls by their roots (the field case, the tank): the root goes where
+      // the crab is, and the crab's own root, which the animator places in the host's frame, rides in it at the
+      // origin. Left at the frame's origin, a root moved by the host carried the crab twice as far, out of sight.
+      const r = crab.root.position;
+      if (r.x !== 0 || r.y !== 0 || r.z !== 0) { this.root.position.copy(r); r.set(0, 0, 0); }
+    }
     ind.pos.copy(crab.pos);
     ind.heading = crab.heading;
   }

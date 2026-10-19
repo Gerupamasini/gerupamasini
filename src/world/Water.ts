@@ -1,6 +1,6 @@
 import {
-  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4,
-  RedFormat, RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, Vector4, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene,
+  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, Matrix4,
+  RedFormat, RGBAFormat, ShaderMaterial, Vector2, Vector3, Vector4, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene,
   type Texture, type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
@@ -11,41 +11,6 @@ import { WAVES_GLSL, type WaveSet } from './Waves';
 import { makeFoamTexture, SURF_GLSL, type SurfUniforms } from './Surf';
 import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
 import type { SurfSpray } from './SurfSpray';
-
-/** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
-export function makeWaveNormal(S = 256): DataTexture {
-  let a = 3 >>> 0;
-  const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const waves: { kx: number; ky: number; a: number; ph: number }[] = [];
-  for (let k = 0; k < 40; k++) {
-    const kx = Math.round((rnd() - 0.5) * 16), ky = Math.round((rnd() - 0.5) * 16);
-    if (kx === 0 && ky === 0) continue;
-    const kl = Math.hypot(kx, ky);
-    waves.push({ kx, ky, a: 1 / Math.pow(kl, 1.4), ph: rnd() * 6.28 });
-  }
-  const data = new Uint8Array(S * S * 4);
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    let dx = 0, dy = 0;
-    const u = (x / S) * Math.PI * 2, v = (y / S) * Math.PI * 2;
-    for (const w of waves) {
-      const c = Math.cos(w.kx * u + w.ky * v + w.ph) * w.a;
-      dx += c * w.kx; dy += c * w.ky;
-    }
-    dx *= 0.12; dy *= 0.12;
-    const i = (y * S + x) * 4;
-    data[i] = Math.max(0, Math.min(255, (dx * 0.5 + 0.5) * 255));
-    data[i + 1] = Math.max(0, Math.min(255, (dy * 0.5 + 0.5) * 255));
-    data[i + 2] = 255;
-    data[i + 3] = 255;
-  }
-  const t = new DataTexture(data, S, S, RGBAFormat);
-  t.wrapS = t.wrapT = RepeatWrapping;
-  t.magFilter = LinearFilter;
-  t.minFilter = LinearMipmapLinearFilter;
-  t.generateMipmaps = true;
-  t.needsUpdate = true;
-  return t;
-}
 
 export interface WaterLight {
   sunUp: number;
@@ -209,6 +174,8 @@ export class WaterPass {
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
+      // a shore without surf (葛西, 漫湖) does without its code altogether (SURF_GLSL)
+      defines: surf.uSurf.value.w > 0 ? {} : { NO_SURF: 1 },
       depthTest: false,
       depthWrite: false,
       // (the water's level at the eye, which decides whether the view is under the surf, is the same for every

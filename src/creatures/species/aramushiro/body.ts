@@ -1,7 +1,7 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Quaternion, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CARRY_TILT, FOOT, HEAD, MODEL_SH, OPERCULUM, carryRotation } from './anatomy';
-import { LANDMARKS, apertureOutline, lowestY } from './shell';
+import { LANDMARKS, apertureOutline } from './shell';
 
 /**
  * The soft parts: the foot, the head and neck (SoftBody), the tentacles with their eyes, the siphon, the proboscis and
@@ -107,9 +107,6 @@ export const REST: Rest = (() => {
     opercFoot, opercShut, footTop: top / SH,
   };
 })();
-
-/** how high the shell's lowest point is over the ground in the rest pose (m) */
-export const REST_SHELL_LOW = lowestY(REST.shellM);
 
 // ------------------------------------------------------------------ geometry
 

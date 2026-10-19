@@ -51,12 +51,11 @@ void main() {
 
 const fragmentShader = /* glsl */ `
 ${commonGLSL}
-uniform sampler2D uColor;      // the first pattern's colour (its melanin included)
+uniform sampler2D uColor;
 uniform vec3 uTint;            // colour morph: tint of membrane and rays
 uniform float uMelK;           // colour morph: melanophore optical-depth factor
-uniform sampler2D uRelief;     // rg: normal x, y; b: ray density; a: membrane coverage
-uniform sampler2D uPigment;    // rgb: melanin of patterns 1…3; a: iridophores
-uniform vec3 uPatSel;          // the individual's pattern: its melanin channel
+uniform sampler2D uData;       // r: ray density, g: melanin, b: iridophores, a: membrane coverage
+uniform sampler2D uNormalMap;
 uniform int uPass;
 uniform float uFinDensity;
 uniform float uCausticAmt;
@@ -67,20 +66,16 @@ varying vec4 vWorldTangent;
 varying vec2 vUv;
 
 void main() {
-  vec4 rel = texture(uRelief, vUv);
-  float cov = rel.a;
+  vec4 dat = texture(uData, vUv);
+  float cov = dat.a;
   if (cov < 0.004) discard;
-  vec4 fp = texture(uPigment, vUv);
-  float melP = dot(fp.rgb, uPatSel);
-  // the colour atlas darkens by the first pattern's melanin (as the atlas is painted): the individual's instead
-  vec3 alb = texture(uColor, vUv).rgb * exp((fp.r - melP) * vec3(2.4, 2.8, 3.1)) * uTint;
+  vec3 alb = texture(uColor, vUv).rgb * uTint;
   float face = gl_FrontFacing ? 1.0 : -1.0;
   vec3 Ng0 = normalize(vWorldNormal);
   vec3 Ng = Ng0 * face;
   vec3 T = normalize(vWorldTangent.xyz - Ng0 * dot(Ng0, vWorldTangent.xyz));
   vec3 B = cross(Ng0, T) * vWorldTangent.w;
-  vec2 nxy = rel.rg * 2.0 - 1.0;
-  vec3 nm = vec3(nxy, sqrt(max(1.0 - dot(nxy, nxy), 0.0)));
+  vec3 nm = texture(uNormalMap, vUv).xyz * 2.0 - 1.0;
   // rays protrude on both faces: keep tangential components, flip only the normal component
   vec3 N = normalize(T * nm.x + B * nm.y + Ng * nm.z);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -89,7 +84,7 @@ void main() {
   float cosL = dot(Ng, L);
   float muL = max(abs(cosL), 0.1);
 
-  float ray = rel.b, mel = 1.0 - pow(max(1.0 - melP, 0.0), uMelK), irid = fp.a;
+  float ray = dat.r, mel = 1.0 - pow(max(1.0 - dat.g, 0.0), uMelK), irid = dat.b;
   float tauS = uFinDensity * (0.055 + 0.5 * ray + 0.7 * irid);
   vec3 tauA = vec3(0.004, 0.008, 0.02) + ray * vec3(0.05, 0.12, 0.26) + mel * vec3(2.3, 2.7, 3.1) + (1.0 - alb) * 0.05;
   // colour morph: diffuse pigment in membrane and rays (yellowish for amber, dusky for the dark morph)
@@ -132,8 +127,7 @@ void main() {
 }
 `;
 
-/** textures: color (the colour atlas), relief, pigment (the GLB fin material's extras); pattern: the individual's (0…2) */
-export function createFinMaterials({ textures, shared, tint = [1, 1, 1], melK = 1, pattern = 0 }) {
+export function createFinMaterials({ textures, shared, tint = [1, 1, 1], melK = 1 }) {
   const make = (pass) => new THREE.ShaderMaterial({
     name: pass === 0 ? 'MahazeFinTransmit' : 'MahazeFinScatter',
     uniforms: {
@@ -141,9 +135,8 @@ export function createFinMaterials({ textures, shared, tint = [1, 1, 1], melK = 
       uColor: { value: textures.color },
       uTint: { value: new THREE.Vector3(...tint) },
       uMelK: { value: melK },
-      uRelief: { value: textures.relief },
-      uPigment: { value: textures.pigment },
-      uPatSel: { value: new THREE.Vector3(pattern === 0 ? 1 : 0, pattern === 1 ? 1 : 0, pattern === 2 ? 1 : 0) },
+      uData: { value: textures.data },
+      uNormalMap: { value: textures.normal },
       uPass: { value: pass },
     },
     vertexShader,

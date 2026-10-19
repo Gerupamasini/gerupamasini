@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { Key } from '../common/Icons';

@@ -1,5 +1,5 @@
 import { Bone, Matrix4, Quaternion, Vector3, type Object3D } from 'three';
-import { BIND, CARAPACE, type LegId } from './anatomy';
+import { BIND, type LegId } from './anatomy';
 import { ARTICLES, SIDES, coxaFrame, legBone, type LegRig, type RigDef, type Side } from './geometry';
 
 /**
@@ -234,6 +234,3 @@ export function legTip(leg: LegRig, PL: PlanarLeg, P: LegPose, out = new Vector3
   _w.set(leg.sg * Math.cos(a), 0, Math.sin(a));
   return out.copy(leg.coxa).addScaledVector(_w, _t.r).add(_v.set(0, _t.h, 0));
 }
-
-/** the carapace's half width and half length (mm at CW 100), for shadows, contacts and burying */
-export const BODY_HALF = { w: 50, l: (CARAPACE.front - CARAPACE.back) / 2 };

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { eyeQuaternion } from './rig.js';
 import {
-  S_ROOT, S_END, SL_MM, HEAD_END, X_RANGE, EYES, MOUTH, FINS, SPINE, SPINE_S,
+  S_ROOT, S_END, HEAD_END, X_RANGE, EYES, MOUTH, FINS, SPINE, SPINE_S,
   dorsalEdge, ventralEdge, thickTop, thickBot, sectionProfile, surfaceFeatures, surfaceY, eyeCentre,
   cleftX, cornerS, opercE, spineWeights, clamp, smoothstep, lerp,
 } from './anatomy.js';

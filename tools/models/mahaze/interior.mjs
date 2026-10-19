@@ -188,12 +188,11 @@ export function buildMouth(mesh) {
   // villiform teeth; both jaws are toothed back to just before the mouth corner
   const teeth = new Builder();
   const colBase = [0.86, 0.83, 0.74, 1], colTip = [0.93, 0.9, 0.82, 1];
-  // fine: a villiform tooth (a few hundredths of a millimetre: four sides and two rings are plenty)
-  const addTooth = (base, dir, len, rad, curl, zone, fine = false) => {
+  const addTooth = (base, dir, len, rad, curl, zone) => {
     len *= TOOTH_K; rad *= TOOTH_K;
     // curved cone: centre line bends from `dir` toward the back of the mouth (+s) and the midline
     const back = nrm([1, 0, -Math.sign(base[2]) * 0.35]);
-    const NS = fine ? 2 : 4, NA = fine ? 4 : 7;
+    const NS = 4, NA = 7;
     const centre = (u) => add(base, add(mul(dir, len * u), mul(back, len * curl * u * u)));
     const tangent = (u) => nrm(add(mul(dir, len), mul(back, 2 * len * curl * u)));
     const rings = [];
@@ -253,7 +252,7 @@ export function buildMouth(mesh) {
           const len = (upper ? 0.15 + 0.06 * front : 0.15 + 0.12 * front * front) * (0.85 + 0.3 * h);
           addTooth(base, dir, len, 0.03 + 0.012 * front, 0.35, zone);
         } else {
-          addTooth(base, dir, 0.05 + 0.03 * h, 0.012 + 0.003 * h, 0.2, zone, true);
+          addTooth(base, dir, 0.05 + 0.03 * h, 0.012 + 0.003 * h, 0.2, zone);
         }
       }
     };

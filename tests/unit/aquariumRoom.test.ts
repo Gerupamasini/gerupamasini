@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptySave, InvalidSaveError, parseSave } from '../../src/core/Save';
 import { canPlaceTank, freeTankPosition, newRoomTank, resizedTankLayout, roomCapacity } from '../../src/aquarium/room';
-import { equipmentItem, emptyEquipmentCollection, GACHA_POOL, tankSizeItemId } from '../../src/aquarium/catalog';
+import { equipmentItem, GACHA_POOL, tankSizeItemId } from '../../src/aquarium/catalog';
 import { TANK_DIMENSIONS, TANK_SIZES } from '../../src/aquarium/state';
 import type { IndividualRecord } from '../../src/creatures/Individual';
 

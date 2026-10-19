@@ -34,7 +34,6 @@ export interface CarrionGround {
 const CELL = 8;
 const KEEP = 30;
 const MAX_ITEMS = 48;
-const FRAGS = 4;
 /** the width a snail takes at the meal (m) */
 const PLACE_W = 0.0085;
 

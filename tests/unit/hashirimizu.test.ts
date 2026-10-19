@@ -14,7 +14,7 @@ import type { DriverContext } from '../../src/creatures/drivers/Driver';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const json = (rel: string) => JSON.parse(readFileSync(root + 'public/data/' + rel, 'utf8'));
 const map = MapSchema.parse(json('maps/hashirimizu.json'));
-const { heightAt, offshore, ZERO_X, REF_TIDE } = shape;
+const { heightAt, ZERO_X, REF_TIDE } = shape;
 /** the ground d metres from the shore, averaged along the coast (the alongshore undulation is a few cm) */
 const meanH = (d: number) => { let s = 0, n = 0; for (let z = -36; z <= 36; z += 3) { s += heightAt(ZERO_X + d, z); n++; } return s / n; };
 

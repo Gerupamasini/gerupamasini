@@ -6,23 +6,27 @@ import { createBodyMaterial, createProfileTexture } from './BodyMaterial.js';
 import { createFinMaterials } from './FinMaterial.js';
 import { createEyeMaterial } from './EyeMaterial.js';
 import { createInteriorMaterial } from './InteriorMaterial.js';
-import type { GobyLodPacking } from '../bodyTranslucency';
+import type { MorphPick, MorphTable } from '../colourMorph.js';
 
-/** the goby GLBs' material extras (packed maps: tools/lib/gobyLod.mjs) */
 interface MahazeMatExtras {
   role: string;
-  /** body: melanin of every pattern (rgb), iridophores (a) */
   pigmentTexture?: number;
-  /** body: the snout cap's map of three panels and their layout */
-  snoutCap?: { packed: number; panels: { count: number; size: number; gutter: number }; rectMM: { y0: number; y1: number; z0: number; z1: number } };
+  /** budget-sized GLBs: ambient occlusion in the colour map's alpha, roughness in the pigment map's (no ORM map); the
+   * マハゼ's morph layout: its looks in channels (../bodyTranslucency.ts GobyChannels) */
+  channels?: { mapAlpha?: string; pigmentAlpha?: string; pigment?: string };
+  /** the morph layout's looks, and the one this fish wears */
+  morphs?: MorphTable;
+  morph?: MorphPick;
+  snoutCap?: { albedoRoughness: number; pigment: number; rectMM: { y0: number; y1: number; z0: number; z1: number } };
   profile?: { n: number; data: number[] };
   fishFrame?: { S0: number; Y0: number; SL: number; SEND: number };
   vertebrae?: { start: number; count: number };
-  /** body: the patterns and colour morphs of the packed maps */
-  lod?: GobyLodPacking;
-  /** fin: relief (normal x, y, ray density, coverage) and pigments (melanin of every pattern, iridophores) */
-  relief?: number;
-  pigment?: number;
+  dataTexture?: number;
+  /** fin: the normal map only the volumetric fins use (the standard fins have none) */
+  normalTexture?: number;
+  /** fin: tint and melanophore factor of the individual's colour morph (the fin atlases are shared by the colours) */
+  tint?: [number, number, number];
+  melK?: number;
 }
 
 interface FinEntry {
@@ -57,22 +61,15 @@ export class HeroInstance {
     const interiors = model.meshes.filter((m) => roleOf(m)?.role === 'interior');
     if (!body || !finMeshes.length || !eyes.length) throw new Error('mahaze hero: roles missing');
     const bx = roleOf(body)!;
-    const lod = bx.lod!;
-    // the individual's pattern and colour morph: its variant, set on its copy of the body material (gobyLodVariant)
-    const vi = ((((body.material as Material).userData as { gobyVariant?: number }).gobyVariant ?? 0) % lod.variants + lod.variants) % lod.variants;
-    const pattern = Math.min(Math.floor(vi / lod.colours), lod.patternChannels - 1), colour = vi % lod.colours;
-    const morph = lod.morphs?.[colour];
-    const orig = body.material as unknown as { map: Texture; normalMap: Texture; roughnessMap?: Texture; aoMap?: Texture };
-    // (the melanin as its density, or as its sRGB-encoded darkening: tools/lib/gobyLod.mjs packBodyMaps)
-    const pigment = await tex(bx.pigmentTexture, lod.melanin === 'density' ? NoColorSpace : SRGBColorSpace);
-    const cap = await tex(bx.snoutCap?.packed, NoColorSpace);
+    const orig = body.material as unknown as { map: Texture; normalMap: Texture; roughnessMap?: Texture | null; aoMap?: Texture | null };
+    const pigment = await tex(bx.pigmentTexture, NoColorSpace);
+    const capAlbedo = await tex(bx.snoutCap?.albedoRoughness, SRGBColorSpace);
+    const capPigment = await tex(bx.snoutCap?.pigment, NoColorSpace);
     const bodyMat = createBodyMaterial({
-      textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap ?? orig.aoMap, pigment, cap },
+      textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap ?? orig.aoMap ?? null, pigment, capAlbedo, capPigment },
+      packed: bx.channels?.mapAlpha === 'ao' && bx.channels.pigmentAlpha === 'roughness',
+      ...(bx.morphs && bx.channels?.pigment === 'melanin3+iridophores' ? { morphs: bx.morphs, morph: bx.morph ?? null } : {}),
       capRect: bx.snoutCap!.rectMM,
-      capPanels: bx.snoutCap!.panels,
-      lod,
-      pattern,
-      colour,
       profileTexture: createProfileTexture(bx.profile),
       frame: bx.fishFrame,
       vertebrae: bx.vertebrae,
@@ -85,13 +82,11 @@ export class HeroInstance {
     const interiorMat = createInteriorMaterial({ shared });
     for (const m of interiors) inst.swap(m, interiorMat as unknown as Material);
     inst.interiorMat = interiorMat as unknown as HeroInstance['interiorMat'];
-    const finOrig = finMeshes[0].material as unknown as { map: Texture; userData: { mahaze: MahazeMatExtras } };
+    const finOrig = finMeshes[0].material as unknown as { map: Texture; normalMap: Texture | null; userData: { mahaze: MahazeMatExtras } };
+    const finData = await tex(finOrig.userData.mahaze.dataTexture, NoColorSpace);
     const fx = finOrig.userData.mahaze;
-    const [relief, finPigment] = await Promise.all([tex(fx.relief, NoColorSpace), tex(fx.pigment, NoColorSpace)]);
-    const finMats = createFinMaterials({
-      textures: { color: finOrig.map, relief, pigment: finPigment }, shared, pattern,
-      tint: morph?.finTint ?? [1, 1, 1], melK: morph?.finMelK ?? 1,
-    }) as { transmit: Material; scatter: Material };
+    const finNormal = finOrig.normalMap ?? (await tex(fx.normalTexture, NoColorSpace));
+    const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finNormal }, shared, tint: fx.tint, melK: fx.melK }) as { transmit: Material; scatter: Material };
     inst.created.push(bodyMat, eyeMat, interiorMat as unknown as Material, finMats.transmit, finMats.scatter);
     for (const f of finMeshes) {
       const scatter = new SkinnedMesh(f.geometry, finMats.scatter);

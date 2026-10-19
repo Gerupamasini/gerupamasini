@@ -48,7 +48,6 @@ export interface SaveV1 {
   guideDismissed?: boolean;
 }
 
-export type SaveData = SaveV1;
 const KEY = 'save:slot1';
 const BACKUP_KEY = 'save:backup';
 const RECOVERY_KEY = 'save:unreadable';

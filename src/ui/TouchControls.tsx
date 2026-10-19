@@ -1,4 +1,3 @@
-import { h } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { App } from '../app/App';
 import type { Action, Input } from '../core/Input';

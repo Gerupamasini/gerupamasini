@@ -954,8 +954,3 @@ export function buildBodyGeometry(rig, lodIndex) {
   cache.set(key, out);
   return out;
 }
-
-/** quantise per-individual chela size so geometry can be shared (8 buckets) */
-export function quantiseChela(v) {
-  return Math.round(v * 8) / 8;
-}

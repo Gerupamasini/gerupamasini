@@ -185,6 +185,14 @@ float rippleHeight(vec2 xz, float sandy, float pit) {
 }
 `;
 
+/** The surf's strength (SurfUniforms.uSurf). A shore without surf compiles it out: NO_SURF makes it a constant zero, so
+ * the compiler drops every branch it guards (the swash's memory, its foam, the planed sand) and the shader is smaller. */
+const SURF_DECL = /* glsl */ `#ifdef NO_SURF
+const vec4 uSurf = vec4(0.0);
+#else
+uniform vec4 uSurf;
+#endif`;
+
 /** GLSL shared by the shading and the ripple sheet's relief: where an open shore's surf leaves the sand without ripples.
  * Needs uSurf, tSurfZone, uSurfGrid, uWaterLevel and SURF_MEM_GLSL. */
 const RIPPLE_SURF_GLSL = /* glsl */ `
@@ -292,6 +300,10 @@ export class Terrain {
   /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
    * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
   private readonly uMudLook: IUniform<number> = { value: 0 };
+  /** no silt flat's look: its code compiled out (NO_MUD) until setSediment asks for one */
+  private noMud = true;
+  /** no surf (a sheltered flat): the swash's memory, foam and planed sand compiled out (NO_SURF) unless setSurf brings one */
+  private noSurf = true;
   /** the water's mirror of the land and sky (shared with the water pass, see shareMirror): the sheets of water on a
    * mud flat show it as the river does */
   private mirrorU: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> } = {
@@ -570,6 +582,8 @@ export class Terrain {
     // the depth whether the ground is above the swash's sheet of a few millimetres, sees it where it is)
     const over = kind === 'patch';
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: over, polygonOffsetFactor: over ? -1 : 0, polygonOffsetUnits: over ? -2 : 0 });
+    if (this.noMud) (mat.defines as Record<string, number>).NO_MUD = 1;
+    if (this.noSurf) (mat.defines as Record<string, number>).NO_SURF = 1;
     const uWater = this.uWater, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -630,7 +644,7 @@ uniform float uSheetDrop;
 uniform vec2 uRipRot;
 uniform float uRippleGain;
 uniform float uHalf;
-${kind === 'sheet' ? `uniform vec4 uSurf;
+${kind === 'sheet' ? `${SURF_DECL}
 uniform sampler2D tSurfZone;
 uniform vec2 uSurfGrid;
 uniform float uWaterLevel;
@@ -716,7 +730,12 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
 uniform float uSheetR;
+// (a sandy flat compiles the silt flat's look out: NO_MUD, setSediment)
+#ifdef NO_MUD
+const float uMudLook = 0.0;
+#else
 uniform float uMudLook;
+#endif
 uniform sampler2D tMirror;
 uniform mat4 uMirrorMat;
 uniform float uMirrorOn;
@@ -728,7 +747,7 @@ uniform vec3 uMudTint;
 uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
-uniform vec4 uSurf;
+${SURF_DECL}
 uniform sampler2D tSurfZone;
 uniform vec2 uSurfGrid;
 uniform sampler2D tSurfMem;
@@ -771,12 +790,16 @@ vec3 vnoiseD(vec2 p) {
   float k1 = b - a, k2 = c - a, k3 = a - b - c + d;
   return vec3(a + k1 * u.x + k2 * u.y + k3 * u.x * u.y, du * vec2(k1 + k3 * u.y, k2 + k3 * u.x));
 }
-// grain field (after MahazeViewer): distance to the nearest grain centre in cell units, two ids, and the offset to it
+// grain field (after MahazeViewer): distance to the nearest grain centre in cell units, two ids, and the offset to it.
+// A centre keeps 0.1 cell from its cell's edges, and nothing shows further than about 0.6 cell from one (the widest
+// grain's rim has faded to 1 % there): so only the 2 × 2 cells on this point's side of its cell can hold a centre
+// that shows, the others' are at least 0.6 away (4 cells searched, not 9)
 vec3 grains(vec2 p, out vec2 off) {
   vec2 ip = floor(p), fp = fract(p);
+  vec2 side = step(0.5, fp) * 2.0 - 1.0;
   float best = 9.0; vec2 id = vec2(0.0); off = vec2(0.0);
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 g = vec2(float(i), float(j));
+  for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j)) * side;
     vec2 o = hash22(ip + g);
     vec2 r = g + o * 0.8 + 0.1 - fp;
     float d = dot(r, r);
@@ -839,8 +862,9 @@ vec3 grains(vec2 p, out vec2 off) {
   float det1 = (1.0 - smoothstep(0.1, 0.35, fw * 0.5 / 1.4)) * uDetail;
   float det2 = (1.0 - smoothstep(0.08, 0.3, fw * 0.5 / 3.4)) * uDetail;
   if (det2 > 0.001) {
-    vec2 o1, o2;
-    vec3 g1 = grains(mm / 1.4, o1);
+    // (the medium grains only once they are big enough to show: det1 reaches less far than det2)
+    vec2 o1 = vec2(0.0), o2;
+    vec3 g1 = det1 > 0.0 ? grains(mm / 1.4, o1) : vec3(9.0, 0.0, 0.0);
     vec3 g2 = grains(mm / 3.4 + 17.0, o2);
     // (silt carries few sand grains: the mud look keeps a scatter of them, as the goby flat does)
     float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit) * (1.0 - 0.8 * uMudLook * (1.0 - isSand));
@@ -944,11 +968,12 @@ vec3 grains(vec2 p, out vec2 off) {
   }
   // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
   // lowest, longest-wet hollows (after MahazeViewer's sediment)
-  float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
+  // (the noise is worked out only where it shows: on the sand there is no film, under the water no film to keep)
+  float filmP = muddy > 0.0 ? muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0)) : 0.0;
   gFilm = filmP;
   // (on a lake's silt flat the film is olive, not golden, and there is little black mud at the surface)
   diffuseColor.rgb *= mix(vec3(1.0), mix(vec3(0.78, 0.68, 0.42), vec3(0.86, 0.86, 0.7), mudL), filmP * 0.6);
-  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0)) * (1.0 - 0.8 * mudL);
+  float reducedP = vSubstrate > 1.5 ? smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0)) * (1.0 - 0.8 * mudL) : 0.0;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
   // under an アマモ bed the sediment is finer, darker and richer (trapped silt, detritus, the canopy's shade); past the
   // distance where the blades are drawn, the canopy itself stands in (lying mats at low water, dark green under it)
@@ -972,7 +997,8 @@ vec3 grains(vec2 p, out vec2 off) {
   // (the ripples are 8 cm: once a pixel covers more than a fifth of one, their troughs blend into their mean)
   float trough = mix(clamp(max(-gRipple, 0.0) * 1.6, 0.0, 1.0), 0.2, smoothstep(10.0, 30.0, fw));
   gFootMm = fw;
-  float hollow = smoothstep(0.45, 0.8, vnoise(vWorldPos.xz * 0.6 + 13.0)) * 0.7 + smoothstep(0.5, 0.85, vnoise(vWorldPos.xz * 2.3 - 5.0)) * 0.5;
+  // (under the water the sediment is saturated and filmed whatever its hollows)
+  float hollow = wetHere > 0.0 ? smoothstep(0.45, 0.8, vnoise(vWorldPos.xz * 0.6 + 13.0)) * 0.7 + smoothstep(0.5, 0.85, vnoise(vWorldPos.xz * 2.3 - 5.0)) * 0.5 : 0.0;
   float retain = 1.0 + 2.5 * trough * trough + 2.0 * hollow;
   float film = pow(max(mix(wd.r, wd.g, mudD), 1e-4), 1.0 / retain);
   float moist = pow(max(mix(wd.b, wd.a, mudD), 1e-4), 1.0 / (0.8 + 0.4 * retain));
@@ -1069,7 +1095,7 @@ vec3 grains(vec2 p, out vec2 off) {
   }
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
+  if (land > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
   gWet *= 1.0 - land;
   gWetFilm *= 1.0 - land;
   // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
@@ -1279,8 +1305,25 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
   setSediment(rippleGain: number, mudLook: number): void {
     this.uRippleGain.value = rippleGain;
     this.uMudLook.value = mudLook;
+    this.setNoMud(mudLook <= 0);
     this.setRippleSheet(this.sheetWanted);
     this.setRippleMap(this.rippleMapWanted);
+  }
+
+  /** Without a silt flat's look (葛西, 走水) its code is compiled out of the terrain's shaders (the programs rebuilt). */
+  private setNoMud(on: boolean): void {
+    this.noMud = on;
+    this.setDefine('NO_MUD', on);
+  }
+
+  /** A compile-time switch on all the terrain's materials (each changed one rebuilds its program). */
+  private setDefine(name: 'NO_MUD' | 'NO_SURF', on: boolean): void {
+    for (const m of [this.material, this.patchMaterial, ...(this.sheetMaterial ? [this.sheetMaterial] : [])]) {
+      const d = m.defines as Record<string, number | string>;
+      if ((name in d) === on) continue;
+      if (on) d[name] = 1; else delete d[name];
+      m.needsUpdate = true;
+    }
   }
 
 
@@ -1349,9 +1392,11 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     }
   }
 
-  /** Share the surf's uniforms with the water (call before the first frame). */
+  /** Share the surf's uniforms with the water (call before the first frame); a shore without surf compiles it out. */
   setSurf(surf: SurfUniforms): void {
     this.surf = surf;
+    this.noSurf = !(surf.uSurf.value.w > 0);
+    this.setDefine('NO_SURF', this.noSurf);
   }
 
   /** What the sand remembers of the swash (null: no memory, the sand stays as it usually is). */

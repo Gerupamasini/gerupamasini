@@ -205,7 +205,7 @@ export class Behavior {
 
   /** utility-based choice among calm activities */
   choose(env) {
-    const I = this.internal, P = this.personality, e = this.envInfo;
+    const I = this.internal, e = this.envInfo;
     // withdrawal ends only through EMERGE (run); emergence and shell exchange end when their sequence is done
     if (this.state === STATE.HIDE_IN_SHELL || this.state === STATE.GUARDED) return;
     if (this.state === STATE.MATE_GUARD && !this.stateDone()) return;
@@ -271,7 +271,7 @@ export class Behavior {
     this.sub = '';
     this.subTime = 0;
     this.data = { ...extra };
-    const r = this.rng, SL = this.crab.SL, I = this.internal, P = this.personality;
+    const r = this.rng, I = this.internal, P = this.personality;
     switch (state) {
       case STATE.IDLE: this.stateDur = r.wait(3.5, 0.5); break;
       case STATE.REST: this.stateDur = Math.min(120, r.wait(25, 0.7)); break;

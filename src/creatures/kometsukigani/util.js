@@ -10,7 +10,6 @@ export const smooth01 = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t);
 /** frame-rate independent exponential approach */
 export const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
 export const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-export const dampAngle = (a, b, lambda, dt) => a + wrapAngle(b - a) * (1 - Math.exp(-lambda * dt));
 
 /** 32-bit string hash (FNV-1a). */
 export function hashString(s) {
@@ -74,14 +73,6 @@ export class Spring {
     return this.v;
   }
   reset(v) { this.v = v; this.vel = 0; }
-}
-
-/**
- * Exponential random interval with a floor (Poisson-like event timing): behaviours that recur
- * "now and then" instead of on a metronome.
- */
-export function expInterval(rand, mean, min = 0) {
-  return min + -Math.log(1 - rand() * 0.999) * Math.max(1e-3, mean - min);
 }
 
 /** Random in [a, b] from a rand() closure. */

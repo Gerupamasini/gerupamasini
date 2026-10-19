@@ -79,4 +79,18 @@ describe('the surf field for what floats in it', () => {
     open.dispose();
     calm.dispose();
   });
+
+  it('compiles the surf out of the water where the shore has none (NO_SURF: a third of 葛西\'s frame)', () => {
+    const waves = createWaves();
+    const open = new WaterPass(terrain, waves, surfUniforms(HASHIRIMIZU.surf));
+    const calm = new WaterPass(terrain, waves, surfUniforms(null));
+    const defs = (w: WaterPass) => (w as unknown as { material: { defines: Record<string, unknown> } }).material.defines;
+    expect('NO_SURF' in defs(open)).toBe(false);
+    expect('NO_SURF' in defs(calm)).toBe(true);
+    // (the lighter composite keeps it)
+    calm.setLite(true);
+    expect('NO_SURF' in defs(calm)).toBe(true);
+    open.dispose();
+    calm.dispose();
+  });
 });

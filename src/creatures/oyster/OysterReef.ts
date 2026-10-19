@@ -94,7 +94,6 @@ export class OysterReef {
   private readonly state: Float32Array;       // 4 per oyster: gape, dead, phase, erosion
   private readonly look: Float32Array;        // 4 per oyster
   private readonly plane: Float32Array;       // 4 per oyster
-  private readonly clump: Uint32Array;        // clump index per oyster
   private readonly behaviors: (OysterBehavior | null)[];
   private readonly slot: Int32Array;          // instance slot in its current mesh (−1 not drawn)
   private readonly lodOf: Int8Array;          // −1 not drawn
@@ -129,7 +128,7 @@ export class OysterReef {
     this.buildPrototypes(opts);
     const rng = new Rng(hashInts(opts.seed, 0x7eef));
     // lay out every clump into flat arrays
-    const P: number[] = [], M: number[] = [], C: number[] = [], R: number[] = [], S: number[] = [], Lk: number[] = [], Pl: number[] = [], K: number[] = [];
+    const P: number[] = [], M: number[] = [], C: number[] = [], R: number[] = [], S: number[] = [], Lk: number[] = [], Pl: number[] = [];
     const Sd: number[] = [], Ag: number[] = [], Cr: number[] = [], Ln: number[] = [];
     const genomes: OysterGenome[] = [];
     const maxN = opts.maxOysters ?? 4000;
@@ -181,7 +180,6 @@ export class OysterReef {
         S.push(m.genome.dead === 1 ? m.deadGape : 0, m.genome.dead, (m.genome.seeds.colorSeed % 1000) / 1000, m.genome.erosion);
         Lk.push(m.genome.colorKey, m.genome.mud, m.genome.algae, m.genome.barnacles);
         Pl.push(m.plane.x, m.plane.y, m.plane.z, m.plane.w);
-        K.push(this.clumps.length);
         genomes.push(m.genome);
         Sd.push(m.seed ?? 0); Ag.push(AGES.indexOf(m.genome.age)); Cr.push(m.crowding ?? 0.5); Ln.push(m.genome.length);
       }
@@ -220,7 +218,6 @@ export class OysterReef {
           S.push(0, 2, (pick.genome.seeds.colorSeed % 1000) / 1000, Math.min(1, pick.genome.erosion + 0.3));
           Lk.push(pick.genome.colorKey, Math.min(1, pick.genome.mud + 0.3), pick.genome.algae, pick.genome.barnacles * 0.5);
           Pl.push(0, 0, 0, 0);
-          K.push(this.clumps.length);
           genomes.push(pick.genome);
           Sd.push(pick.seed ?? 0); Ag.push(AGES.indexOf(pick.genome.age)); Cr.push(pick.crowding ?? 0.5); Ln.push(pick.genome.length);
         }
@@ -243,7 +240,6 @@ export class OysterReef {
     this.state = Float32Array.from(S);
     this.look = Float32Array.from(Lk);
     this.plane = Float32Array.from(Pl);
-    this.clump = Uint32Array.from(K);
     this.slot = new Int32Array(this.count).fill(-1);
     this.lodOf = new Int8Array(this.count).fill(-1);
     this.accDt = new Float32Array(this.count);

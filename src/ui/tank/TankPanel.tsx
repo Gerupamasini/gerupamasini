@@ -1,5 +1,5 @@
 import { researchFor } from '../../systems/Encyclopedia';
-import { h, Fragment } from 'preact';
+import { Fragment } from 'preact';
 import { useRef, useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Matrix3, Vector3 } from 'three';
 import { ABDOMEN, CARAPACE, CHELIPED, EYE, FACE, LEGS, MXP3, STERNUM } from './ScopimeraGlobosaMorphology.js';
 import { SEGMENTS, SIDES, sharedRig } from './ScopimeraGlobosaRig.js';
 import { clamp, hash01, mulberry, smoothstep, TAU } from './util.js';

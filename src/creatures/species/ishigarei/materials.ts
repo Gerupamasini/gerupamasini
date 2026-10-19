@@ -690,5 +690,3 @@ export function wetSubstrateTint(substrate: string, out: Color): Color {
   const c = SUBSTRATE_TINT[substrate] ?? SUBSTRATE_TINT.sand;
   return out.setRGB(c[0] * 0.76 * 0.85, c[1] * 0.76 * 0.925, c[2] * 0.76 * 1.06);
 }
-
-export const ISH_UNIFORMS = AMH_UNIFORMS;

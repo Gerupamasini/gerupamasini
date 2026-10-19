@@ -91,7 +91,13 @@ export function setSurfSea(u: SurfUniforms, sea: { height: number; period: numbe
  * beach (a foaming collision), and the backwash draws the water below the still level before the next bore.
  */
 export const SURF_GLSL = /* glsl */ `
+// (a shore without surf compiles it out: NO_SURF makes uSurf a constant zero, so every branch it guards is dropped and
+// the shader is that much smaller; the water's composite costs a third of the frame less on 葛西 for it)
+#ifdef NO_SURF
+const vec4 uSurf = vec4(0.0);
+#else
 uniform vec4 uSurf;
+#endif
 uniform vec4 uSurfDir;
 uniform vec4 uSurfLv;
 uniform vec2 uSurfGrid;

@@ -19,7 +19,7 @@ import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentColle
 import { equipmentUnlocked, progressionOf, tankAnimalCapacity, tankUnlocked, buyAquariumUpgrade, isFilterKind, installedFilter, makeEquipment, claimIntroQuests, type FilterKind } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
-import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
+import { NetView, NET_LAYER, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { BinocularView } from '../player/BinocularView';
 import { ClamField } from '../world/ClamField';
@@ -27,7 +27,7 @@ import { colonyQuality, ScopimeraColony } from '../creatures/kometsukigani/Scopi
 import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
-import { configureModelLoader, instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { configureModelLoader, instantiateModel } from '../creatures/models/ModelLoader';
 import { AutoQuality } from '../render/AutoQuality';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
@@ -35,7 +35,7 @@ import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
-import type { SpeciesDef, ToolDef } from '../data/schemas';
+import type { ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import { spawnsOnMap } from '../creatures/Spawner';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
@@ -95,6 +95,8 @@ export class App {
   clams: ClamField | null = null;
   /** the tool of the capture in progress (its proficiency grows with what it brings up) */
   private lastTool: ToolDef | null = null;
+  /** the model of what the tool has just caught, made while the tool moves (prepareCatch) */
+  private catchReady: { ind: Individual; obj: Promise<Object3D | null> } | null = null;
   /** the observation case set down on the flat, and the camera that looks into it */
   fieldCase: FieldCase | null = null;
   shop: ShopScene | null = null;
@@ -1192,6 +1194,7 @@ export class App {
       }
     }
     this.lastTool = tool;
+    this.prepareCatch(caught);
     this.capture.start(tool, caught, swingSec);
     this.net?.show();
     this.setMode('capture');
@@ -1217,6 +1220,7 @@ export class App {
       const ind = this.crabs.dig(p.x, p.z, 0.06);
       if (ind) { if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn'); else caught.push(ind); }
       this.lastTool = tool;
+      this.prepareCatch(caught);
       this.capture.start(tool, caught);
       this.shovel?.show();
       this.setMode('capture');
@@ -1247,6 +1251,7 @@ export class App {
       }
     }
     this.lastTool = tool;
+    this.prepareCatch(caught);
     this.capture.start(tool, caught);
     this.shovel?.show();
     this.setMode('capture');
@@ -1291,7 +1296,9 @@ export class App {
     const shovel = this.toolType(this.capture.state.value?.toolId ?? '') === 'dig';
     if (!shovel) for (const ind of caught) this.creatures.remove(ind.id);
     const first = caught[0];
-    if (first) void this.displayModelFor(first).then((obj) => {
+    const ready = this.catchReady?.ind === first ? this.catchReady.obj : first ? this.displayModelFor(first) : null;
+    this.catchReady = null;
+    if (first && ready) void ready.then((obj) => {
       if (!obj || this.capture.catches[0] !== first) return;
       // the clam's shape is built in shell lengths; the others at their model length
       const scale = CLAM_DRIVERS.has(first.species.model.driver ?? '') ? first.length_mm / 1000 : first.length_mm / first.species.model.modelLength_mm;
@@ -1299,10 +1306,41 @@ export class App {
     });
   }
 
+  /**
+   * Start on the model of what came up the moment the tool is swung: by the time the water has run out of the net
+   * (the swing, the lift, the first half second of looking) it is built and its shaders are compiled.
+   */
+  private prepareCatch(caught: Individual[]): void {
+    const first = caught[0];
+    this.catchReady = first ? { ind: first, obj: this.displayModelFor(first).then(async (obj) => { if (obj) await this.compileForOverlay(obj); return obj; }) } : null;
+  }
+
+  /**
+   * Compile a model's shaders the way the tool overlay draws it (straight to the screen with its tone mapping, no
+   * shadow maps, the tool's layer and lights). Those differ from the field pass's, so every animal coming up in the
+   * net needed new ones: compiled on the frame it first showed, they held the reveal up for a moment.
+   */
+  private async compileForOverlay(obj: Object3D): Promise<void> {
+    const world = this.world;
+    if (!world) return;
+    const gl = this.renderer.gl, target = gl.getRenderTarget(), shadows = gl.shadowMap.enabled;
+    let ready: Promise<unknown> | null = null;
+    gl.setRenderTarget(null);
+    gl.shadowMap.enabled = false;
+    this.camera.layers.set(NET_LAYER);
+    try { ready = gl.compileAsync(obj, this.camera, world.scene); } catch (err) { console.warn(err); } finally {
+      this.camera.layers.set(0);
+      gl.shadowMap.enabled = shadows;
+      gl.setRenderTarget(target);
+    }
+    await ready;
+  }
+
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
   private async displayModelFor(ind: Individual): Promise<Object3D | null> {
     const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid, ind.dress);
-    const rel = m.lod1 ?? m.hero ?? m.lod2;
+    // (the lightest preset draws the far tier only: it is the one already loaded, the detailed one would be fetched now)
+    const rel = QUALITY_PRESETS[this.settings.fieldQuality].modelTier === 'lod2' ? m.lod2 ?? m.lod1 ?? m.hero : m.lod1 ?? m.hero ?? m.lod2;
     if (rel) {
       try { return (await instantiateModel(rel, variantOf(ind.id))).root; } catch (err) { console.warn(err); }
     }
@@ -2143,6 +2181,18 @@ export class App {
     gl.shadowMap.enabled = false;
     gl.clearDepth();
     this.camera.layers.set(NET_LAYER);
+    // what came up, still hidden in the net or under the sand on the scoop, is drawn once into a single pixel: the
+    // work of a first draw (the driver's last compile, the uploads) is done while the tool comes up, not on the
+    // frame the catch shows
+    const shown = this.net?.warmCatch() ?? this.shovel?.warmCatch() ?? null;
+    if (shown) {
+      gl.setScissorTest(true);
+      gl.setScissor(0, 0, 1, 1);
+      gl.render(scene, this.camera);
+      gl.setScissorTest(false);
+      shown();
+      gl.clearDepth();
+    }
     gl.render(scene, this.camera);
     this.camera.layers.set(0);
     scene.background = background;

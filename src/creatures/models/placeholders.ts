@@ -1,4 +1,4 @@
-import { BoxGeometry, CapsuleGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, Object3D, SphereGeometry, type Material } from 'three';
+import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, Object3D, SphereGeometry, type Material } from 'three';
 
 /** Named parts the placeholder drivers animate. */
 export interface PlaceholderModel {
@@ -14,79 +14,6 @@ function mesh(geo: ConstructorParameters<typeof Mesh>[0], mat: Material, name: s
   m.castShadow = true;
   parent.add(m);
   return m;
-}
-
-/** シラタエビ placeholder: 60 mm shrimp, +Z forward, +Y up, origin at the ground under the body. */
-export function makeShrimp(): PlaceholderModel {
-  const root = new Group();
-  root.name = 'Shrimp_Placeholder';
-  const body = new MeshStandardMaterial({ color: 0xe8e2d4, roughness: 0.4, transparent: true, opacity: 0.85, metalness: 0 });
-  const dark = new MeshStandardMaterial({ color: 0x8a8378, roughness: 0.6 });
-  const parts: Record<string, Object3D> = {};
-  const L = 0.06;
-  const pivot = new Group();
-  pivot.position.y = 0.006;
-  root.add(pivot);
-  parts.pivot = pivot;
-  // carapace
-  const cara = mesh(new CapsuleGeometry(0.0045, 0.014, 4, 8), body, 'carapace', pivot);
-  cara.rotation.x = Math.PI / 2;
-  cara.position.z = 0.012;
-  // rostrum
-  const ros = mesh(new ConeGeometry(0.0012, 0.009, 6), body, 'rostrum', pivot);
-  ros.rotation.x = Math.PI / 2;
-  ros.position.set(0, 0.003, 0.024);
-  // abdomen: 6 segments hinged in a chain
-  let parent: Object3D = pivot;
-  let zOff = 0.004;
-  for (let i = 0; i < 4; i++) {
-    const seg = new Group();
-    seg.name = `abd${i}`;
-    seg.position.z = zOff;
-    parent.add(seg);
-    const r = 0.0042 - i * 0.0006;
-    const m = mesh(new CylinderGeometry(r * 0.85, r, 0.0087, 8), body, `abdMesh${i}`, seg);
-    m.rotation.x = Math.PI / 2;
-    m.position.z = -0.0045;
-    parts[`abd${i}`] = seg;
-    parent = seg;
-    zOff = -0.0087;
-  }
-  // tail fan
-  const fan = new Group();
-  fan.position.z = -0.006;
-  parent.add(fan);
-  for (const [i, ang] of [-0.5, 0, 0.5].entries()) {
-    const f = mesh(new BoxGeometry(0.004, 0.0006, 0.008), body, `fan${i}`, fan);
-    f.rotation.y = ang;
-    f.position.set(Math.sin(ang) * 0.004, 0, -0.004);
-  }
-  parts.fan = fan;
-  // walking legs: 5 pairs
-  for (let i = 0; i < 3; i++) for (const side of [-1, 1]) {
-    const leg = new Group();
-    leg.name = `leg${i}${side > 0 ? 'L' : 'R'}`;
-    leg.position.set(side * 0.004, -0.002, 0.018 - i * 0.006);
-    pivot.add(leg);
-    const seg = mesh(new CylinderGeometry(0.0004, 0.0003, 0.009, 4), dark, 'legSeg', leg);
-    seg.rotation.z = side * 0.9;
-    seg.position.set(side * 0.003, -0.003, 0);
-    parts[leg.name] = leg;
-  }
-  // antennae
-  for (const side of [-1, 1]) {
-    const ant = mesh(new CylinderGeometry(0.0003, 0.0001, 0.05, 4), dark, `antenna${side > 0 ? 'L' : 'R'}`, pivot);
-    ant.rotation.x = -Math.PI / 2 + 0.2;
-    ant.rotation.z = side * 0.25;
-    ant.position.set(side * 0.002, 0.004, 0.045);
-    parts[ant.name] = ant;
-  }
-  // eyes
-  for (const side of [-1, 1]) {
-    const eye = mesh(new SphereGeometry(0.0011, 8, 6), dark, 'eye', pivot);
-    eye.position.set(side * 0.0035, 0.004, 0.02);
-  }
-  return { root, parts, length: L };
 }
 
 /** シロチドリ placeholder: 170 mm plover, +Z forward, +Y up, origin at the feet. */
