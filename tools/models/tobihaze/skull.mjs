@@ -73,16 +73,20 @@ const toModel = (p) => [CT_S.shift + CT_S.scale * p[0], p[1], p[2]];
 // 2014 Fig. 2A: upper-jaw tip y 0.29, lower 0.25), but the landmarks above, refitted to the soft tissue, had the
 // symphysis level with it, above the gape and inside the upper lip, so the lower teeth stood out of the lower lip
 // as soon as the jaw dropped. The lower jaw's bones are drawn turned JAW_FIT degrees down about the quadrate
-// condyles: the symphysis sits at y 0.07–0.09, inside the chin under the gape, the coronoid process 0.018 forward
-// (the maxillo-mandibular ligament keeps its length).
-// It is also drawn JAW_FIT_S shorter along s (from the condyles), so its tip lies under the sculpt's receding chin
-// (s 0.07–0.08, set back under the upper lip: anat_soft.md §1.2) instead of 0.02 HL in front of the lower lip.
-// (Merged round n14: 3° and 0.97, down from 6° and 0.93. The mouth's sculpt now closes lower, its gape 0.100 at the
-// front under a median lip that hangs to y 0.083, its slit 0.01 HL wide: at 6° the dentary's tooth row lay in that slit
-// at rest, 88 tooth samples of the left side visible from outside; at 3° / 0.97 none are, the dentary stands out of the
-// skin by at most 0.0056 HL (0.0063 at 6°), the gape views are unchanged and the maxillo-mandibular ligament still keeps
-// its length, the maxilla at 26.75° for the jaw at 70 + 15°.)
-export const JAW_FIT = 3, JAW_FIT_S = 0.97;
+// condyles (the coronoid process a little forward; the maxillo-mandibular ligament keeps its length: the maxilla at
+// 26.75° for the jaw at 70 + 15°, as before), and JAW_FIT_S shorter along s (from the condyles), so its tip lies in the
+// sculpt's receding chin (s ≈ 0.095, set back under the upper lip: anat_soft.md §1.2), not in front of the lower lip.
+// (Round n15: 5° and 0.90, with the dentary refitted below (DENT_FIT). The n14 sculpt's lower jaw is a thin wedge under
+// a low gape: its tissue (below the slit) has its top at y 0.082–0.088 from s 0.09 to the rictus, its front at s 0.085
+// on the midline, and it is only 0.04 HL deep at s 0.10. The CT's dentary, 0.09 HL deep, stood 0.03–0.04 HL above that
+// top at 3° / 0.97 (its teeth at y 0.102–0.125 inside the upper lip, the front two ahead of the chin at s 0.073), so the
+// jaw carried no lip over its teeth when it dropped: they stood 0.044 HL in front of the lower lip at half gape.)
+export const JAW_FIT = 5, JAW_FIT_S = 0.90;
+// The dentary in the sculpt's lower jaw: its alveolar edge lowered (CT y, per dentTop point, the coronoid's root kept)
+// and its symphysis made shallower (the ventral edge drawn toward the top by `depth`), so the whole toothed ramus lies in
+// the lower jaw's tissue: the tips of its teeth 0.008 HL or more under the tissue's top (under the lower lip and the
+// gum, so none shows at rest and the lip stays in front of them at the gape), the bone inside the chin but for 0.004 HL.
+export const DENT_FIT = { drop: [0.028, 0.028, 0.028, 0.035, 0.05, 0], depth: [0.55, 0.6, 0.75, 0.9, 1, 1], toothH: 0.009 };
 const QMJ_CT = [LM.quadCondyle[0], LM.quadCondyle[1], 0];
 const jawFitPoint = (p) => {
   const a = (JAW_FIT * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), x = p[0] - QMJ_CT[0], y = p[1] - QMJ_CT[1];
@@ -226,21 +230,25 @@ export function skullBones() {
   sided('Preopercle', 'J_suspL', () => strap([L.popTop, [0.684, 0.26, 0.262], [0.688, 0.18, 0.268], L.popAngle, [0.665, 0.105, 0.265], L.popFront], [0.03, 0.045, 0.05, 0.05, 0.04, 0.025], 0.01));
 
   // ------------------------------------------------------------------ lower jaw (J_jaw, J_imj)
-  // the dentary: a curved wedge, 0.03 deep at the symphysis, deepening back to the tall coronoid process; the rami
+  // the dentary: a curved wedge, shallow at the symphysis, deepening back to the tall coronoid process; the rami
   // diverge ≈28° from the midline; a single row of conical teeth
-  const dentTop = [L.dentSymTop, [0.020, 0.130, 0.040], [0.060, 0.127, 0.075], [0.120, 0.125, 0.105], [0.190, 0.130, 0.135], [0.250, 0.150, 0.155]];
-  const dentBot = [L.dentSymBottom, [0.040, 0.088, 0.040], [0.085, 0.066, 0.075], [0.150, 0.048, 0.103], L.dentVentral, [0.275, 0.045, 0.150]];
+  // (refitted to the sculpt's lower jaw: DENT_FIT)
+  const dentTop = [L.dentSymTop, [0.020, 0.130, 0.040], [0.060, 0.127, 0.075], [0.120, 0.125, 0.105], [0.190, 0.130, 0.135], [0.250, 0.150, 0.155]].map((p, i) => off(p, [0, -DENT_FIT.drop[i], 0]));
+  const dentBot = [L.dentSymBottom, [0.040, 0.088, 0.040], [0.085, 0.066, 0.075], [0.150, 0.048, 0.103], L.dentVentral, [0.275, 0.045, 0.150]].map((p, i) => v3.lerp(dentTop[i], p, DENT_FIT.depth[i]));
   sided('Dentary', 'J_imj', () => jawFitField(unionOf([
     sheet(dentTop, dentBot, 0.016),
     plateFromPoints([[0.245, 0.135, 0.155], [0.285, 0.13, 0.165], L.coronoid, [0.30, 0.25, 0.168], [0.25, 0.16, 0.157]], 0.012),   // coronoid process
   ], 0.006)));
   // the lower teeth stand on the dentary's inner (lingual) edge, behind the lower lip, their tips at the gape
-  sided('Teeth_Dentary', 'J_imj', () => jawFitField(teeth(dentTop.slice(0, 5).map((p, i) => off(p, [0.010 - 0.0015 * i, -0.007 + 0.001 * Math.min(4, i), -0.006 * Math.min(1, i)])), 12, 0.013, 0.0034, [-0.05, 1, -0.05], 0.55)));
-  // the anguloarticular: a triangular block with the C-shaped socket behind and the retroarticular knob below
+  sided('Teeth_Dentary', 'J_imj', () => jawFitField(teeth(dentTop.slice(0, 5).map((p, i) => off(p, [0.010 - 0.0015 * i, -0.007 + 0.001 * Math.min(4, i), -0.006 * Math.min(1, i)])), 12, DENT_FIT.toothH, 0.0034, [-0.05, 1, -0.05], 0.55)));
+  // the anguloarticular: a triangular block with the C-shaped socket behind and the retroarticular knob below (the
+  // knob drawn 0.022 higher and a little medial of the landmark, a little smaller, inside the sculpt's narrow jaw corner:
+  // it stood up to 0.036 HL out of the skin under the rictus)
+  const RA = off(L.retroart, [0.004, 0.022, -0.008]);
   sided('Anguloarticular', 'J_jaw', () => jawFitField(unionOf([
     plateFromPoints([[0.26, 0.06, 0.155], [0.31, 0.04, 0.168], L.jawSocket, [0.33, 0.135, 0.172], [0.27, 0.15, 0.158]], 0.022),
-    ellipsoidF(F(L.retroart, [1, 0, 0], [0, 1, 0]), [0.025, 0.018, 0.016]),
-    rod(L.retroart, [0.325, 0.07, 0.172], 0.012, 0.016),
+    ellipsoidF(F(RA, [1, 0, 0], [0, 1, 0]), [0.022, 0.014, 0.013]),
+    rod(RA, [0.325, 0.07, 0.168], 0.011, 0.015),
   ], 0.008)));
   // Meckel's cartilage inside the dentary
   sided('Cart_Meckel', 'J_jaw', () => jawFitField(polyRod([[0.06, 0.10, 0.07], [0.15, 0.09, 0.115], [0.29, 0.09, 0.165]], [0.006, 0.007, 0.008])), true);
