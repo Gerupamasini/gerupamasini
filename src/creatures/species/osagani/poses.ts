@@ -15,7 +15,7 @@ export type Partial4 = Partial<LegPose>;
  * down to the mud with their tips near the midline (A45, B12, A51, B25: the "Λ" of the male's claws). FK fitted: the
  * carpus at the front corner, the palm across the front pointing in, the fingers down to the mud by the midline.
  */
-export const CHELA_STAND: Partial4 = { promo: 0.16, pitch: -0.1, lev: 0.26, roll: 0.0, meYaw: 0.68, mcYaw: -0.98, mc: -0.03, cp: -0.03, cpRoll: 0.42, cpYaw: -1.8, pd: 0.0 };
+export const CHELA_STAND: Partial4 = { promo: 0.05, pitch: -0.1, lev: 0.36, roll: 0.0, meYaw: 0.61, mcYaw: -0.88, mc: -0.19, cp: -0.07, cpRoll: 0.26, cpYaw: -1.58, pd: 0.0 };
 /** the female's small chelae standing: before the mouth, the fingertips down on the mud (A47, B4; FK fitted on her arm) */
 export const CHELA_STAND_F: Partial4 = { promo: 0.78, pitch: -0.1, lev: -0.06, roll: 0.0, meYaw: 0.97, mcYaw: -1.73, mc: -0.85, cp: 0.63, cpRoll: -0.18, cpYaw: -0.19, pd: 0.0 };
 /** the female's folded at rest across the front under the eyes, the fingers in towards the midline (A28, B32, A1) */

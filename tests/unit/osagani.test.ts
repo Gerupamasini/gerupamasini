@@ -93,9 +93,14 @@ describe('ヤマトオサガニ: the body plan', () => {
   });
 
   it("the mature male's chela large (propodus ≈ 0.95 CW) with deflexed fingers; the female's small", () => {
-    const pl = CHELA_MALE.palm.length + CHELA_MALE.finger.length * Math.cos(CHELA_MALE.fingerAngle);
-    expect(pl / CW_MM).toBeGreaterThan(0.75);
-    expect(CHELA_MALE.fingerAngle).toBeLessThan(-0.8);
+    // from the palm's joint to the closed fingertip, and the fingers ≈ 40° below the palm's axis (A45, square-on)
+    expect(Math.hypot(...CHELA_MALE.tip) / CW_MM).toBeGreaterThan(0.85);
+    expect(CHELA_MALE.fingerAngle).toBeLessThan(-0.5);
+    expect(CHELA_MALE.fingerAngle).toBeGreaterThan(-0.9);
+    // the palm tallest distally, where the fingers spring from it
+    const hy = CHELA_MALE.palm.sections.map((s) => s.hy);
+    expect(hy[hy.length - 1]).toBeGreaterThanOrEqual(Math.max(...hy));
+    expect(hy[hy.length - 1] * 2 / CHELA_MALE.palm.length).toBeGreaterThan(0.5);
     expect(chelaFor('f', 35).male).toBe(false);
     expect(chelaFor('m', 35).male).toBe(true);
     expect(chelaFor('m', 14).male).toBe(false);
@@ -256,6 +261,33 @@ describe('ヤマトオサガニ: behaviour round the burrow', () => {
     expect(b.state.mode).toBe('FORAGE');
     expect(maxL - minL).toBeGreaterThan(0.15);
     expect(b.pose.mxp).toBeGreaterThan(0);
+  });
+
+  it("the male's fingertips at the mud's surface, not in it: standing, resting low by the burrow, feeding", () => {
+    const root = new Group();
+    const { bones } = createBones(rig, root);
+    const ground = (x: number) => 0.01 * Math.sin(x * 5);
+    const b = mk(21);
+    const arm = chelaFor('m', 35).arm, tip = new Vector3();
+    const seen = new Set<string>();
+    let low = 1;
+    const check = () => {
+      if (b.state.burrow > 0.02 || b.state.mode === 'DEFEND') return;
+      seen.add(`${b.state.mode}/${b.state.phase}`);
+      applyPose(root, bones, rig, b.pose, arm);
+      for (const s of ['L', 'R']) {
+        tip.set(CHELA_MALE.tip[0] / 1000, CHELA_MALE.tip[1] / 1000, 0).applyMatrix4(bones[`J_P1${s}_pr`].matrixWorld);
+        low = Math.min(low, tip.y - ground(tip.x));
+      }
+    };
+    const go = (s: number) => { for (let i = 0; i < s * 40; i++) { b.update(1 / 40, 0); check(); } };
+    b.idle(4); go(3);
+    b.enterBurrow(30); go(6);
+    b.exitBurrow(1.5); go(4);
+    b.forage(10); go(6);
+    expect(seen.has('IDLE/mouth')).toBe(true);
+    expect(seen.has('FORAGE/scoop')).toBe(true);
+    expect(low).toBeGreaterThan(-0.0012);
   });
 
   it('every state runs at every tier without broken numbers', () => {

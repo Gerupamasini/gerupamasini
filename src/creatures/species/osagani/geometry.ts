@@ -772,7 +772,8 @@ function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
     const L = ch.palm.length, h = ch.palm.sections[3].hy;
     const fa = ch.fingerAngle, fl = ch.finger.length;
     const fx = ch.fingerAt[0] + Math.cos(fa) * fl, fy = ch.fingerAt[1] + Math.sin(fa) * fl;
-    tube([P('pr'), P('pr', L * 0.45), P('pr', L)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
+    const cy = ch.palm.sections[ch.palm.sections.length - 1].cy ?? 0;
+    tube([P('pr'), P('pr', L * 0.45, cy * 0.7), P('pr', L, cy)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
     tube([P('pr', ch.fingerAt[0], ch.fingerAt[1]), P('pr', ch.fingerAt[0] + Math.cos(fa) * fl * 0.5, ch.fingerAt[1] + Math.sin(fa) * fl * 0.5), P('pr', fx, fy)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
     tube([P(daBone), P(daBone, ch.da.length * 0.5, -0.3), P(daBone, ch.da.length, -1.0)], [h * 0.36, h * 0.28, 0.1], PART.FINGER, flag);
   }

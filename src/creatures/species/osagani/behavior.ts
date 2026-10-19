@@ -667,13 +667,16 @@ export function createCrabBehavior(o: CrabOptions) {
           if (active) {
             const down = ph < 0.35 ? smooth(ph / 0.35) : ph < 0.5 ? 1 : 1 - smooth((ph - 0.5) / 0.3);
             const up = ph > 0.55 ? Math.sin(((ph - 0.55) / 0.45) * Math.PI) : 0;
-            add({ lev: -0.12 * down + 0.3 * up, mc: -0.12 * down + 0.25 * up, promo: 0.12 * down + 0.15 * up, cpYaw: 0.25 * up });
+            add({ lev: -0.08 * down + 0.3 * up, mc: -0.06 * down + 0.25 * up, promo: 0.12 * down + 0.15 * up, cpYaw: 0.25 * up });
             G.pd = ph < 0.3 ? 0.3 : ph < 0.45 ? 0.02 : 0.04;
           }
         }
         break;
       }
     }
+    // the male's long fingers kept at the mud's surface however low the body sits (resting by the burrow, feeding):
+    // ≈ 11 mm of fingertip height a radian of `lev`
+    if (male && st.mode !== 'DEFEND') G.lev += Math.max(0, LIFT.stand * 1.05 - st.lift) / 11;
   }
 
   // ------------------------------------------------------------ the pose

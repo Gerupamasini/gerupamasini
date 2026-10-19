@@ -364,34 +364,39 @@ export interface ChelaSpec {
 }
 
 /**
- * The mature male's chela: the palm elongate, tall and compressed with a blunt upper crest; the fingers deflexed
- * ≈ 60° from the palm's axis (B33, B34), the dactylus long and curved over the fixed finger, the large wedge-shaped tooth on the
- * fixed finger's cutting edge at a distance from its base (Wada 2018), the cutting edges finely toothed (B33, B34, A45,
- * B12, B29). Propodus (palm and fixed finger) ≈ 0.95 CW along its lower edge at this size (Wada 2018: log PL = −1.719 +
- * 2.105 log CW, 0.97 CW at CW 35; A45, B12).
+ * The mature male's chela: the palm elongate, tall and compressed, its upper margin a straight blunt crest and its lower
+ * margin falling away distally so that the palm is tallest (≈ 0.6 its length) where the fingers spring from it; the
+ * fixed finger broad-based, taking the palm's whole lower half and running on from its lower margin; the dactylus
+ * hinged at the upper distal corner, broad and arched over the fixed finger. Measured on the outer face seen square-on
+ * (A45; the obliquer B33, B34 foreshorten the palm and make the fingers look steeper): the fingers' axes ≈ 38° and ≈ 42°
+ * below the palm's, the closed tips 1.6 palm-lengths out. The large wedge-shaped tooth on the fixed finger's cutting
+ * edge at a distance from its base (Wada 2018), the cutting edges finely toothed (B33, B34, A45, B12, B29). Propodus
+ * (palm and fixed finger) ≈ 0.95 CW at this size (Wada 2018: log PL = −1.719 + 2.105 log CW, 0.97 CW at CW 35).
  */
 export const CHELA_MALE: ChelaSpec & { tooth: { t: number; h: number } } = {
   palm: {
     name: 'pr', length: 19.5, n: 2.25, neck: 0.035,
-    sections: [S(0, 2.1, 1.35), S(0.06, 3.1, 1.5), S(0.22, 4.4, 1.62, 0.1), S(0.5, 4.95, 1.66), S(0.85, 5.0, 1.6, -0.1), S(1, 4.6, 1.5, -0.2)],
+    // (the upper margin nearly straight at y ≈ 3.8, the lower margin falling from −2.2 to −7.8)
+    sections: [S(0, 2.2, 1.35), S(0.06, 3.3, 1.5, -0.25), S(0.2, 4.7, 1.6, -0.9), S(0.45, 5.4, 1.66, -1.5), S(0.75, 5.75, 1.62, -1.9), S(1, 5.8, 1.55, -2.0)],
     // the palm's upper margin a blunt crest, its lower margin rounded (B33)
     costae: [[0.0, 0.3, 0.2], [Math.PI, 0.16, 0.32]],
   },
   finger: {
-    name: 'pr', length: 14.5, n: 2.3,
-    sections: [S(0, 2.35, 1.75), S(0.15, 2.05, 1.6), S(0.5, 1.5, 1.22), S(0.85, 0.85, 0.74, -0.12), S(1, 0.1, 0.1, -0.3)],
+    // its base the palm's distal lower half, narrowing fast and then evenly to the tip (A45)
+    name: 'pr', length: 16.0, n: 2.3,
+    sections: [S(0, 4.0, 1.55), S(0.16, 3.9, 1.5), S(0.35, 2.3, 1.35), S(0.6, 1.7, 1.12), S(0.85, 0.85, 0.74, -0.1), S(1, 0.1, 0.1, -0.25)],
     costae: [[Math.PI, 0.12, 0.3]],
   },
-  fingerAt: [18.7, -2.1],
-  fingerAngle: -1.0,
+  fingerAt: [17.1, -1.5],
+  fingerAngle: -0.66,
   da: {
-    name: 'da', length: 18.0, n: 2.3, neck: 0.03,
-    sections: [S(0, 1.7, 1.38), S(0.08, 1.92, 1.45), S(0.4, 1.6, 1.25, -0.3), S(0.75, 1.15, 0.95, -0.75), S(0.92, 0.62, 0.56, -1.05), S(1, 0.1, 0.1, -1.15)],
+    name: 'da', length: 18.4, n: 2.3, neck: 0.03,
+    sections: [S(0, 1.6, 1.3), S(0.1, 1.75, 1.38), S(0.4, 1.7, 1.25, -0.25), S(0.7, 1.3, 1.0, -0.6), S(0.9, 0.7, 0.6, -0.9), S(1, 0.12, 0.12, -1.0)],
     costae: [[0.0, 0.18, 0.22]],
   },
-  hinge: [19.2, 2.9],
-  daAngle: -1.15,
-  tip: [26.5, -14.3],
+  hinge: [18.2, 2.6],
+  daAngle: -0.69,
+  tip: [29.8, -11.3],
   /** the wedge tooth on the fixed finger (t along the finger, its height mm) */
   tooth: { t: 0.32, h: 1.4 },
 };
