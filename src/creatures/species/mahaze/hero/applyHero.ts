@@ -7,6 +7,7 @@ import { createFinMaterials } from './FinMaterial.js';
 import { createEyeMaterial } from './EyeMaterial.js';
 import { createInteriorMaterial } from './InteriorMaterial.js';
 import type { MorphPick, MorphTable } from '../colourMorph.js';
+import { anatomyFor, type GobyBodyExtras } from '../bodyTranslucency';
 
 interface MahazeMatExtras {
   role: string;
@@ -73,6 +74,8 @@ export class HeroInstance {
       profileTexture: createProfileTexture(bx.profile),
       frame: bx.fishFrame,
       vertebrae: bx.vertebrae,
+      // the species' skeleton and organs (the マハゼ's from a goby skeleton's CT: ../skeleton.js)
+      anatomy: anatomyFor((body.material as Material).name, bx as unknown as GobyBodyExtras),
       shared,
     }) as Material;
     inst.swap(body, bodyMat);

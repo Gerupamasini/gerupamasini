@@ -12,6 +12,7 @@
 //   * skin chromatophores (melanin / iridophores / xanthophores) filter light at entry and exit
 import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
+import { COLUMN_GLSL, COLUMN_PLAIN, SLANT } from '../skeleton.js';
 import { morphGLSL, morphUniforms } from '../colourMorph.js';
 
 // Skinned: the volume is evaluated in the rest pose (vObjPos) and world directions are mapped into
@@ -86,6 +87,13 @@ uniform vec4 uFrame;            // S0, Y0, SL, SEND (mm)
 uniform vec4 uJaws;             // dense jaw/lip tissue: s ramp (x→y), height ramp (z→w)
 uniform float uVertStart;
 uniform float uVertLen;
+uniform vec4 uColHn;            // the column's height in the section: first centrum, over the cavity, at the vent, caudal base
+uniform vec4 uColShape;         // … the vent (mm), its radius at the first centrum and the last, its last centrum (mm)
+uniform vec2 uColRm;            // … its radius in the scattering tissue at the first centrum and the last
+uniform vec2 uCavity;           // the body cavity: front and hind end (mm)
+uniform vec3 uOrgC[8];          // the organs (liver, gut, peritoneum, kidney, heart, brain, otoliths): centre (mm)
+uniform vec3 uOrgR[8];          // … radii (mm)
+uniform vec3 uOrgK[8];          // … absorption per mm (rgb)
 uniform float uSigS;            // base tissue scattering (1/mm)
 uniform vec3 uSigA;             // base tissue absorption (1/mm)
 uniform float uScatter;         // user scale on scattering (milkiness)
@@ -192,6 +200,11 @@ vec3 pigAt(vec3 p, float lod) {
 #endif
 }
 
+${COLUMN_GLSL}
+// the vertebral column's height at s mm (../skeleton.js: the マハゼ's high over the body cavity, about the middle in the tail)
+float columnY(Sec q, float s) { return q.yc + gobyColumnHn(s, uVertStart, uColShape.x, uFrame.z, uColHn) * q.t; }
+float columnU(float s) { return clamp((s - uVertStart) / (uColShape.w - uVertStart), 0.0, 1.0); }
+
 // chromatophore filter of the skin layer (melanin, iridophores, xanthophores)
 vec3 skinT(vec3 pig) {
   vec3 t = exp(-pig.r * vec3(3.4, 3.8, 4.3));
@@ -223,22 +236,46 @@ void medium(vec3 p, out float sS, out vec3 sA) {
   float trunk = smoothstep(uVertStart - 0.5, uVertStart + 0.5, s) * (1.0 - smoothstep(uFrame.z - 0.3, uFrame.z + 0.5, s));
   if (trunk > 0.0 && I > 0.0) {
     // vertebral column with denser inter-vertebral joints
-    float spineY = q.yc + 0.06 * q.t;
+    float spineY = columnY(q, s);
     float dys = p.y - spineY;
-    float rad = mix(0.3, 0.16, clamp((s - uVertStart) / (uFrame.z - uVertStart), 0.0, 1.0));
+    float rad = mix(uColRm.x, uColRm.y, clamp((s - uVertStart) / (uFrame.z - uVertStart), 0.0, 1.0));
     float vph = fract((s - uVertStart) / uVertLen);
     float joint = smoothstep(0.3, 0.5, abs(vph - 0.5));
     float spine = exp(-(dys * dys + p.z * p.z) / (rad * rad)) * trunk;
     sS += I * spine * (7.0 + 6.0 * joint);
     sA += I * spine * vec3(0.05, 0.065, 0.09);
-    // neural & haemal spines: slanted rods in the median plane
     float mid = exp(-p.z * p.z / 0.03);
+#ifdef GOBY_CT_SKELETON
+    // neural spines on every vertebra (short over the body cavity), haemal spines on the caudal ones behind the vent:
+    // slanted rods in the median plane, leaning back as a goby's do (../skeleton.js)
+    float caudal = smoothstep(uColShape.x - 0.3 * uVertLen, uColShape.x + 0.7 * uVertLen, s);
+    float rph = fract(((s - uVertStart) - ${SLANT.spine.toFixed(3)} * abs(dys)) / uVertLen);
+    float reach = dys > 0.0 ? mix(0.75, 0.85, caudal) : 0.85;
+    float rod = exp(-pow((rph - 0.5) * uVertLen / 0.06, 2.0)) * mid * trunk * (dys > 0.0 ? 1.0 : caudal) *
+                smoothstep(0.25, 0.5, abs(dys)) * (1.0 - smoothstep(reach - 0.15, reach + 0.1, abs(hn)));
+    sS += I * rod * 3.5;
+    // pleural ribs: a pair on each abdominal vertebra from the third on, down the body wall around the cavity
+    float abd = smoothstep(uVertStart + 1.5 * uVertLen, uVertStart + 2.5 * uVertLen, s) * (1.0 - caudal);
+    if (abd > 0.0 && dys < 0.0) {
+      bool up = dy > 0.0;
+      float n = up ? q.nT : q.nB;
+      float rr = pow(pow(abs(p.z) / max(q.w, 1e-3), n) + pow(abs(dy) / max(up ? q.t : q.b, 1e-3), n), 1.0 / n);
+      float bph = fract(((s - uVertStart) + ${SLANT.rib.toFixed(3)} * dys) / uVertLen);
+      float rib = exp(-pow((bph - 0.5) * uVertLen / 0.07, 2.0)) * smoothstep(0.62, 0.8, rr) * (1.0 - smoothstep(0.9, 0.98, rr)) *
+                  smoothstep(0.1, 0.4, -dys) * (1.0 - smoothstep(0.7, 0.9, -hn));
+      sS += I * rib * abd * 3.0;
+    }
+    // myosepta (W-shaped, apex forward at the horizontal septum, at the column)
+    float an = abs(dys) / max(dys > 0.0 ? q.t : q.b, 1e-3);
+#else
+    // neural & haemal spines: slanted rods in the median plane
     float rph = fract(((s - uVertStart) - 0.62 * abs(dys)) / uVertLen);
     float rod = exp(-pow((rph - 0.5) * uVertLen / 0.06, 2.0)) * mid * trunk *
                 smoothstep(0.25, 0.5, abs(dys)) * (1.0 - smoothstep(0.7, 0.95, abs(hn)));
     sS += I * rod * 3.5;
     // myosepta (W-shaped, apex forward at the horizontal septum)
     float an = abs(hn);
+#endif
     float chev = an < 0.55 ? an / 0.55 : 1.0 - 0.45 * (an - 0.55) / 0.45;
     float mph = fract(((s - uVertStart) - 0.95 * chev) / uVertLen);
     float sept = exp(-pow((mph - 0.5) * uVertLen / 0.08, 2.0)) * trunk;
@@ -248,7 +285,7 @@ void medium(vec3 p, out float sS, out vec3 sA) {
   }
   if (trunk > 0.0) {
     // internal melanophores: a segmental row above the vertebral column and along the haemal arches
-    float spineY = q.yc + 0.06 * q.t;
+    float spineY = columnY(q, s);
     float ph2 = fract((s - uVertStart) / uVertLen + 0.25);
     float seg = exp(-pow((ph2 - 0.5) * uVertLen / 0.2, 2.0));
     float rowU = exp(-(pow(p.y - spineY - 0.5, 2.0) + p.z * p.z) / 0.035);
@@ -256,8 +293,8 @@ void medium(vec3 p, out float sS, out vec3 sA) {
     sA += (rowU * 0.9 + rowD * 0.7) * seg * trunk * vec3(1.5, 1.7, 1.9) * (0.5 + 0.5 * I);
   }
   // abdominal cavity: viscera + melanin-bearing peritoneum on its dorsal wall
-  vec3 vc = vec3(17.2, q.yc - 0.42 * q.b, 0.0);
-  vec3 vq = (p - vc) / vec3(6.0, 0.58 * q.b + 0.1, 0.66 * q.w + 0.05);
+  vec3 vc = vec3(0.5 * (uCavity.x + uCavity.y), q.yc - 0.42 * q.b, 0.0);
+  vec3 vq = (p - vc) / vec3(0.5 * (uCavity.y - uCavity.x), 0.58 * q.b + 0.1, 0.66 * q.w + 0.05);
   float e = length(vq);
   float gut = 1.0 - smoothstep(0.7, 1.0, e);
   sS += I * gut * 2.2;
@@ -286,7 +323,12 @@ float ellChord(vec3 o, vec3 d, float L, vec3 c, vec3 r, inout float tFirst) {
 }
 // Gaussian tube around the (nearly straight) vertebral column, with denser centrum rims
 float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
+#ifdef GOBY_CT_SKELETON
+  float s0 = clamp(o.x, uVertStart, uColShape.w);
+  float spineY = columnY(section(s0), s0);
+#else
   float spineY = 3.68;
+#endif
   vec2 dp = d.yz;
   float dd = max(dot(dp, dp), 0.02);
   float tc = 0.0, sc = 0.0;
@@ -294,15 +336,14 @@ float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
     vec2 w = o.yz - vec2(spineY, 0.0);
     tc = -dot(w, dp) / dd;
     sc = o.x + d.x * clamp(tc, 0.0, L);
-    Sec q = section(clamp(sc, uVertStart, 40.6));
-    spineY = q.yc + 0.06 * q.t;
+    float sq = clamp(sc, uVertStart, uColShape.w);
+    spineY = columnY(section(sq), sq);
   }
   vec2 cpt = o.yz - vec2(spineY, 0.0) + dp * tc;
-  float u = clamp((sc - uVertStart) / (40.6 - uVertStart), 0.0, 1.0);
-  float r = mix(0.34, 0.17, u);
+  float r = mix(uColShape.y, uColShape.z, columnU(sc));
   float sig = r / sqrt(dd);
   float g = exp(-dot(cpt, cpt) / (r * r)) * sig * 0.8862 * (erfA((L - tc) / sig) - erfA(-tc / sig));
-  float win = smoothstep(uVertStart - 0.4, uVertStart + 0.4, sc) * (1.0 - smoothstep(40.2, 41.0, sc));
+  float win = smoothstep(uVertStart - 0.4, uVertStart + 0.4, sc) * (1.0 - smoothstep(uColShape.w - 0.4, uColShape.w + 0.4, sc));
   float vph = fract((sc - uVertStart) / uVertLen);
   float rim = smoothstep(0.3, 0.48, abs(vph - 0.5));
   if (g * win > 0.02) tFirst = min(tFirst, max(tc - sig, 0.0));
@@ -312,14 +353,7 @@ float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
 vec3 organTau(vec3 o, vec3 d, float L, out float tFirst) {
   tFirst = 1e3;
   vec3 tau = spineTau(o, d, L, tFirst) * vec3(4.0, 4.4, 5.0);                                      // vertebral column
-  tau += ellChord(o, d, L, vec3(13.4, 1.55, 0.2), vec3(1.9, 1.05, 1.85), tFirst) * vec3(1.3, 2.3, 2.9); // liver
-  tau += ellChord(o, d, L, vec3(17.9, 1.4, -0.1), vec3(3.7, 1.0, 1.35), tFirst) * vec3(1.0, 1.4, 2.3);  // stomach + gut
-  tau += ellChord(o, d, L, vec3(16.9, 2.72, 0.0), vec3(5.4, 0.3, 1.75), tFirst) * vec3(3.8, 4.0, 4.2);    // dark peritoneum roof
-  tau += ellChord(o, d, L, vec3(16.8, 3.2, 0.0), vec3(5.8, 0.22, 0.32), tFirst) * vec3(0.8, 2.6, 2.6);     // kidney under the column
-  tau += ellChord(o, d, L, vec3(10.2, 0.9, 0.0), vec3(0.7, 0.5, 0.6), tFirst) * vec3(0.5, 4.0, 3.6);      // heart
-  tau += ellChord(o, d, L, vec3(6.8, 4.4, 0.0), vec3(2.4, 0.75, 0.8), tFirst) * vec3(0.15, 0.2, 0.3);    // brain
-  tau += ellChord(o, d, L, vec3(8.3, 3.75, 0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);             // otoliths
-  tau += ellChord(o, d, L, vec3(8.3, 3.75, -0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);
+  for (int i = 0; i < 8; i++) tau += ellChord(o, d, L, uOrgC[i], uOrgR[i], tFirst) * uOrgK[i];
   return tau;
 }
 
@@ -574,12 +608,57 @@ void main() {
 }
 `;
 
+// the organs the hero was first given (the マハゼ juvenile's, mm): the エドハゼ and the ヒメハゼ keep them; centre, radii,
+// absorption per mm — liver, stomach + gut, dark peritoneum roof, kidney under the column, heart, brain, otoliths
+const PLAIN_ORGANS = [
+  [[13.4, 1.55, 0.2], [1.9, 1.05, 1.85], [1.3, 2.3, 2.9]],
+  [[17.9, 1.4, -0.1], [3.7, 1.0, 1.35], [1.0, 1.4, 2.3]],
+  [[16.9, 2.72, 0.0], [5.4, 0.3, 1.75], [3.8, 4.0, 4.2]],
+  [[16.8, 3.2, 0.0], [5.8, 0.22, 0.32], [0.8, 2.6, 2.6]],
+  [[10.2, 0.9, 0.0], [0.7, 0.5, 0.6], [0.5, 4.0, 3.6]],
+  [[6.8, 4.4, 0.0], [2.4, 0.75, 0.8], [0.15, 0.2, 0.3]],
+  [[8.3, 3.75, 0.78], [0.32, 0.2, 0.11], [6, 6, 6]],
+  [[8.3, 3.75, -0.78], [0.32, 0.2, 0.11], [6, 6, 6]],
+];
+const v3 = (a) => new THREE.Vector3(...a);
+/**
+ * The skeleton and organs: the マハゼ's (anatomy.skeleton.ct) from its anatomy (../bodyTranslucency.ts anatomyFor: the
+ * column high over the body cavity, haemal spines behind the vent, ribs, the kidney and the peritoneum under the column;
+ * ../skeleton.js), the other gobies' as the hero first drew them.
+ */
+function skeletonUniforms(anatomy) {
+  if (!anatomy?.skeleton.ct) {
+    return {
+      uColHn: { value: new THREE.Vector4(...COLUMN_PLAIN.hn) },
+      uColShape: { value: new THREE.Vector4(23.2, ...COLUMN_PLAIN.radius, 40.6) },
+      uColRm: { value: new THREE.Vector2(0.3, 0.16) },
+      uCavity: { value: new THREE.Vector2(11.2, 23.2) },
+      uOrgC: { value: PLAIN_ORGANS.map((o) => v3(o[0])) },
+      uOrgR: { value: PLAIN_ORGANS.map((o) => v3(o[1])) },
+      uOrgK: { value: PLAIN_ORGANS.map((o) => v3(o[2])) },
+    };
+  }
+  const k = anatomy.skeleton, sc = anatomy.columnScale, liver = anatomy.organs[0];
+  return {
+    uColHn: { value: new THREE.Vector4(...k.hn) },
+    uColShape: { value: new THREE.Vector4(k.vent, k.radius[0] * sc, k.radius[1] * sc, anatomy.column[1]) },
+    // (the scattering tube a little narrower than the absorbing one, as before)
+    uColRm: { value: new THREE.Vector2(k.radius[0] * sc * 0.88, k.radius[1] * sc * 0.88) },
+    // the cavity runs from the liver's front to the vent
+    uCavity: { value: new THREE.Vector2(liver.c.x - liver.r.x, k.vent) },
+    uOrgC: { value: anatomy.organs.map((o) => o.c.clone()) },
+    uOrgR: { value: anatomy.organs.map((o) => o.r.clone()) },
+    uOrgK: { value: anatomy.organs.map((o) => o.k.clone()) },
+  };
+}
+
 /**
  * @param {object} o  textures { albedo, normal, orm (older GLBs), pigment, capAlbedo, capPigment }; packed: the GLB keeps
  *   its ambient occlusion in the colour map's alpha and its roughness in the pigment map's (extras.mahaze.channels);
- *   morphs, morph: the マハゼ's morph layout (the looks' table and the fish's own: ../colourMorph.js)
+ *   morphs, morph: the マハゼ's morph layout (the looks' table and the fish's own: ../colourMorph.js); anatomy: the
+ *   species' (../bodyTranslucency.ts anatomyFor), its skeleton and organs
  */
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, packed = false, morphs = null, morph = null }) {
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, packed = false, morphs = null, morph = null, anatomy = null }) {
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
@@ -601,10 +680,14 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uBackStrength: { value: 0.3 },
     uAmbThrough: shared.uAmbThrough ?? { value: 5.0 },
     ...(morphs ? morphUniforms(morphs, morph) : {}),
+    ...skeletonUniforms(anatomy),
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
-    defines: morphs ? { MORPH_CHANNELS: '' } : packed ? { PACKED_CHANNELS: '' } : {},
+    defines: {
+      ...(morphs ? { MORPH_CHANNELS: '' } : packed ? { PACKED_CHANNELS: '' } : {}),
+      ...(anatomy?.skeleton.ct ? { GOBY_CT_SKELETON: '' } : {}),
+    },
     uniforms,
     vertexShader,
     fragmentShader,
