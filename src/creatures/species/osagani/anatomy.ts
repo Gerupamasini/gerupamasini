@@ -3,21 +3,21 @@
  * of 35 mm carapace width (CW, between the tips of the external orbital teeth: the game's `length_mm` of a crab is
  * its carapace width). Males reach 40 mm, females 38 mm (Wada 2018).
  *
- * Measured on the two photograph sheets that came with the request — A1–A51 (Wikimedia Commons and iNaturalist) and
- * B1–B70 (iNaturalist, and twelve stereo-microscope photographs, B59–B70) — on Wada (2018, Crustacean Research
- * 47: 1–5) for the proportions a photograph cannot give, and on the sections of the CC0 photogrammetry scan of a male
- * (ffish.asia / floraZia.com) for the body's volumes (its sections measured and fitted; nothing of it is shipped);
- * never a generic crab:
- *  - carapace  transversely rectangular, CL = 0.451 + 0.663 CW (Wada 2018, males; 0.68 CW at this size, along the
- *              mid-line; the scan as a chord 0.65). The dorsal orbital margin convex forward, sweeping back to the
- *              external orbital angles ≈ 3 mm behind it (B63 straight down, the A47 front view; the scan 2 mm); the
- *              lateral margins nearly parallel, converging over the posterior third into rounded posterolateral
- *              corners (B65, B63, the scan); the posterior margin broad and straight (B65)
+ * Measured on the CC0 photogrammetry scan of a male (ffish.asia / floraZia.com) for the body's own shape — its
+ * dorsal surface, walls, face, orbits and underside drawn from tables measured on it (`scanfit.ts`), its legs' and
+ * eyestalks' lengths, sections and roots measured along their axes — and on the two photograph sheets that came with
+ * the request — A1–A51 (Wikimedia Commons and iNaturalist) and B1–B70 (iNaturalist, and twelve stereo-microscope
+ * photographs, B59–B70) — for what a scan does not show (colour, setae, teeth, the claws' forms); never a generic crab:
+ *  - carapace  transversely rectangular and short: 0.56 CW long at the margins in plan (the scan; B65 0.55), the
+ *              frontal lobe the furthest forward and the dorsal orbital margins 2 mm behind it, nearly straight across
+ *              to the external orbital teeth; the lateral margins nearly parallel over the anterolateral teeth, the
+ *              branchial regions rolling over behind them into rounded posterolateral corners (the scan, B65, B63)
  *  - front     a narrow deflexed lobe between the eyestalks' bases (≈ 0.08 CW across: B60, B66, B69) with a median
  *              furrow running back into the gastric region (B69)
- *  - orbits    long trenches under the whole anterior margin, from the front out to the external orbital teeth
- *              (B15, A32, B63): the eyestalks fold into them; the dorsal orbital margin finely beaded, the
- *              infraorbital margin crenulate (B15, B49)
+ *  - orbits    long trenches open forwards and upwards in front of the dorsal orbital margin, from the eyestalks'
+ *              sockets out to the external orbital teeth, floored by the infraorbital margin standing 2–3 mm out in
+ *              front of the dorsal margin 2 mm below it (the scan's sections; B15, A32, A47): the eyestalks fold into
+ *              them; the dorsal orbital margin finely beaded, the infraorbital margin crenulate (B15, B49)
  *  - margins   three anterolateral teeth a side counting the external orbital tooth (B63, B69, A32; Ito 2014 for
  *              the allied M. banzai): the first acute, forward and outward, the second and third smaller; the lateral
  *              margins fringed with setae (A32, B24, B49)
@@ -26,14 +26,16 @@
  *              B69); flat across the front half, the branchial regions rolling over into the sides behind the third
  *              anterolateral tooth (no marginal ridge there: the scan's transverse sections, B7, A47) and the posterior
  *              third falling to the posterior margin halfway down the back (the scan's sagittal sections, B7, A13)
- *  - depth     a deep body: sternum to the dorsal crest ≈ 0.42 CW (the scan's sections); in front a box with vertical
- *              walls, in side view an egg — the underside rising fore and aft to the buccal frame and the abdomen's
- *              hinge (the scan, B7)
- *  - face      under the front margin it falls back towards the corners: flat across the maxillipeds, the orbits deeper
- *              and the infraorbital margins and pterygostomian faces ≈ 3 mm behind the external orbital angles, which
- *              overhang it (the scan's front map; A47, A45, B60); dark with mud in the field (A45, A47, B7)
- *  - eyes      long, slender eyestalks set close to the midline (bases ≈ 0.2 CW apart: A1, A45, B12), ≈ 0.38 CW long
- *              (reaching the external orbital tooth when folded: B15), raised upright and splayed ≈ 12° (A47, B60);
+ *  - depth     a deep body: sternum to the dorsal crest ≈ 0.42 CW (the scan); in front a box with vertical walls
+ *              under margins overhanging them by 1.5 mm, in side view an egg — the underside rising forward from
+ *              mid-length to the buccal frame, and backward to the abdomen's hinge (the scan, B7)
+ *  - face      upright: flat across the maxillipeds 9.3 mm in front of the carapace's centre from the infraorbital
+ *              margins down to the ischia's lower half, then sloping back to the sternum; falling back beyond the
+ *              maxillipeds towards the corners (the scan; A47, A45, B60); dark with mud in the field (A45, A47, B7)
+ *  - eyes      long, slender eyestalks set close to the midline (bases ≈ 0.22 CW apart: the scan, A1, A45, B12),
+ *              ≈ 0.38 CW long (reaching the external orbital tooth when folded: B15), raised and splayed ≈ 17°,
+ *              bowed out and forward (≈ 17 mm the radius of the bend): leaning out ≈ 30° from their sockets and
+ *              turning upright towards the cornea, which leans back a little (the scan's stalks, A47, B60);
  *              a short thick basal article, a slender translucent stalk with a slight waist a third of the way up and a
  *              gentle swelling into the cornea; the cornea a terminal, elongate oval cap a little wider than the stalk
  *              (B59, B66: 1.15–1.25 ×), brown with dark mottling
@@ -46,19 +48,23 @@
  *              at a distance from its base, the cutting edges brown (A45, B12, B33, B34, B8, B29); the merus a long
  *              three-sided prism fringed with setae (B2, B34). The female's (and the immature male's) small, slender,
  *              with pointed, little-deflexed fingers (A47, B62, B68)
- *  - walking   P2 < P3 ≈ P4 > P5: 0.79, 0.94, 0.99, 0.67 CW (merus to dactylus: B70, B65, B64); merus 0.42, carpus
- *  legs        0.18, propodus 0.22, dactylus 0.19 of that. The meri broad plates (≈ 0.36 of their length across, seen
- *              broad from the front, from above and from below alike: A45, A47, B24, B65, B64), the anterior margin
- *              serrulate (B24), setose; the carpus shorter and a little narrower, the propodus narrower still with
- *              stiff setae below (A1), the dactylus long, slender, slightly curved and sharp (B70, A1); each article's
- *              distal end lobed over the next (B65, B70)
+ *  - walking   long: P2 < P3 < P4 > P5, 1.02, 1.31, 1.35, 0.71 CW from merus to dactylus, the merus over 0.4 of it
+ *  legs        (the scan's legs along their axes). The meri deep blades standing in the knee's plane, ≈ 0.21 CW high
+ *              and half as thick, a teardrop in section — the dorsal margin a thin keel set with spinules, the ventral
+ *              margin blunt and setose (the scan's sections; B24); the carpus a rounded box, the propodus a high oval
+ *              with stiff setae below (A1), the dactylus flattened across the plane, long, slender, slightly curved and
+ *              sharp (B70, A1); each article's distal end lobed over the next (B65, B70). The knee's plane turned
+ *              about the merus on the hind legs (P3 0.7, P4 and P5 ≈ 1 rad on the scan): their meri out and forward,
+ *              their distal legs swinging back under them, the meri's faces seen from above (B24, B65)
  *  - ventral   a broad sternum rising fore and aft; the coxae of the walking legs in a row along its edge at the foot
- *              of the walls (B61, B64, B67, the scan); the male's abdomen narrow, the female's broad (B16, B34, B55,
- *              B61, B67)
+ *              of the walls, stout and contiguous, running on into the meri (the scan; B61, B64, B67); the male's
+ *              abdomen narrow, the female's broad (B16, B34, B55, B61, B67)
  * Frame: x the crab's left, y dorsal, z forward (anterior). Origin: under the carapace's centre on the plane of the
  * sternum. The legs' own frames: x distal along the article, y dorsal, z anterior on the left side (posterior on the
  * right, so that both frames are right-handed and a positive turn about z always lifts).
  */
+
+import { DORSUM, WALL } from './scanfit';
 
 export const CW_MM = 35;
 /** model carapace width (m): the geometry is built for a 35 mm crab and scaled to the individual */
@@ -70,12 +76,11 @@ export type V3 = [number, number, number];
 // ------------------------------------------------------------------ carapace
 
 export const CARAPACE = {
-  /** z of the frontal lobe's tip and of the posterior margin as seen from above (CL 22.4 projected; 0.68 CW along the
-   *  arched dorsum, which rolls down over the back: the CC0 scan's mid-sagittal section, A13, B7) */
-  front: 11.15,
-  back: -11.2,
-  /** the centre the outline's rays start from (x, z) */
-  centre: [0, 0.0] as V2,
+  /** z of the frontal lobe's tip and of the posterior margin at the margins (19.8 mm, 0.56 CW: the scan, B65) */
+  front: 9.15,
+  back: -10.6,
+  /** the centre the outline's rays start from (x, z): the wall table's axis (`WALL.c`) */
+  centre: [0, -1.5] as V2,
   /** the dorsal crest (the gastric and cardiac regions' height over the sternum's plane: 0.44 CW, a deep body — the
    *  scan's sections give 0.42–0.47) and where along z it is */
   crest: 15.05,
@@ -87,66 +92,80 @@ export const CARAPACE = {
 /**
  * The left half of the outline, front centre to posterior centre: (x, z, kind). Kinds: 'F' the frontal lobe, 'O' the
  * orbital margin, 'T' a tooth's tip, 'N' the notch behind a tooth, 'L' the lateral margin, 'P' the posterior. The
- * geometry samples the smooth runs between the knots and keeps the teeth's tips and notches sharp. The lateral margins
- * run nearly parallel (the scan's horizontal sections: the carapace as wide at mid-length as at the external orbital
- * teeth; B24, A32), the posterolateral corners rounded into a broad, straight posterior margin (0.72 CW: B65, the scan).
+ * geometry samples the smooth runs between the knots and keeps the teeth's tips and notches sharp. Measured on the
+ * scan's dorsal surface (where it turns down at the margin) and its walls (where the dorsum rolls over behind): the
+ * frontal lobe furthest forward, the dorsal orbital margins 2 mm behind it and nearly straight out to the external
+ * orbital teeth, three anterolateral teeth, the lateral margins nearly parallel, the posterolateral corners rounded
+ * into a broad, slightly convex posterior margin (B65, B63, A32).
  */
 export const OUTLINE: { p: V2; kind: 'F' | 'O' | 'T' | 'N' | 'L' | 'P' }[] = [
-  { p: [0.0, 11.15], kind: 'F' },
-  { p: [1.2, 11.08], kind: 'F' },
-  { p: [1.95, 10.85], kind: 'F' },
-  // the frontal lobe widening into its base between the eyestalks' sockets (B66, B69, the scan: ≈ 0.12 CW across)
-  { p: [2.7, 10.55], kind: 'O' },
-  // the dorsal orbital margin: convex forward, sweeping back to the external orbital angle — the corners ≈ 3 mm
-  // behind the inner orbital margin and 4 mm behind the front (B63 straight down; the A47 front view, where the margin
-  // dips at the middle; the scan 2 mm)
-  { p: [5.6, 10.35], kind: 'O' },
-  { p: [8.6, 9.95], kind: 'O' },
-  { p: [11.4, 9.15], kind: 'O' },
-  { p: [13.8, 8.25], kind: 'O' },
-  { p: [15.75, 7.4], kind: 'O' },
-  // the external orbital tooth: acute, forward and a little outward at the corner; the second and third anterolateral
-  // teeth smaller, each with a notch behind it (between the scan's 0.92 / 0.78 / 0.66 CL from the back and B63's
-  // 0.74 / 0.60 / 0.48)
-  { p: [17.95, 6.95], kind: 'T' },
-  { p: [16.9, 5.5], kind: 'N' },
-  { p: [17.9, 4.2], kind: 'T' },
-  { p: [17.0, 2.95], kind: 'N' },
-  { p: [17.85, 1.75], kind: 'T' },
-  { p: [17.15, 0.75], kind: 'N' },
-  // the lateral margin: nearly parallel to mid-length, then converging over the posterior third into rounded
-  // posterolateral corners (the scan's top view and its horizontal sections; B63, B65)
-  { p: [17.55, -0.9], kind: 'L' },
-  { p: [17.4, -3.3], kind: 'L' },
-  { p: [16.9, -5.6], kind: 'L' },
-  { p: [15.8, -8.0], kind: 'L' },
-  { p: [14.2, -9.5], kind: 'P' },
-  { p: [12.0, -10.5], kind: 'P' },
-  { p: [9.8, -11.0], kind: 'P' },
-  { p: [5.0, -11.2], kind: 'P' },
-  { p: [0.0, -11.2], kind: 'P' },
+  { p: [0.0, 9.15], kind: 'F' },
+  { p: [1.2, 9.1], kind: 'F' },
+  { p: [2.3, 8.9], kind: 'F' },
+  // the eyestalk's socket at the orbit's inner end, then the dorsal orbital margin out to the external orbital tooth
+  { p: [3.2, 8.4], kind: 'O' },
+  { p: [4.6, 7.4], kind: 'O' },
+  { p: [6.0, 7.0], kind: 'O' },
+  { p: [8.6, 6.85], kind: 'O' },
+  { p: [11.0, 6.3], kind: 'O' },
+  { p: [13.2, 5.6], kind: 'O' },
+  { p: [15.2, 5.3], kind: 'O' },
+  // the external orbital tooth: acute, forward and outward at the corner; the second and third anterolateral teeth a
+  // little further out, each with a notch behind it (the scan's top view; B63, B69)
+  { p: [17.6, 5.9], kind: 'T' },
+  { p: [17.0, 4.6], kind: 'N' },
+  { p: [18.3, 3.7], kind: 'T' },
+  { p: [17.6, 2.5], kind: 'N' },
+  { p: [18.1, 1.1], kind: 'T' },
+  { p: [17.4, 0.2], kind: 'N' },
+  // the lateral margin, then where the branchial region rolls over into the wall: down the side and round the back
+  { p: [17.0, -1.2], kind: 'L' },
+  { p: [16.2, -2.6], kind: 'L' },
+  { p: [14.9, -4.0], kind: 'L' },
+  { p: [14.4, -6.1], kind: 'L' },
+  { p: [13.0, -7.8], kind: 'L' },
+  { p: [11.2, -9.0], kind: 'P' },
+  { p: [9.2, -9.75], kind: 'P' },
+  { p: [7.2, -10.1], kind: 'P' },
+  { p: [5.4, -10.25], kind: 'P' },
+  { p: [2.6, -10.4], kind: 'P' },
+  { p: [0.0, -10.6], kind: 'P' },
 ];
 
+/** bilinear in a table of rows (z) by columns (|x|), clamped at its edges */
+function table2(T: { x0: number; z0: number; step: number; rows: number[][] }, x: number, z: number): number {
+  const nz = T.rows.length, nx = T.rows[0].length;
+  const u = Math.max(0, Math.min(nx - 1.0001, (Math.abs(x) - T.x0) / T.step)), v = Math.max(0, Math.min(nz - 1.0001, (z - T.z0) / T.step));
+  const i = Math.floor(v), k = Math.floor(u), fv = v - i, fu = u - k;
+  const R = T.rows;
+  return (R[i][k] * (1 - fu) + R[i][k + 1] * fu) * (1 - fv) + (R[i + 1][k] * (1 - fu) + R[i + 1][k + 1] * fu) * fv;
+}
+
+/** the dorsal surface's height over (x, z) without the grooves' relief: the scan's (`DORSUM`) */
+export function dorsalHeight(x: number, z: number): number {
+  return table2(DORSUM, x, z);
+}
+
 /**
- * height of the free margin at an outline point: the dorsal orbital margin level with the flat top, the frontal lobe
- * bent down between the eyestalks' sockets (B60, B66), the lateral margins falling a little backwards, and over the
- * posterior third the margin rolling down to the posterior margin halfway down the back (the CC0 scan's sagittal and
- * transverse sections: 8 mm over the sternum at the middle, a little higher at the posterolateral corners; B7, A13)
+ * height of the free margin at an outline point: the dorsal surface's own there (the scan) — the frontal lobe bent
+ * down between the eyestalks' sockets, the orbital and anterolateral margins level with the top, the margin falling
+ * down the sides behind the third tooth and round the back halfway down it
  */
 export function marginHeight(x: number, z: number): number {
-  const ax = Math.abs(x);
-  // (the dorsal orbital margin's line runs back from the front to the external orbital angle: z ≈ 11.1 − 0.21 |x|)
-  if (z > 10.75 - 0.21 * ax) return 14.2 - 0.35 * Math.min(1, ax / 17) - 0.75 * (1 - smooth01(1.6, 3.0, ax));
-  if (z > 1.5) return 14.15 - 0.2 * ((8.2 - Math.min(8.2, z)) / 11.2);
-  // behind the third anterolateral tooth the margin is no ridge on the top: the branchial regions roll over (a
-  // shoulder of ≈ 4 mm radius) and the widest line runs back down the side to mid-height by the fourth legs, then
-  // round the back to the posterior margin halfway down it (the scan's transverse sections z = −4, −8; B7, A13, A47)
-  const k = smooth01(1.5, -4.5, z);
-  const side = 14.03 - 4.1 * k;
-  if (z > -4.5) return side;
-  const k2 = smooth01(-4.5, -10.8, z);
-  const post = 7.7 + 0.4 * Math.min(1, (ax / 14) ** 2);
-  return side - (side - post) * k2;
+  return dorsalHeight(x, z);
+}
+
+/**
+ * The body's wall: the distance out from the vertical axis through `WALL.c` to the surface along the direction `deg`
+ * (degrees from forward round to backward, either side) at the height `y` (the scan's; bilinear, clamped)
+ */
+export function wallRadius(deg: number, y: number): number {
+  const W = WALL;
+  const nt = W.rows.length, ny = W.rows[0].length;
+  const u = Math.max(0, Math.min(nt - 1.0001, (Math.abs(deg) - W.th0) / W.thStep)), v = Math.max(0, Math.min(ny - 1.0001, (y - W.y0) / W.yStep));
+  const i = Math.floor(u), k = Math.floor(v), fu = u - i, fv = v - k;
+  const R = W.rows;
+  return (R[i][k] * (1 - fv) + R[i][k + 1] * fv) * (1 - fu) + (R[i + 1][k] * (1 - fv) + R[i + 1][k + 1] * fv) * fu;
 }
 
 /** smoothstep (here so that the body plan needs nothing from the geometry's helpers) */
@@ -181,28 +200,29 @@ function polyDist(x: number, z: number, pts: V2[]): number {
 export const GROOVES: { pts: V2[]; depth: number; w: number }[] = [
   // the gastric region's lateral edges, from behind the frontal lobe out and back, then curving in behind it (the
   // "smile" of A1: its posterior edge convex backwards, B63, B69)
-  { pts: [[2.6, 9.0], [4.6, 7.6], [6.4, 5.2], [7.0, 2.8], [6.5, 0.6], [4.6, -0.6], [2.2, -1.0], [0.0, -1.1]], depth: 0.44, w: 0.95 },
+  { pts: [[2.5, 7.6], [4.4, 6.2], [6.2, 4.3], [6.9, 2.3], [6.5, 0.3], [4.6, -0.8], [2.2, -1.2], [0.0, -1.3]], depth: 0.4, w: 0.95 },
   // the cardiac region's sides and the branchiocardiac grooves (the H's legs behind: B63, B69)
   { pts: [[4.6, -0.6], [5.3, -3.0], [5.0, -5.8], [4.0, -7.9]], depth: 0.38, w: 0.9 },
   // the cervical groove's outer limb, dividing the hepatic region from the branchial (B63)
-  { pts: [[7.0, 2.8], [9.6, 3.6], [12.2, 5.4], [14.4, 7.0]], depth: 0.26, w: 0.85 },
+  { pts: [[6.9, 2.3], [9.6, 2.9], [12.0, 4.1], [14.0, 5.0]], depth: 0.24, w: 0.85 },
   // the median furrow of the front into the gastric region (B69)
-  { pts: [[0.0, 11.2], [0.0, 7.8]], depth: 0.32, w: 0.55 },
+  { pts: [[0.0, 9.2], [0.0, 6.4]], depth: 0.3, w: 0.55 },
 ];
 
 /**
- * The carapace's regional relief over the dorsal surface (mm): the gastric and cardiac swellings, the branchial
- * regions with their oblique granular ridges, the hepatic hollows behind the orbits, the grooves (A1, A32, B54, B63,
- * B69). `x` is mirrored by the caller only through |x| (the shell's own asymmetry is added by the geometry).
+ * The carapace's regional relief over the dorsal surface (mm): the grooves and the granular ridges the scan's smoothed
+ * surface has lost, and a little of the gastric and cardiac swellings, the branchial regions and the hepatic hollows
+ * behind the orbits over its own (A1, A32, B54, B63, B69). `x` is mirrored by the caller only through |x| (the
+ * shell's own asymmetry is added by the geometry).
  */
 export function dorsalRelief(x: number, z: number): number {
   const ax = Math.abs(x);
   let h = 0;
-  h += 0.45 * gauss((x * x) / 18 + ((z - 4.0) * (z - 4.0)) / 14);                    // gastric (mesogastric)
-  h += 0.35 * gauss(((ax - 3.4) * (ax - 3.4)) / 5 + ((z - 7.0) * (z - 7.0)) / 5);      // protogastric lobes
-  h += 0.42 * gauss((x * x) / 9 + ((z + 3.6) * (z + 3.6)) / 8);                       // cardiac
-  h += 0.35 * gauss(((ax - 10.5) * (ax - 10.5)) / 22 + ((z + 2.5) * (z + 2.5)) / 28); // branchial
-  h -= 0.45 * gauss(((ax - 10.8) * (ax - 10.8)) / 6 + ((z - 6.6) * (z - 6.6)) / 4);   // hepatic hollow behind the orbit
+  h += 0.16 * gauss((x * x) / 18 + ((z - 3.4) * (z - 3.4)) / 14);                    // gastric (mesogastric)
+  h += 0.12 * gauss(((ax - 3.4) * (ax - 3.4)) / 5 + ((z - 5.6) * (z - 5.6)) / 5);      // protogastric lobes
+  h += 0.16 * gauss((x * x) / 9 + ((z + 3.6) * (z + 3.6)) / 8);                       // cardiac
+  h += 0.12 * gauss(((ax - 10.5) * (ax - 10.5)) / 22 + ((z + 2.5) * (z + 2.5)) / 28); // branchial
+  h -= 0.2 * gauss(((ax - 10.8) * (ax - 10.8)) / 6 + ((z - 4.8) * (z - 4.8)) / 4);    // hepatic hollow behind the orbit
   for (const g of GROOVES) {
     const d = polyDist(ax, z, g.pts);
     h -= g.depth * gauss((d * d) / (g.w * g.w));
@@ -211,18 +231,9 @@ export function dorsalRelief(x: number, z: number): number {
   // (B63, B69: the pale lines), and a short one on the hepatic region
   h += ridge(ax, z, [15.4, 1.6], [9.4, -1.0], 0.22, 0.7);
   h += ridge(ax, z, [15.0, -3.6], [9.0, -5.6], 0.2, 0.7);
-  h += ridge(ax, z, [14.8, 5.4], [11.6, 4.3], 0.15, 0.6);
-  // the beaded rim of the dorsal orbital margin
-  if (z > 8.6) h += 0.16 * gauss(((z - (10.1 - 0.035 * ax)) ** 2) / 0.12) * Math.min(1, ax / 2.4);
+  h += ridge(ax, z, [14.4, 4.4], [11.4, 3.5], 0.15, 0.6);
   return h;
 }
-
-/**
- * The dorsal surface's mid-line profile (z, y): flat over the front and the gastric region, highest a little in front
- * of the middle, rolling down over the back to the posterior margin — an egg, not a box (the CC0 scan's mid-sagittal
- * section scaled to CW 35; B7, A13, A28)
- */
-const VAULT: V2[] = [[-11.4, 7.0], [-10.0, 9.1], [-8.0, 11.0], [-6.0, 12.2], [-4.0, 13.1], [-2.0, 13.8], [0.0, 14.25], [2.5, 14.4], [5.0, 14.4], [8.0, 14.2], [10.5, 13.9], [11.6, 13.6]];
 
 /** Catmull-Rom through (x, y) knots sorted by x, clamped at the ends */
 export function curveAt(knots: V2[], x: number): number {
@@ -242,41 +253,41 @@ export function curveAt(knots: V2[], x: number): number {
 }
 
 /**
- * The dorsal surface without its relief: the mid-line profile, falling a little towards the lateral margins (≈ 0.75 mm
- * at mid-length: the scan's transverse sections — flat across, not domed). `s` is the share of the way from the centre
- * to the outline along the ray.
+ * The sternum's mid-line profile (z, y over the lowest point): flat over the middle, rising forward from mid-length
+ * to the buccal frame and backward over the posterior third to the abdomen's hinge — the underside of the egg (the
+ * scan's underside beside the male's abdomen; B61, B67)
  */
-export function vault(z: number, s: number): number {
-  return curveAt(VAULT, z) - 0.75 * Math.pow(s, 2.6);
-}
+const STERNUM_PROFILE: V2[] = [[-11.2, 4.4], [-10.6, 3.0], [-10.0, 2.2], [-9.0, 1.5], [-8.0, 0.95], [-7.0, 0.55], [-6.0, 0.32], [-5.0, 0.25], [-2.0, 0.25], [0.0, 0.6], [1.0, 1.2], [2.0, 1.85], [3.0, 2.45], [4.0, 3.0], [5.0, 3.45], [6.0, 3.85], [7.0, 4.4]];
 
-/**
- * The sternum's plane (y, mm) under (x, z): flat across the middle, rising forward to the buccal frame and backward
- * to the abdomen's hinge under the posterior margin — the underside's curve of the egg (the scan's sagittal sections:
- * 0.6 at mid-length, 1.5 by the fourth legs, 3.5 at the hinge; B61, B67)
- */
+/** the sternum's surface (y, mm) under (x, z): the mid-line profile, a little higher out towards the coxae */
 export function sternumY(x: number, z: number): number {
-  const back = smooth01(-3.5, -10.6, z), front = smooth01(3.5, 6.6, z);
-  return 0.55 + 0.35 * Math.min(1, (x / 16) ** 2) + 3.1 * back * back + 1.4 * front * front;
+  return curveAt(STERNUM_PROFILE, z) + 0.25 * Math.min(1, (x / 14) ** 2);
 }
 
 // ------------------------------------------------------------------ eyes, mouthparts, abdomen
 
 export const EYE = {
-  /** the eyestalk's joint deep in its socket at the inner end of the orbit (B59, B60, B66: the bases ≈ 0.2 CW apart) */
-  base: [4.45, 12.55, 10.45] as V3,
-  /** raised: upright, splayed ≈ 10° (the scan's front view, A47, B60), straight up from the side (the scan, B7) */
-  up: [0.17, 0.985, 0.02] as V3,
-  /** folded: out along the orbit's trench, a little down and back (B15) */
-  folded: [0.97, -0.03, -0.24] as V3,
-  /** basal article, stalk, cornea (B59: the stalk ≈ 1/9 as thick as long; the cornea 1.15–1.25 × the stalk) */
+  /** the eyestalk's joint in its socket at the inner end of the orbit, just in front of the dorsal orbital margin (the
+   *  scan: the stalks rise 7.8 mm apart; B59, B60, B66) */
+  base: [3.8, 13.0, 8.4] as V3,
+  /** raised: the chord from the socket to the cornea's tip — splayed ≈ 17° and a little back (the scan's front and
+   *  side views, A47, B60) */
+  up: [0.293, 0.952, -0.091] as V3,
+  /** folded: out along the orbit's trench, a little down and back (the scan's orbits, B15) */
+  folded: [0.97, -0.035, -0.23] as V3,
+  /** the stalk's bow off its chord at mid-length (mm): out to the side and forward alike — it leaves its socket leaning
+   *  out ≈ 30° and turns upright towards the cornea, which leans back a little (the scan's eyestalks: 0.28 mm out and
+   *  0.27 mm forward over their middle 7 mm, both sides; A47, B60) */
+  bow: [0.55, 0.5] as V2,
+  /** basal article, stalk, cornea (the scan: the stalk 0.9 × 0.8 mm across, the cornea ≈ 1.4 mm; B59: the stalk ≈ 1/9
+   *  as thick as long, the cornea 1.15–1.25 × the stalk) */
   basal: 1.4,
-  basalR: 0.78,
-  stalk: 10.7,
-  stalkR: 0.5,
-  waist: 0.44,
+  basalR: 0.74,
+  stalk: 10.0,
+  stalkR: 0.45,
+  waist: 0.4,
   cornea: 2.1,
-  corneaR: 0.64,
+  corneaR: 0.69,
 };
 
 /**
@@ -289,7 +300,7 @@ export const EYE = {
  * from the vertical with the face (the scan's sagittal sections). `hinge` the x of a plate's
  * outer edge, `width` the plate's across, `y0`, `z0` the top of its outer edge, `y1`, `z1` its foot; `length` along it
  */
-export const MXP3 = { hinge: 7.0, width: 5.4, y0: 10.2, z0: 9.6, y1: 3.6, z1: 6.55, length: 7.3 };
+export const MXP3 = { hinge: 7.0, width: 5.4, y0: 10.3, z0: 9.15, y1: 4.4, z1: 6.4, length: 6.5 };
 
 /**
  * The abdomen folded under the sternum: the male's narrow (B34, B16) and the female's broad, rounded flap (B55, B61,
@@ -335,6 +346,9 @@ export interface ArticleSpec {
   neck?: number;
   /** the section turned about the article's own axis (t, rad) */
   twist?: [number, number][];
+  /** a teardrop section (0 … 1): the dorsal margin drawn out to a thin keel, the ventral margin blunt and full (the
+   *  walking legs' meri: the scan's sections) */
+  tear?: number;
   /** a row of small spinules (the serrulate margin of a merus: B24): angle round, t from … to, count, length */
   serrate?: { a: number; t0: number; t1: number; count: number; length: number };
 }
@@ -350,63 +364,78 @@ export interface LegSpec {
 
 const S = (t: number, hy: number, hz: number, cy = 0, cz = 0): SectionKnot => ({ t, hy, hz, cy, cz });
 
+/** a walking leg's article lengths (mm) and its sections: the merus's, the carpus's and the propodus's height (in the
+ *  knee's plane) and thickness (across it), the dactylus's thickness (in the plane) and breadth (across it), full mm */
+export interface WalkingDims {
+  cx: number; bi: number; me: number; ca: number; pr: number; da: number;
+  meH: number; meT: number; caH: number; caT: number; prH: number; prT: number; daT: number; daB: number;
+  /** the sections' lean (rad, + the dorsal edge back) of the merus, the carpus and the propodus, and the merus's keel */
+  lean: [number, number, number];
+  tear: number;
+}
+
 /**
- * A walking leg: article lengths (mm) and the merus's half breadth. Never a cylinder: every article is a compressed
- * plate — the CC0 scan's sections through the legs give lenses 4–5 times as broad as thick (the merus ≈ 0.2 CW
- * across, B24, B65, B70, B34) — with its plane turned ≈ 40° about the leg's axis (the scan's sections), the anterior
- * margin down so that the broad faces look forward and up: the meri show broad from the front (A45, A47), from above
- * (B24, B65) and from below (B64) alike. Each is narrowed a little at its proximal joint (B65, B70); the merus broadest a
- * little before its middle with a serrulate anterior
- * margin (B24); the carpus shorter; the propodus narrower, with stiff setae below (A1); the dactylus a slender blade to
- * a sharp, slightly down-curved point (B70, A1).
+ * A walking leg, from the CC0 scan's legs (sections cut square to each article's axis, 0.25 mm voxels; its 1.28 times
+ * to CW 35). Never a cylinder: the merus a deep blade standing in the knee's plane — twice as high as thick, its
+ * dorsal margin drawn to a thin keel leaning ≈ 15° back, set with spinules and a subdistal spine, the ventral margin
+ * blunt, full and fringed with setae (the thickness across it 0.87 · 1 · 1 · 0.95 · 0.87 · 0.7 · 0.55 · 0.35 from
+ * the ventral margin to the keel); the carpus a rounded box ≈ 1.2 times as high as thick, crested above; the propodus
+ * a high oval ≈ 1.7 times as high as thick, setose below; the dactylus a slender blade flattened the other way, broad
+ * across the plane, to a sharp, slightly down-curved point (B70, A1). Each narrowed a little at its proximal joint
+ * (B65, B70). The leg's plane is turned on the hind legs (`BIND.roll`): the meri's faces look up and back from above.
  */
-function walkingLeg(id: LegId, coxa: V3, yaw: number, L: { cx: number; bi: number; me: number; ca: number; pr: number; da: number }, meB: number): LegSpec {
-  const b = meB;
-  const th = Math.sqrt(meB / 2.5);
-  // (the plates turned about the leg's axis with the anterior margin down, so that their broad faces look forward
-  // and up: broad from the front (A45, A47), from above (B24, B65) and from below (B64) alike)
-  const tw = (a: number, c: number): [number, number][] => [[0, -a], [1, -c]];
+function walkingLeg(id: LegId, coxa: V3, yaw: number, D: WalkingDims): LegSpec {
+  const mh = D.meH / 2, mt = D.meT / 2, ch = D.caH / 2, ct = D.caT / 2, ph = D.prH / 2, pt = D.prT / 2, dt = D.daT / 2, db = D.daB / 2;
+  // (each section's lean: a turn about the article's axis, its dorsal edge towards posterior)
+  const [lm, lc, lp] = D.lean;
   return {
     id, coxa, yaw,
     articles: [
-      // coxa and basis-ischium: short and broad, set in the body's foot and widening into the merus's base — no pipe
-      // between body and leg (B61, B64, B67; the scan)
-      { name: 'cx', length: L.cx, n: 2.2, sections: [S(0, 1.35, 1.8), S(0.5, 1.45, 1.95), S(1, 1.35, 1.85)], twist: tw(0.1, 0.25) },
-      { name: 'bi', length: L.bi, n: 2.2, neck: 0.05, sections: [S(0, 1.12, 1.6), S(0.4, 1.1, 1.85), S(1, 1.0, 0.68 * meB + 0.1)], twist: tw(0.3, 0.55) },
-      // merus: the broad plate, its anterior margin a keel set with spinules
+      // coxa and basis-ischium: short and stout, set in the body's foot and widening into the merus's deep base — no
+      // pipe between body and leg (B61, B64, B67; the scan)
+      // (as deep as the merus's base nearly: the scan's roots run on into the meri, contiguous along the body's foot)
+      { name: 'cx', length: D.cx, n: 2.4, sections: [S(0, 0.55 * mh + 0.35, 0.95 * mt + 0.2), S(0.5, 0.62 * mh + 0.35, mt + 0.25), S(1, 0.62 * mh + 0.3, 0.95 * mt + 0.15)] },
+      { name: 'bi', length: D.bi, n: 2.4, neck: 0.05, twist: [[0, 0], [1, lm * 0.6]], sections: [S(0, 0.58 * mh + 0.3, 0.92 * mt + 0.1), S(0.45, 0.7 * mh + 0.1, 0.95 * mt), S(1, 0.8 * mh, 0.9 * mt, -0.06 * mh)] },
+      // merus: the deep blade, keeled above
       {
-        name: 'me', length: L.me, n: 2.7, nz: 1.6, neck: 0.04, twist: tw(0.62, 0.72),
-        // (thinner with its breadth: a blade ≈ 0.36 of its length across and 2.5–3 times as broad as thick: B24, B65)
-        sections: [S(0, 0.74 * th, 0.62 * b), S(0.1, 0.86 * th, 0.88 * b), S(0.42, 0.92 * th, 1.0 * b, 0.04), S(0.85, 0.88 * th, 0.94 * b, 0.04), S(1, 0.8 * th, 0.8 * b)],
-        costae: [[Math.PI / 2, 0.2, 0.22], [-Math.PI / 2, 0.08, 0.3], [0, 0.1, 0.5]],
-        serrate: { a: Math.PI / 2 - 0.2, t0: 0.15, t1: 0.9, count: 13, length: 0.32 },
-        spines: [{ t: 0.93, a: 1.25, length: 0.75, r: 0.2, lean: 0.95 }],
+        name: 'me', length: D.me, n: 2.4, nz: 2.1, tear: D.tear, neck: 0.04, twist: [[0, lm * 0.8], [1, lm]],
+        sections: [S(0, 0.82 * mh, 0.88 * mt, -0.05 * mh), S(0.1, 0.92 * mh, 0.96 * mt), S(0.4, 1.0 * mh, 1.0 * mt), S(0.85, 0.94 * mh, 0.95 * mt), S(1, 0.8 * mh, 0.84 * mt)],
+        costae: [[0, 0.14, 0.18], [Math.PI / 2, 0.05, 0.45], [Math.PI, 0.05, 0.5]],
+        serrate: { a: 0.08, t0: 0.12, t1: 0.86, count: 14, length: 0.34 },
+        spines: [{ t: 0.9, a: 0.12, length: 0.8, r: 0.22, lean: 0.95 }],
       },
-      // carpus: shorter, a little narrower, a crest along its upper face (A1)
-      { name: 'ca', length: L.ca, n: 2.5, nz: 1.75, neck: 0.1, twist: tw(0.72, 0.78), sections: [S(0, 0.6 * th, 0.46 * b), S(0.22, 0.72 * th, 0.62 * b), S(0.85, 0.76 * th, 0.7 * b), S(1, 0.7 * th, 0.64 * b)], costae: [[0.25, 0.12, 0.35]] },
-      // propodus: narrower again and tapering, stiff setae below (A1)
-      { name: 'pr', length: L.pr, n: 2.4, nz: 1.8, neck: 0.08, twist: tw(0.78, 0.82), sections: [S(0, 0.5 * th, 0.44 * b), S(0.15, 0.6 * th, 0.55 * b), S(0.7, 0.58 * th, 0.53 * b), S(1, 0.52 * th, 0.45 * b)], costae: [[Math.PI / 2, 0.08, 0.4]] },
-      // dactylus: a slender blade, compressed, to the sharp, slightly down-curved tip (B70, A1; the scan: thin lenses)
-      { name: 'da', length: L.da, n: 2.05, neck: 0.08, twist: tw(0.82, 0.85), sections: [S(0, 0.48, 0.34 * b), S(0.12, 0.52, 0.37 * b), S(0.45, 0.42, 0.27 * b, -0.06), S(0.8, 0.26, 0.15 * b, -0.2), S(0.95, 0.1, 0.06, -0.33), S(1, 0.03, 0.03, -0.4)] },
+      // carpus: shorter, a rounded box, a crest along its upper face (A1)
+      { name: 'ca', length: D.ca, n: 2.6, nz: 2.4, tear: 0.18, neck: 0.1, twist: [[0, lm], [0.3, lc], [1, lc]], sections: [S(0, 0.74 * ch, 0.8 * ct), S(0.22, 0.95 * ch, 0.97 * ct), S(0.8, 1.0 * ch, 1.0 * ct), S(1, 0.9 * ch, 0.9 * ct)], costae: [[0, 0.12, 0.3]] },
+      // propodus: a high oval, a little narrower distally, stiff setae below (A1)
+      { name: 'pr', length: D.pr, n: 2.3, nz: 2.1, tear: 0.2, neck: 0.08, twist: [[0, lc], [0.3, lp], [1, lp]], sections: [S(0, 0.82 * ph, 0.84 * pt), S(0.15, 0.97 * ph, 0.97 * pt), S(0.6, 1.0 * ph, 1.0 * pt), S(1, 0.82 * ph, 0.86 * pt)], costae: [[0, 0.08, 0.35]] },
+      // dactylus: a slender blade, broad across the leg's plane, to the sharp, slightly down-curved tip (B70, A1)
+      { name: 'da', length: D.da, n: 2.1, neck: 0.08, sections: [S(0, 0.9 * dt, 0.86 * db), S(0.12, dt, db), S(0.45, 0.85 * dt, 0.82 * db, -0.06), S(0.8, 0.5 * dt, 0.42 * db, -0.2), S(0.95, 0.16, 0.14, -0.33), S(1, 0.03, 0.03, -0.4)] },
     ],
   };
 }
 
-/** the leg pairs' article lengths (mm at CW 35): P2 0.79, P3 0.94, P4 0.99, P5 0.67 CW from merus to dactylus (B70, B65, B64) */
-export const WALKING: Record<'P2' | 'P3' | 'P4' | 'P5', { cx: number; bi: number; me: number; ca: number; pr: number; da: number; b: number }> = {
-  P2: { cx: 2.0, bi: 2.0, me: 11.6, ca: 5.0, pr: 6.1, da: 5.2, b: 2.25 },
-  P3: { cx: 2.1, bi: 2.2, me: 13.8, ca: 5.9, pr: 7.2, da: 6.1, b: 2.5 },
-  P4: { cx: 2.1, bi: 2.2, me: 14.5, ca: 6.2, pr: 7.6, da: 6.4, b: 2.55 },
-  P5: { cx: 1.9, bi: 1.9, me: 9.8, ca: 4.4, pr: 5.0, da: 4.6, b: 1.95 },
+/**
+ * The leg pairs measured on the scan (mm at CW 35; the scan's sections a few per cent under its own figures, for the
+ * setae and the scan's bloom): the meri long and deep — P3's 0.61 CW long and 0.21 CW high (B24, B65 from above, A45,
+ * A47 from the front) — P4 the longest leg, 1.35 CW from merus to dactylus; P2 smaller throughout; P5 short, its
+ * propodus a flat oval. (P2's dactylus is short on the scan, its tip lost: set from P3's proportions.)
+ */
+export const WALKING: Record<'P2' | 'P3' | 'P4' | 'P5', WalkingDims> = {
+  P2: { cx: 1.7, bi: 1.9, me: 18.9, ca: 5.6, pr: 6.4, da: 4.8, meH: 5.0, meT: 3.25, caH: 3.75, caT: 2.75, prH: 3.4, prT: 2.0, daT: 1.1, daB: 1.95, lean: [0.28, 0.2, 0.2], tear: 0.5 },
+  P3: { cx: 1.9, bi: 2.6, me: 21.5, ca: 8.0, pr: 9.4, da: 6.8, meH: 7.3, meT: 3.7, caH: 4.4, caT: 3.65, prH: 4.6, prT: 2.85, daT: 1.25, daB: 2.2, lean: [0.4, 0.15, 0.0], tear: 0.5 },
+  P4: { cx: 1.7, bi: 1.9, me: 21.3, ca: 8.4, pr: 9.7, da: 7.8, meH: 7.3, meT: 3.25, caH: 4.0, caT: 3.2, prH: 4.7, prT: 2.4, daT: 1.3, daB: 1.65, lean: [0.15, 0.1, -0.4], tear: 0.3 },
+  P5: { cx: 1.8, bi: 2.4, me: 10.0, ca: 4.3, pr: 6.3, da: 4.2, meH: 5.6, meT: 2.05, caH: 3.6, caT: 1.7, prH: 4.4, prT: 1.45, daT: 1.1, daB: 1.8, lean: [0.12, -0.35, -0.45], tear: 0.5 },
 };
 
 /**
- * The legs of the left side. Thoraco-coxal joints along the body wall between the sternum and the pleural line (B61,
- * B64, B67); rest directions fanning from forward (P2) to back (P5) as they stand (A47, B4, B24, B44, A20).
+ * The legs of the left side. Thoraco-coxal joints where the scan's legs leave the body: along the foot of the side
+ * wall over the sternum's edge, P2 under the carapace's widest point, each further back and higher than the one before
+ * (P5 high on the narrowing back), the cheliped's at the front corner of the sternum (B61, B64, B67). Rest directions
+ * the meri's as they stand on the scan: forward and out on the front legs, out on P4, out and a little back on P5.
  */
 export function legSpecs(): LegSpec[] {
   const P1: LegSpec = {
-    id: 'P1', coxa: [9.0, 3.5, 6.2], yaw: 0.7,
+    id: 'P1', coxa: [8.0, 4.2, 5.2], yaw: 0.7,
     articles: [
       { name: 'cx', length: 2.4, n: 2.3, sections: [S(0, 1.5, 1.6), S(0.5, 1.6, 1.7), S(1, 1.45, 1.5)] },
       { name: 'bi', length: 3.0, n: 2.3, neck: 0.15, sections: [S(0, 1.2, 1.25), S(0.3, 1.35, 1.35), S(1, 1.55, 1.45)] },
@@ -421,15 +450,10 @@ export function legSpecs(): LegSpec[] {
       { name: 'ca', length: 5.0, n: 2.2, neck: 0.1, sections: [S(0, 1.7, 1.6), S(0.25, 2.3, 2.1), S(0.75, 2.45, 2.2), S(1, 2.2, 1.9)], costae: [[0.0, 0.12, 0.3]] },
     ],
   };
-  // (each side's four legs nearly parallel, out to the side and a little back, not a fan: A20, B44, A18, B24)
-  // (the coxae at the foot of the vertical branchiostegal walls, the sternum nearly as broad as the carapace: the scan's
-  // transverse sections, B61, B67)
-  // (the joints a little inside the wall's foot, so that the coxa comes out of the body: the scan's transverse
-  // sections put the coxae at the bottom corners of the box; P5 higher and further in on the narrowing back)
-  const P2 = walkingLeg('P2', [14.9, 2.6, 3.3], 0.3, WALKING.P2, WALKING.P2.b);
-  const P3 = walkingLeg('P3', [15.4, 2.3, -0.6], 0.02, WALKING.P3, WALKING.P3.b);
-  const P4 = walkingLeg('P4', [15.2, 2.45, -4.5], -0.2, WALKING.P4, WALKING.P4.b);
-  const P5 = walkingLeg('P5', [13.9, 3.7, -7.9], -0.5, WALKING.P5, WALKING.P5.b);
+  const P2 = walkingLeg('P2', [14.0, 2.6, -1.0], 0.75, WALKING.P2);
+  const P3 = walkingLeg('P3', [14.2, 3.4, -4.1], 0.5, WALKING.P3);
+  const P4 = walkingLeg('P4', [13.9, 4.2, -7.6], 0.2, WALKING.P4);
+  const P5 = walkingLeg('P5', [11.4, 6.0, -10.0], -0.2, WALKING.P5);
   return [P1, P2, P3, P4, P5];
 }
 
@@ -519,12 +543,13 @@ export const CHELA_FEMALE: ChelaSpec = {
  */
 export const BIND: Record<LegId, { pitch: number; lev: number; roll: number; mc: number; cp: number; pd: number; mcYaw?: number; meYaw?: number }> = {
   P1: { pitch: -0.1, lev: 0.35, roll: 0, meYaw: 1.1, mc: -0.55, mcYaw: -1.55, cp: 0.05, pd: 0.0 },
-  // (the walking legs' `mcYaw` is the knee's own swing: the distal leg does not lie in the merus's plane — it swings
-  // forward on the front legs and back on the hind ones (B24, A1, B44, A20): never straight spokes)
-  P2: { pitch: -0.08, lev: 0.55, roll: 0, mc: -1.05, cp: -0.18, pd: -0.3, mcYaw: -0.3 },
-  P3: { pitch: -0.08, lev: 0.55, roll: 0, mc: -1.05, cp: -0.18, pd: -0.3, mcYaw: -0.08 },
-  P4: { pitch: -0.08, lev: 0.55, roll: 0, mc: -1.05, cp: -0.18, pd: -0.3, mcYaw: 0.2 },
-  P5: { pitch: -0.06, lev: 0.5, roll: 0, mc: -1.0, cp: -0.15, pd: -0.3, mcYaw: 0.42 },
+  // (the walking legs' `roll` turns the knee's plane about the merus, dorsal edge forward: the distal leg swings back
+  // under the merus on the hind legs — the scan's legs: 0.1, 0.8, 1.1, 1.1 rad from P2 to P5, their meri out and
+  // forward, their feet fanned back from them (B24, A1, B44, A20); `mcYaw` the knee's own swing (forward on P2))
+  P2: { pitch: -0.08, lev: 0.3, roll: 0.1, mc: -1.2, cp: -0.12, pd: -0.25, mcYaw: -0.15 },
+  P3: { pitch: -0.08, lev: 0.3, roll: 0.7, mc: -1.2, cp: -0.12, pd: -0.25, mcYaw: 0 },
+  P4: { pitch: -0.08, lev: 0.3, roll: 0.9, mc: -1.2, cp: -0.12, pd: -0.25, mcYaw: 0 },
+  P5: { pitch: -0.06, lev: 0.3, roll: 0.6, mc: -1.1, cp: -0.12, pd: -0.25, mcYaw: 0 },
 };
 
 /**

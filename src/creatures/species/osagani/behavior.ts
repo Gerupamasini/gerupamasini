@@ -591,10 +591,12 @@ export function createCrabBehavior(o: CrabOptions) {
       const cur = P.legs[key];
       if (isWalking(leg.id)) {
         if (inHole) {
-          // drawn in against the body (the slide down the shaft), the dactyli gripping the walls
+          // drawn in beside the body, the meri a little down and the distal legs folded back under them (the slide down
+          // the shaft), the dactyli gripping the walls: the long meri never raised over the carapace, so that nothing but
+          // the eyestalks shows over the mud while it peeks
           copyLeg(cur, G);
           const k = smooth((st.burrow - 0.05) / 0.4);
-          blendLeg(G, { promo: 0, lev: 0.95, mcYaw: 0, mc: -2.1, cp: -0.45, pd: -0.7 }, k, G);
+          blendLeg(G, { promo: 0, lev: -0.2, mcYaw: 0, mc: -2.2, cp: -0.5, pd: -0.8 }, k, G);
         } else if (!lowDetail) {
           const ft = feet.find((f) => f.leg === leg)!;
           worldToBody(ft.planted, _b);

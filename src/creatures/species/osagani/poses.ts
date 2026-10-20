@@ -30,13 +30,14 @@ export const CHELA_MOUTH: Partial4 = { promo: 0.55, pitch: -0.1, lev: 0.25, roll
 export const CHELA_TUCK: Partial4 = { promo: -0.3, pitch: -0.1, lev: 0.0, roll: 0.0, meYaw: 0.25, mcYaw: -2.3, mc: -0.1, cp: -0.05, cpRoll: 1.0, cpYaw: -0.4, pd: 0.0 };
 
 /**
- * Where the walking legs stand (body frame, mm at CW 35): the angle off the leg's rest direction and the reach from
- * the coxa; the dactylus meets the mud at `DACTYL_ANGLE`. Standing they fan from forward (P2) to back (P5) with the
- * meri raised over the carapace's edge and the distal legs steeply down (A47, B4, B7, A20, B44); low at rest they
- * splay further; in alarm they stand tall.
+ * Where the walking legs stand (body frame, mm at CW 35): the foot's direction from the coxa (rad from straight out,
+ * + forward) and its reach; the dactylus meets the mud at `DACTYL_ANGLE`. Standing they fan from forward (P2) to back
+ * (P5) as the scan's feet do — P2 ≈ 47° forward, P3 straight out, P4 ≈ 36° and P5 ≈ 52° back — the meri raised over
+ * the carapace's edge and the distal legs steeply down (A47, B4, B7, A20, B44); low at rest they splay further; in
+ * alarm they stand tall.
  */
-export const STANCE: Record<string, { ang: number; r: number }> = {
-  P2: { ang: 0.26, r: 20.5 }, P3: { ang: 0.04, r: 25.5 }, P4: { ang: -0.08, r: 26.0 }, P5: { ang: -0.15, r: 17.0 },
+export const STANCE: Record<string, { dir: number; r: number }> = {
+  P2: { dir: 0.8, r: 29.0 }, P3: { dir: 0.0, r: 30.0 }, P4: { dir: -0.62, r: 30.0 }, P5: { dir: -0.9, r: 19.5 },
 };
 export const DACTYL_ANGLE = -1.38;
 
@@ -44,7 +45,7 @@ const _t = new Vector3();
 /** a walking leg's neutral foot (body frame, mm) for a body height `lift` over the ground and a spread factor */
 export function neutralFoot(leg: LegRig, lift: number, spread = 1, out = new Vector3()): Vector3 {
   const s = STANCE[leg.id];
-  const a = leg.yaw + s.ang * spread;
+  const a = s.dir * (1 + 0.2 * (spread - 1));
   const r = s.r * (0.6 + 0.4 * spread);
   return out.set(leg.coxa.x + leg.sg * Math.cos(a) * r, -lift, leg.coxa.z + Math.sin(a) * r);
 }

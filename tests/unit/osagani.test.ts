@@ -25,20 +25,22 @@ function tips(beh: ReturnType<typeof createCrabBehavior>, root: Group, bones: Re
 }
 
 describe('ヤマトオサガニ: the body plan', () => {
-  it('a transversely rectangular carapace: CL ≈ 0.68 CW, the sides nearly parallel, three anterolateral teeth', () => {
+  it('a transversely rectangular carapace: CL ≈ 0.56 CW (the scan), the sides nearly parallel, three anterolateral teeth', () => {
     const loop = outline(LODS[0]);
     const xs = loop.map((e) => e.x), zs = loop.map((e) => e.z);
     const cw = Math.max(...xs) - Math.min(...xs);
     const cl = Math.max(...zs) - Math.min(...zs);
     expect(cw).toBeGreaterThan(CW_MM * 0.98);
     expect(cw).toBeLessThan(CW_MM * 1.06);
-    expect(cl / cw).toBeGreaterThan(0.62);
-    expect(cl / cw).toBeLessThan(0.7);
+    // (the CC0 scan's specimen: shorter than Wada's (2018) Shirahama males, CL ≈ 0.68 of the width between the
+    // external orbital angles)
+    expect(cl / cw).toBeGreaterThan(0.5);
+    expect(cl / cw).toBeLessThan(0.6);
     // nearly as wide at mid-length as at the external orbital teeth (not an ellipse)
     const half = (z: number) => Math.max(...loop.filter((e) => Math.abs(e.z - z) < 0.6 && e.x > 0).map((e) => e.x));
-    expect(half(0) / half(6.95)).toBeGreaterThan(0.95);
+    expect(half(0) / half(5.9)).toBeGreaterThan(0.95);
     // the posterior margin broad and straight
-    expect(half(-11) * 2 / cw).toBeGreaterThan(0.6);
+    expect(half(Math.min(...zs) + 1.5) * 2 / cw).toBeGreaterThan(0.55);
     // the teeth: three outward tips on the anterolateral margin of each side
     const left = loop.filter((e) => e.x > 14 && e.z > 0.5 && e.z < 11);
     let tipsN = 0;
@@ -76,19 +78,24 @@ describe('ヤマトオサガニ: the body plan', () => {
       if (spec.id === 'P1') continue;
       const art = (n: string) => spec.articles.find((a) => a.name === n)!;
       const me = art('me'), da = art('da');
-      const mid = me.sections.reduce((a, b) => (b.hz > a.hz ? b : a));
-      // the merus a broad plate: more than twice as broad as thick, broad for its length
-      expect(mid.hz / mid.hy).toBeGreaterThan(2);
-      expect((mid.hz * 2) / me.length).toBeGreaterThan(0.3);
+      const mid = me.sections.reduce((a, b) => (b.hy > a.hy ? b : a));
+      // the merus a deep blade standing in the knee's plane: half as thick as high or less, deep for its length, its
+      // dorsal margin a keel (a teardrop section: the scan's legs)
+      expect(mid.hy / mid.hz).toBeGreaterThan(1.5);
+      expect((mid.hy * 2) / me.length).toBeGreaterThan(0.25);
+      expect(me.tear ?? 0).toBeGreaterThan(0.2);
+      // the dactylus flattened the other way: broader across the leg's plane than in it
+      const dmid = da.sections[1];
+      expect(dmid.hz).toBeGreaterThan(dmid.hy);
       // necks at the joints
       for (const n of ['bi', 'me', 'ca', 'pr', 'da']) expect(art(n).neck ?? 0).toBeGreaterThan(0.03);
       // the dactylus ends in a point
       expect(da.sections[da.sections.length - 1].hy).toBeLessThan(0.05);
-      // thinner from the merus out to the dactylus
-      const w = (a: typeof me) => Math.max(...a.sections.map((s) => s.hz));
-      expect(w(art('ca'))).toBeLessThan(w(me));
-      expect(w(art('pr'))).toBeLessThan(w(art('ca')));
-      expect(w(da)).toBeLessThan(w(art('pr')));
+      // slighter from the merus out to the dactylus (the sections' areas; P5's propodus a flat oval as high as its carpus)
+      const area = (a: typeof me) => Math.max(...a.sections.map((s) => s.hy * s.hz));
+      expect(area(art('ca'))).toBeLessThan(area(me));
+      expect(area(art('pr'))).toBeLessThan(area(me));
+      expect(area(da)).toBeLessThan(area(art('pr')) / 2);
     }
   });
 
@@ -221,6 +228,17 @@ describe('ヤマトオサガニ: behaviour round the burrow', () => {
     // only the eyestalks out: up, while the carapace is under the mud's level
     expect(b.pose.eyeRaise[0]).toBeGreaterThan(0.9);
     expect(b.pose.lift).toBeLessThan(-15);
+    // and no leg over the mud: the long walking legs folded beside the body, the claws drawn in
+    {
+      const root = new Group();
+      const { bones } = createBones(rig, root);
+      applyPose(root, bones, rig, b.pose, 1);
+      const ground = (x: number) => 0.01 * Math.sin(x * 5);
+      for (const leg of rig.legs) for (const a of ['me', 'ca', 'pr', 'da'] as const) {
+        const p = new Vector3().setFromMatrixPosition(bones[`J_${leg.id}${leg.side}_${a}`].matrixWorld);
+        expect(p.y).toBeLessThan(ground(p.x));
+      }
+    }
     run(b, 3);
     expect(b.state.burrow).toBeLessThan(0.05);
     expect(b.state.mode).toBe('IDLE');

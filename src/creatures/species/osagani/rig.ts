@@ -221,25 +221,29 @@ const _v = new Vector3(), _w = new Vector3();
 const _k = { r: 0, h: 0, z: 0 };
 /**
  * Where the foot is in the leg's own frame (r out, h up, z forward) for a pose whose knee swings the distal leg out of
- * the merus's vertical plane by `kneeYaw` (a turn about the merus's own y axis: positive swings it back).
+ * the merus's vertical plane: by `kneeYaw` (a turn about the merus's own y axis: positive swings it back) and by the
+ * merus's `roll` (a turn of the knee's plane about the merus's axis: positive turns its dorsal edge forward, so that
+ * the distal leg hanging under it swings back).
  */
-function swungTip(L: PlanarLeg, P: LegPose, kneeYaw: number, out: { r: number; h: number; z: number }) {
+function swungTip(L: PlanarLeg, P: LegPose, kneeYaw: number, roll: number, out: { r: number; h: number; z: number }) {
   planarTip(L, P.lev, P.mc, P.cp, L.pitch + P.lev + P.mc + P.cp + P.pd, _t);
   // the knee (end of the fused basis-merus) and the merus's axis in the plane
   const a1 = L.pitch + P.lev;
   const r1 = L.l[0] * Math.cos(L.pitch) + L.l[1] * Math.cos(a1), h1 = L.l[0] * Math.sin(L.pitch) + L.l[1] * Math.sin(a1);
   const Dr = _t.r - r1, Dh = _t.h - h1;
   const dx = Dr * Math.cos(a1) + Dh * Math.sin(a1), dy = -Dr * Math.sin(a1) + Dh * Math.cos(a1);
-  const c = Math.cos(kneeYaw), s = Math.sin(kneeYaw);
-  out.r = r1 + dx * c * Math.cos(a1) - dy * Math.sin(a1);
-  out.h = h1 + dx * c * Math.sin(a1) + dy * Math.cos(a1);
-  out.z = -dx * s;
+  const c = Math.cos(kneeYaw), s = Math.sin(kneeYaw), cr = Math.cos(roll), sr = Math.sin(roll);
+  // (in the merus's frame: the knee's swing, then the roll about the merus's axis)
+  const X = dx * c, Y = dy * cr + dx * s * sr, Z = dy * sr - dx * s * cr;
+  out.r = r1 + X * Math.cos(a1) - Y * Math.sin(a1);
+  out.h = h1 + X * Math.sin(a1) + Y * Math.cos(a1);
+  out.z = Z;
   return out;
 }
 
 /**
  * IK of a walking leg for a foot target in the body's frame (mm): the coxa swings the leg to the target (promo), the
- * planar chain reaches it, and the knee's own swing (`mcYaw`, the leg's rest value) is allowed for by a few
+ * planar chain reaches it, and the knee's own swing and the merus's roll (the leg's rest values) are allowed for by
  * corrections of the reach and the swing. Returns the miss (mm).
  */
 export function solveLeg(leg: LegRig, PL: PlanarLeg, target: Vector3, th: number, P: LegPose, mode: DistalMode = 'full'): number {
@@ -248,22 +252,27 @@ export function solveLeg(leg: LegRig, PL: PlanarLeg, target: Vector3, th: number
   const ang = Math.atan2(_v.z, sg * _v.x);
   let Rt = Math.hypot(_v.x, _v.z);
   const Ht = _v.y;
-  const ky = BIND[leg.id].mcYaw ?? 0;
+  const ky = BIND[leg.id].mcYaw ?? 0, kr = BIND[leg.id].roll;
+  const bent = ky !== 0 || kr !== 0;
   P.pitch = PL.pitch;
   P.mcYaw = ky;
+  P.roll = kr;
   let off = 0, miss = 0;
   // (a foot out of reach is drawn in towards the coxa at the same height, not left to swing below the ground: the
   // gait then steps it)
   for (let attempt = 0; attempt < 3; attempt++) {
     let r = Rt, h = Ht;
-    for (let it = 0; it < (ky ? 4 : 1); it++) {
+    for (let it = 0; it < (bent ? 8 : 1); it++) {
       miss = solvePlanar(PL, r, h, th, P, mode);
-      if (!ky) break;
-      swungTip(PL, P, ky, _k);
+      if (!bent) break;
+      swungTip(PL, P, ky, kr, _k);
       off = Math.atan2(_k.z, _k.r);
-      r += Rt - Math.hypot(_k.r, _k.z); h += Ht - _k.h;
+      const er = Rt - Math.hypot(_k.r, _k.z), eh = Ht - _k.h;
+      if (er * er + eh * eh < 1e-4) break;
+      // (the roll shortens the distal leg's drop by its cosine: the height's correction scaled up to match)
+      r += er; h += eh / Math.max(0.45, Math.cos(kr));
     }
-    if (ky) { swungTip(PL, P, ky, _k); miss = Math.hypot(Math.hypot(_k.r, _k.z) - Rt, _k.h - Ht); }
+    if (bent) { swungTip(PL, P, ky, kr, _k); miss = Math.hypot(Math.hypot(_k.r, _k.z) - Rt, _k.h - Ht); }
     if (miss < 0.25 || Rt < 4) break;
     Rt -= miss + 0.3;
   }
@@ -273,7 +282,7 @@ export function solveLeg(leg: LegRig, PL: PlanarLeg, target: Vector3, th: number
 
 /** forward kinematics of a walking leg's tip in the body's frame (mm) from a pose */
 export function legTip(leg: LegRig, PL: PlanarLeg, P: LegPose, out = new Vector3()): Vector3 {
-  swungTip(PL, P, P.mcYaw, _k);
+  swungTip(PL, P, P.mcYaw, P.roll, _k);
   const a = leg.yaw + P.promo + Math.atan2(_k.z, _k.r);
   _w.set(leg.sg * Math.cos(a), 0, Math.sin(a));
   return out.copy(leg.coxa).addScaledVector(_w, Math.hypot(_k.r, _k.z)).add(_v.set(0, _k.h, 0));
