@@ -9,7 +9,8 @@
 // deltas (headrig.mjs morphNormals; the inflation's from its own rule, bindNormalDeltas), and the poses are shaded with
 // them exactly as the game's morph targets will be: n = normalize(n0 + Σ w ΔN), then skinned. morphs.glb holds the
 // bind head with every blend shape as a glTF morph target (POSITION and NORMAL) and their drivers in the mesh's extras.
-// The teeth are fitted to the sculpt (skull.mjs fitTeeth).
+// The teeth are fitted to the sculpt (skull.mjs fitTeeth). The blend shapes come from headmorphs.mjs, the code path the
+// shipped tiers use too.
 //   node tools/models/tobihaze/build-pose.mjs [--head <module>] [--inflated <module>] [--h <mm>] [--hb <mm>] [--poses a,b]
 //     [--out <dir>] [--morphs 0]
 // (--inflated: the inflated head, head-inflated.mjs by default, the target of the poses' `inflate` blend shape)
@@ -22,7 +23,8 @@ import { surfaceNets } from './mesher.mjs';
 import { skullBones, fitTeeth } from './skull.mjs';
 import { boundedUnion, movePoint } from './skel.mjs';
 import { eyeGlobe } from './eye.mjs';
-import { headWeights, HEAD_POSES, poseWorld, skinVertices, blinkTargets, throatTargets, gapeTargets, inflateTargets, inflateMorph, inflateMidMorph, smoothSculpt, morphNormals, bindNormalDeltas, faceNormals, smoothField, rotateTo, fixWinding, ventTargets, BLINK_DROP, JOINT_NAMES } from './headrig.mjs';
+import { headWeights, HEAD_POSES, poseWorld, skinVertices, fixWinding, JOINT_NAMES } from './headrig.mjs';
+import { headMorphs, MORPH_ORDER } from './headmorphs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -49,31 +51,13 @@ const skin = headWeights(head.position, head.indices, f, { K: HEAD_SCULPT, teeth
 log('weights');
 const writeMorphs = arg('--morphs', '1') !== '0';
 const needs = (k) => writeMorphs || poses.some((p) => HEAD_POSES[p]?.morph?.[k]);
-// (the blink's blend shape is solved against the weights: the eye joints' share of the globe's drop is taken out of it)
-const blink = needs('blinkL') || needs('blinkR') ? blinkTargets(head.position, head.normal, headSDF, HEAD_SCULPT, { weights: skin, index: head.indices }) : null;
-if (blink) log('blink targets');
-const throat = needs('throat') ? throatTargets(head.position, head.normal, HEAD_SCULPT, { index: head.indices }) : null;
-if (throat) log('throat targets');
-const gapeC = needs('gape') || needs('gum') ? gapeTargets(head.position, head.normal, head.indices, f, HEAD_SCULPT, skin, { teeth }) : null;
-if (gapeC) log('gape correctives');
-const vent = needs('vent') ? ventTargets(head.position, head.normal, head.indices, skin, { K: HEAD_SCULPT }) : null;
-if (vent) log('vent corrective');
-// the inflation's blend shapes: onto the inflated head (head-inflated.mjs), solved for the full `inflated` pose, and
-// its in-between corrective (exact at `inflatedHalf`; driven by 4w(1 − w) from the inflate weight w)
-let inflate = null, inflateMid = null, inflateMask = null, inflateProjS = null, inflateField = null, inflateD = null, inflateLaid = null;
-if (needs('inflate')) {
-  const IM = await import(pathToFileURL(path.resolve(arg('--inflated', path.join(here, 'head-inflated.mjs')))).href);
-  inflateField = IM.inflatedSDF(HEAD_SCULPT, { cut: true, headSDF });
-  const inf = inflateTargets(head.position, head.indices, f, headSDF(smoothSculpt(HEAD_SCULPT), { cut: true }), inflateField, { K: HEAD_SCULPT, jawSplay: poseWorld(HEAD_POSES.inflated) });
-  inflate = inflateMorph(head.position, skin, poseWorld(HEAD_POSES.inflated), inf);
-  const HP = HEAD_POSES.inflatedHalf;
-  inflateMid = inflateMidMorph(head.position, skin, poseWorld(HP), inf, inflate, HP.morph.inflate);
-  // (the displacement at full weight: inflateTargets applies the mask)
-  inflateMask = inf.mask; inflateD = inf.d; inflateLaid = inf.laid ?? null;
-  // the projected skin (1) against the features riding on it (0), smoothed so the normals' two rules blend
-  inflateProjS = smoothField(Float32Array.from(inf.projected), head.indices, 3);
-  log(`inflate targets (${inf.stats.projected} projected, ${inf.stats.filled} filled)`);
-}
+// the blend shapes with their normal deltas (headmorphs.mjs): the blink (solved against the weights: the eye joints'
+// share of the globe's drop is taken out of it), the throat's pouch, the gape's and the vent's correctives, and the
+// inflation onto the inflated head (head-inflated.mjs, or --inflated) with its in-between corrective
+const morphs = await headMorphs(head, skin, {
+  K: HEAD_SCULPT, headSDF, headField: f, teeth, which: MORPH_ORDER.filter(needs), world: false, log,
+  inflated: pathToFileURL(path.resolve(arg('--inflated', path.join(here, 'head-inflated.mjs')))).href,
+});
 
 
 // the bones meshed once per joint (bind pose), moved rigidly
@@ -109,96 +93,18 @@ const rigid = (m, T) => {
 };
 // ---- the blend shapes with their normal deltas (bind frame): { name: { d, n } }
 const P0 = head.position, N0 = head.normal, I0 = head.indices, nV = P0.length / 3;
-const shapes = {};
-if (blink) {
-  // (the normals follow the blink's whole move: the blend shape and the eye joints' share of the globe's drop)
-  const iL = JOINT_NAMES.indexOf('J_eyeL'), iR = JOINT_NAMES.indexOf('J_eyeR'), full = new Float32Array(P0.length);
-  for (let v = 0; v < nV; v++) {
-    let es = 0; for (let q = 0; q < 4; q++) { const j = skin.joints[v * 4 + q]; if (j === iL || j === iR) es += skin.weights[v * 4 + q]; }
-    for (let k = 0; k < 3; k++) full[v * 3 + k] = blink.L[v * 3 + k] + blink.R[v * 3 + k];
-    full[v * 3 + 1] -= BLINK_DROP * es;
-  }
-  // (where the skin was laid on the closed surface, its own normals: blinkTargets' normal, in their share)
-  const dn = morphNormals(P0, N0, I0, full, { smooth: 4 }), nL = new Float32Array(P0.length), nR = new Float32Array(P0.length);
-  if (blink.normal) for (let v = 0; v < nV; v++) {
-    const w = blink.normalShare[v];
-    if (!(w > 0)) continue;
-    for (let k = 0; k < 3; k++) dn[v * 3 + k] = (1 - w) * dn[v * 3 + k] + w * (blink.normal[v * 3 + k] - N0[v * 3 + k]);
-  }
-  // (split across the midline as the positions are)
-  for (let v = 0; v < nV; v++) {
-    const z = P0[v * 3 + 2], tl = 0.5 + 0.5 * (Math.abs(z) < 0.03 ? Math.sin((z / 0.03) * Math.PI / 2) : Math.sign(z));
-    for (let k = 0; k < 3; k++) { nL[v * 3 + k] = dn[v * 3 + k] * tl; nR[v * 3 + k] = dn[v * 3 + k] * (1 - tl); }
-  }
-  shapes.blinkL = { d: blink.L, n: nL }; shapes.blinkR = { d: blink.R, n: nR };
-}
-if (throat) shapes.throat = { d: throat, n: morphNormals(P0, N0, I0, throat) };
-if (gapeC) { shapes.gape = { d: gapeC.gape, n: morphNormals(P0, N0, I0, gapeC.gape) }; shapes.gum = { d: gapeC.gum, n: morphNormals(P0, N0, I0, gapeC.gum) }; }
-if (vent) shapes.vent = { d: vent, n: morphNormals(P0, N0, I0, vent) };
-// the inflation's normals. The skin lands at the bind position moved by the inflation's displacement (the joints swing
-// only the bones inside it): on the projected skin the normal is the bind's turned toward the balloon's own at the
-// displaced point (its field's gradient), in the mask's share; the features riding on the skin (the gill margin, the pads)
-// turn as the smoothed facets round them turn. Worked out on the posed skin of the full and the halfway pose and carried
-// back into the bind frame as the inflate and inflateMid shapes' normal deltas.
-const inflationNormals = (posed, wInf) => {
-  const P = posed.position, N = Float32Array.from(posed.normal), e = 2e-4, g = inflateField, B = P0, D = inflateD;
-  const fb = smoothField(faceNormals(B, I0), I0, 4), fp = smoothField(faceNormals(P, I0), I0, 4);
-  // (the pads' laid ends (inflateTargets' laid share) take the posed skin's own normals, lightly smoothed: carried from
-  // the bind's round end, the rule above combed their relief with stripes)
-  const pv = inflateLaid ? smoothField(faceNormals(P, I0), I0, 3) : null;
-  for (let v = 0; v < nV; v++) {
-    const w = Math.min(1, wInf * inflateMask[v]);
-    if (w < 1e-3) continue;
-    const a = [fb[v * 3], fb[v * 3 + 1], fb[v * 3 + 2]], b = [fp[v * 3], fp[v * 3 + 1], fp[v * 3 + 2]];
-    const la = Math.hypot(...a) || 1, lb = Math.hypot(...b) || 1;
-    for (let k = 0; k < 3; k++) { a[k] /= la; b[k] /= lb; }
-    const n0 = [N0[v * 3], N0[v * 3 + 1], N0[v * 3 + 2]];
-    let r = rotateTo(a, b, n0);
-    const pj = inflateProjS[v];
-    if (pj > 1e-3) {
-      const x = B[v * 3] + D[v * 3], y = B[v * 3 + 1] + D[v * 3 + 1], z = B[v * 3 + 2] + D[v * 3 + 2];
-      const gx = g(x + e, y, z) - g(x - e, y, z), gy = g(x, y + e, z) - g(x, y - e, z), gz = g(x, y, z + e) - g(x, y, z - e);
-      const gl = Math.hypot(gx, gy, gz) || 1;
-      const t = [n0[0] * (1 - w) + (w * gx) / gl, n0[1] * (1 - w) + (w * gy) / gl, n0[2] * (1 - w) + (w * gz) / gl];
-      const tl = Math.hypot(...t) || 1;
-      r = [0, 1, 2].map((k) => r[k] * (1 - pj) + (t[k] / tl) * pj);
-    }
-    if (pv && inflateLaid[v] > 0) {
-      const lw = Math.min(1, inflateLaid[v]), rl = Math.hypot(...r) || 1, q = [pv[v * 3], pv[v * 3 + 1], pv[v * 3 + 2]], ql = Math.hypot(...q) || 1;
-      r = [0, 1, 2].map((k) => (r[k] / rl) * (1 - lw) + (q[k] / ql) * lw);
-    }
-    const l = Math.hypot(...r) || 1;
-    N[v * 3] = r[0] / l; N[v * 3 + 1] = r[1] / l; N[v * 3 + 2] = r[2] / l;
-  }
-  return N;
-};
-if (inflate) {
-  const WF = poseWorld(HEAD_POSES.inflated), HP = HEAD_POSES.inflatedHalf, WH = poseWorld(HP), h = HP.morph.inflate;
-  const full = new Float32Array(P0.length), half = new Float32Array(P0.length);
-  for (let i = 0; i < P0.length; i++) { full[i] = P0[i] + inflate[i]; half[i] = P0[i] + h * inflate[i] + (HP.morph.inflateMid ?? 0) * inflateMid[i]; }
-  const nInf = bindNormalDeltas(N0, skin, WF, inflationNormals(skinVertices(full, N0, skin, WF), 1));
-  const base = new Float32Array(P0.length); for (let i = 0; i < P0.length; i++) base[i] = h * nInf[i];
-  const nMid = bindNormalDeltas(N0, skin, WH, inflationNormals(skinVertices(half, N0, skin, WH), h), base);
-  shapes.inflate = { d: inflate, n: nInf }; shapes.inflateMid = { d: inflateMid, n: nMid };
-}
-log(`normal deltas (${Object.keys(shapes).join(', ')})`);
+const shapes = Object.fromEntries(morphs.names.map((k) => [k, { d: morphs.d[k], n: morphs.n[k] }]));
 const objDelta = (D) => { const o = new Float32Array(D.length); for (let i = 0; i < D.length; i += 3) { o[i] = D[i + 2] * HL * 0.001; o[i + 1] = D[i + 1] * HL * 0.001; o[i + 2] = -D[i] * HL * 0.001; } return o; };
 const objNDelta = (D) => { const o = new Float32Array(D.length); for (let i = 0; i < D.length; i += 3) { o[i] = D[i + 2]; o[i + 1] = D[i + 1]; o[i + 2] = -D[i]; } return o; };
 
 fs.mkdirSync(outDir, { recursive: true });
 // the bind head with every blend shape as a morph target (POSITION and NORMAL deltas, object frame) and their drivers
 if (writeMorphs && Object.keys(shapes).length) {
-  const DRIVERS = {
-    blinkL: 'J_eyeL drop / BLINK_DROP (the eye pulled down 0.10 HL)', blinkR: 'J_eyeR drop / BLINK_DROP',
-    throat: 'buccal pumping (gulp 1, inflate 1)', inflate: 'cheek inflation w (inflated 1, inflatedHalf 0.5)', inflateMid: '4 w (1 − w) of the inflation w',
-    gape: 'J_jaw angle / 70°, clamped 0…1', gum: 'J_jaw angle / 40°, clamped 0…1',
-    vent: 'J_opercL/R angle / 18° (vent 1, gulp 4/18), clamped 0…1; 0 in the cheek inflation (its own blend shape carries the covers)',
-  };
   const gm = new GLBBuilder('tobihaze-head-morphs');
   const clay = gm.addMaterial({ name: 'Clay', pbrMetallicRoughness: { baseColorFactor: [0.72, 0.7, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.6 } });
   const names = Object.keys(shapes);
   const prim = gm.primitive({ ...toObjMesh(P0, N0, I0), material: clay, targets: names.map((k) => objDelta(shapes[k].d)), normalTargets: names.map((k) => objNDelta(shapes[k].n)) });
-  const mesh = gm.addMesh('Head', [prim], { targetNames: names, drivers: Object.fromEntries(names.map((k) => [k, DRIVERS[k] ?? ''])) });
+  const mesh = gm.addMesh('Head', [prim], { targetNames: names, drivers: morphs.drivers });
   gm.json.meshes[mesh].weights = names.map(() => 0);
   gm.addScene('s', [gm.addNode({ name: 'Head', mesh })]);
   fs.writeFileSync(path.join(outDir, 'morphs.glb'), gm.toBuffer());
