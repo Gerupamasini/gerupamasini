@@ -171,6 +171,26 @@ export function transferVec3(src, dst, o = {}) {
   return out;
 }
 
+/**
+ * The hero's alert eye lift carried to a tier without eye joints (round B4, poses P4: lod2 has no J_eyeL/R and no eyesUp, so
+ * its alert eyes stood 0.9 mm under the near tiers' in the land state and popped at the lod1 ↔ lod2 switch): the hero's
+ * dense skin moved as the lift moves it (the eyesUp correctives at lift / their full lift plus the eye joints' share of the
+ * lift: the joints only translate) carried to the tier's vertices by tissue class (transferVec3), fish mm, bind frame.
+ * @param H build.mjs heroData ({ dense, packed, D, cls, grid })   @param dst { position, normal, cls } (the tier's skin)
+ * @param o { lift (HL, the alert's), full (HL, the eyesUp shapes' lift), eyeJ: [J_eyeL, J_eyeR] hero joint indices, HL }
+ * @returns Float32Array(nDst·3) mm
+ */
+export function eyeLiftOnTier(H, dst, { lift, full = 0.08, eyeJ, HL: hl = HL } = {}) {
+  const nD = H.dense.position.length / 3, w = lift / full, M = new Float32Array(nD * 3);
+  const dL = H.D.eyesUpL, dR = H.D.eyesUpR;
+  for (let v = 0; v < nD; v++) {
+    let share = 0; for (let q = 0; q < 4; q++) if (eyeJ.includes(H.packed.joints[v * 4 + q])) share += H.packed.weights[v * 4 + q] / 255;
+    for (let c = 0; c < 3; c++) M[v * 3 + c] = w * ((dL?.[v * 3 + c] ?? 0) + (dR?.[v * 3 + c] ?? 0));
+    M[v * 3 + 1] += share * lift * hl;
+  }
+  return transferVec3({ position: H.dense.position, normal: H.dense.normal, cls: H.cls, data: M }, dst, { grid: H.grid, normal: true });
+}
+
 /** The data of a source mesh sampled at points by their closest point on its surface (barycentric), e.g. a fin's roots
  * on the hero's skin: src { position, indices, data, dim }, points (mm, n·3) → Float32Array(n·dim). */
 export function sampleSurface(src, points, o = {}) {

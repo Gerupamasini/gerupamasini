@@ -39,7 +39,10 @@
 //    def.sole.normal, all its vertices within 0.15 mm of the plane's lowest (the ground once levelled), its underside
 //    (lens points facing the ground) within 0.10 mm; the inner blade continues the forearm (the middle rays' bases →
 //    heel within 10° of elbow → wrist); the heel 0.25-0.32 HL from the bases (round B3: u1's short distal sole on a
-//    0.5 HL blade; B2's 0.15-0.20 reported)
+//    0.5 HL blade; B2's 0.15-0.20 reported); round B4, an 'edge' foot (fins plant.mode 'edge': the furled bundle bent
+//    forward in its own plane, standing on its lower edge): the flat-sole gates reported, and the foot in the fan's plane
+//    (spread along n ≤ the furl's + 0.15 mm), one strip (width at the tips 0.85-1.15 of the furl's), its toe along
+//    def.sole.toe (≤ 10°)
 // 12 the pectoral's fold, in the arm's rest pose: the blade past rayT 0.3 lies on the flank, 0 … 0.3 mm off the trunk's
 //    skin (A030, A040, B067)
 // 13 the pelvic's fold hugs the belly: every vertex past 0.02 HL from its root no more than 0.01 HL under the belly's
@@ -424,7 +427,31 @@ const st = (name, state, tier = 'hero') => {
       return r.len;
     });
     const inner = per.slice(1, -1), lo = Math.min(...per), loIn = Math.min(...inner);
-    gate(`caudal ${state}: principal rays inside the body from the base (HL; min all / inner 15 / marginal pair)`, `${fmt(lo)} / ${fmt(loIn)} / ${fmt(per[0])}, ${fmt(per[per.length - 1])}`, '≥ 0.08', lo >= 0.08);
+    // (round B4: a report — the trunk key's sheath carries the taper over the rays' bases past the skin's end, so how far
+    // a ray runs inside the body is not what shows; the visible gates below replace it)
+    gate(`caudal ${state}: principal rays inside the body from the base (HL; min all / inner 15 / marginal pair; report: B3's embed)`, `${fmt(lo)} / ${fmt(loIn)} / ${fmt(per[0])}, ${fmt(per[per.length - 1])}`, 'report (≥ 0.08)', true);
+  }
+  // (round B4, the trunk key's visible gates, b4_trunk tail.mjs V1, V2, V4: the scaled skin's end per height across the
+  // peduncle (the midplane's last inside point) — at mid-depth SL … SL + 0.08 HL, a straight boundary (U, the mid-depth's
+  // s against the mean of 15 % and 85 % of the depth, ≤ 0.02 HL; the largest deviation from that line ≤ 0.02); the
+  // visible fin, its farthest s − the skin's end at mid-depth, 0.75-0.81 HL (A030 0.155 TL, A070 0.159) in bind, fold and
+  // spread; caudal triangles hidden in the body (all three corners inside) ≤ 10 %. Its V3 (top-view thickness), V5
+  // (shading line) and V6 (roots out under flex) are run by tail.mjs itself)
+  {
+    const SLh = K.caudalBase, yc0 = prof.at(SLh).yc;
+    const bis = (h, a, b) => { for (let i = 0; i < 40; i++) { const c = (a + b) / 2; if (h(c) < 0) a = c; else b = c; } return (a + b) / 2; };
+    const endAt = (y) => { let last = null; for (let s = 3.95; s <= 4.8; s += 0.002) if (F(s, y, 0) < 0) last = s; return last === null ? null : bis((s) => F(s, y, 0), last, last + 0.002); };
+    const sMid = endAt(yc0), sRef = sMid - 0.03, yT = bis((y) => F(sRef, y, 0), yc0, yc0 + 0.4), yB = bis((y) => F(sRef, y, 0), yc0, yc0 - 0.4);
+    const sAt = (fr) => endAt(yB + (yT - yB) * fr), s15 = sAt(0.15), s85 = sAt(0.85), U = sMid - (s15 + s85) / 2;
+    let dev = 0; for (const fr of [0.25, 0.35, 0.5, 0.65, 0.75]) { const sv = sAt(fr), l = s15 + ((s85 - s15) * (fr - 0.15)) / 0.7; if (sv !== null) dev = Math.max(dev, Math.abs(sv - l)); }
+    gate('caudal visible V1: the skin\'s end at mid-depth past SL / boundary U / its deviation from straight (HL)', `${fmt(sMid - SLh)} / ${fmt(U)} / ${fmt(dev)}`, '0 … 0.08 / ≤ 0.02 / ≤ 0.02', sMid - SLh >= 0 && sMid - SLh <= 0.08 && Math.abs(U) <= 0.02 && dev <= 0.02);
+    for (const state of ['bind', 'fold', 'spread']) {
+      const { P, n: nn, m: mc } = st('Fin_Caudal', state);
+      let far = -Infinity; for (let i = 0; i < nn; i++) far = Math.max(far, P[i * 3]);
+      let hid = 0; const Ic = mc.indices, nt = Ic.length / 3;
+      for (let t = 0; t < nt; t++) if ([0, 1, 2].every((c) => F(P[Ic[t * 3 + c] * 3], P[Ic[t * 3 + c] * 3 + 1], P[Ic[t * 3 + c] * 3 + 2]) < 0)) hid++;
+      gate(`caudal visible ${state}: V2 bare fin past the skin's end (HL) / V4 triangles hidden in the body`, `${fmt(far - sMid)} / ${(100 * hid / nt).toFixed(1)} %`, '0.75-0.81 / ≤ 10 %', far - sMid >= 0.75 && far - sMid <= 0.81 && hid / nt <= 0.1);
+    }
   }
 }
 
@@ -444,13 +471,43 @@ const st = (name, state, tier = 'hero') => {
   const tr = C[0][0] + C[1][1] + C[2][2];
   for (let it = 0; it < 200; it++) { const M = [0, 1, 2].map((a) => [0, 1, 2].map((b) => (a === b ? tr : 0) - C[a][b])); nfit = nrm([0, 1, 2].map((a) => M[a][0] * nfit[0] + M[a][1] * nfit[1] + M[a][2] * nfit[2])); }
   const tilt = Math.acos(Math.min(1, Math.abs(dot(nfit, nS)))) * DEG;
-  gate('plant: sole plane vs def.sole.normal (deg)', fmt(tilt), '≤ 2', tilt <= 2);
+  // (round B4: an 'edge' foot (def.sole.edge, fins plant.mode 'edge': the furled bundle bent forward in its own plane and
+  // standing on its lower edge, the broad faces to the side) has no flat sole by design: B3's flat-sole gates reported, and
+  // the edge foot's own gates below)
+  const edgeFoot = !!so.edge;
+  gate(`plant: sole plane vs def.sole.normal (deg)${edgeFoot ? ' (report: round B3\'s flat sole; the edge foot by design)' : ''}`, fmt(tilt), edgeFoot ? 'report (≤ 2)' : '≤ 2', edgeFoot || tilt <= 2);
   let lo = Infinity, hi = -Infinity, loU = Infinity, hiU = -Infinity;
   sel.forEach((i) => { const h = dot([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], nS) * HL; lo = Math.min(lo, h); hi = Math.max(hi, h); });
   // (the underside: the vertices whose normal faces the ground)
   const tg = TG.hero.Fin_Pectoral_L, kP = tg.names.indexOf('plant');
   sel.forEach((i) => { const nn = [0, 1, 2].map((j) => m.normal[i * 3 + j] + tg.normals[kP][i * 3 + j]); if (dot(nn, nS) < -0.5) { const h = dot([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], nS) * HL; loU = Math.min(loU, h); hiU = Math.max(hiU, h); } });
-  gate('plant: sole vertices above its lowest (mm) / underside spread (mm)', `${fmt(hi - lo)} / ${fmt(hiU - loU)} (${sel.length} vertices)`, '≤ 0.15 / ≤ 0.10', hi - lo <= 0.15 && hiU - loU <= 0.1);
+  gate(`plant: sole vertices above its lowest (mm) / underside spread (mm)${edgeFoot ? ' (report: round B3\'s flat sole)' : ''}`, `${fmt(hi - lo)} / ${fmt(hiU - loU)} (${sel.length} vertices)`, edgeFoot ? 'report (≤ 0.15 / ≤ 0.10)' : '≤ 0.15 / ≤ 0.10', edgeFoot || (hi - lo <= 0.15 && hiU - loU <= 0.1));
+  if (edgeFoot) {
+    // (the edge foot, in the fin's own frame: (a) bent in its own plane — the foot's spread along the fan's normal n no more
+    // than the furled bundle's own over the same vertices + 0.15 mm (no twist out of the plane); (b) bent as one strip —
+    // the bundle's width across its line at the tips (ray 0 → ray N−1, square to the toe in the plane) 0.85–1.15 of the
+    // furl's across its own; (c) the toe along def.sole.toe: the middle rays' last 0.1 HL within 10° of it. The land
+    // state's toe line and contact patch are the rig's gates (planeArm: toe-line pitch, contact ahead / out))
+    const Fu = st('Fin_Pectoral_L', 'furl').P, nn = nrm(so.normal);
+    let pLo = Infinity, pHi = -Infinity, fLo = Infinity, fHi = -Infinity;
+    sel.forEach((i) => { const a = dot([P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], nn) * HL, b = dot([Fu[i * 3], Fu[i * 3 + 1], Fu[i * 3 + 2]], nn) * HL; pLo = Math.min(pLo, a); pHi = Math.max(pHi, a); fLo = Math.min(fLo, b); fHi = Math.max(fHi, b); });
+    gate('plant (edge foot): spread along the fan normal, plant vs furl (mm)', `${fmt(pHi - pLo)} vs ${fmt(fHi - fLo)}`, '≤ furl + 0.15', pHi - pLo <= fHi - fLo + 0.15);
+    const N = d.rays.length, tipOf = (Q, k) => { let b = -1, bt = -1; for (let i = 0; i < n; i++) if (Math.abs(m.ray[i] - k) < 1e-6 && m.rayT[i] > bt) { bt = m.rayT[i]; b = i; } return [Q[b * 3], Q[b * 3 + 1], Q[b * 3 + 2]]; };
+    const baseOf = (Q, k) => { let b = -1, bt = 2; for (let i = 0; i < n; i++) if (Math.abs(m.ray[i] - k) < 1e-6 && m.rayT[i] < bt) { bt = m.rayT[i]; b = i; } return [Q[b * 3], Q[b * 3 + 1], Q[b * 3 + 2]]; };
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const toe = nrm(so.toe), km = (N - 1) >> 1, furlDir = nrm(sub(tipOf(Fu, km), baseOf(Fu, km)));
+    const wP = Math.abs(dot(sub(tipOf(P, 0), tipOf(P, N - 1)), nrm(cross(nn, toe)))), wF = Math.abs(dot(sub(tipOf(Fu, 0), tipOf(Fu, N - 1)), nrm(cross(nn, furlDir))));
+    gate('plant (edge foot): bundle width at the tips, plant / furl (HL)', `${fmt(wP)} / ${fmt(wF)} = ${fmt(wP / wF)}`, '0.85-1.15', wP / wF >= 0.85 && wP / wF <= 1.15);
+    // (the middle rays' end direction: their vertices in the last 0.1 HL, first → last)
+    let worstToe = 0;
+    for (const k of [km, km + 1]) {
+      const vs = []; for (let i = 0; i < n; i++) if (Math.abs(m.ray[i] - k) < 1e-6 && m.rayT[i] * d.rays[k].len >= d.rays[k].len - 0.1) vs.push(i);
+      vs.sort((a, b) => m.rayT[a] - m.rayT[b]);
+      const dirE = nrm(sub([P[vs.at(-1) * 3], P[vs.at(-1) * 3 + 1], P[vs.at(-1) * 3 + 2]], [P[vs[0] * 3], P[vs[0] * 3 + 1], P[vs[0] * 3 + 2]]));
+      worstToe = Math.max(worstToe, Math.acos(Math.min(1, dot(dirE, toe))) * DEG);
+    }
+    gate('plant (edge foot): middle rays\' ends vs def.sole.toe (deg)', fmt(worstToe), '≤ 10', worstToe <= 10);
+  }
   const u = nrm(sub(K.pectoral.wrist, K.pectoral.elbow));
   const mid = [(d.rays.length - 1) >> 1, d.rays.length >> 1].map((k) => d.rays[k].base).reduce((a, b) => a.map((v, i) => (v + b[i]) / 2));
   const heel = so.heel.map((v) => v / HL), inner = nrm(sub(heel, mid)), ang = Math.acos(dot(inner, u)) * DEG, hd = Math.hypot(...sub(heel, mid));

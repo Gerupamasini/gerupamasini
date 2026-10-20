@@ -16,7 +16,8 @@
 //
 // The body texture is square (2048² hero, 1024² lod1, 256² lod2); BODY_LAYOUT ([x0, y0, x1, y1], v down) sizes each
 // chart for about 0.0019 HL (0.031 mm) of skin per texel at 2048 on the body and 0.0015 on the face (shots-uv.mjs
-// tiers reports it per chart):
+// tiers reports it per chart); lod2 bakes its own, BODY_LAYOUT_LOD2 (round B4: only the rects it fills, TIERS.lod2.layout;
+// a chart the layout leaves out is not made):
 //   bodyL, bodyR   one side each of the body from s 0.43 HL to the tail's end (round B3: to the end of the caudal's
 //                  fleshy base, body.mjs tailEnd, the seam along its rounded edge), round from the ventral midline to
 //                  the dorsal one by arc length (half cylinders, no wrap: the seams lie on the midlines, under the keels
@@ -102,6 +103,24 @@ export const BODY_LAYOUT = {
   patch: [0.41, 0.874, 0.786, 0.99],
 };
 
+/** lod2's atlas (round B4, tech P4: B3's lod2 baked BODY_LAYOUT, 9.2 % of whose 256² went to rects the far skin never uses
+ * — the domes (its dome skin charts into the head's), the sockets, the gill pockets, the slit's walls, the tail cap and
+ * the teeth): only the rects lod2 fills, at BODY_LAYOUT's places but the body halves 6 % taller (texels round the body)
+ * and the head 5 % larger, the lobes and the patch moved clear of it (larger lobes or a moved patch changed which few
+ * far triangles the folds' repair lays in the patch: 7.3 mm² of it visible against B3's 5.1, this one 4.7). The atlas
+ * is baked per tier. */
+export const BODY_LAYOUT_LOD2 = {
+  bodyL: [0, 0, 1, 0.28],
+  bodyR: [0, 0.29, 1, 0.57],
+  head: [0, 0.58, 0.42, 1],
+  lobeL: [0.43, 0.70, 0.54, 0.819],
+  lobeR: [0.55, 0.70, 0.66, 0.819],
+  iris: [0.796, 0.746, 0.946, 0.866],
+  eyeSkin: [0.796, 0.876, 0.946, 0.996],
+  hidden: [0.914, 0.643, 0.919, 0.648],
+  patch: [0.43, 0.874, 0.786, 0.99],
+};
+
 /** The part [a0, b0, a1, b1] of each projection's unit square its rect holds (the rest is never used: the eye's
  * charts are discs the skin fills only part of, the lobe's runs past both ends of the arm). */
 export const CHART_CROP = {
@@ -134,8 +153,10 @@ export const TIERS = {
   // (lod2's body halves reach 0.85 rad over the ventral midline, where its long triangles span the broad flat throat
   // (round B3: with B2's 0.35 a 7–18-triangle island of 50–85 mm² under the throat went to the patch), 0.25 over the
   // dorsal one: the halves' texels 5 % coarser round the body); its lobes' turn takes 0.75 of their rect's height (its
-  // few long triangles round the arm cross the seam by more than the hero's 0.14: 7 went outside, to the patch)
-  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, axialAttrs: 1, tex: 256, pad: 1, repairClose: 1, minIsland: 2, margin: [0.85, 0.25], lobeShare: 0.75 },
+  // few long triangles round the arm cross the seam by more than the hero's 0.14: 7 went outside, to the patch); round
+  // B4: its patch islands 4 texels apart (B3 1: five pairs of islands from places 4–52 mm apart on the fish 1–2 texels
+  // apart in the atlas, which a bake's dilation and mipmaps bleed into each other; the patch rect has the room)
+  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, axialAttrs: 1, tex: 256, pad: 4, repairClose: 1, minIsland: 2, margin: [0.85, 0.25], lobeShare: 0.75, layout: BODY_LAYOUT_LOD2 },
 };
 
 /** The tier's field (fish mm, .hl in HL with .head / .parts / .cup). */
@@ -231,7 +252,9 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const margin = o.margin ?? 0.12;
   const cup = cupField(HEAD_SCULPT);
   const charts = [];
-  const add = (name, c) => { charts.push({ name, rect: L[name], ...(CHART_CROP[name] && !o.noCrop ? { crop: CHART_CROP[name] } : {}), ...c }); return charts.length - 1; };
+  // (round B4: a chart whose rect the layout leaves out — lod2's BODY_LAYOUT_LOD2 — is not made (−1): its skin goes where
+  // its fallback would, the sockets' to the domes', the domes' to the head's or the body's)
+  const add = (name, c) => { if (!L[name]) return -1; charts.push({ name, rect: L[name], ...(CHART_CROP[name] && !o.noCrop ? { crop: CHART_CROP[name] } : {}), ...c }); return charts.length - 1; };
   const cHead = add('head', { keep: 'outer', project: azimuthal([sC, yC, 0], [-1, 0, 0], [0, 1, 0], Math.PI * 0.56) });
   const sB1 = Math.max(4.25, sEnd) * HL;
   const cBodyL = add('bodyL', { keep: 'outer', project: halfCylinder(0.43 * HL, sB1, axisY, 1, { margin, arc }) });
@@ -267,8 +290,8 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const base = (cm) => (cm[0] < sC ? cHead : cm[2] >= 0 ? cBodyL : cBodyR);
   const fallback = (c, cm) => {
     if (c === cDomeL || c === cDomeR) return base(cm);
-    if (c === cSockL) return cDomeL;
-    if (c === cSockR) return cDomeR;
+    if (c === cSockL) return cDomeL >= 0 ? cDomeL : base(cm);
+    if (c === cSockR) return cDomeR >= 0 ? cDomeR : base(cm);
     // (the arm's own skin hidden behind more of it in its tube — the wrist's end, seen edge-on — to the patch: on the
     // body's chart, which keeps its outermost skin, it would stand over the flank and send the flank to the patch)
     if (c === cHidden) return cHidden;
@@ -311,23 +334,23 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
     // down to its underside in the infraorbital crease) the skin facing away from the globe's centre
     for (const s of [1, -1]) {
       const c = [E.s, E.y, E.z * s], d = vec.sub(q, c), r = Math.hypot(...d);
-      if (r < rIn && vec.dot(n, d) / r < -0.15) return s > 0 ? cSockL : cSockR;
+      if (r < rIn && vec.dot(n, d) / r < -0.15) { const k = s > 0 ? cSockL : cSockR; if (k >= 0) return k; }
     }
     const s = q[2] >= 0 ? 1 : -1, c = [E.s, E.y, E.z * s], d = vec.sub(q, c), r = Math.hypot(...d);
-    if (r < re + eyeR && vec.dot(n, d) > 0.2 * r) return s > 0 ? cDomeL : cDomeR;
+    if (r < re + eyeR && vec.dot(n, d) > 0.2 * r) { const k = s > 0 ? cDomeL : cDomeR; if (k >= 0) return k; }
     // (the slit's walls and the pockets' as they face each other; their rounded ends, edge-on in those projections,
     // stay with the outer skin's charts, or the patch where those cannot see them)
-    if (o.interior?.mouth?.[v] && Math.abs(n[1]) > 0.45) return n[1] < 0 ? cMouthRoof : cMouthFloor;
+    if (o.interior?.mouth?.[v] && Math.abs(n[1]) > 0.45 && cMouthRoof >= 0) return n[1] < 0 ? cMouthRoof : cMouthFloor;
     // (hero: the lips' margins, the upper lip's underside and the lower lip's top within `lipBand` of the closed mouth's
     // line, face down / up onto the slit's plane as its walls do: they go with the walls, whose planar projection sees
     // them from below / above; from inside the head the face's chart sees each behind the other lip, and B1 laid them
     // in the patch as a red line along both lips)
-    if (o.interior?.mouth && q[0] < LIP.s && Math.abs(n[1]) > LIP.ny && Math.abs(q[1] - lipY(q[0])) < LIP.band) {
+    if (o.interior?.mouth && cMouthRoof >= 0 && q[0] < LIP.s && Math.abs(n[1]) > LIP.ny && Math.abs(q[1] - lipY(q[0])) < LIP.band) {
       const lower = isLowerLip(q[0], q[1], fishHL.head.parts(q[0], q[1], q[2]));
       if (!lower && n[1] < 0) return cMouthRoof;
       if (lower && n[1] > 0) return cMouthFloor;
     }
-    if (o.interior?.gill?.[v] && Math.abs(n[2]) > 0.45) return n[2] * s < 0 ? (s > 0 ? cGillRoofL : cGillRoofR) : (s > 0 ? cGillFloorL : cGillFloorR);
+    if (o.interior?.gill?.[v] && cGillRoofL >= 0 && Math.abs(n[2]) > 0.45) return n[2] * s < 0 ? (s > 0 ? cGillRoofL : cGillRoofR) : (s > 0 ? cGillFloorL : cGillFloorR);
     if (q[0] > 0.95 && q[0] < 1.8 && q[1] < 0.5) {
       const a = along(q, s);
       // (from the shoulder on: the root's band, where the arm turns into the flank, is the arm's; B1 left t < 0.06 on the
@@ -403,9 +426,10 @@ export function pruneInsideGlobes(mesh, { margin = 0.004 } = {}) {
 /**
  * Split every vertex where the surface touches itself (its triangles form more than one fan through its edges, as
  * where a pruned hole's rim runs through one vertex twice): one copy per fan, so each boundary is a simple loop and
- * the skin is a manifold at its vertices too. The copies keep the vertex's position, normal and source.
+ * the skin is a manifold at its vertices too. The copies keep the vertex's normal and source, and (round B4) lie
+ * `apart` mm apart (each copy and the original eased into its own sheet's solid), so they do not share a position.
  */
-export function splitPinches(mesh, { field = null, h = 0 } = {}) {
+export function splitPinches(mesh, { field = null, h = 0, apart = 0 } = {}) {
   const I = Uint32Array.from(mesh.indices), P = mesh.position, nv = P.length / 3, nt = I.length / 3;
   const vt = Array.from({ length: nv }, () => []);
   for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) vt[I[t * 3 + k]].push(t);
@@ -475,6 +499,25 @@ export function splitPinches(mesh, { field = null, h = 0 } = {}) {
     normal.set(mesh.normal.subarray(v * 3, v * 3 + 3), (nv + i) * 3);
     if (source) source[nv + i] = mesh.source[v];
   });
+  // (round B4, tech P5: each copy of a split vertex, the original too, eased `apart` (mm) into its own sheet's solid,
+  // along its fan's area normal: the parted sheets no longer share a point, so the skin is manifold welded by position
+  // as by source — B3's lod1 had 2 non-manifold edges by position where its kept lining meets the skin at the cup front)
+  if (apart > 0) {
+    const fan = new Float64Array(m * 3), moved = new Uint8Array(m);
+    extra.forEach((v, i) => { moved[v] = 1; moved[nv + i] = 1; });
+    for (let t = 0; t < nt; t++) {
+      const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+      if (!moved[a] && !moved[b] && !moved[c]) continue;
+      const u = [0, 1, 2].map((k) => position[b * 3 + k] - position[a * 3 + k]), w = [0, 1, 2].map((k) => position[c * 3 + k] - position[a * 3 + k]);
+      const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      for (const x of [a, b, c]) if (moved[x]) for (let k = 0; k < 3; k++) fan[x * 3 + k] += n[k];
+    }
+    for (let x = 0; x < m; x++) {
+      if (!moved[x]) continue;
+      const l = Math.hypot(fan[x * 3], fan[x * 3 + 1], fan[x * 3 + 2]);
+      if (l > 0) for (let k = 0; k < 3; k++) position[x * 3 + k] -= (apart * fan[x * 3 + k]) / l;
+    }
+  }
   return { position, normal, indices: I, source, split: extra.length, nmSplit };
 }
 
@@ -554,7 +597,10 @@ export function fishDense({ h, field, box = BODY_BOX, cap = true, partSheets, lo
   let dropped = b.dropped;
   if (cap) {
     // (a pinch can hold a few triangles that hang by one vertex: split off, they are dropped as bits)
-    const sp = splitPinches(mesh, { field: partSheets ? f : null, h });
+    // (round B4: the parted sheets' copies eased apart only where the field parts sheets — lod1's kept lining —: the
+    // hero's dense mesh, which the accepted head is meshed into, stays as it was; easing its 5 pinch copies 0.002 mm
+    // changed which lip and gill-cover triangles its charts lay in the patch, 17.3 → 19.5 mm² of it in view)
+    const sp = splitPinches(mesh, { field: partSheets ? f : null, h, apart: partSheets ? 0.002 : 0 });
     split = sp.split; nmSplit = sp.nmSplit;
     let sk = sp;
     if (split) {
@@ -776,7 +822,7 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
       if (nd) log(`locked the split vertices and their ${nd} triangles`);
     }
   }
-  const B = bodyCharts(K, { layout: o.layout, interior: classes, margin: T.margin ?? (T.simplifyFirst ? 0.35 : 0.12), lobeShare: T.lobeShare });
+  const B = bodyCharts(K, { layout: o.layout ?? T.layout, interior: classes, margin: T.margin ?? (T.simplifyFirst ? 0.35 : 0.12), lobeShare: T.lobeShare });
   const { charts, prefer, index, forceTri, fallback } = B;
   const lobes = new Set([index.lobeL, index.lobeR]);
   const regions = T.regions
@@ -792,9 +838,9 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
     resolve: { size: tex, eps: 0.25 * T.h, share: 0.25, fallback },
     denseRepair: T.denseRepair ?? { close: 3, ring: 0, minIsland: 0 },
     // (the patch's islands at the charts' density, 0.0019 HL per texel at 2048; 2 texels apart at the tier's size)
-    repair: T.noRepair ? false : { density: 1 / (0.0019 * HL * 2048), pad: (T.pad ?? 4) / tex, close: T.repairClose ?? 6, ring: T.repairRing ?? 0, minIsland: T.minIsland ?? 4, spare: SPARE_CHARTS, overlap: { size: tex, eps: T.overlapEps ?? 0.01, share: T.overlapShare ?? 0.1 } }, log,
+    repair: T.noRepair ? false : { density: 1 / (0.0019 * HL * 2048), pad: (T.pad ?? 4) / tex, close: T.repairClose ?? 6, ring: T.repairRing ?? 0, minIsland: T.minIsland ?? 4, spare: SPARE_CHARTS, overlap: { size: tex, eps: T.overlapEps ?? 0.01, share: T.overlapShare ?? 0.1 }, ...(T.bleed === false ? {} : { bleed: { size: tex, gap: T.bleedGap ?? 3, mm: T.bleedMM ?? 0.3 } }) }, log,
   });
-  return { ...res, charts, layout: o.layout ?? BODY_LAYOUT, tier: T, classes, chartIndex: index };
+  return { ...res, charts, layout: o.layout ?? T.layout ?? BODY_LAYOUT, tier: T, classes, chartIndex: index };
 }
 
 /**

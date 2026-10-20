@@ -473,6 +473,32 @@ export const MORPH_POSES = {
 };
 
 /**
+ * The joints' own share of a posed blend shape's move (round B4, tech P1): for a shape whose pose (MORPH_POSES) only
+ * TRANSLATES joints (the eyes' lift and drop: J_eyeL/R carry the cups' rims, the lining and part of the collar), the
+ * displacement the skin gets from the joints alone at full weight, per vertex: Σ_j share_j · t_j (HL, fish frame; the
+ * joints turn nothing, so the posed surface is bind + Δ + this). A shape's normal deltas must be worked out on that whole
+ * move: lod1's eyesUpL/R and its shrink-wrapped blinkL/R took them from bind + Δ alone (build.mjs lighterSkin), which
+ * shears across the collar where the eye's share falls from 1 to 0, so the shading turned up to 146° off the posed
+ * surface at the land state's lift (black specks and a crumpled rim on the lifted collar, the creased hood in the blink).
+ * The hero's shapes take their normals this way already (headMorphs: `full`). null for a shape whose pose turns a joint
+ * (its normals need the un-skinning bindNormalDeltas does) or has no pose.
+ * @param name a blend shape's name   @param skin { joints, weights } (Uint8 weights /255 or floats)
+ * @param jointNames the skin's joint index → name   @param n the vertex count
+ * @returns Float32Array(n·3) (HL) | null
+ */
+export function morphJointMove(name, skin, jointNames, n) {
+  const pose = MORPH_POSES[name];
+  if (!pose) return null;
+  for (const e of Object.values(pose)) for (const [c, v] of Object.entries(e)) if (c !== 't' && v) return null;
+  const t = jointNames.map((nm) => pose[nm]?.t ?? null), sc = skin.weights instanceof Uint8Array ? 1 / 255 : 1, out = new Float32Array(n * 3);
+  for (let v = 0; v < n; v++) for (let q = 0; q < 4; q++) {
+    const w = skin.weights[v * 4 + q] * sc, tj = w ? t[skin.joints[v * 4 + q]] : null;
+    if (tj) for (let k = 0; k < 3; k++) out[v * 3 + k] += w * tj[k];
+  }
+  return out;
+}
+
+/**
  * The head's blend shapes on a head-space skin.
  * @param sub   { position (HL, fish frame), normal, indices (wound consistently: headrig fixWinding) }
  * @param skin  { joints: indices into headrig JOINT_NAMES, weights } (headWeights, or the shipped weights mapped there)

@@ -13,13 +13,15 @@
 //   p_*   the pelvic base under the chest (side, from below and in front) and the front views that show whether the trunk
 //         stays inside the head's outline (f_level: straight on; m_u5: the owner's u5, the fish's front raised ~12° so the
 //         camera sits that much below the bind fish's axis)
-//   e_*   the peduncle's end (from above and below, square on: the taper of its half-width; round B3: the fleshy base
-//         running on into the fin, to s 4.44)
+//   e_*   the peduncle's end (from above and below, square on: the taper of its half-width; round B4: the scaled skin
+//         ends at s 4.20, the fin's sheath carries the taper on)
 //   k_*   round B3: the caudal junction on a GLB with the fins (the tier GLBs, or the trunk's clay-with-fins builds),
 //         the caudal folded as on land (pose morph Fin_Caudal.fold; ignored where the mesh has no such target) and in
 //         the bind, from the side, 3/4, above, behind and below, and from the tail photos' cameras (A070, A030, A067,
 //         A017) framed on the tail; n_* the folded anal fin in its furrow; q_* the pelvic cup pressed (morph
-//         Fin_Pelvic.press) from the side, the front, below and 3/4
+//         Fin_Pelvic.press) from the side, the front, below and 3/4. Round B4: the junction from in front at 3/4, the
+//         caudal spread (side) and flexed (above), the sheath's own node in the trunk's clay builds (Sheath_Caudal,
+//         drawn opaque) posed with the fin; the pelvic press family (pressLow / pressHigh / pressDeep) from the side
 // (round B1: the matched photos and the overlays are in the scratchpad's ref/cmp/b1_trunk_*.jpg; the photos' cameras
 // for A030 / A002 are near-lateral telephoto shots, u1 a low close shot from in front of the right side, B010 / A005 the
 // same fish from above its left side, B067 the left side from a little in front, B002 from about 30° above the snout;
@@ -45,8 +47,12 @@ const plate = box(3.95, 4.50, 0.05, 0.42, -0.12, 0.12), pelvis = box(0.85, 1.55,
 // (round B3: the caudal junction with the fin, the tail with the folded fin, the anal fin's furrow, the pressed pelvic)
 const cjun = box(3.95, 4.60, 0.0, 0.48, -0.15, 0.15), ctail = box(3.30, 4.98, -0.02, 0.55, -0.15, 0.15);
 const analBox = box(2.30, 3.90, -0.12, 0.25, -0.12, 0.12), pelPress = box(0.85, 1.65, -0.35, 0.35, -0.35, 0.35);
-const FOLD = { morph: { Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Pelvic: { fold: 1 } } };
+const FOLD = { morph: { Fin_Caudal: { fold: 1 }, Sheath_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Pelvic: { fold: 1 } } };
 const PRESS = { morph: { Fin_Pelvic: { press: 1 } } };
+// (round B4: the caudal opened and flexed with its sheath; the pelvic press family)
+const SPREAD = { morph: { Fin_Caudal: { spread: 1 }, Sheath_Caudal: { spread: 1 } } };
+const FLEX = { morph: { Fin_Caudal: { flex: 1 }, Sheath_Caudal: { flex: 1 } } };
+const pressOf = (k) => ({ morph: { Fin_Pelvic: { [k]: 1 } } });
 const clay = (name, view) => ({ name, mode: 'clay', view: { fit: 'body', margin: 0.06, ...view } });
 const sil = (name, view) => ({ name, mode: 'silhouette', view: { margin: 0, ...view } });
 
@@ -124,4 +130,9 @@ export const SHOTS = [
   { name: 'q_front_press', mode: 'clay', pose: PRESS, view: { azim: 0, elev: -8, fov: 22, fit: pelPress, margin: 0.04 } },
   { name: 'q_under_press', mode: 'clay', pose: PRESS, view: { azim: 0, elev: -90, topUp: 1, fov: 22, fit: pelPress, margin: 0.04 } },
   { name: 'q_q34_press', mode: 'clay', pose: PRESS, view: { azim: 50, elev: -25, fov: 22, fit: pelPress, margin: 0.04 } },
+  // round B4: the junction from in front at 3/4, the caudal spread and flexed, the pelvic press family
+  { name: 'k_q34f_fold', mode: 'clay', pose: FOLD, view: { azim: 55, elev: 20, fov: 20, fit: cjun, margin: 0.06 } },
+  { name: 'k_side_spread', mode: 'clay', pose: SPREAD, view: { azim: 90, elev: 3, fov: 22, fit: ctail, margin: 0.04 } },
+  { name: 'k_top_flex', mode: 'clay', pose: FLEX, view: { azim: 0, elev: 90, topUp: 1, fov: 22, fit: ctail, margin: 0.04 } },
+  ...['pressLow', 'pressHigh', 'pressDeep'].map((k) => ({ name: `q_side_${k}`, mode: 'clay', pose: pressOf(k), view: { azim: 90, elev: -3, fov: 22, fit: pelPress, margin: 0.04 } })),
 ];

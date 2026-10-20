@@ -53,6 +53,9 @@ const toothMat = new THREE.MeshStandardMaterial({ color: 0xf0e8d6, roughness: 0.
 // opaque); the far tier's merged, alpha-tested fins opaque
 const clayFin = new THREE.MeshStandardMaterial({ color: 0xc9bca6, roughness: 0.5, metalness: 0, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
 const clayFinMask = new THREE.MeshStandardMaterial({ color: 0xc9bca6, roughness: 0.5, metalness: 0, side: THREE.DoubleSide });
+// (round B4: the caudal's sheath — the fleshy base past the skin's end, the fin mesh's extras `sheath` triangle ranges —
+// opaque in the body's clay, so the body's end does not show through it as a band)
+const clayFlesh = new THREE.MeshStandardMaterial({ color: 0xb9b2a8, roughness: 0.62, metalness: 0, side: THREE.DoubleSide });
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x8d877e, roughness: 0.9, metalness: 0 });
 const silMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 // x-ray: the skeleton opaque (alizarin red, as a cleared and stained specimen) inside a faint skin
@@ -60,6 +63,34 @@ const boneMat = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5
 const cartMat = new THREE.MeshStandardMaterial({ color: 0x3f7fd0, roughness: 0.5, metalness: 0 });
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0xe8dc8a, roughness: 0.6, metalness: 0, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
 let model = null, original = new Map(), mode = 'clay', box = new THREE.Box3(), regions = {}, rig = null, ground = null;
+// (round B4: the eye is one primitive on one material that reads the body atlas through its iris and eyeSkin rects;
+// in clay the atlas is painted from the root extras' tobihaze.eyes.clay (eyemesh.eyeClayAtlas): the body clay
+// everywhere, the iris rect gold-brown with the pupil dark and glossy below its edge, so the hero and lod1 eyes keep
+// B3's look and lod2's merged eyes show their window. One material per loaded model, for every material whose extras
+// role is 'eye' or 'body')
+let clayAtlas = null;
+function clayAtlasMaterial() {
+  const c = rig?.eyes?.clay;
+  if (!c?.iris || !c.pupilEdge) return null;
+  if (clayAtlas) return clayAtlas;
+  const S = 1024, paint = (fillBody, fillIris, fillPupil) => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const g = cv.getContext('2d');
+    g.fillStyle = fillBody; g.fillRect(0, 0, S, S);
+    const [x0, y0, x1, y1] = c.iris.map((v) => v * S), n = c.pupilEdge.length - 1;
+    g.fillStyle = fillIris; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    g.fillStyle = fillPupil; g.beginPath(); g.moveTo(x0, y0);
+    for (let k = 0; k <= n; k++) g.lineTo(x0 + (k / n) * (x1 - x0), y0 + c.pupilEdge[k] * (y1 - y0));
+    g.lineTo(x1, y0); g.closePath(); g.fill();
+    const t = new THREE.CanvasTexture(cv); t.flipY = false; return t;
+  };
+  const rgb = (a) => `rgb(${a.map((v) => Math.round(v * 255)).join(',')})`, grey = (r) => rgb([r, r, r]);
+  const col = c.colours ?? { pupil: [0.23, 0.2, 0.16], iris: [0.54, 0.45, 0.28] }, rough = c.colours?.roughness ?? { window: 0.12, skin: 0.62 };
+  const map = paint('#b9b2a8', rgb(col.iris), rgb(col.pupil)); map.colorSpace = THREE.SRGBColorSpace;
+  const roughnessMap = paint(grey(0.62), grey(rough.window), grey(rough.window));
+  clayAtlas = new THREE.MeshStandardMaterial({ color: 0xffffff, map, roughnessMap, roughness: 1, metalness: 0 });
+  return clayAtlas;
+}
 const bind = new Map(); // bone → its bind { position, quaternion } (restored before every pose)
 
 function applyMode(m) {
@@ -80,12 +111,18 @@ function applyMode(m) {
     if (m === 'xray' || m === 'bones') o.material = bone || tooth ? boneMat : cart ? cartMat : ghostMat;
     // a globe with a window has a skin cap (clay like the head); a bare globe keeps the eye clay
     const capped = eye && o.parent?.children.some((c) => /cornea/i.test((original.get(c) ?? c.material)?.name ?? ''));
-    if (m !== 'xray' && m !== 'bones') o.material = m === 'clay' ? (tooth ? toothMat : fin ? (merged ? clayFinMask : clayFin) : iris ? clayIris : cornea ? clayCornea : eye && !capped ? clayEye : clayMat) : m === 'silhouette' ? silMat : original.get(o);
+    // (round B4: a material whose extras role is 'eye' or 'body' (the one-primitive eye, the skin) on the clay atlas)
+    const role = om?.userData?.tobihaze?.role, atlas = m === 'clay' && !tooth && (role === 'eye' || role === 'body') ? clayAtlasMaterial() : null;
+    if (m !== 'xray' && m !== 'bones') o.material = m === 'clay' ? (atlas ?? (tooth ? toothMat : fin ? (merged ? clayFinMask : clayFin) : iris ? clayIris : cornea ? clayCornea : eye && !capped ? clayEye : clayMat)) : m === 'silhouette' ? silMat : original.get(o);
+    // (round B4: a fin mesh with a sheath range (geometry groups set at load) draws it with the opaque flesh clay; a single
+    // material ignores the groups)
+    if (m === 'clay' && fin && o.geometry?.groups?.length && o.userData?.sheath) o.material = [o.material, clayFlesh];
   });
 }
 
 async function load(url) {
   if (model) { scene.remove(model); original.clear(); bind.clear(); }
+  if (clayAtlas) { clayAtlas.map?.dispose(); clayAtlas.roughnessMap?.dispose(); clayAtlas.dispose(); clayAtlas = null; }
   if (ground) { scene.remove(ground); ground = null; }
   const gltf = await new GLTFLoader().loadAsync(url);
   model = gltf.scene;
@@ -99,6 +136,15 @@ async function load(url) {
     if (o.userData?.tobihaze?.axes) rig = o.userData.tobihaze;
     // (skinned meshes are framed by their posed vertices; the bounds are recomputed after a pose)
     if (o.isSkinnedMesh) o.frustumCulled = false;
+    // (round B4: the fin mesh's sheath triangle ranges (extras `sheath`: { fin: [first triangle, count] }) as geometry
+    // groups, material 1 the opaque flesh in clay)
+    const sh = o.isMesh && o.userData?.sheath && o.geometry?.index ? Object.values(o.userData.sheath).sort((a, b) => a[0] - b[0]) : null;
+    if (sh?.length && !o.geometry.groups.length) {
+      const total = o.geometry.index.count;
+      let at = 0;
+      for (const [t0, n] of sh) { if (t0 * 3 > at) o.geometry.addGroup(at, t0 * 3 - at, 0); o.geometry.addGroup(t0 * 3, n * 3, 1); at = (t0 + n) * 3; }
+      if (at < total) o.geometry.addGroup(at, total - at, 0);
+    }
   });
   applyMode(mode);
   return { box: [box.min.toArray(), box.max.toArray()], regions: Object.keys(regions) };
@@ -186,11 +232,12 @@ function applyPose(pose = {}) {
       if (typeof w === 'number') { o.morphTargetInfluences[i] = w; set.add(k); }
     }
     // (correctives driven by a joint (the mesh's extras `drive`: weight = clamp(value / per, 0, 1)), where the pose does
-    // not give their weight: the eyes-up web by the eye's lift, the blink by its drop, the gape by the jaw's angle)
+    // not give their weight: the eyes-up web by the eye's lift, the blink by its drop, the gape by the jaw's angle;
+    // round B4: `per` may be negative — lod2's pitchDown_Fin_Pelvic is authored at J_pelvic's lower range end)
     const drive = (o.userData?.drive ?? o.parent?.userData?.drive) || {};
     for (const [k, d] of Object.entries(drive)) {
       const i = o.morphTargetDictionary[k];
-      if (i === undefined || set.has(k) || !d || typeof d.joint !== 'string' || !(d.per > 0)) continue;
+      if (i === undefined || set.has(k) || !d || typeof d.joint !== 'string' || !d.per) continue;
       const e = pose[d.joint];
       if (!e || Array.isArray(e)) continue;
       const v = d.channel === 'lift' ? e.t?.[1] ?? 0 : d.channel === 'drop' ? -(e.t?.[1] ?? 0) : e[d.channel] ?? 0;

@@ -106,6 +106,11 @@ export function refillRegions(P, indices, region, isIn) {
   }
   const out = [], outR = [], used = new Set();
   for (let t = 0; t < nt; t++) if (!drop[t]) { out.push(indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2]); outR.push(region[t]); }
+  // (round B4 integration: the kept triangles' edges, so a fan whose diagonal runs along one of them — four triangles on
+  // that edge, a non-manifold lod2 since the round-B4 trunk shifted the far field — starts from another loop vertex)
+  const kept = new Set(), ukey = (a, b) => (a < b ? key(a, b) : key(b, a));
+  for (let i = 0; i < out.length; i += 3) for (let k = 0; k < 3; k++) kept.add(ukey(out[i + k], out[i + (k + 1) % 3]));
+  const clashes = (L, r) => { let n = 0; for (let i = 2; i + 1 < L.length; i++) if (kept.has(ukey(L[r], L[(r + i) % L.length]))) n++; return n; };
   let added = 0, bad = false;
   for (const [a0, outs] of next) for (const b0 of outs) {
     if (used.has(key(a0, b0))) continue;
@@ -114,7 +119,25 @@ export function refillRegions(P, indices, region, isIn) {
     used.add(key(a, b));
     while (b !== a0 && guard++ < 1e5) { loop.push(b); const c = (next.get(b) ?? []).find((x) => !used.has(key(b, x))); if (c === undefined) { bad = true; break; } a = b; b = c; used.add(key(a, b)); }
     if (bad || loop.length < 3) { bad = true; break; }
-    for (let i = 1; i + 1 < loop.length; i++) { out.push(loop[0], loop[i], loop[i + 1]); outR.push(regOf.get(a0)); added++; }
+    // (a loop through one vertex twice — a pinched boundary — split there into simple loops, each fanned on its own: one
+    // fan over both put four triangles on the apex's edge to that vertex)
+    const simple = [], stack = [loop];
+    while (stack.length) {
+      const Lp = stack.pop(), seen = new Map();
+      let cut = null;
+      for (let i = 0; i < Lp.length && !cut; i++) { if (seen.has(Lp[i])) cut = [seen.get(Lp[i]), i]; else seen.set(Lp[i], i); }
+      if (!cut) { if (Lp.length >= 3) simple.push(Lp); continue; }
+      stack.push(Lp.slice(cut[0], cut[1]), Lp.slice(cut[1]).concat(Lp.slice(0, cut[0])));
+    }
+    for (const lp of simple) {
+      // (the fan's apex: the loop's first vertex unless one of its diagonals is a kept edge, then the first that has none
+      // — or the fewest)
+      let r0 = 0, best = clashes(lp, 0);
+      for (let r = 1; r < lp.length && best > 0; r++) { const c = clashes(lp, r); if (c < best) { best = c; r0 = r; } }
+      const L = lp.slice(r0).concat(lp.slice(0, r0));
+      for (let i = 1; i + 1 < L.length; i++) { out.push(L[0], L[i], L[i + 1]); outR.push(regOf.get(a0)); added++; }
+      for (let i = 2; i + 1 < L.length; i++) kept.add(ukey(L[0], L[i]));
+    }
   }
   // (a boundary that is not a set of simple loops: keep the triangles as they were)
   if (bad) return { indices, region, removed: 0, added: 0 };

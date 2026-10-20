@@ -8,13 +8,15 @@
 //           spread beside the flank (A061, and from the side)
 //   tiers   hero, lod1 and lod2 in the land state (side, 3/4, front: orthographic but the 3/4), at rest from above and in
 //           the water from A061's camera
-//   crawl   the crawl's stance (rig.crawlFrames, written per tier by build.mjs into states.json `crawl`): each frame of
-//           the hero from the side and from in front and above through one fixed camera (CRAWL_BOX / CRAWL_VIEWS, the
-//           sheet marks the weld), and lod1's and lod2's from the side
+//   crawl   the crawl's cycle (round B4: rig.crawlCycle, written per tier by build.mjs into states.json `crawl`, 49 keys
+//           over one cycle — the stance to `duty`, then the recovery): every 4th key of the hero from the side, the 3/4
+//           and above through one fixed camera each (CRAWL_BOX / CRAWL_VIEWS, the sheet marks the bearing contacts), and
+//           lod1's (every 8th) and lod2's (every 3rd of its 17) from the side
 //   b2      round B2's tier GLBs (FINAL_B2, default tools/models/tobihaze/out/b2ref, with B2's own states.json) against
-//           round B3's with the same cameras and states: side (rest), front (land), top (rest), land, water, the pectoral
-//           close up (land) and the caudal junction close up (rest)
-// FINAL_SET=views|macro|poses|tiers|crawl|b2|all (default all but b2; a list too) picks a batch (keep a batch near ten
+//           this round's with the same cameras and states: side (rest), front (land), top (rest), land, water, the
+//           pectoral close up (land) and the caudal junction close up (rest)
+//   b3      the same against round B3's (FINAL_B3, default tools/models/tobihaze/out/b3ref; round B4)
+// FINAL_SET=views|macro|poses|tiers|crawl|b2|b3|all (default all but b2/b3; a list too) picks a batch (keep a batch near ten
 // shots: SwiftShader is slow); FINAL_DIR (repo-relative, default tools/models/tobihaze/out/tiers) is where the
 // tobihaze.<tier>.glb files and states.json are.
 //
@@ -43,6 +45,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..', '..');
 const dir = process.env.FINAL_DIR ?? 'tools/models/tobihaze/out/tiers';
 const b2dir = process.env.FINAL_B2 ?? 'tools/models/tobihaze/out/b2ref';
+const b3dir = process.env.FINAL_B3 ?? 'tools/models/tobihaze/out/b3ref';
 const glb = (t, d = dir) => `${d}/tobihaze.${t}.glb`;
 const box = (s0, s1, y0, y1, z0, z1) => {
   const a = toObject([s0 * HL, y0 * HL, z0 * HL]), b = toObject([s1 * HL, y1 * HL, z1 * HL]);
@@ -56,14 +59,14 @@ const front = box(0.0, 2.2, -0.45, 0.85, -0.95, 0.95);
 
 /** The reference states' poses per tier (build.mjs: <dir>/states.json). */
 const readStates = (d) => { const f = path.join(root, d, 'states.json'); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {}; };
-const STATES = readStates(dir), STATES_B2 = readStates(b2dir);
+const STATES = readStates(dir), STATES_B2 = readStates(b2dir), STATES_B3 = readStates(b3dir);
 const stateOf = (S, state, tier = 'hero') => {
   const s = S[tier]?.[state];
   if (!s) return null;
   // (a ground plane under the fish on land and at rest; none in the water)
   return { ...structuredClone(s.pose), ...(state === 'water' ? {} : { ground: true }) };
 };
-export const LAND = stateOf(STATES, 'land'), REST = stateOf(STATES, 'rest'), WATER = stateOf(STATES, 'water'), REACH = stateOf(STATES, 'reach');
+export const LAND = stateOf(STATES, 'land'), REST = stateOf(STATES, 'rest'), WATER = stateOf(STATES, 'water'), REACH = stateOf(STATES, 'reach'), SWIM = stateOf(STATES, 'swim');
 
 const shot = (name, model, view, pose) => ({ name, mode: 'clay', model, view: { margin: 0.06, ...view, ...(pose ? { pose } : {}) } });
 const CAM = {
@@ -101,6 +104,8 @@ const POSES = LAND ? [
   shot('p_water_A061', glb('hero'), CAM.water_A061, WATER),
   shot('p_water_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, WATER),
   ...(REACH ? [shot('p_reach_A023', glb('hero'), CAM.reach_A023, REACH)] : []),
+  // (round B4: the swimming fish, B3's water: the swim wave, the caudal spread)
+  ...(SWIM ? [shot('p_swim_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, SWIM)] : []),
 ] : [];
 const TIER_VIEWS = [
   ['land_side', 'land', { azim: 90, elev: 3, ortho: true, fit: 'all' }],
@@ -112,20 +117,30 @@ const TIER_VIEWS = [
 const TIERS = ['hero', 'lod1', 'lod2'].flatMap((t) => TIER_VIEWS.filter(([, st]) => STATES[t]?.[st]).map(([k, st, v]) => shot(`t_${t}_${k}`, glb(t), v, stateOf(STATES, st, t))));
 // the crawl's frames from one fixed camera each (the fish moves through it over the welded tips)
 export const CRAWL_BOX = box(-1.0, 2.4, -0.45, 0.75, -0.9, 0.9);
-export const CRAWL_VIEWS = { side: { azim: 90, elev: 3, ortho: true, fit: CRAWL_BOX, margin: 0.04 }, q34: { azim: 55, elev: 18, fov: 24, fit: CRAWL_BOX, margin: 0.04 } };
+export const CRAWL_VIEWS = { side: { azim: 90, elev: 3, ortho: true, fit: CRAWL_BOX, margin: 0.04 }, q34: { azim: 55, elev: 18, fov: 24, fit: CRAWL_BOX, margin: 0.04 }, top: { azim: 0, elev: 90, topUp: -1, ortho: true, fit: CRAWL_BOX, margin: 0.04 } };
 const crawlOf = (t) => STATES[t]?.crawl ?? [];
+// (round B4: the cycle's keys, every `step`-th and the last; the frame index in the name is the key's own)
+export const CRAWL_STEP = { hero: 4, lod1: 8, lod2: 3 };
+const every = (F, k) => F.map((f, i) => [f, i]).filter(([, i], _, a) => i % k === 0 || i === a.length - 1);
 const CRAWL = [
-  ...crawlOf('hero').flatMap((f, i) => Object.entries(CRAWL_VIEWS).map(([k, v]) => shot(`crawl_hero_${String(i).padStart(2, '0')}_${k}`, glb('hero'), v, { ...f.pose, ground: true }))),
-  ...['lod1', 'lod2'].flatMap((t) => crawlOf(t).map((f, i) => shot(`crawl_${t}_${String(i).padStart(2, '0')}_side`, glb(t), CRAWL_VIEWS.side, { ...f.pose, ground: true }))),
+  ...every(crawlOf('hero'), CRAWL_STEP.hero).flatMap(([f, i]) => Object.entries(CRAWL_VIEWS).map(([k, v]) => shot(`crawl_hero_${String(i).padStart(2, '0')}_${k}`, glb('hero'), v, { ...f.pose, ground: true }))),
+  ...['lod1', 'lod2'].flatMap((t) => every(crawlOf(t), CRAWL_STEP[t]).map(([f, i]) => shot(`crawl_${t}_${String(i).padStart(2, '0')}_side`, glb(t), CRAWL_VIEWS.side, { ...f.pose, ground: true }))),
 ];
 // round B2 → B3: the same cameras on both rounds' hero GLBs, each in its own round's states
 const CMP = [['side', 'side_A030', 'rest'], ['front', 'front_B002', 'land'], ['top', 'top_A036', 'rest'], ['land', 'land_A070', 'land'], ['water', 'water_A061', 'water'], ['pec', 'pec_close', 'land'], ['tail', 'tail_close', 'rest']];
 const B2 = [
   ...CMP.filter(([, , st]) => STATES_B2.hero?.[st]).map(([k, c, st]) => shot(`c_b2_${k}`, glb('hero', b2dir), CAM[c], stateOf(STATES_B2, st))),
-  ...CMP.filter(([, , st]) => STATES.hero?.[st]).map(([k, c, st]) => shot(`c_b3_${k}`, glb('hero'), CAM[c], stateOf(STATES, st))),
+  ...CMP.filter(([, , st]) => STATES.hero?.[st]).map(([k, c, st]) => shot(`c_cur_${k}`, glb('hero'), CAM[c], stateOf(STATES, st))),
+];
+
+// round B3 → B4: the same cameras on both rounds' hero GLBs, each in its own round's states (c_b3_* round B3's, c_b4_*
+// this round's)
+const B3 = [
+  ...CMP.filter(([, , st]) => STATES_B3.hero?.[st]).map(([k, c, st]) => shot(`c_b3_${k}`, glb('hero', b3dir), CAM[c], stateOf(STATES_B3, st))),
+  ...CMP.filter(([, , st]) => STATES.hero?.[st]).map(([k, c, st]) => shot(`c_b4_${k}`, glb('hero'), CAM[c], stateOf(STATES, st))),
 ];
 
 const set = process.env.FINAL_SET ?? 'all';
-const SETS = { views: VIEWS, macro: MACRO, poses: POSES, tiers: TIERS, crawl: CRAWL, b2: B2 };
+const SETS = { views: VIEWS, macro: MACRO, poses: POSES, tiers: TIERS, crawl: CRAWL, b2: B2, b3: B3 };
 const ALL = [...VIEWS, ...MACRO, ...POSES, ...TIERS, ...CRAWL];
-export const SHOTS = set === 'all' ? ALL : set.split(',').flatMap((k) => SETS[k] ?? [...ALL, ...B2].filter((s) => s.name === k));
+export const SHOTS = set === 'all' ? ALL : set.split(',').flatMap((k) => SETS[k] ?? [...ALL, ...B2, ...B3].filter((s) => s.name === k));

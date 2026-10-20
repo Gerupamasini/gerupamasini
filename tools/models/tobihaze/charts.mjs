@@ -451,7 +451,7 @@ function triCharts(mesh) {
 
 /** The triangles a UV layout cannot keep: folded (against their chart's orientation), degenerate in UV while not in
  * 3D, or with a corner outside their chart's rect (beyond `tol`). Hidden charts (chart.hidden) are skipped. */
-export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, overlap = null } = {}) {
+export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, overlap = null, bleed = null } = {}) {
   const { uv, indices: I, position: P } = mesh, triChart = triCharts(mesh);
   const orient = chartOrientation(mesh, charts.length);
   // the median texel stretch per chart (UV area per 3D area), to tell a collapsed triangle
@@ -477,7 +477,65 @@ export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, over
     const occ = occludedTriangles(mesh, charts, { size: overlap.size ?? 2048, eps: overlap.eps ?? 0.01, share: overlap.share ?? 0 });
     for (let t = 0; t < bad.length; t++) if (occ[t] && !bad[t]) bad[t] = 4;
   }
+  // (round B4, bake padding: bleed { size, gap, mm }: the triangles of one chart's island that come within `gap` texels
+  // of another island of the same chart where the surface under the two lies more than `mm` apart — a projection's two
+  // sheets side by side in the atlas, which a bake's dilation and mipmaps bleed into each other)
+  if (bleed) {
+    const bl = bleedTriangles(mesh, charts, bleed);
+    for (let t = 0; t < bad.length; t++) if (bl[t] && !bad[t]) bad[t] = 5;
+  }
   return bad;
+}
+
+/**
+ * The triangles that bleed into another island of their chart (round B4, the B3 review's bake padding): each chart's
+ * islands (its triangles joined through shared vertices; hidden and relay charts — the patch, packed `pad` apart —
+ * skipped) rasterised at `size` by texel centre with the surface point under each texel; where a texel of one island
+ * lies within `gap` texels (Chebyshev) of a texel of another and their surface points are more than `mm` apart, the
+ * smaller island's triangle there is flagged. Same-projection neighbours that continue each other on the surface (a
+ * chart cut by a few triangles sent elsewhere) are not flagged: a bake computes their texels from the same place.
+ * @returns Uint8Array per triangle
+ */
+export function bleedTriangles(mesh, charts, { size = 2048, gap = 3, mm = 0.3 } = {}) {
+  const { uv, indices: I, position: P } = mesh, nt = I.length / 3, nv = P.length / 3, triChart = triCharts(mesh);
+  const skip = (t) => { const C = charts[triChart[t]]; return !C || C.hidden || C.relay; };
+  // islands per chart: triangles joined through their shared vertices (a vertex has one UV)
+  const par = new Int32Array(nt).map((_, i) => i), find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  const first = new Int32Array(nv).fill(-1);
+  for (let t = 0; t < nt; t++) {
+    if (skip(t)) continue;
+    for (let k = 0; k < 3; k++) { const v = I[t * 3 + k], u = first[v]; if (u < 0) first[v] = t; else if (triChart[u] === triChart[t]) { const a = find(u), b = find(t); if (a !== b) par[b] = a; } }
+  }
+  const isl = new Int32Array(nt).fill(-1), count = new Map();
+  for (let t = 0; t < nt; t++) if (!skip(t)) { isl[t] = find(t); count.set(isl[t], (count.get(isl[t]) ?? 0) + 1); }
+  const own = new Int32Array(size * size).fill(-1), pt = new Float32Array(size * size * 3);
+  for (let t = 0; t < nt; t++) {
+    if (isl[t] < 0) continue;
+    const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+    rasterBary(uv, I, t, size, (p, w0, w1, w2) => {
+      own[p] = t;
+      for (let q = 0; q < 3; q++) pt[p * 3 + q] = w0 * P[a * 3 + q] + w1 * P[b * 3 + q] + w2 * P[c * 3 + q];
+    });
+  }
+  const out = new Uint8Array(nt), mm2 = mm * mm;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const p = y * size + x, tp = own[p];
+    if (tp < 0) continue;
+    const ip = isl[tp];
+    for (let dy = -gap; dy <= gap; dy++) {
+      const Y = y + dy; if (Y < 0 || Y >= size) continue;
+      for (let dx = -gap; dx <= gap; dx++) {
+        const X = x + dx; if (X < 0 || X >= size) continue;
+        const q = Y * size + X, tq = own[q];
+        if (tq < 0 || isl[tq] === ip || triChart[tq] !== triChart[tp]) continue;
+        const d2 = (pt[p * 3] - pt[q * 3]) ** 2 + (pt[p * 3 + 1] - pt[q * 3 + 1]) ** 2 + (pt[p * 3 + 2] - pt[q * 3 + 2]) ** 2;
+        if (d2 <= mm2) continue;
+        // (the smaller island's triangle: it is the one a patch can take)
+        if (count.get(ip) < count.get(isl[tq]) || (count.get(ip) === count.get(isl[tq]) && ip < isl[tq])) out[tp] = 1; else out[tq] = 1;
+      }
+    }
+  }
+  return out;
 }
 
 /**

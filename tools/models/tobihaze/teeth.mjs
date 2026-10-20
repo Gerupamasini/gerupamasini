@@ -33,17 +33,26 @@ export function toothAxis(t, F = TOOTH_FIT) {
 /**
  * The teeth mesh.
  * @param teeth skull.mjs fitTeeth(head) ({ premax, dentary: [{ root, tip, r, bend }] }, HL, left side)
- * @param o { sides (6), layout (BODY_LAYOUT) }
+ * @param o { sides (6), layout (BODY_LAYOUT), sink: { premax, dentary } (HL, each tooth moved that far back along its own
+ *   axis, root first; TEETH_SINK) }
  * @returns { position (fish mm), normal, uv, indices, group: Uint8Array per vertex (0 premax, 1 dentary), groups: ['premax',
  *   'dentary'], triangles }
  */
-export function teethMesh(teeth, { sides = 6, layout = BODY_LAYOUT } = {}) {
+/** Each row's sink into its jaw (HL; round B4, the rig key's request: the fitted premaxillary row's front tips stood
+ * 0.03–0.15 mm out of the closed upper lip at bind and in every pose — 8 tip vertices, B1–B3 — a geometry fault of the
+ * fit, not of the weights: the premaxillary teeth sunk 0.01 HL (0.16 mm) along their own axes; the dentary's hidden). */
+export const TEETH_SINK = { premax: 0.01, dentary: 0 };
+
+export function teethMesh(teeth, { sides = 6, layout = BODY_LAYOUT, sink = TEETH_SINK } = {}) {
   const R = layout.teeth, uc = [(R[0] + R[2]) / 2, (R[1] + R[3]) / 2];
   const P = [], N = [], G = [], I = [];
   const groups = ['premax', 'dentary'];
   for (const [g, row] of groups.map((k, i) => [i, teeth[k] ?? []])) {
     for (const side of [1, -1]) {
-      for (const t of row) {
+      for (const t0 of row) {
+        // (the sink: root and tip moved back along the tooth's own axis)
+        const sk = sink?.[groups[g]] ?? 0, dir0 = nrm(sub(t0.tip, t0.root));
+        const t = sk ? { ...t0, root: sub(t0.root, mul(dir0, sk)), tip: sub(t0.tip, mul(dir0, sk)) } : t0;
         const ax = toothAxis(t);
         // the last station is the tip's point: rings at the others, a frame carried along the axis
         const base = P.length / 3;

@@ -9,14 +9,18 @@
 //               have read with its green channel inverted. The gaze turns these nodes about the globe's centre (rig.mjs
 //               AXES.eyes); the joints only translate (the blink's drop, the eyes raised).
 //   lod2        both globes placed at rest in the object frame, to be merged into the Body (its material, J_head 255)
-// The mesh is split into the skin (drawn with the Body material) and the window (the clay round's Cornea and Iris
-// materials as its two parts, the pupil and the iris ring; `window` is the two as one primitive for a tier that draws
-// the whole window from the iris rect). Each part has only the vertices it uses and its own UVs: the skin's all in the
-// `eyeSkin` rect (its rim, the window's edge, on the rect's top row), the window's in the `iris` rect, so the ring the
-// two share is two rings of vertices and no triangle reaches across the gutter between the rects. Each part carries
-// per-vertex tangents (tiers.vertexTangents: the skin is drawn with the Body material and its normal map).
+// The mesh is split into the skin and the window (the pupil and the iris ring; `window` is the two as one). Each part
+// has only the vertices it uses and its own UVs: the skin's all in the `eyeSkin` rect (its rim, the window's edge, on
+// the rect's top row), the window's in the `iris` rect, so the ring the two share is two rings of vertices and no
+// triangle reaches across the gutter between the rects. Each part carries per-vertex tangents (tiers.vertexTangents).
+// Round B4 (draw calls: CLAUDE.md counts a material as a draw): the tiers draw each globe as ONE primitive, `whole` (the
+// skin and the window, each with its own UVs and tangents, in one vertex list), with one Eye material that reads the
+// body atlas's maps through those rects — the skin's colour from eyeSkin, the window's (the iris ring and the pupil,
+// glossy) from the iris rect. B3 drew three primitives a globe (skin on the Body material, the pupil on Cornea, the
+// iris on Iris). The clay round has no maps: the viewer paints the iris rect from `eyeClayAtlas` (the pupil's edge per
+// u, the window's rect) so the clay keeps its dark window and iris ring.
 import { EYE_MM, toObject, dirToObject } from './anatomy.mjs';
-import { eyeGlobe } from './eye.mjs';
+import { eyeGlobe, pupilEdge } from './eye.mjs';
 import { BODY_LAYOUT } from './fishmesh.mjs';
 import { vertexTangents } from './tiers.mjs';
 
@@ -91,6 +95,9 @@ export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangent
     pupil: compact(position, normal, uvWin, g.pupil, o),
     iris: compact(position, normal, uvWin, g.iris, o),
   };
+  // (round B4: the globe as one primitive, the skin's vertices first, then the window's)
+  parts.whole = joinParts([parts.skin, parts.window]);
+  parts.whole.ranges = { skin: [0, parts.skin.indices.length / 3], window: [parts.skin.indices.length / 3, parts.window.indices.length / 3] };
   // (all: the skin's and the window's triangles in the globe's own numbering, the pole rows' zero-area facets left out
   // as the parts leave them)
   const P = position, same = (a, b) => P[a * 3] === P[b * 3] && P[a * 3 + 1] === P[b * 3 + 1] && P[a * 3 + 2] === P[b * 3 + 2];
@@ -98,6 +105,39 @@ export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangent
   for (const src of [g.skin, g.cornea]) for (let t = 0; t < src.length; t += 3) { const a = src[t], b = src[t + 1], c = src[t + 2]; if (!same(a, b) && !same(b, c) && !same(a, c)) all.push(a, b, c); }
   const indices = Uint32Array.from(all);
   return { position, normal, uv, indices, parts, triangles: indices.length / 3 };
+}
+
+/** Parts (each { position, normal, uv, indices, tangent? }, own vertices) as one vertex list: their triangles in order. */
+function joinParts(list) {
+  const nv = list.reduce((a, p) => a + p.position.length / 3, 0), ni = list.reduce((a, p) => a + p.indices.length, 0);
+  const tan = list.every((p) => p.tangent);
+  const out = { position: new Float32Array(nv * 3), normal: new Float32Array(nv * 3), uv: new Float32Array(nv * 2), indices: new Uint32Array(ni), ...(tan ? { tangent: new Float32Array(nv * 4) } : {}) };
+  let v0 = 0, i0 = 0;
+  for (const p of list) {
+    const n = p.position.length / 3;
+    out.position.set(p.position, v0 * 3); out.normal.set(p.normal, v0 * 3); out.uv.set(p.uv, v0 * 2);
+    if (tan) out.tangent.set(p.tangent, v0 * 4);
+    for (let i = 0; i < p.indices.length; i++) out.indices[i0 + i] = p.indices[i] + v0;
+    v0 += n; i0 += p.indices.length;
+  }
+  return out;
+}
+
+/**
+ * What a clay renderer needs to paint the eye's look into the body atlas (round B4: the eye is one primitive on one
+ * material, so the clay's dark pupil and gold-brown iris ring come from the atlas, as the textures will): the window's
+ * rect (`iris`) and the skin's (`eyeSkin`), and the pupil's edge across the window rect: `pupilEdge[k]` the share of
+ * the rect's height (from its top, v down) where the pupil ends at u = k / n (eye.mjs eyeGlobe: u = φ / 2π, the
+ * window's v ∈ [0, 0.5] onto the rect, the pupil's rings out to ρp(φ)). Side-independent (the right globe's u runs the
+ * same azimuths).
+ */
+export function eyeClayAtlas(layout = BODY_LAYOUT, n = 32) {
+  return {
+    iris: layout.iris, eyeSkin: layout.eyeSkin,
+    pupilEdge: Array.from({ length: n + 1 }, (_, k) => +pupilEdge((k / n) * Math.PI * 2).toFixed(4)),
+    colours: { pupil: [0.23, 0.2, 0.16], iris: [0.54, 0.45, 0.28], roughness: { window: 0.12, skin: 0.6 } },
+    note: 'clay only: paint the iris rect gold-brown with the pupil (v < pupilEdge at u, linear between the samples) dark and glossy; the rest of the atlas the body clay',
+  };
 }
 
 /**

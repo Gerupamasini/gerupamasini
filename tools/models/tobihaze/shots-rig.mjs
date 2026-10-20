@@ -65,6 +65,10 @@ function stateShots(dir) {
     shot('vent_rear', 'hero', { fit: 'head', azim: 150, elev: 12, fov: 24, margin: 0.06 }, { J_opercL: { angle: 18 }, J_opercR: { angle: 18 }, J_suspL: { angle: 4 }, J_suspR: { angle: 4 } }),
   );
   for (const k of Object.keys(ST.hero).filter((k) => /^land\d+$/.test(k))) out.push(shot(`${k}_side`, 'hero', { fit: 'all', azim: 90, elev: 2, ortho: true }, S('hero', k)), shot(`${k}_q34`, 'hero', { fit: 'all', azim: 60, elev: 10, fov: 18 }, S('hero', k)));
+  // (round B4) the water state (the A061 bottom rest: the caudal closed into a spear) and the swim, and each transition's
+  // keys (states.json <tier>.transitions: the arms lifted over an arc between the states) low along the ground
+  for (const st of ['water', 'swim']) if (ST.hero[st]) out.push(shot(`${st}_side_hero`, 'hero', { fit: 'all', azim: 90, elev: 2, ortho: true }, S('hero', st)), shot(`${st}_top_hero`, 'hero', { fit: 'all', azim: 75, elev: 55, fov: 18 }, S('hero', st)));
+  for (const [k, T] of Object.entries(ST.hero.transitions ?? {})) for (const key of T.keys.filter((x) => [0.25, 0.5, 0.75].includes(x.u))) out.push(shot(`tr_${k.replace('>', '_')}_${key.u}`, 'hero', { fit: 'chest', azim: 62, elev: 7, fov: 22, margin: 0.1 }, { ...structuredClone(key.pose), ground: true }));
   return out;
 }
 

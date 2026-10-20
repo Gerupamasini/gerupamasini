@@ -43,6 +43,8 @@
 // bends with the junction; in the lobe's share of the fish's field (fishSDF.parts: noLobe against lobe, held off the
 // gill cover, smoothed over the mesh); the flank round the arm's root follows the shoulder in part (RIG.shoulderHalo);
 // the pelvic base likewise takes J_pelvic.
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { HL, HEAD, EYE_MM, toObject, dirToObject } from './anatomy.mjs';
 import { BODY_SCULPT, trunkProfile, fishSDF } from './body.mjs';
 import { HEAD_SCULPT, headSDF } from './head.mjs';
@@ -144,8 +146,34 @@ export const RIG = {
     land: { joints: ['J_sp3', 'J_sp4', 'J_sp5', 'J_sp6', 'J_sp7', 'J_caudal'], bands: [[2.0, 2.4], [2.4, 2.7], [2.7, 3.0], [3.0, 3.3], [3.3, 3.6], [3.6, 3.9], [3.9, 4.3]], fins: ['Fin_Caudal'], ground: ['Fin_Anal', 'Fin_Caudal'], from: 'J_sp1', maxDeg: 8, reg: 0.002, smooth: 0.01 },
     rest: { joints: ['J_root', 'J_sp1', 'J_sp2', 'J_sp3', 'J_sp4', 'J_sp5', 'J_sp6', 'J_sp7', 'J_caudal'], bands: [[0.15, 0.6], [0.6, 1.0], [1.0, 1.5], [1.5, 2.0], [2.0, 2.4], [2.4, 2.7], [2.7, 3.0], [3.0, 3.3], [3.3, 3.6], [3.6, 3.9], [3.9, 4.3]], fins: ['Fin_Caudal'], ground: 'all', maxDeg: 8, reg: 0.002, smooth: 0.01 },
   },
-  // (round B3) the pelvic cup's press in the land state (pressPelvic): J_pelvic's pitch searched within this (deg)
-  pelvicPress: { pitch: [-8, 28] },
+  // (round B4) the transitions between the states (transitionPlan, TRANSITIONS): the arc sampled at `samples` points, `keys`
+  // keys; the lift's directions (deg per unit of scale, the left arm's channels) tried in order, each scaled up to `maxDeg`
+  // by bisection until the blade keeps clearMM·sin²(πu) over the ground along the arc (within `tolMM`; round B4 test, B3
+  // states: land→rest needs the depression and the junction's flexion together, 45° for the ground; land→reach 15°; the
+  // shoulder's swing alone or the twist push the blade down)
+  transition: { samples: 20, keys: 8, clearMM: 1.0, tolMM: 0.05, maxDeg: 70, lift: { depflex: { J_pec: { depression: -1 }, J_pecFin: { flexion: 1 } }, dep: { J_pec: { depression: -1 } }, flex: { J_pecFin: { flexion: 1 } }, swing: { J_pec: { swing: 1 } } } },
+  // (round B3) the pelvic cup's press in the land state (pressPelvic): J_pelvic's pitch searched within this (deg; round B4:
+  // [-8, 28] → the press family's clean range within the channel's, AXES J_pelvic)
+  pelvicPress: { pitch: [-5, 16] },
+  // (round B4, fins P3 / poses P4: B3's J_pelvic pitch [-20, 35] and roll ±15 put the cup into the chest at both ends: 1,726
+  // vertices 1.92 mm deep folded at -20°, 169 bare at +35°; the trunk key's clean ranges per state on the B4 cup (pelvic4:
+  // no vertex past 0.02 HL from its root more than 0.05 mm inside the body, the body unmoved): the bare cup pitch [-5, 5] /
+  // roll ±3, fold [0, 8] / ±3 (7 here: lod1's cup 0.06 mm in at 8°), spread [-5, 8] / ±5, pressLow [-10, 16] / ±10, press [-15, 20] / ±10, pressHigh and
+  // pressDeep [-20, 20] / ±15. The channels' ranges are their union over what the runtime drives, `coupled` each state's
+  // own (deg; `morph`: the Fin_Pelvic targets whose summed weight ≥ `min` select the entry, `bare` when none does; several
+  // selected: the intersection))
+  // (round B4 test on the skinned B4 cup, rig t_pelvic: each range's single-axis ends are clean, but pitch and roll at their
+  // ends together put up to 7 vertices 0.11 mm into the chest (pressLow at (16°, ±10°)); with |roll| / its end + max(0,
+  // pitch) / its end ≤ `cornerSum` every shape is clean at 1.25)
+  pelvic: {
+    pitch: [-5, 16], roll: [-10, 10], cornerSum: 1.25,
+    coupled: [
+      { bare: true, pitch: [-5, 5], roll: [-3, 3], note: 'the cup in its bind shape (no fold, spread or press ≥ 0.25)' },
+      { morph: ['fold'], min: 0.25, pitch: [0, 7], roll: [-3, 3], note: 'folded under the belly (rest, water, swim)' },
+      { morph: ['spread'], min: 0.25, pitch: [-5, 8], roll: [-5, 5], note: 'spread' },
+      { morph: ['pressLow', 'press', 'pressHigh', 'pressDeep'], min: 0.25, pitch: [-5, 16], roll: [-10, 10], note: 'pressed on the ground (land, reach, the props: rig.mjs pressPelvic)' },
+    ],
+  },
   // the eyes' lift (HL): the joint's range up to `eyeLift` (the alert periscope, u1 and A070: the eye's top 0.5–0.9 ED over
   // the nape, the rest 0.55; +0.08: 0.93 ED) with the eyes-up correctives (headmorphs EYES_UP: skinned alone, the collar
   // past +0.03 stretches in a band, 383 web edges over 2× at +0.05 and 1,345 at +0.08, against 3 and 118 with them);
@@ -153,51 +181,81 @@ export const RIG = {
   eyeLift: 0.08, eyeLiftBare: 0.03, eyeAlert: 0.06,
   // the shoulder's channels (round B3, about the bind lobe; deg): swing (about the lateral axis: the lobe swept forward
   // or back as seen from the side), protraction (about the vertical: forward round the flank, the girdle's hinge),
-  // depression (about the lobe's bind face normal: the lobe down in its own plane), twist (about its own axis). These
-  // ranges are the IK's search box, not a clean set: every state's and crawl frame's pose solved inside them passes the
-  // arm root's gate over its whole neighbourhood (every skin triangle within 0.35 HL of the shoulder: area ≥ 0.3 of the
-  // bind at the 0.1st percentile, no skin vertex through the skin), but their corners do not (out/pectoral t_root.mjs:
-  // swing −35° alone 0.52, −50° 0.35, −35° with twist +30° 0.35; protraction −40° puts the lobe into the flank); coupled
-  // limits fitted to the B3 lobe are still to come (B2's were for the old elbowed arm and its channels)
+  // depression (about the lobe's bind face normal: the lobe down in its own plane), twist (about its own axis).
+  // Round B4: a CLEAN set, the ranges and the coupled limits together (Σ sum[channel] × value ≤ max): every pose inside
+  // it, with the junction anywhere in its own range, keeps the arm root's neighbourhood (every skin triangle within 0.35
+  // HL of the shoulder) at area ≥ 0.3 of the bind at the 0.1st percentile on hero AND lod1 and the lobe out of the flank
+  // (out/pectoral p_lim.mjs + an_lim.py, both arms: 6,000 random poses inside, 0 failing; the box without the coupled limits failed
+  // 7 %, B3's whole box 41 %). Fitted round the poses the rig uses (the land leg, the welded prop 10–25°, the crawl, rest,
+  // water, reach); each coupled limit cuts one failing corner:
+  //   1 the lobe pulled back with its face turned in (protraction −, twist −) and not lowered: into the flank
+  //   2, 3 swung forward while raised (swing +, depression +): the root's front fillet crushed
+  //   4 pulled back while level (protraction −, depression +): into the flank behind the gill cover
+  //   5 pulled back and twisted in: the lobe's inner face into the flank
+  //   6, 7 swung (and drawn) forward and twisted in: lod1's root crushed
+  //   8 twisted out while pulled back, 9 swung and drawn far forward while level, 10 drawn forward and twisted out:
+  //     lod1's root crushed (both sides: lod1's mesh is not a mirror image, its right root fails where the left holds)
+  // The bind (all 0) lies outside (twist): the IK and the states start inside it.
   shoulder: {
-    swing: [-60, 70], protraction: [-75, 75], depression: [-70, 60], twist: [-60, 60],
-    coupled: [],
+    swing: [-12, 30], protraction: [-22, 28], depression: [-52, 2], twist: [-60, -8],
+    coupled: [
+      { sum: { swing: 0.43, protraction: -1, depression: 0.54, twist: -0.54 }, max: 41, note: 'pulled back, turned in, not lowered: the lobe into the flank' },
+      { sum: { swing: 1, depression: 0.67 }, max: 23.5, note: 'swung forward while raised: the root crushed' },
+      { sum: { swing: 0.43, depression: 1 }, max: 7.5, note: 'raised (with a forward swing): the root crushed' },
+      { sum: { protraction: -1, depression: 0.65 }, max: 14, note: 'pulled back while level: into the flank behind the gill cover' },
+      { sum: { protraction: -1, twist: -0.5 }, max: 46, note: 'pulled back and twisted in: the inner face into the flank' },
+      { sum: { swing: 1, twist: -0.5 }, max: 52, note: 'swung forward and twisted in: lod1\'s root crushed' },
+      { sum: { swing: 1, protraction: 1, twist: -0.5 }, max: 58, note: 'swung and drawn forward, twisted in: lod1\'s root crushed' },
+      { sum: { protraction: -0.8, twist: 1 }, max: 0, note: 'twisted out while pulled back: lod1\'s root crushed' },
+      { sum: { swing: 1, protraction: 1, depression: 0.5 }, max: 42, note: 'swung and drawn far forward, level: lod1\'s root crushed' },
+      { sum: { protraction: 1, twist: 1 }, max: 3, note: 'drawn forward and twisted out: lod1\'s right root crushed' },
+    ],
   },
   // the junction (the radial–ray joint; deg): flexion about the blade's width axis (+ the blade toward the lobe's outer
-  // face: forward when the lobe stands as a leg; the intra-fin angle 180° − flexion: Pace & Gibb 2009 76° → 178° on land,
-  // 121° → 213° in water), sweep about the face normal (the blade turned in its own plane toward its leading edge)
-  junction: { flexion: [-45, 105], sweep: [-25, 25] },
+  // face), sweep about the face normal (the blade turned in its own plane; − toward its trailing edge: with the lobe
+  // standing as a leg, the blade forward). Round B4: the land arm's broad faces stand to the side, so the intra-fin angle
+  // a side view reads (Pace & Gibb 2009: 76° → 178° on land) is the in-plane one, 180° − |sweep|: the sweep held to
+  // −104 … −2 (76–178°); the flexion (out of the blade's plane) −45 … 32
+  junction: { flexion: [-45, 32], sweep: [-104, -2] },
   // mid-blade (the heel) and distal (the tips): flex about the blade's width axis (+ the distal part toward the outer
   // face: planted, the sole's toes lifted, the roll-off; the furled crutch's heel bends up to ~100° mid-stance, the tips
   // −60 … +70 pressed and rolled off)
-  mid: { flex: [-45, 100] },
+  mid: { flex: [-45, 100], sweep: [-45, 45] },
   tip: { flex: [-60, 70] },
-  // the states' arms (statePose: the single source build.mjs, the shots and the runtime read): rest, fins.mjs's rest
-  // pose plus these offsets (deg by channel); water, the shoulder's and the junction's channels (A061, A042: the spread
-  // fan beside the flank behind the shoulder, out, back and down, its centre 3.9 mm off the flank; out/pectoral
-  // opt_water.mjs's search within the root-safe box swing ±20, twist ±30); reach, the front's raise, the lobe's direction
-  // (deg below the horizontal, deg out from straight ahead: 29° forward of the perpendicular and 34° out in the front
-  // body's frame), the planted tip's place (mm ahead of the shoulder, out from it) and the junction's flexion the IK
-  // leans toward
-  rest: { protraction: 0 },
-  water: { swing: -15, protraction: -20, depression: 12, twist: 20, junction: -15, sweep: 20 },
-  reach: { raise: 10, lobe: [44, 36], aheadMM: 9, outMM: 3, lobeW: 1, junction: 30, flat: 2 },
-  // the crawl's stance (crawlFrames; Pace & Gibb 2009: synchronous, the rays furled on land, the fin's tip the contact):
-  // the furled blade (`blade` 'furl') with its tip welded `aheadMM` ahead of the shoulder and `outMM` out from it (its
-  // mid-line `liftMM` above the ground) while the body moves `strideMM` over it at a raise of raiseDeg [start, end]; the
-  // lobe swept back on its schedule (`lobeFwd`, `lobeOut`: deg in the front body's frame, knots spread over the stance;
-  // pulled with `lobeW`), the blade bending at the heel (J_pecMid) to reach the tip (each frame seeded from the arm's
-  // two-link solution in the plane of the lobe and the tip), the tips pressed `tipPitch` deg below the horizontal (pulled
-  // with `tipPress`); the arm's inner angle (lobe to the line to the tip) opening ~100° → 170°; `frames` frames.
-  // (prevW: each channel's pull toward the frame's seed, ARM_IK order)
-  // (lod1: crawlFrames(…, { tier: 'lod1' }) with J_pecTip held at 0 and these overrides: the tips not pressed, the lobe
-  // pulled harder onto a shallower sweep)
-  crawl: { blade: 'furl', raiseDeg: [12, 12], frames: 8, strideMM: 14.2, aheadMM: 6.5, outMM: 6, liftMM: 0.5, lobeFwd: [-35, -55, -62], lobeOut: [32, 32, 30], lobeW: 3, tipPitch: [10, 10, 15, 30], tipPress: 3, junctionW: 0.3, midW: 0.3, weldK: 40, planeW: 0, toeW: 0, junction: [80, 10], flat: 10, tipFlat: 20, rollFrom: 0.6, straighten: 1, prevW: [0.3, 1, 1, 3, 0.3, 3, 0.3, 0.3], lod1: { tipPress: 0, lobeW: 6, lobeFwd: [-30, -48, -58], liftMM: 0.2 } },
+  // the states' arms (statePose: the single source build.mjs, the shots and the runtime read; round B4, every one inside
+  // the clean limits above):
+  //   rest (A030: B3's arm lay along the flank 3.8 mm over the mud): the arm down and back to the mud, the furled blade
+  //     flat on it (solveArmPlant 'prop' on the settled rest body: the distal blade's broad face down, its lowest `lift`
+  //     mm over the mud, the lobe toward `lobeFwd` deg back of the vertical and `lobeOut` out, the junction's flexion
+  //     toward `junction`); `arm` the solved channels (the hero's), used where no tier mesh is given
+  //   water (A061, A042; B3's fans stood 59° from the horizontal, edge-on to A061 at 1 % of their area): the spread fans
+  //     28° from the horizontal, 95 % of their area to A061, beside the flank (centre 6.1 mm behind, 3.5 below and 6.3
+  //     out of the shoulder, 1.7 mm off the flank at the nearest): the shoulder's and the junction's channels
+  //     (out/pectoral t_water.mjs); round B4 integration (the rig key's request: the bottom rest's contact the belly, not
+  //     the fans): depression −32.45 → −40, the fans' lowest point from 0.64 mm under the belly's to 0.31 mm over it (tilt
+  //     28.4°, 91 % of the area to A061, centre 6.5 back / 2.4 down / 6.4 out; hero root 0.632, 0 flips; lod1 0.387)
+  //   reach (A023, A070): the front raised `raise`, the lobe forward and down (`lobeFwd` deg forward of the vertical,
+  //     `lobeOut` out, in the front body's frame) as far as the clean limits let it, the fan half spread (`spread`) lying
+  //     flat on the mud forward, its centre `aheadHL` ahead of the shoulder and `outHL` out of it
+  rest: { lobeFwd: -35, lobeOut: 35, junction: 0, lift: 0.06, arm: { J_pec: { swing: 29.979, protraction: 11.996, depression: -31.244, twist: -32.051 }, J_pecFin: { flexion: 22.629, sweep: -74.058 }, J_pecMid: { flex: 29.113, sweep: -0.663 }, J_pecTip: { flex: 0 } } },
+  water: { swing: 17.03, protraction: -10.28, depression: -40, twist: -49.62, junction: 18.78, sweep: -10.21 },
+  reach: { raise: 10, lobeFwd: 10, lobeOut: 30, spread: 0.5, aheadHL: 0.45, outHL: 0.3, contactW: 3, junction: 0, sweep: -70, sweepW: 0.3, lift: 0.04, seed: { J_pec: { swing: 20, protraction: 5, depression: -10, twist: -40 }, J_pecFin: { flexion: 30, sweep: -80 } } },
+  // (round B4) the crawl as a full cycle (crawlCycle / crawlPose; Pace & Gibb 2009, behaviour §3.1): `cycleS` s a cycle,
+  // the stance `duty` of it (its first `lift` and last `set` of the cycle the body rising off / settling onto the mud
+  // straight up and down, the push between), `strideMM` forward per cycle (0.19 TL: 0.375 BL/s at 0.5 s), the feet planted
+  // with their weld point `aheadMM` ahead of the shoulder, the body vaulted `vaultMM` through the push (belly, pelvic cup
+  // and tail clear), the feet swung forward `clearMM` over the mud at the recovery's middle (at least `liftMM` all the
+  // way); `frames` keyframes a cycle; the arms' pulls (faces square to s past `faceMax`, the junction's flexion toward 0,
+  // each channel toward the frame before, the weld's weight per mm, the foot's heading)
+  crawl: { cycleS: 0.5, duty: 0.6, lift: 0.08, set: 0.08, strideMM: 15, aheadMM: 7.5, raiseDeg: 15, vaultMM: 0.4, clearMM: 1.0, liftMM: 0.3, clearSlack: 0.1, sweepFrom: -90, sweepTo: -5, sweepW: 1, thetaFrom: 30, thetaTo: 120, thetaW: 0.3, strokeW: 3, frames: 48, faceW: 3, bladeFaceW: 3, faceMax: 10, junctionW: 0.2, prevW: 0.3, weldK: 40, rollTol: 0.005, rollIters: 12 },
   // the propped land posture (A070, A005, u1, B010, A001, A009; solveArmPlant): the front's raise (bent over J_sp1 and
   // J_sp2 by RIG.bend.prop: B2's `split` here is gone, round B3); the lobe's posture the IK leans toward (`lobeFwd` deg forward of the vertical in the fish
   // frame, `lobeOut` out: 80–90° to the body's axis), the junction toward fins.mjs's nominal prop flexion, pulled with
   // `posture` (cost per deg²); the IK's seed
-  prop: { raise: 15, heelSink: 0.04, lobeFwd: -8, lobeOut: 20, toeAz: 5, planeW: 5, wpEnd: 0.5, seed: { J_pec: { protraction: 45, depression: 35 } } },
+  // (round B4) `plane`: the land arm as one leg in one plane (planeArm: the broad faces to the side, u1's V), tilted out
+  // `abduct` deg and turned `yaw` (+ front edge out), the Newton's start (tL, sweep); `weld`: propPose's held-foot solve
+  // at other raises (the posture's pulls)
+  prop: { raise: 15, heelSink: 0.04, lobeFwd: -8, lobeOut: 20, toeAz: 5, planeW: 5, wpEnd: 0.5, seed: { J_pec: { protraction: 45, depression: 35 } }, plane: { abduct: 32, yaw: 0, tL: 40, sweep: -85 }, weld: { prevW: 0.3, faceW: 3, bladeFaceW: 3, faceMax: 8, junctionW: 0.5 } },
 };
 
 const TL_HL = 80 / HL;
@@ -792,22 +850,27 @@ function buildAxes() {
       depression: ch(fx(axisFor(sh, F1.n, wr, [0, -1, 0])), [...RIG.shoulder.depression], { positive: 'the lobe down in its own plane (its leading edge turning out)' }),
       twist: ch(fx(axisFor(sh, F1.u, add3(sh, mul3(F1.w, 0.1)), F1.n)), [...RIG.shoulder.twist], { positive: 'the lobe\'s leading edge turned toward its outer face' }),
     }, coupled: RIG.shoulder.coupled.map((c) => ({ ...structuredClone(c), note: `Σ sum[channel] × value ≤ max (deg): ${c.note}` })) };
-    joints[`J_pecFin${S}`] = { kind: 'pectoral lobe/fin junction (the radial–ray joint, the visible main hinge)', pivotFrom: BLADE.from, intraFinAngleDeg: { formula: '180 − flexion', range: [180 - RIG.junction.flexion[1], 180 - RIG.junction.flexion[0]], biology: { land: [76, 178], water: [121, 213] } }, order: ['flexion', 'sweep'], channels: {
+    joints[`J_pecFin${S}`] = { kind: 'pectoral lobe/fin junction (the radial–ray joint, the visible main hinge)', pivotFrom: BLADE.from, intraFinAngleDeg: { formula: '180 − |sweep| (round B4: the side view of the land arm, its faces to the side; the in-plane angle)', range: [180 + RIG.junction.sweep[0], 180 + RIG.junction.sweep[1]], biology: { land: [76, 178], water: [121, 213] } }, order: ['flexion', 'sweep'], channels: {
       flexion: ch(fx(flexAx), [...RIG.junction.flexion], { positive: 'the blade toward the lobe\'s outer face (forward when the lobe stands as a leg: the intra-fin angle closing)' }),
       sweep: ch(fx(axisFor(jf, F1.n, far, wAx)), [...RIG.junction.sweep], { positive: 'the blade turned in its own plane toward its leading edge' }),
     } };
-    joints[`J_pecMid${S}`] = { kind: 'pectoral mid-blade (the planted sole\'s heel: the ankle the sole turns on)', pivotFrom: BLADE.from, order: ['flex'], channels: {
+    joints[`J_pecMid${S}`] = { kind: 'pectoral mid-blade (the planted foot\'s heel: the ankle the foot turns on)', pivotFrom: BLADE.from, order: ['flex', 'sweep'], channels: {
       flex: ch(fx(midAx), [...RIG.mid.flex], { positive: 'the outer blade toward the lobe\'s outer face: planted, the sole\'s toes lifted off the ground (the roll-off)' }),
+      // (round B4: the ankle in the blade's own plane, the furled bundle bending at the heel as the land foot does
+      // (fins.mjs plant 'edge'): the foot held on the mud while the front rises or sinks (rig.propPose) and through the
+      // crawl's stance)
+      sweep: ch(fx(axisFor(jm, F1.n, add3(jm, mul3(F1.u, 0.2)), wAx)), [...RIG.mid.sweep], { positive: 'the outer blade turned in its own plane toward its leading edge' }),
     } };
     joints[`J_pecTip${S}`] = { kind: 'pectoral blade tips (the rays bending under load)', pivotFrom: BLADE.from, order: ['flex'], channels: {
       flex: ch(fx(tipAx), [...RIG.tip.flex], { positive: 'the tips toward the outer face: planted, lifted off the ground' }),
     } };
   }
   // the pelvic fins' base: pitch about the lateral axis (+ presses the rear of the cup down: the piston, Wicaksono 2022)
-  { const p = BODY_SCULPT.pelvicBase.c, rear = add3(p, [0.2, 0, 0]); joints.J_pelvic = { kind: 'pelvic base', order: ['pitch', 'roll'], channels: {
-    pitch: ch(axisFor(p, [0, 0, 1], rear, [0, -1, 0]), [-20, 35], { positive: 'the cup\'s rear down' }),
-    roll: ch(axisFor(p, [1, 0, 0], add3(p, [0, -0.1, 0]), [0, 0, 1]), [-15, 15], { positive: 'the cup tilted toward the fish\'s left' }),
-  } }; }
+  // (round B4: the ranges the cup clears the chest in, RIG.pelvic: the channels' the union, `coupled` per blend-shape state)
+  { const p = BODY_SCULPT.pelvicBase.c, rear = add3(p, [0.2, 0, 0]), PV = RIG.pelvic; joints.J_pelvic = { kind: 'pelvic base', order: ['pitch', 'roll'], channels: {
+    pitch: ch(axisFor(p, [0, 0, 1], rear, [0, -1, 0]), [...PV.pitch], { positive: 'the cup\'s rear down' }),
+    roll: ch(axisFor(p, [1, 0, 0], add3(p, [0, -0.1, 0]), [0, 0, 1]), [...PV.roll], { positive: 'the cup tilted toward the fish\'s left' }),
+  }, coupled: structuredClone(PV.coupled), cornerSum: PV.cornerSum, coupledRule: `by the Fin_Pelvic blend-shape weights: the entries whose \`morph\` targets sum to ≥ \`min\` apply (several: the intersection of their ranges), the \`bare\` entry when none does; within them, and with |roll| / the roll range's end + max(0, pitch) / the pitch range's end ≤ ${PV.cornerSum} (the corners cut), the cup stays out of the chest (no vertex more than 0.05 mm inside; rig.mjs pelvicRange)` }; }
   for (const [nm, d] of Object.entries(joints)) { d.parent = JOINTS[J[nm]].parent; d.pivotM = JOINTS[J[nm]].obj.map((c) => +c.toFixed(6)); }
   if (joints.J_root) joints.J_root.parent = null;
   const yawLim = (a, b) => [Math.round(a), Math.round(b)];
@@ -854,7 +917,7 @@ function buildAxes() {
       states: 'rig.mjs statePose(\'land\' | \'reach\' | \'rest\' | \'water\') and crawlFrames(): the one source for build.mjs, the shots and the runtime',
     },
     // (the crawl's stance: RIG.crawl and rig.mjs crawlFrames; the welded point is the furled blade's tip)
-    crawl: { ...structuredClone(RIG.crawl), contact: 'the furled blade\'s tip (fins.mjs def.furl.tip: the middle ray\'s end, J_pecTip; crawlFrames returns it welded in the world as `weld`)' },
+    crawl: { ...structuredClone(RIG.crawl), contact: 'the furled blade\'s distal tip rolling on the mud (crawlCycle: J_pecTip held at 0, the distal blade one piece with J_pecMid; the lowest of its vertices bears, welded where it touched, and passes the contact on as the crutch turns: frames[i].contacts.weld (world mm, this cycle\'s) and .vertex (index in the tier\'s furled distal blade, plantedSole(\'L\', { state: \'furl\', every: 1 }).blade past J_pecFin)); crawlPose(phase) shifts the contacts strideMM a whole cycle', speed: 'runtime speed = strideMM / cycleS (0.375 BL/s at the defaults; behaviour §3.1: P. barbarus 0.31–0.40 BL/s on mud)', phases: 'crawlPose(phase): phase 0–duty the stance (lift, push, set-down: the body vaulted vaultMM clear of the mud, belly, pelvic cup and tail; the junction 90° → 175°), duty–1 the recovery (the body still on the cup and the belly, the crutches lifted clearMM and swung strideMM forward); whole cycles add strideMM to J_root\'s t' },
     eyes: { L: ex(1), R: ex(-1) },
     head: { poses: HEAD_POSES, blinkDropHL: BLINK_DROP },
   };
@@ -972,7 +1035,7 @@ export function skinPacked(pos, skin, W, { normal = null, names = TIER_JOINTS.he
 
 /** The arm's IK channels in the order solveArmPlant's vector holds them (round B3: the shoulder's four, the junction's
  * two, the mid-blade's and the tip's flex). */
-export const ARM_IK = [['J_pec', 'swing'], ['J_pec', 'protraction'], ['J_pec', 'depression'], ['J_pec', 'twist'], ['J_pecFin', 'flexion'], ['J_pecFin', 'sweep'], ['J_pecMid', 'flex'], ['J_pecTip', 'flex']];
+export const ARM_IK = [['J_pec', 'swing'], ['J_pec', 'protraction'], ['J_pec', 'depression'], ['J_pec', 'twist'], ['J_pecFin', 'flexion'], ['J_pecFin', 'sweep'], ['J_pecMid', 'flex'], ['J_pecTip', 'flex'], ['J_pecMid', 'sweep']];
 
 /** How far a joint's channel values break its limits (deg: the ranges' overshoot plus the coupled limits'); 0 inside. */
 export function limitExcess(name, values, axes = AXES) {
@@ -1000,12 +1063,28 @@ const SOLE = {};
  * joint each rides (`blade`: none may go under the ground). Fish mm.
  * @param side 'L' | 'R'   @param o { tier: the fins' mesh tier (the hero's: its rays' lens relief is the sole's underside), every: keep every n-th }
  */
-export function plantedSole(side = 'L', { tier = 'hero', every = 2, state = 'plant' } = {}) {
-  const key = `${side}:${tier}:${every}:${state}`;
+export function plantedSole(side = 'L', { tier = 'hero', every = 2, state = 'plant', morph = null } = {}) {
+  const key = `${side}:${tier}:${every}:${state}:${morph ? JSON.stringify(morph) : ''}`;
   if (SOLE[key]) return SOLE[key];
   if (!FINS) throw new Error('plantedSole: fins.mjs is not available');
   const def = FINS.finDefinitions(BODY_SCULPT).find((d) => d.name === `Fin_Pectoral_${side}`);
   const mesh = FINS.buildFinMesh(def, FINS.finTierParams(tier)[def.name]), tg = FINS.buildFinTargets(def, mesh, { normals: false });
+  // (round B4, state 'flat': the blade in a blend of its shapes (`morph`, e.g. { furl: 1 }, { spread: 0.5 }) laid on its
+  // broad face: the distal part (J_pecMid's and J_pecTip's: one piece with J_pecTip held at 0) the sole, the lobe's outer
+  // face normal (def.sole.axis, fins.mjs frame n) its normal: the rest's blade on the mud, the reach's fan)
+  if (state === 'flat') {
+    const mo = morph ?? { furl: 1 }, Lmax = Math.max(...def.rays.map((r) => r.len)), tipL = 0.5 * (RIG.blade.tip[0] + RIG.blade.tip[1]) * Lmax;
+    const pts = [], all = [];
+    for (let v = 0, c = 0; v < mesh.position.length / 3; v++) {
+      if (c++ % every) continue;
+      const k = clamp(Math.round(mesh.ray[v]), 0, def.rays.length - 1), l = mesh.rayT[v] * def.rays[k].len;
+      const p = [0, 1, 2].map((q) => mesh.position[v * 3 + q] + Object.entries(mo).reduce((a, [nm, w]) => { const i = tg.names.indexOf(nm); return a + (i >= 0 ? w * tg.deltas[i][v * 3 + q] : 0); }, 0));
+      const joint = l >= tipL ? `J_pecTip${side}` : l >= (def.plantFrame ?? def.mirrorOf.plantFrame).rays[k].at ? `J_pecMid${side}` : `J_pecFin${side}`;
+      if (l >= 0.06) all.push({ p, joint });
+      if (joint !== `J_pecFin${side}` && l >= 0.06) pts.push(p);
+    }
+    return (SOLE[key] = { points: pts, tipPoints: [], blade: all, normal: [...def.sole.axis], heel: [...def.bladePivot], tip: [...def.furl.tip], joint: `J_pecMid${side}`, tipJoint: `J_pecMid${side}`, state });
+  }
   // (state 'furl': the furled blade (the crawl's crutch: Pace & Gibb's rays furled on land) with its tip, no sole)
   if (state === 'furl') {
     const kF = tg.names.indexOf('furl'), Lmax = Math.max(...def.rays.map((r) => r.len)), tipL = 0.5 * (RIG.blade.tip[0] + RIG.blade.tip[1]) * Lmax;
@@ -1034,7 +1113,7 @@ export function plantedSole(side = 'L', { tier = 'hero', every = 2, state = 'pla
     if (onSole) (l >= tipL ? tipPts : pts).push(p);
   }
   const normal = def.sole.normal;
-  return (SOLE[key] = { points: pts, tipPoints: tipPts, blade: all, normal: [...normal], heel: [...def.bladePivot], tip: [...def.sole.tip], joint: jM, tipJoint: jT });
+  return (SOLE[key] = { points: pts, tipPoints: tipPts, blade: all, normal: [...normal], heel: [...def.bladePivot], tip: [...def.sole.tip], joint: jM, tipJoint: jT, ...(def.sole.edge ? { edge: true } : {}) });
 }
 const inv33 = (A) => {
   const [a, b, c, d, e, f, g, h, i] = A, det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g) || 1e-30;
@@ -1248,9 +1327,12 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
     const low = lowestPosed(tierMesh, W0, o.raise ? (v) => keep(v) && tierMesh.position[v * 3] > s1 : keep);
     g = low.y; gFrom = `the skin's lowest posed vertex (bind s ${(tierMesh.position[low.v * 3] / HL).toFixed(3)} HL)`;
   }
-  const mode = o.mode ?? 'prop', P = RIG.prop, sides = {}, D2R = Math.PI / 180;
+  const mode = o.mode ?? 'prop', P = { ...RIG.prop, ...(o.prop ?? {}) }, sides = {}, D2R = Math.PI / 180;
   const W0 = poseWorldHero(body), Th = W0.J_head;
-  const nomJ = o.junction ?? BLADE.prop?.junctionDeg ?? 20;
+  const nomJ = o.junction ?? (P.face ? P.flexion ?? 0 : BLADE.prop?.junctionDeg ?? 20);
+  // (round B4: the front body's axes in the posed frame: s (back), its forward on the ground, its outward (left) on it)
+  const sHead = norm3(rvT(Th, [1, 0, 0])), fwdG = norm3([-sHead[0], 0, -sHead[2]]), outG = [fwdG[2], 0, -fwdG[0]];
+  const faceN = BODY_SCULPT.pectoral.axes?.n ?? [0, 0, 1];
   let furled = false;
   for (const S of o.sides ?? ['L', 'R']) {
     const sd = S === 'L' ? 1 : -1, mz = (d) => [d[0], d[1], d[2] * sd];
@@ -1260,7 +1342,10 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
     const lobeWant = o.lobe ? norm3(mz(o.lobe.L ?? o.lobe[S])) : o.lobeHead ? norm3(rvT(Th, mz(o.lobeHead))) : norm3(rvT(Th, mz([-Math.sin(fwd) * Math.cos(out), -Math.cos(fwd) * Math.cos(out), Math.sin(out)])));
     const chans = ARM_IK.map(([j, c]) => [`${j}${S}`, c]);
     // (o.lock: [joint, channel] pairs held at 0, e.g. lod1's J_pecTip, which that tier does not keep)
-    const ranges = chans.map(([j, c]) => ((o.lock ?? []).some(([lj, lc]) => `${lj}${S}` === j && lc === c) ? [0, 0] : AXES.joints[j].channels[c].range));
+    // (round B4, o.fixed: { L: { J_pec: { swing: v, … } } }: channels held at given values (the right mirrored by the
+    // same values), e.g. a shoulder chosen from the root-safe set with only the blade solved)
+    const fixedV = (j, c) => { const f = o.fixed?.[S] ?? o.fixed?.L; const v = f?.[j]?.[c] ?? f?.[j.replace(/R$/, 'L')]?.[c] ?? f?.[j.replace(/[LR]$/, '')]?.[c]; return v; };
+    const ranges = chans.map(([j, c]) => ((o.lock ?? []).some(([lj, lc]) => `${lj}${S}` === j && lc === c) ? [0, 0] : fixedV(j, c) !== undefined ? [fixedV(j, c), fixedV(j, c)] : AXES.joints[j].channels[c].range));
     const idx = (j, c) => chans.findIndex(([a, b]) => a === `${j}${S}` && b === c);
     const iJ = idx('J_pecFin', 'flexion'), iSw = idx('J_pecFin', 'sweep'), iM = idx('J_pecMid', 'flex'), iT = idx('J_pecTip', 'flex');
     const sh = JOINTS[J[`J_pec${S}`]].at, jn = JOINTS[J[`J_pecFin${S}`]].at;
@@ -1292,12 +1377,37 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
       // (the intra-fin angle as the photos and Pace & Gibb read it: the lobe against the distal blade (the sole's toe
       // direction, the furled tip's), 180° when the fin is straight)
       const ba = tw ? angDeg(mul3(lobe, -1), tw) : null;
-      return { p, W, lo, hi, blo, nn, nt, td, lobe, tip, a, lim, Tm, az, hinge, inner, ba };
+      // (round B4) the lobe's and the inner blade's broad faces (their outer normals: the bind lobe's axes.n carried by
+      // J_pec and by J_pecFin) and the sole's centroid against the shoulder (HL: ahead along the front body's heading on
+      // the ground, out from it); the inner blade's direction (the junction to the heel), the intra-fin angle the side
+      // view reads (lobe to inner blade)
+      const nL = norm3(rvT(W[`J_pec${S}`], mz(faceN))), nB = norm3(rvT(W[`J_pecFin${S}`], mz(faceN)));
+      let cen = null;
+      if (sole.points.length) { cen = [0, 0, 0]; for (const q of sole.points) cen = add3(cen, mvT(Tm, q)); cen = mul3(cen, 1 / sole.points.length); }
+      const dc = cen ? sub3(cen, a) : null, ahead = dc ? dot3(dc, fwdG) / HL : 0, outC = dc ? (dot3(dc, outG) * sd) / HL : 0;
+      const heel = mvT(W[`J_pecMid${S}`], JOINTS[J[`J_pecMid${S}`]].at), inB = norm3(sub3(heel, b)), intra = angDeg(mul3(lobe, -1), inB);
+      // (round B4: an edge foot (fins.mjs plant mode 'edge') is level when its toe line is: the foot's pitch, deg)
+      const toeW = sole.edge && tw ? norm3(tw) : null, pitch = toeW ? (Math.asin(clamp(toeW[1], -1, 1)) * 180) / Math.PI : null;
+      return { p, W, lo, hi, blo, nn, nt, td, lobe, tip, a, lim, Tm, az, hinge, inner, ba, nL, nB, ahead, outC, intra, cen, toeW, pitch, inB };
     };
     const K = 10, KN = 50;
     const resid = (x, wp) => {
       const G = geo(x), r = [];
-      if (mode === 'prop') {
+      if (mode === 'prop' && P.face) {
+        // (round B4: the broad faces to the side (B010, A005, B014, u1, A070): the lobe's and the inner blade's outer
+        // normals square to the front body's s (their width along the body, what a side camera sees), the lobe toward its
+        // posture, the sole's centroid toward `aheadHL` / `outHL` from the shoulder, its toes toward `toeAz`)
+        r.push(K * (Math.min(G.lo, G.blo - P.heelSink) - g), ...(G.toeW ? [KN * G.toeW[1]] : [KN * G.nn[0], KN * G.nn[2]]));
+        for (let k = 0; k < 3; k++) r.push(wp * 3 * (P.lobeW ?? 1) * (G.lobe[k] - lobeWant[k]));
+        // (a face may turn up to `faceMax` deg off that plane freely: cos 20° keeps 0.94 of the width)
+        const fm = Math.sin(((P.faceMax ?? 0) * Math.PI) / 180), hinge = (d) => Math.sign(d) * Math.max(0, Math.abs(d) - fm);
+        r.push(wp * (P.faceW ?? 0) * hinge(dot3(G.nL, sHead)), wp * (P.bladeFaceW ?? 0) * hinge(dot3(G.nB, sHead)));
+        if (P.aheadHL !== undefined) r.push(wp * (P.contactW ?? 1) * (G.ahead - P.aheadHL));
+        if (P.outHL !== undefined) r.push(wp * (P.contactW ?? 1) * (G.outC - P.outHL));
+        r.push((wp * (P.junctionW ?? 0.5) * (x[iJ] - nomJ)) / 30, (wp * (P.sweepW ?? 0.2) * (x[iSw] - (P.sweep ?? 0))) / 30, (wp * (P.midW ?? 0.5) * (x[iM] - (P.mid ?? 0))) / 30, (wp * 0.5 * x[iT]) / 30, (wp * (P.toeW ?? 1) * (G.az - P.toeAz)) / 20);
+        if (P.intra !== undefined) r.push((wp * (P.intraW ?? 1) * (G.intra - P.intra)) / 30);
+        if (P.planeW) r.push(P.planeW * dot3(G.hinge, rvT(Th, [1, 0, 0])));
+      } else if (mode === 'prop') {
         r.push(K * (Math.min(G.lo, G.blo - P.heelSink) - g), KN * G.nn[0], KN * G.nn[2]);
         for (let k = 0; k < 3; k++) r.push(wp * 3 * (G.lobe[k] - lobeWant[k]));
         r.push((wp * 2 * (x[iJ] - nomJ)) / 30, (wp * 0.5 * x[iM]) / 30, (wp * 0.5 * x[iT]) / 30, (wp * 3 * x[iSw]) / 30, (wp * (G.az - P.toeAz)) / 20);
@@ -1319,21 +1429,35 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
         }
         // (the stroke's plane: the junction's hinge square to the body's axis)
         if (o.planeW) r.push(o.planeW * dot3(G.hinge, rvT(Th, [1, 0, 0])));
-        r.push((o.weldK ?? K) * Math.min(0, G.blo - 1.5 * (o.heelSink ?? P.heelSink) - g));
+        // (round B4, o.clearMM: the whole blade that far over the ground: a crawl's recovery swing)
+        r.push((o.weldK ?? K) * Math.min(0, G.blo - 1.5 * (o.heelSink ?? P.heelSink) - g - (o.clearMM ?? 0)));
         // (the junction toward o.junction (its flexion, deg) or the arm's inner angle toward o.inner (deg))
-        r.push(((o.junctionW ?? 1) * (o.inner !== undefined ? G.inner - o.inner : x[iJ] - nomJ)) / 30, (0.5 * x[iSw]) / 30, ((o.toeW ?? wp * 0.5) * (G.az - (o.toeAz ?? P.toeAz))) / 20);
+        r.push(((o.junctionW ?? 1) * (o.inner !== undefined ? G.inner - o.inner : x[iJ] - nomJ)) / 30, ((o.sweepW ?? 0.5) * (x[iSw] - (o.sweep ?? 0))) / 30, ((o.toeW ?? wp * 0.5) * (G.az - (o.toeAz ?? P.toeAz))) / 20);
         // (the heel's ankle toward a target: the blade straightening as the sole rolls onto its tips)
         if (o.midTarget !== undefined) r.push(((o.midW ?? 1) * (x[iM] - o.midTarget)) / 30);
         // (the intra-fin angle (lobe to distal blade) toward o.bladeAngle)
         if (o.bladeAngle !== undefined && G.ba !== null) r.push(((o.bladeW ?? 1) * (G.ba - o.bladeAngle)) / 30);
         // (a stance's smoothness: each channel near the previous frame's)
-        if (prev && o.prevW) for (let i = 0; i < x.length; i++) r.push(((Array.isArray(o.prevW) ? o.prevW[i] : o.prevW) * (x[i] - prev[i])) / 30);
+        if (prev && o.prevW) for (let i = 0; i < x.length; i++) r.push(((Array.isArray(o.prevW) ? o.prevW[i] ?? 0.3 : o.prevW) * (x[i] - prev[i])) / 30);
         if (o.lobe || o.lobeHead) for (let k = 0; k < 3; k++) r.push((o.lobeW ?? 1) * wp * 3 * (G.lobe[k] - lobeWant[k]));
+        // (round B4: the broad faces kept square to the front body's s, past `faceMax` deg)
+        if (o.faceW || o.bladeFaceW) { const fm = Math.sin(((o.faceMax ?? 0) * Math.PI) / 180), hg = (d) => Math.sign(d) * Math.max(0, Math.abs(d) - fm); r.push((o.faceW ?? 0) * hg(dot3(G.nL, sHead)), (o.bladeFaceW ?? 0) * hg(dot3(G.nB, sHead))); }
+        // (round B4, o.stroke { n, down, fwd (world unit vectors), W, theta, thetaW }: the leg in one plane (the lobe, the
+        // inner blade and the distal blade's direction square to n: the crawl's stroke plane, so the broad faces stay to
+        // the side) and the distal blade's angle in it (deg from `fwd` toward `down`: 0 lying forward, 90 straight down)
+        if (o.stroke) {
+          const st = o.stroke, w = st.W ?? 3;
+          r.push(w * dot3(G.lobe, st.n), w * dot3(G.inB, st.n));
+          if (G.td) {
+            r.push(w * dot3(G.td, st.n));
+            if (st.theta !== undefined) r.push(((st.thetaW ?? 1) * ((Math.atan2(dot3(G.td, st.down), dot3(G.td, st.fwd)) * 180) / Math.PI - st.theta)) / 10);
+          }
+        }
         // (only the lobe's lean out from the body (deg, in the front body's frame): the weld and the sole set the rest)
         if (o.lobeOut !== undefined) { const lz = dot3(G.lobe, rvT(Th, mz([0, 0, 1]))); r.push(((o.lobeW ?? 1) * wp * ((Math.asin(clamp(lz, -1, 1)) * 180) / Math.PI - o.lobeOut)) / 10); }
       }
       for (const v of x) r.push((0.02 * v) / 90);
-      r.push(10 * G.lim);
+      r.push(30 * G.lim);
       return r;
     };
     const cost = (r) => r.reduce((a2, v) => a2 + v * v, 0);
@@ -1355,7 +1479,7 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
       }
       return x;
     };
-    const fromVals = (vals) => chans.map(([j, c]) => vals?.[j]?.[c] ?? vals?.[j.replace(/[LR]$/, '')]?.[c] ?? 0);
+    const fromVals = (vals) => chans.map(([j, c]) => vals?.[j]?.[c] ?? vals?.[j.replace(/R$/, 'L')]?.[c] ?? vals?.[j.replace(/[LR]$/, '')]?.[c] ?? 0);
     const prev = o.seed?.[S] ? fromVals(o.seed[S]) : null;
     // (the weld's error: the welded frame's points' worst distance, or the tip's)
     const wfErr = (G) => (wf ? Math.max(...wf.bind.map((b, i) => Math.hypot(...sub3(mvT(G.W[wf.joint], b), wf.to[i])))) : Math.hypot(...sub3(G.tip, tg)));
@@ -1370,7 +1494,7 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
       // decide, which kept the arm near its bind)
       for (const wp of (o.seed?.[S] ? [1, P.wpEnd] : [2, 1, P.wpEnd])) x = lm(x, wp);
       const G = geo(x);
-      const err = mode === 'prop' ? Math.abs(Math.min(G.lo, G.blo - P.heelSink) - g) + 0.02 * Math.hypot(G.nn[0], G.nn[2]) * 57.3 : wfErr(G) + Math.max(0, g - G.blo);
+      const err = mode === 'prop' ? Math.abs(Math.min(G.lo, G.blo - P.heelSink) - g) + 0.02 * (G.pitch !== null ? Math.abs(G.pitch) : Math.hypot(G.nn[0], G.nn[2]) * 57.3) : wfErr(G) + Math.max(0, g - G.blo);
       const score = 1e4 * err * err + cost(resid(x, P.wpEnd)) + 100 * G.lim * G.lim;
       if (!best || score < best.score) best = { x, G, score };
       if (o.seed?.[S] && err < 0.01 && G.lim < 1e-3) break;
@@ -1387,7 +1511,7 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
     const lobeToBody = ang(G.lobe, bodyAx);
     sides[S] = {
       values: v, mode,
-      tiltDeg: +ang(G.nn, [0, 1, 0]).toFixed(3), tipTiltDeg: +ang(G.nt, [0, 1, 0]).toFixed(3),
+      tiltDeg: G.pitch !== null ? +Math.abs(G.pitch).toFixed(3) : +ang(G.nn, [0, 1, 0]).toFixed(3), tipTiltDeg: +ang(G.nt, [0, 1, 0]).toFixed(3),
       soleLowMM: +(G.lo - g).toFixed(4), soleHighMM: +(G.hi - g).toFixed(4), bladeLowMM: +(G.blo - g).toFixed(4),
       lobeDeg: +ang(G.lobe, lobeWant).toFixed(2), lobeToBodyDeg: +Math.min(lobeToBody, 180 - lobeToBody).toFixed(2),
       lobeFwdDeg: +((Math.atan2(-lh[0], -lh[1]) * 180) / Math.PI).toFixed(2), lobeOutDeg: +((Math.asin(clamp(lh[2] * sd, -1, 1)) * 180) / Math.PI).toFixed(2),
@@ -1397,6 +1521,10 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
       soleCentreMM: cen.map((c) => +c.toFixed(4)), tipMM: G.tip.map((c) => +c.toFixed(4)), tipErrMM: tg || wf ? +wfErr(G).toFixed(4) : null,
       shoulderMM: G.a.map((c) => +c.toFixed(4)), limitExcess: +G.lim.toFixed(4),
       ...(G.td ? { tipPitchDeg: +((Math.asin(clamp(-G.td[1], -1, 1)) * 180) / Math.PI).toFixed(2) } : {}),
+      // (round B4) the broad faces' tilt off the plane square to the front body's s (deg: 0 = the full width to a side
+      // camera), the sole's centroid against the shoulder (HL), the side view's intra-fin angle (lobe to inner blade)
+      faceLobeDeg: +((Math.asin(clamp(Math.abs(dot3(G.nL, sHead)), 0, 1)) * 180) / Math.PI).toFixed(2), faceBladeDeg: +((Math.asin(clamp(Math.abs(dot3(G.nB, sHead)), 0, 1)) * 180) / Math.PI).toFixed(2),
+      contactAheadHL: +G.ahead.toFixed(4), contactOutHL: +G.outC.toFixed(4), intraSideDeg: +G.intra.toFixed(2),
     };
     for (const [j, c] of Object.entries(v)) body[j] = { ...(body[j] ?? {}), ...c };
   }
@@ -1415,126 +1543,331 @@ export function solveArmPlant(pose = {}, tierMesh = null, ground = null, o = {})
 }
 
 /**
- * The crawl's stance (round B3; Pace & Gibb 2009: both fins synchronous, the rays furled on land and the fin's tip the
- * contact, planted ahead of and below the shoulder, the radials swung back through the push while the fin opens; the
- * tips bending under load): `frames` poses through one stance with the furled blade's tip (fins.mjs def.furl.tip, riding
- * J_pecTip; `blade` 'plant': the planted sole's, def.sole.tip) welded at one world point while the body moves `strideMM`
- * forward over it (J_root's `t`: the fish frame of the first frame is the world), propped at a raise from raiseDeg[0] to
- * raiseDeg[1]. Each frame's arms by solveArmPlant 'weld': the tip exact, the lobe toward its schedule (`lobeFwd`,
- * `lobeOut`), the tips pressed (`tipPitch`), seeded from the arm's two-link solution (the lobe, then junction → heel →
- * tip in the plane of the lobe and the tip, the heel bent the sole's way; the shoulder's rotation fitted to the lobe and
- * that plane's hinge, held from the frame before where the arm runs straight). Without `lobeFwd` the lobe comes from the
- * shoulder–junction–tip triangle with the blade's chord (`elbowOut` turning the junction out) and, with `blade` 'plant',
- * from the previous frame (the sole flat until `rollFrom`, the junction toward `junction`).
- * @param tierMesh the hero's (or a tier's) skin: { position, skin, names? } (the ground under the rear body)
- * @param o RIG.crawl overrides (knots: a value or an array spread evenly over the stance)
- * @returns { frames: [{ phase, raise, pose (+ morph furl 1 | plant 1), tip (posed mm), tipErrMM, sides }], weld: [s, y,
- *   z] (mm, world), strideMM, ground }
+ * The land arm as one leg in one plane (round B4; u1, B010, A005, B014, A070: the lobe's and the furled blade's broad
+ * faces seen from the side, B3's forward-turned faces read as a stick on a ski): the plane through the shoulder that
+ * holds the front body's s, tilted out `abduct` deg (its normal both faces' outer normal: their width runs along the
+ * body) and turned `yaw` deg about the vertical (+ its front edge out); the lobe `tL` deg back from the plane's down,
+ * the junction swept `sweep` deg in the blade's own plane (− toward its trailing edge: the blade forward, u1's V, the
+ * intra-fin angle 180° − |sweep| on Pace & Gibb's land range 76–178°), the planted foot (fins.mjs 'plant', mode 'edge':
+ * the furled distal blade bent forward in its plane) on the ground with its toe line level: (tL, sweep) by Newton on
+ * the foot's height and pitch. The shoulder's channels are fitted to the plane's frame (fitChannels, in J_head's
+ * frame, J_pecL's parent); the junction's flexion, the heel and the tips at 0. The right side the same channel values
+ * (the axes mirror).
+ * @param body the body's pose (propped, settled); @param g the ground (fish mm, posed)
+ * @param o { abduct, yaw, tL, sweep (the Newton's start), raise (when `body` is not yet propped), side 'L' }
+ * @returns { values: { J_pecL, J_pecFinL, J_pecMidL, J_pecTipL } (the left's), tL, sweep, heightMM, pitchDeg, converged }
  */
-export function crawlFrames(tierMesh, o = {}) {
-  // (o.tier 'lod1': that tier keeps 3 joints a side (no J_pecTip: its weights ride J_pecMid), so its stance is solved
-  // with J_pecTip held at 0 and RIG.crawl.lod1's overrides; the weld then holds on lod1 too)
-  const C = { ...RIG.crawl, ...(o.tier === 'lod1' ? RIG.crawl.lod1 : {}), ...o }, out = [];
-  const lock = C.tier === 'lod1' ? [['J_pecTip', 'flex']] : undefined;
-  const base0 = proppedPose(C.raiseDeg[0], {});
-  // (the ground and the shoulder at the stance's start)
-  const W0 = poseWorldHero(base0), keep = notArm(tierMesh), s1 = JOINTS[J.J_sp1].at[0];
-  const g = lowestPosed(tierMesh, W0, (v) => keep(v) && tierMesh.position[v * 3] > s1).y;
-  const sh0 = mvT(W0.J_pecL, JOINTS[J.J_pecL].at);
-  // (the first frame from the propped stance's arm: the sole planted as in the land state; the weld where its tip
-  // lands, or `aheadMM` / `outMM` from the shoulder when given)
-  const prop0 = solveArmPlant(base0, null, { y: g }, {});
-  // (`liftMM`: the welded point (the tip ray's mid-line) that far above the ground, its underside on it)
-  const weld = C.aheadMM !== undefined ? [sh0[0] - C.aheadMM, g + (C.liftMM ?? 0), sh0[2] + (C.outMM ?? 0)] : [prop0.sides.L.tipMM[0], g, prop0.sides.L.tipMM[2]];
-  // (the furled crutch (C.blade 'furl'; Pace & Gibb 2009: the rays furled on land, the fin's tip the contact): its tip
-  // welded, no sole to keep flat)
-  const sTier = C.tier === 'lod1' ? 'lod1' : 'hero', every = sTier === 'hero' ? 2 : 1;
-  const furl = C.blade === 'furl', sole = furl ? { L: plantedSole('L', { state: 'furl', tier: sTier, every }), R: plantedSole('R', { state: 'furl', tier: sTier, every }) } : undefined;
-  // (the junction's flexion: two values (start, end) or knots spread evenly over the stance)
-  const knots = (k, ph) => { if (!Array.isArray(k)) return k; const u = ph * (k.length - 1), i = Math.min(k.length - 2, Math.floor(u)); return k[i] + (k[i + 1] - k[i]) * (u - i); };
-  let seed = { L: prop0.sides.L.values, R: prop0.sides.R.values }, toeAz = null;
-  // (the arm's triangle (C.triangle, the furled crutch's default): shoulder, junction, the welded tip, with the lobe's
-  // length and the blade's chord; in the stroke's plane (through the shoulder, the tip and the line the body moves along)
-  // the junction behind the shoulder–tip line: the lobe's direction and the inner angle the IK leans toward)
-  const shB = JOINTS[J.J_pecL].at, jnB = JOINTS[J.J_pecFinL].at, Lb = Math.hypot(...sub3(jnB, shB));
-  const Bc = Math.hypot(...sub3(furl ? sole.L.tip : BLADE.sole?.tip ?? jnB, jnB)) * (C.chord ?? 1);
-  const triangle = C.triangle ?? furl;
-  let prevHinge = null;
-  // (the blade as two links: junction → heel (J_pecMid), heel → the welded tip)
-  const jmB = JOINTS[J.J_pecMidL].at, LA = Math.hypot(...sub3(jmB, jnB)), LB = Math.hypot(...sub3(furl ? sole.L.tip : BLADE.sole?.tip ?? jmB, jmB));
-  const lobeB = norm3(sub3(jnB, shB)), hingeB = norm3(objToFish(AXES.joints.J_pecFinL.channels.flexion.axis));
-  for (let i = 0; i < C.frames; i++) {
-    const ph = i / (C.frames - 1), raise = C.raiseDeg[0] + (C.raiseDeg[1] - C.raiseDeg[0]) * ph;
-    // the body moved forward by stride × phase (−s), its rear kept on the ground
-    let body = proppedPose(raise, {});
-    body.J_root = { ...(body.J_root ?? {}), t: [-(C.strideMM * ph) / HL, 0, 0] };
-    const lowY = lowestPosed(tierMesh, poseWorldHero(body), (v) => keep(v) && tierMesh.position[v * 3] > s1).y;
-    // (the vault: the body lifted by the push, `vaultMM` at the stance's end, its belly off the ground: Pace & Gibb 2009,
-    // the rays more than the radials lift the body)
-    body.J_root.t[1] = (g - lowY + (C.vaultMM ?? 0) * ph) / HL;
-    const junction = knots(C.junction, ph);
-    const lobeOut = knots(C.lobeOut, ph);
-    // (with `lobeFwd` (knots, deg forward of the front body's perpendicular) the whole lobe's direction is pulled: the
-    // radials protracted at the touch-down, retracted through the push)
-    const lf = C.lobeFwd !== undefined ? (knots(C.lobeFwd, ph) * Math.PI) / 180 : null, lo2 = (lobeOut * Math.PI) / 180;
-    const lobeHead = lf === null ? undefined : [-Math.sin(lf) * Math.cos(lo2), -Math.cos(lf) * Math.cos(lo2), Math.sin(lo2)];
-    let triLobe, triInner, triSeed, triMid, triFlex;
-    if (triangle) {
-      const Wb = poseWorldHero(body), Sx = mvT(Wb.J_pecL, shB), d = sub3(weld, Sx), dl = Math.hypot(...d), dh = norm3(d);
-      const nP = norm3(cross3([1, 0, 0], dh)), perp = cross3(nP, dh);
-      const al = Math.acos(clamp((Lb * Lb + dl * dl - Bc * Bc) / (2 * Lb * dl), -1, 1));
-      // (of the two junctions in that plane, the one behind (+s); then turned `elbowOut` deg round the shoulder–tip line
-      // toward the outside (the elbow out: the lobe kept off the flank as it sweeps back))
-      const back = (perp[0] >= 0 ? perp : mul3(perp, -1)), outw = nP[2] < 0 ? mul3(nP, -1) : nP, ps = (knots(C.elbowOut ?? 0, ph) * Math.PI) / 180;
-      triLobe = norm3(add3(mul3(dh, Math.cos(al)), mul3(add3(mul3(back, Math.cos(ps)), mul3(outw, Math.sin(ps))), Math.sin(al))));
-      triInner = (Math.acos(clamp((Lb * Lb + Bc * Bc - dl * dl) / (2 * Lb * Bc), -1, 1)) * 180) / Math.PI;
-      // (with `lobeFwd` the lobe follows that schedule instead (the front body's frame), the blade bending (J_pecMid,
-      // J_pecTip) to take up the length; the inner angle the lobe's with the line to the tip)
-      let hinge = null, flex1 = null, flex2 = 0;
-      if (lobeHead) {
-        // (the lobe on its schedule; the blade in the plane of the lobe and the tip as two links (junction → heel, heel →
-        // tip) reaching the tip with the heel bent the sole's way (the first link nearer the lobe's line, the second
-        // pressed forward))
-        triLobe = norm3(rvT(Wb.J_head, lobeHead));
-        const Jx = add3(Sx, mul3(triLobe, Lb)), JT = sub3(weld, Jx), D = Math.hypot(...JT);
-        triInner = angDeg(mul3(triLobe, -1), JT);
-        // (the arm's plane: the lobe and the line to the tip; near straight (that line along the lobe) it is held from the
-        // frame before, so the shoulder's twist does not spin)
-        const hc = cross3(triLobe, norm3(JT)), sw = clamp(Math.hypot(...hc) / 0.5, 0, 1);
-        hinge = norm3(hc);
-        if (prevHinge && sw < 1) { const ph2 = norm3(sub3(prevHinge, mul3(triLobe, dot3(prevHinge, triLobe)))); hinge = norm3(add3(mul3(hinge, sw), mul3(ph2, 1 - sw))); }
-        prevHinge = hinge;
-        const rot = (v, th) => add3(mul3(v, Math.cos(th)), mul3(cross3(hinge, v), Math.sin(th)));
-        const beta = (angDeg(triLobe, JT) * Math.PI) / 180, gam = Math.acos(clamp((LA * LA + D * D - LB * LB) / (2 * LA * D), -1, 1));
-        const d1 = rot(triLobe, beta - gam), Mx = add3(Jx, mul3(d1, LA)), d2 = norm3(sub3(weld, Mx));
-        flex1 = ((beta - gam) * 180) / Math.PI;
-        flex2 = (Math.atan2(dot3(cross3(d1, d2), hinge), dot3(d1, d2)) * 180) / Math.PI;
-      }
-      // (the IK's seed: the shoulder's rotation taking the bind lobe and the junction's hinge onto the triangle's (the hinge
-      // square to the arm's plane, so the junction's + flexion bends the blade toward the tip), the junction at 180° − inner)
-      const Jx = add3(Sx, mul3(triLobe, Lb)), Th = Wb.J_head;
-      hinge ??= norm3(cross3(triLobe, norm3(sub3(weld, Jx))));
-      const inv = (v) => [0, 1, 2].map((c) => Th.R[c] * v[0] + Th.R[3 + c] * v[1] + Th.R[6 + c] * v[2]);
-      const lh = inv(triLobe), hh0 = inv(hinge), hh = norm3(sub3(hh0, mul3(lh, dot3(hh0, lh))));
-      const hB = norm3(sub3(hingeB, mul3(lobeB, dot3(hingeB, lobeB)))), A = [lobeB, hB, cross3(lobeB, hB)], B = [lh, hh, cross3(lh, hh)];
-      const Rm = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => A.reduce((sa, a, k) => sa + B[k][r] * a[c], 0)));
-      triSeed = { J_pec: fitChannels('J_pecL', Rm).values, J_pecFin: { flexion: flex1 ?? 180 - triInner, sweep: 0 }, J_pecMid: { flex: flex2 }, J_pecTip: { flex: 0 } };
-      triMid = flex2; triFlex = flex1;
-    }
-    // (the lobe's lean out from the body: the weld and the flat sole set its sweep; the sole flat from the plant, the
-    // heel free to lift after `rollFrom`: the roll onto the tips)
-    // (the tip welded; the tips flat on the ground; the sole flat until `rollFrom`, then its heel free to lift (the roll
-    // onto the tips); the sole's heading held near the plant's; the junction toward the schedule)
-    const roll = Math.max(0, (ph - C.rollFrom) / (1 - C.rollFrom)), flat = C.flat * (1 - Math.min(1, 3 * roll));
-    // (rolling: the blade straightening at the heel (the ankle the plant bakes in undone) while the tips stay flat)
-    const midTarget = roll > 0 ? -C.straighten * roll * (FINS?.FIN_SCULPT?.pectoral?.plant?.ankle ?? 45) : undefined;
-    const sol = solveArmPlant(body, null, { y: g }, { mode: 'weld', target: { L: weld, R: [weld[0], weld[1], -weld[2]] }, junction, junctionW: C.junctionW, flat, tipFlat: knots(C.tipFlat, ph), lobeOut: lobeHead || triangle ? undefined : lobeOut, lobeHead: triangle ? undefined : lobeHead, lobe: triangle ? { L: triLobe } : undefined, lobeW: C.lobeW, weldK: C.weldK, seed: triangle ? { L: triSeed, R: triSeed } : seed, seedOnly: triangle, lock, prevW: i || triangle ? C.prevW : 0, heelSink: furl ? 0 : undefined, toeAz: toeAz ?? C.toeAz, toeW: toeAz === null && C.toeAz === undefined ? 0 : C.toeW, midTarget: furl ? (triMid !== undefined && lobeHead ? triMid : knots(C.mid ?? 0, ph)) : midTarget, midW: C.midW, sole, tipPress: furl ? C.tipPress ?? 3 : 0, tipPitch: knots(C.tipPitch ?? 0, ph), planeW: C.planeW ?? 0, bladeAngle: C.bladeAngle !== undefined ? knots(C.bladeAngle, ph) : undefined, bladeW: C.bladeW, inner: triangle && !lobeHead ? triInner : C.inner !== undefined ? knots(C.inner, ph) : undefined, ...(triangle && lobeHead ? { junction: triFlex } : {}) });
-    if (toeAz === null) toeAz = sol.sides.L.toeAzimuthDeg;
-    seed = { L: sol.sides.L.values, R: sol.sides.R.values };
-    sol.pose.morph = { ...(sol.pose.morph ?? {}), Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal2: { fold: 0.3 } };
-    out.push({ phase: +ph.toFixed(4), raise: +raise.toFixed(3), pose: sol.pose, tip: sol.sides.L.tipMM, tipErrMM: Math.max(sol.sides.L.tipErrMM, sol.sides.R.tipErrMM), sides: sol.sides });
+export function planeArm(body, g, o = {}) {
+  const PL = { ...RIG.prop.plane, ...o }, D = Math.PI / 180, a = PL.abduct * D, yw = (PL.yaw ?? 0) * D;
+  const AX = BODY_SCULPT.pectoral.axes, u0 = norm3(AX.u1), n0 = norm3(sub3(AX.n, mul3(u0, dot3(AX.n, u0))));
+  const frame = (u, n) => { const x = norm3(u), y = norm3(sub3(n, mul3(x, dot3(n, x)))); return [x, y, cross3(x, y)]; };
+  const between = (A, B) => [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => A[0][c] * B[0][r] + A[1][c] * B[1][r] + A[2][c] * B[2][r]));
+  const ry = (v) => [v[0] * Math.cos(yw) - v[2] * Math.sin(yw), v[1], v[0] * Math.sin(yw) + v[2] * Math.cos(yw)];
+  const np = ry([0, Math.sin(a), Math.cos(a)]), dp = ry([0, -Math.cos(a), Math.sin(a)]), sA = ry([1, 0, 0]);
+  const shoulder = (tL) => fitChannels('J_pecL', between(frame(u0, n0), frame(add3(mul3(dp, Math.cos(tL * D)), mul3(sA, Math.sin(tL * D))), np))).values;
+  const sole = plantedSole('L'), toeB = BLADE.sole?.toe ?? [1, 0, 0];
+  const base = o.raise ? proppedPose(o.raise, body) : body;
+  const F = (tL, sw) => {
+    const p = { ...base, J_pecL: shoulder(tL), J_pecFinL: { flexion: 0, sweep: sw } }, W = poseWorldHero(p);
+    let lo = Infinity;
+    for (const q of sole.points) lo = Math.min(lo, mvT(W.J_pecMidL, q)[1]);
+    for (const q of sole.tipPoints) lo = Math.min(lo, mvT(W.J_pecTipL, q)[1]);
+    for (const b of sole.blade) lo = Math.min(lo, mvT(W[b.joint], b.p)[1]);
+    const t = norm3(rvT(W.J_pecMidL, toeB));
+    return { h: lo - g, pitch: (Math.asin(clamp(t[1], -1, 1)) * 180) / Math.PI };
+  };
+  let x = [PL.tL ?? 45, PL.sweep ?? -90], f0 = F(x[0], x[1]);
+  for (let it = 0; it < 50 && Math.hypot(f0.h, f0.pitch / 10) > 1e-6; it++) {
+    const r = [f0.h, f0.pitch / 10];
+    const Jc = [0, 1].map((i) => { const y = x.slice(); y[i] += 0.05; const f = F(y[0], y[1]); return [(f.h - f0.h) / 0.05, (f.pitch - f0.pitch) / 10 / 0.05]; });
+    const det = Jc[0][0] * Jc[1][1] - Jc[1][0] * Jc[0][1] || 1e-12;
+    const dx = [-(r[0] * Jc[1][1] - r[1] * Jc[1][0]) / det, -(Jc[0][0] * r[1] - Jc[0][1] * r[0]) / det], s = Math.min(1, 10 / (Math.hypot(...dx) || 1));
+    x = [x[0] + s * dx[0], x[1] + s * dx[1]];
+    f0 = F(x[0], x[1]);
   }
-  return { frames: out, weld: weld.map((c) => +c.toFixed(4)), strideMM: C.strideMM, ground: +g.toFixed(4) };
+  const values = { J_pecL: shoulder(x[0]), J_pecFinL: { flexion: 0, sweep: +x[1].toFixed(3) }, J_pecMidL: { flex: 0 }, J_pecTipL: { flex: 0 } };
+  return { values, tL: +x[0].toFixed(3), sweep: +x[1].toFixed(3), heightMM: +f0.h.toFixed(4), pitchDeg: +f0.pitch.toFixed(4), converged: Math.abs(f0.h) < 0.005 && Math.abs(f0.pitch) < 0.05 };
+}
+
+/**
+ * The propped land pose at any front raise with the feet WELDED (round B4; the runtime's IDLE raise 10–25°, behaviour
+ * §3.6: the soles stay put while the front rises or sinks): the reference land state (statePose 'land', RIG.prop.raise)
+ * gives each foot's frame (J_pecMid's world transform: the planted foot rides it whole); at `raise` the body is propped
+ * and laid on the ground again (settleOnGround) and each arm solved by solveArmPlant 'weld' with that frame held
+ * (weldFrame J_pecMid), the broad faces kept square to the front body's s, seeded from the reference arm.
+ * @param raise deg   @param o { tierMesh, fins, pelvic (as statePose), ref: statePose('land')'s result (else solved here) }
+ * @returns { pose, ground, solved, weldErrMM, raise }
+ */
+export function propPose(raise, o = {}) {
+  const ref = o.ref ?? statePose('land', o), Wr = poseWorldHero(ref.pose), pm = JOINTS[J.J_pecMidL].at;
+  const to = [pm, add3(pm, [1, 0, 0]), add3(pm, [0, 1, 0])].map((q) => mvT(Wr.J_pecMidL, q));
+  const eyes = { J_eyeL: { t: [0, RIG.eyeAlert, 0] }, J_eyeR: { t: [0, RIG.eyeAlert, 0] } }, body = { ...eyes };
+  let g = ref.ground.y;
+  if (o.tierMesh && RIG.bend?.land) {
+    const st = settleOnGround(proppedPose(raise, { ...body, morph: structuredClone(STATE_MORPHS.land) }), { skin: o.tierMesh, fins: o.fins ?? {} }, RIG.bend.land);
+    for (const [j, d] of Object.entries(st.deltas)) body[j] = { ...(body[j] ?? {}), pitch: +((body[j]?.pitch ?? 0) + d).toFixed(3) };
+    g = st.groundMM;
+  }
+  // (the rear body stays where it lay: proppedPose turns the whole fish about J_root's pivot and bends the front back, so
+  // the rear's place shifts with the raise; J_root's t puts the rear (J_sp3's pivot, behind the bend) back on the
+  // reference's, the ground with it, so neither the belly nor the feet slide)
+  { const p3 = JOINTS[J.J_sp3].at, a = mvT(Wr.J_sp3, p3), b = mvT(poseWorldHero(proppedPose(raise, body)).J_sp3, p3), d = sub3(a, b);
+    body.J_root = { ...(body.J_root ?? {}), t: d.map((c) => +(c / HL).toFixed(6)) }; g += d[1]; }
+  // (o.seedPose: a neighbouring raise's solution, the continuation propFrames walks)
+  const sp = o.seedPose ?? ref.pose, seedV = { L: Object.fromEntries(['J_pecL', 'J_pecFinL', 'J_pecMidL', 'J_pecTipL'].map((j) => [j, sp[j]])), R: Object.fromEntries(['J_pecR', 'J_pecFinR', 'J_pecMidR', 'J_pecTipR'].map((j) => [j, sp[j]])) };
+  const W = RIG.prop.weld ?? {};
+  const sol = solveArmPlant(body, null, { y: g }, { raise, mode: 'weld', weldFrame: { joint: 'J_pecMid', to }, seed: seedV, seedOnly: true, lock: [['J_pecTip', 'flex']], prevW: W.prevW ?? 0.3, faceW: W.faceW ?? 3, bladeFaceW: W.bladeFaceW ?? 3, faceMax: W.faceMax ?? 8, junction: 0, junctionW: W.junctionW ?? 0.5, ...(W.sweep !== undefined ? { sweep: W.sweep, sweepW: W.sweepW ?? 1 } : {}), heelSink: 0, sole: { L: plantedSole('L'), R: plantedSole('R') } });
+  if (o.pelvic?.targets?.names?.includes('press')) { const pr = pressPelvic(sol.pose, o.pelvic, g); sol.pose = pr.pose; sol.pelvic = pr.result; }
+  sol.pose.morph = { ...structuredClone(STATE_MORPHS.land), ...sol.pose.morph };
+  return { pose: sol.pose, ground: { y: +g.toFixed(4) }, solved: sol, weldErrMM: Math.max(sol.sides.L.tipErrMM, sol.sides.R.tipErrMM), raise };
+}
+
+/**
+ * The welded prop's keyframes over the runtime's raise range (round B4; behaviour §3.6, IDLE 10–25°): propPose at each of
+ * `raises` (deg), walked out from the reference raise each way, every solve seeded from its neighbour's, so a runtime
+ * that interpolates the channels between two keyframes keeps the feet where they stood.
+ * @param o as propPose (+ raises)
+ * @returns [{ raise, pose, ground, weldErrMM }] by raise
+ */
+export function propFrames(o = {}) {
+  const ref = o.ref ?? statePose('land', o), r0 = RIG.prop.raise, raises = o.raises ?? RIG.prop.raises ?? Array.from({ length: 13 }, (_, i) => 10 + 1.25 * i);
+  // (every keyframe carries J_root's t, the reference's 0, so the channels interpolate alike)
+  const p0 = structuredClone(ref.pose); p0.J_root = { ...(p0.J_root ?? {}), t: p0.J_root?.t ?? [0, 0, 0] };
+  const out = [{ raise: r0, pose: p0, ground: ref.ground, weldErrMM: 0 }];
+  for (const dir of [-1, 1]) {
+    let seed = ref.pose;
+    for (const r of raises.filter((x) => (x - r0) * dir > 0).sort((a, b) => dir * (a - b))) {
+      const p = propPose(r, { ...o, ref, seedPose: seed });
+      out.push({ raise: r, pose: p.pose, ground: p.ground, weldErrMM: p.weldErrMM, pelvic: p.solved.pelvic });
+      seed = p.pose;
+    }
+  }
+  return out.sort((a, b) => a.raise - b.raise);
+}
+
+/**
+ * The land arm's plant with the foot flat on the ground `aheadMM` ahead of the shoulder (round B4; the crawl's touch-down):
+ * planeArm's leg (the faces to the side) with the heel's in-plane ankle (J_pecMid sweep) as a third unknown, (tL, junction
+ * sweep, ankle) by Newton on the foot's height, its toe line's pitch and its weld point's place ahead of the shoulder.
+ * @returns as planeArm, + ankle, aheadMM
+ */
+export function plantArm(body, g, o = {}) {
+  const PL = { ...RIG.prop.plane, ...o }, D = Math.PI / 180, a = PL.abduct * D, yw = (PL.yaw ?? 0) * D;
+  const AX = BODY_SCULPT.pectoral.axes, u0 = norm3(AX.u1), n0 = norm3(sub3(AX.n, mul3(u0, dot3(AX.n, u0))));
+  const frame = (u, n) => { const x = norm3(u), y = norm3(sub3(n, mul3(x, dot3(n, x)))); return [x, y, cross3(x, y)]; };
+  const between = (A, B) => [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => A[0][c] * B[0][r] + A[1][c] * B[1][r] + A[2][c] * B[2][r]));
+  const ry = (v) => [v[0] * Math.cos(yw) - v[2] * Math.sin(yw), v[1], v[0] * Math.sin(yw) + v[2] * Math.cos(yw)];
+  const np = ry([0, Math.sin(a), Math.cos(a)]), dp = ry([0, -Math.cos(a), Math.sin(a)]), sA = ry([1, 0, 0]);
+  const shoulder = (tL) => fitChannels('J_pecL', between(frame(u0, n0), frame(add3(mul3(dp, Math.cos(tL * D)), mul3(sA, Math.sin(tL * D))), np))).values;
+  const sole = o.sole ?? plantedSole('L'), toeB = BLADE.sole?.toe ?? [1, 0, 0], weldB = o.weldBind ?? sole.tip;
+  const W0 = poseWorldHero(body), Th = W0.J_head, sH = norm3(rvT(Th, [1, 0, 0])), fw = norm3([-sH[0], 0, -sH[2]]);
+  const sh = mvT(W0.J_pecL, JOINTS[J.J_pecL].at);
+  // (o.furl: the furled crutch (the crawl's), no foot to level: the tip on the ground `aheadMM` ahead, the heel straight;
+  // (tL, sweep) on those two)
+  const n3 = o.furl ? 2 : 3;
+  const vals = (x) => ({ J_pecL: shoulder(x[0]), J_pecFinL: { flexion: 0, sweep: x[1] }, J_pecMidL: { flex: 0, sweep: n3 === 3 ? x[2] : 0 }, J_pecTipL: { flex: 0 } });
+  const F = (x) => {
+    const W = poseWorldHero({ ...body, ...vals(x) });
+    let lo = Infinity;
+    for (const q of sole.points) lo = Math.min(lo, mvT(W.J_pecMidL, q)[1]);
+    for (const q of sole.tipPoints) lo = Math.min(lo, mvT(W.J_pecTipL, q)[1]);
+    for (const b of sole.blade) lo = Math.min(lo, mvT(W[b.joint], b.p)[1]);
+    const t = norm3(rvT(W.J_pecMidL, toeB)), wp = mvT(W.J_pecMidL, weldB);
+    // (o.onWeld: the weld point itself on the ground (the crawl's touch-down on its tip) instead of the lowest point)
+    if (o.furl) return [wp[1] - g, (dot3(sub3(wp, sh), fw) - (o.aheadMM ?? 7)) / 2];
+    return [(o.onWeld ? wp[1] : lo) - g, ((Math.asin(clamp(t[1], -1, 1)) * 180) / Math.PI - (o.pitchDeg ?? 0)) / 10, (dot3(sub3(wp, sh), fw) - (o.aheadMM ?? 7)) / 2];
+  };
+  // (Levenberg–Marquardt within the leg's bounds: the lobe 10–70° back, the junction 0 … −110°, the ankle ±45°)
+  const lo3 = [10, -110, -45].slice(0, n3), hi3 = [70, 0, 45].slice(0, n3), cl = (y) => y.map((v, i) => clamp(v, lo3[i], hi3[i])), ix = [...Array(n3).keys()];
+  let x = cl([PL.tL ?? 40, PL.sweep ?? -80, PL.ankle ?? 0].slice(0, n3)), f0 = F(x), c0 = f0.reduce((s, v) => s + v * v, 0), lam = 1e-3;
+  for (let it = 0; it < 80 && c0 > 1e-12; it++) {
+    const Jc = ix.map((i) => { const y = x.slice(); y[i] += 0.05; const f = F(y); return f.map((v, k) => (v - f0[k]) / 0.05); });
+    const A = ix.map((i) => ix.map((j) => Jc[i].reduce((s, v, k) => s + v * Jc[j][k], 0))), gv = ix.map((i) => Jc[i].reduce((s, v, k) => s + v * f0[k], 0));
+    let ok = false;
+    for (let tr = 0; tr < 10 && !ok; tr++) {
+      const dx = solveN(A.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lam) + 1e-9 : v))), gv.map((v) => -v)), y = cl(x.map((v, i) => v + dx[i])), fy = F(y), cy = fy.reduce((s, v) => s + v * v, 0);
+      if (cy < c0) { x = y; f0 = fy; c0 = cy; lam = Math.max(1e-7, lam / 3); ok = true; } else lam *= 4;
+    }
+    if (!ok) break;
+  }
+  const values = vals(x);
+  return { values, tL: +x[0].toFixed(3), sweep: +x[1].toFixed(3), ankle: n3 === 3 ? +x[2].toFixed(3) : 0, heightMM: +f0[0].toFixed(4), pitchDeg: n3 === 3 ? +(f0[1] * 10).toFixed(4) : null, aheadErrMM: +(f0[n3 - 1] * 2).toFixed(4), converged: Math.hypot(...f0) < 0.005 };
+}
+
+/**
+ * The crawl as a full cycle a runtime can loop (round B4; Pace & Gibb 2009, behaviour §3.1: both fins together, the duty
+ * ≈ 0.6, 93 % of the forward motion in the stance, the weight on the pelvic cup in the recovery): `frames` keyframes over
+ * one cycle (phase 0 → 1; linear interpolation of the channels between them keeps every gate, out/pectoral t_crawl.mjs):
+ *   stance (phase 0 … duty)  both crutches (the furled blades, J_pecTip held at 0) on their distal tips, which ROLL on
+ *     the mud (the bearing vertex welded where it touched, the contact passed to the next vertex the crutch's turn brings
+ *     down: no contact slides, none goes under), while the body vaults: in [0, lift] it rises `vaultMM` straight up, in
+ *     [lift, duty − set] it moves `strideMM` forward (smootherstep) with its axis straight and head-up by the land raise
+ *     (`raiseDeg`), in [duty − set, duty] it is set down straight on the pelvic cup and the belly; each arm by
+ *     solveArmPlant 'weld' in the stroke plane (the lobe, the inner and the distal blade square to a plane through the
+ *     shoulder holding the body's heading, tilted out `abduct`: the broad faces stay to the side), the distal blade's
+ *     angle in it turned one way from `thetaFrom` to `thetaTo`, the junction's in-plane sweep from `sweepFrom` (the V,
+ *     intra-fin 90°) to `sweepTo` (straight, 175°: Pace & Gibb's 76° → 178°), inside the clean limits
+ *   recovery (duty … 1)  the body still on the cup and the belly, each crutch's touch-down vertex carried on an arc
+ *     (`clearMM` up at its middle, the whole blade over the mud) to its next spot `strideMM` ahead, its channels pulled
+ *     toward the touch-down's, so phase 1 is phase 0 of the next cycle with the body `strideMM` further on
+ * The tail is held straight back and lifted clear with the whole body in the stance (Itoh 1999 saw P. modestus lift its
+ * caudal while it moved on its pectorals; McInroe 2016: on level ground the tail is held straight back and not used): a
+ * tail touching the mud while the body moves would slide.
+ * @param tierMesh the tier's skin { position, skin, names } (the ground); o.tier 'lod1' for lod1's own furled blade
+ * @param o RIG.crawl overrides; land: statePose('land')'s result (its body), fins / pelvic (as statePose takes them)
+ * @returns { frames: [{ phase, pose, contacts: { weld: { L, R } | null, vertex, transfers, ground: [names] }, tipErrMM }],
+ *   weldMM / weldRMM (the touch-down's contacts, world), weldBind (the touch-down vertex, bind), strideMM, cycleS, duty,
+ *   speedBLs, ground, schedule }
+ */
+export function crawlCycle(tierMesh, o = {}) {
+  const C = { ...RIG.crawl, ...(o.tier && RIG.crawl[o.tier] ? RIG.crawl[o.tier] : {}), ...o };
+  const lock = [['J_pecTip', 'flex']];
+  const eyes = { J_eyeL: { t: [0, RIG.eyeAlert, 0] }, J_eyeR: { t: [0, RIG.eyeAlert, 0] } };
+  // the body at rest (the land state's: the front raised, the rear and the folded caudal on the mud, the pelvic pressed)
+  const land = o.land ?? statePose('land', { tierMesh, fins: o.fins, pelvic: o.pelvic });
+  // (at the crawl's own raise `raiseDeg`: propPose's body, the rear where the land state's lay)
+  const base = C.raiseDeg !== undefined && C.raiseDeg !== RIG.prop.raise ? propPose(C.raiseDeg, { tierMesh, fins: o.fins, pelvic: o.pelvic, ref: land }) : land;
+  const rest = {};
+  for (const [j, e] of Object.entries(base.pose)) if (!/^J_pec/.test(j) && j !== 'morph') rest[j] = structuredClone(e);
+  Object.assign(rest, eyes);
+  const g = base.ground.y, morph = structuredClone(base.pose.morph);
+  morph.Fin_Pectoral_L = { furl: 1 }; morph.Fin_Pectoral_R = { furl: 1 };
+  // the crutch: the blade furled (Pace & Gibb 2009: the rays furled on land, the fin's tip the contact). Its distal part
+  // (beyond the heel: J_pecMid's and J_pecTip's, one rigid piece with J_pecTip held at 0) ROLLS on the mud: every vertex
+  // of the tier's furled blade there is a candidate contact; the lowest one is welded where it touched (its `spot`) and
+  // when the crutch's turn brings another below the mud, the contact passes to it where it touches (a polygon rolling
+  // without slip: no contact vertex moves while it bears, none goes under). The inner blade (J_pecFin's) is kept over
+  // the mud by the solve. The left arm is solved, the right mirrors it (the body is straight).
+  const plane = { ...(C.abduct !== undefined ? { abduct: C.abduct } : {}), ...(C.yaw !== undefined ? { yaw: C.yaw } : {}) };
+  const sTier = C.tier === 'lod1' ? 'lod1' : 'hero', sole = plantedSole('L', { state: 'furl', tier: sTier, every: sTier === 'hero' ? 2 : 1 });
+  const distal = plantedSole('L', { state: 'furl', tier: sTier, every: 1 }).blade.filter((b) => b.joint !== 'J_pecFinL').map((b) => b.p);
+  const shaft = sole.blade.filter((b) => b.joint === 'J_pecFinL');
+  const soleOf = (tipB, whole = false) => ({ ...sole, blade: whole ? sole.blade : shaft, tip: tipB, tipJoint: 'J_pecMidL' });
+  // the touch-down's first guess: the furled tip (fins.mjs def.furl.tip) on the mud `aheadMM` ahead of the shoulder with
+  // the leg in the land state's plane (plantArm); the rolling solve below then lifts the inner blade off the mud
+  const pa = plantArm(rest, g, { ...plane, aheadMM: C.aheadMM, furl: true, sole, weldBind: sole.tip, tL: 25, sweep: -70 });
+  // (a first guess only: the touch-down's contact is where the rolled solve puts it; a plant short of `aheadMM` by a
+  // fraction of a mm is kept, a wrong one is not)
+  if (Math.abs(pa.heightMM) > 0.3 || Math.abs(pa.aheadErrMM) > 1) throw new Error(`crawlCycle: the touch-down did not converge (${JSON.stringify(pa)})`);
+  const leftOf = (p) => Object.fromEntries(Object.entries(p).filter(([j]) => /^J_pec.*L$/.test(j)));
+  const mirrorVals = (v) => Object.fromEntries(Object.entries(v).map(([j, c]) => [j.replace(/L$/, 'R'), structuredClone(c)]));
+  const armOf = (v) => ({ ...v, ...mirrorVals(v) });
+  const posture = { faceW: C.faceW, bladeFaceW: C.bladeFaceW, faceMax: C.faceMax, junction: 0, junctionW: C.junctionW, heelSink: 0, lock, prevW: C.prevW, weldK: C.weldK, flat: 0, tipFlat: 0, toeW: 0, ...(C.planeW ? { planeW: C.planeW } : {}) };
+  // the body's profile: forward (−s, mm) and up (mm) over the cycle
+  const ss = (u) => { const t = clamp(u, 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
+  const D = C.duty, Lf = C.lift, St = C.set;
+  const fwdAt = (ph) => (ph <= D ? C.strideMM * ss((ph - Lf) / (D - Lf - St)) : C.strideMM);
+  const upAt = (ph) => (ph >= D ? 0 : C.vaultMM * Math.min(ss(ph / Lf), ss((D - ph) / St)));
+  const t0 = rest.J_root?.t ?? [0, 0, 0];
+  const bodyAt = (ph) => { const b = structuredClone(rest); b.J_root = { ...(b.J_root ?? {}), t: [t0[0] - fwdAt(ph) / HL, t0[1] + upAt(ph) / HL, t0[2]] }; return b; };
+  // the stroke plane (world): through the shoulder, holding the body's heading on the ground, tilted out `abduct` deg
+  // (planeArm's land plane, yaw 0, but square to the ground's forward so the body's travel stays in it); the distal
+  // blade's angle in it from `thetaFrom` at the touch-down (bent forward in the V) to `thetaTo` at the lift-off (the arm
+  // straight back): it turns one way through the stance, so the contact rolls one way over the furled tip
+  const sk = (() => { const Th = poseWorldHero(rest).J_head, sH = norm3(rvT(Th, [1, 0, 0])), fw = norm3([-sH[0], 0, -sH[2]]), out = [fw[2], 0, -fw[0]], a = ((C.abduct ?? RIG.prop.plane.abduct) * Math.PI) / 180;
+    return { fwd: fw, n: add3(mul3([0, 1, 0], Math.sin(a)), mul3(out, Math.cos(a))), down: add3(mul3([0, 1, 0], -Math.cos(a)), mul3(out, Math.sin(a))) }; })();
+  const thetaAt = (ph) => (ph <= D ? C.thetaFrom + (C.thetaTo - C.thetaFrom) * clamp(fwdAt(ph) / C.strideMM, 0, 1) : C.thetaTo + (C.thetaFrom - C.thetaTo) * ss((ph - D) / (1 - D)));
+  const strokeAt = (ph) => ({ ...sk, W: C.strokeW, theta: thetaAt(ph), thetaW: C.thetaW });
+  // (the junction's in-plane sweep through the stance: Pace & Gibb 2009's intra-fin angle 76° → 178° on land, the blade
+  // bent forward in a V at the touch-down and straight behind at the lift-off, 180° − |sweep|; back again in the recovery)
+  const sweepAt = (ph) => (ph <= D ? C.sweepFrom + (C.sweepTo - C.sweepFrom) * clamp(fwdAt(ph) / C.strideMM, 0, 1) : C.sweepTo + (C.sweepFrom - C.sweepTo) * ss((ph - D) / (1 - D)));
+  const solveL = (body, tipB, target, seed, extra = {}, whole = false) => {
+    const sol = solveArmPlant(body, null, { y: g }, { ...posture, ...extra, sides: ['L'], mode: 'weld', target: { L: target }, sole: { L: soleOf(tipB, whole) }, seed: { L: seed }, seedOnly: true });
+    return { vals: leftOf(sol.pose), err: sol.sides.L.tipErrMM, side: sol.sides.L };
+  };
+  const lowest = (body, vals) => {
+    const W = poseWorldHero({ ...body, ...vals }); let q = -1, y = Infinity, at = null;
+    for (let i = 0; i < distal.length; i++) { const w = mvT(W.J_pecMidL, distal[i]); if (w[1] < y) { y = w[1]; q = i; at = w; } }
+    return { q, y, at };
+  };
+  // (one stance frame: the contact welded, passed on while another distal vertex is under the mud)
+  const roll = (body, piv, seed, ph) => {
+    let s = null, transfers = 0;
+    for (let it = 0; it < C.rollIters; it++) {
+      s = solveL(body, distal[piv.i], [piv.spot[0], g, piv.spot[1]], seed, { sweep: sweepAt(ph), sweepW: C.sweepW, stroke: strokeAt(ph) });
+      const lo = lowest(body, s.vals);
+      if (lo.y >= g - C.rollTol || lo.q === piv.i) break;
+      piv = { i: lo.q, spot: [lo.at[0], lo.at[2]] }; transfers++; seed = s.vals;
+    }
+    return { ...s, piv, transfers };
+  };
+  const nearest = (p) => { let q = 0, d = Infinity; distal.forEach((b, i) => { const e = Math.hypot(...sub3(b, p)); if (e < d) { d = e; q = i; } }); return q; };
+  // the touch-down (phase 0): rolled from the plant's tip
+  const W0 = poseWorldHero({ ...rest, ...pa.values }), tip0 = mvT(W0.J_pecMidL, sole.tip);
+  const td = roll(rest, { i: nearest(sole.tip), spot: [tip0[0], tip0[2]] }, pa.values, 0);
+  const piv0 = td.piv, arms0 = td.vals;
+  const N = C.frames, frames = [], stanceN = Math.round(N * D);
+  const contact = (piv) => ({ L: [piv.spot[0], g, piv.spot[1]].map((c) => +c.toFixed(4)), R: [piv.spot[0], g, -piv.spot[1]].map((c) => +c.toFixed(4)) });
+  frames.push({ phase: 0, vals: arms0, err: td.err, piv: piv0, transfers: td.transfers });
+  let prev = arms0, piv = piv0;
+  for (let i = 1; i <= stanceN; i++) {
+    const r = roll(bodyAt(i / N), piv, prev, i / N);
+    frames.push({ phase: i / N, vals: r.vals, err: r.err, piv: r.piv, transfers: r.transfers });
+    prev = r.vals; piv = r.piv;
+  }
+  // the recovery: the touch-down's contact vertex carried on an arc (`clearMM` up at its middle) from where the stance
+  // left it to its next spot `strideMM` ahead, the whole blade `liftMM` … over the mud; its channels pulled toward the
+  // touch-down's over the second half, so phase 1 is phase 0 of the next cycle
+  const bEnd = bodyAt(D), Pend = mvT(poseWorldHero({ ...bEnd, ...prev }).J_pecMidL, distal[piv0.i]);
+  const lerpV = (A, B, w) => Object.fromEntries(Object.entries(A).map(([j, e]) => [j, Object.fromEntries(Object.entries(e).map(([c, v]) => [c, v + ((B[j]?.[c] ?? v) - v) * w]))]));
+  for (let i = stanceN + 1; i < N; i++) {
+    const ph = i / N, u = (ph - D) / (1 - D), e = ss(u), up = C.clearMM * Math.sin(Math.PI * u);
+    const tgt = [Pend[0] + (piv0.spot[0] - C.strideMM - Pend[0]) * e, Pend[1] + (g - Pend[1]) * e + up, Pend[2] + (piv0.spot[1] - Pend[2]) * e];
+    const seed = lerpV(prev, arms0, ss((u - 0.4) / 0.6));
+    const s = solveL(bodyAt(ph), distal[piv0.i], tgt, seed, { clearMM: Math.max(0, Math.min(C.clearMM, up) - C.clearSlack), sweep: sweepAt(ph), sweepW: C.sweepW, stroke: strokeAt(ph) }, true);
+    frames.push({ phase: ph, vals: s.vals, err: s.err, piv: null });
+    prev = s.vals;
+  }
+  frames.push({ phase: 1, vals: arms0, err: 0, piv: null });
+  const out = frames.map((f) => {
+    const stance = f.phase <= D + 1e-9;
+    return { phase: +f.phase.toFixed(5), pose: { ...bodyAt(f.phase), ...armOf(f.vals), morph: structuredClone(morph) }, tipErrMM: +(f.err ?? 0).toFixed(4), contacts: { weld: stance && f.piv ? contact(f.piv) : null, ...(stance && f.piv ? { vertex: f.piv.i, transfers: f.transfers } : {}), ground: stance && upAt(f.phase) > 0.05 ? [] : ['belly', 'pelvic', 'caudal'] } };
+  });
+  const schedule = {
+    stance: [0, D], lift: [0, Lf], push: [Lf, D - St], setDown: [D - St, D], recovery: [D, 1],
+    note: 'phase 0: both crutches touched down (the furled blades\' distal tips), the body on the pelvic cup and the belly; lift: the body rises straight up off the mud on the crutches; push: the body moves strideMM forward, vaulted (belly, pelvic cup and tail clear); set-down: lowered straight onto the cup and the belly; through the stance each crutch rolls on its distal tip (contacts.weld: the bearing vertex\'s spot on the mud; contacts.vertex: its index in the tier\'s furled distal blade); recovery: the body still, each crutch lifted on an arc clearMM over the mud and touched down strideMM ahead (phase 1 = phase 0 of the next cycle, J_root t + strideMM forward)',
+  };
+  const weld0 = contact(piv0);
+  return { plantNote: { tL: pa.tL, sweep: pa.sweep, converged: pa.converged }, frames: out, weldMM: weld0.L, weldRMM: weld0.R, weldBind: distal[piv0.i].map((c) => +c.toFixed(4)), contactVertexBind: distal[piv0.i].map((c) => +c.toFixed(4)), strideMM: C.strideMM, cycleS: C.cycleS, duty: D, speedBLs: +(C.strideMM / 80 / C.cycleS).toFixed(4), ground: +g.toFixed(4), plant: pa, schedule };
+}
+
+/** The crawl's keyframes (compatibility with build.mjs' round B3 call): crawlCycle's frames with `phase` over the whole
+ * cycle, `weld` the left weld point at phase 0 (world mm), `strideMM`, `ground`, and the cycle's schedule. */
+export function crawlFrames(tierMesh, o = {}) {
+  const C = crawlCycle(tierMesh, o);
+  return { ...C, frames: C.frames.map((f) => ({ ...f, raise: RIG.prop.raise })), weld: C.weldMM };
+}
+
+const CYCLES = new Map();
+/**
+ * The crawl's pose at any phase (round B4; the runtime's loop): the cycle's keyframes (crawlCycle on the tier's skin,
+ * cached per tier and stride, or o.cycle) interpolated linearly (the channels and J_root's t), the whole cycles before it
+ * adding `strideMM` each to J_root's t (phase 2.25: the third cycle, a quarter in).
+ * @param phase cycles (any real ≥ 0)   @param o { stride (mm), tier, tierMesh (to solve a cycle), cycle, land, fins, pelvic }
+ * @returns { pose, stance (bool), contacts: { weld: { L, R } (world mm, this cycle's) | null, ground: [names] } }
+ */
+export function crawlPose(phase, o = {}) {
+  const key = `${o.tier ?? 'hero'}:${o.stride ?? RIG.crawl.strideMM}`;
+  let C = o.cycle ?? CYCLES.get(key);
+  if (!C) {
+    if (!o.tierMesh) throw new Error('crawlPose: give o.cycle (crawlCycle\'s result, e.g. the GLB extras) or o.tierMesh to solve it');
+    C = crawlCycle(o.tierMesh, { tier: o.tier, strideMM: o.stride ?? RIG.crawl.strideMM, land: o.land, fins: o.fins, pelvic: o.pelvic });
+    CYCLES.set(key, C);
+  }
+  const n = Math.floor(phase), f = phase - n, F = C.frames, k = Math.min(F.length - 2, Math.floor(f * (F.length - 1))), t = f * (F.length - 1) - k;
+  const A = F[k].pose, B = F[k + 1].pose, pose = structuredClone(A);
+  for (const [j, e] of Object.entries(B)) {
+    if (j === 'morph' || !e || typeof e !== 'object' || Array.isArray(e)) continue;
+    pose[j] ??= {};
+    for (const [c, v] of Object.entries(e)) {
+      const a = A[j]?.[c];
+      pose[j][c] = Array.isArray(v) ? v.map((x, i) => (a?.[i] ?? 0) + (x - (a?.[i] ?? 0)) * t) : (a ?? 0) + (v - (a ?? 0)) * t;
+    }
+  }
+  pose.J_root = { ...(pose.J_root ?? {}), t: [(pose.J_root?.t?.[0] ?? 0) - (n * C.strideMM) / HL, pose.J_root?.t?.[1] ?? 0, pose.J_root?.t?.[2] ?? 0] };
+  const stance = f <= C.duty;
+  const shift = (p) => (p ? [p[0] - n * C.strideMM, p[1], p[2]] : null);
+  return { pose, stance, contacts: { weld: F[k].contacts.weld ? { L: shift(F[k].contacts.weld.L), R: shift(F[k].contacts.weld.R) } : null, ground: F[k].contacts.ground } };
 }
 /** The channel values (AXES order and ranges) whose rotation comes closest to a given local rotation R (fish frame,
  * row-major): Gauss–Newton on the matrix difference from the bind. e.g. fins.mjs's restPose quaternions as channels. */
@@ -1558,10 +1891,43 @@ export function fitChannels(name, R, { from = null } = {}) {
 /** The fins' blend-shape weights of the reference states (fins.mjs targets; plantMid 4w(1 − w) = 0 at w 1). */
 export const STATE_MORPHS = {
   land: { Fin_Pectoral_L: { plant: 1, plantMid: 0 }, Fin_Pectoral_R: { plant: 1, plantMid: 0 }, Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal2: { fold: 0.3 } },
-  reach: { Fin_Pectoral_L: { plant: 1, plantMid: 0 }, Fin_Pectoral_R: { plant: 1, plantMid: 0 }, Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal2: { fold: 0.3 } },
-  rest: { Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Caudal: { fold: 1 }, Fin_Pectoral_L: { fold: 1 }, Fin_Pectoral_R: { fold: 1 }, Fin_Pelvic: { fold: 1 } },
+  reach: { Fin_Pectoral_L: { spread: 0.5 }, Fin_Pectoral_R: { spread: 0.5 }, Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal2: { fold: 0.3 } },
+  rest: { Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Caudal: { fold: 1 }, Fin_Pectoral_L: { furl: 1 }, Fin_Pectoral_R: { furl: 1 }, Fin_Pelvic: { fold: 1 } },
   water: { Fin_Pectoral_L: { spread: 1 }, Fin_Pectoral_R: { spread: 1 }, Fin_Caudal: { spread: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 0.8 }, Fin_Anal: { fold: 0.8 } },
 };
+// (round B4, fins P4: B3's water spread the caudal into a fan, but its reference photo shows the bottom rest under water:
+// A061, A060, A029, behaviour §3.3 "the fish lies flat, pectorals fanned sideways and forward like paddles, median fins
+// folded, tail straight": the caudal closed into a long spear (its side-view depth 2.16 → 1.06 × the peduncle's), every
+// median fin and the pelvic cup folded, the pectorals as the paddle state has them. The swimming fish (behaviour §3.3:
+// carangiform, the caudal's thrust, the paddles spread, D2 and the anal fin half raised) is the separate `swim` state)
+Object.assign(STATE_MORPHS, {
+  water: { ...Object.fromEntries(Object.entries(STATE_MORPHS.water).filter(([k]) => /^Fin_Pectoral_/.test(k))), Fin_Caudal: { fold: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Pelvic: { fold: 1 } },
+  swim: { ...Object.fromEntries(Object.entries(STATE_MORPHS.water).filter(([k]) => /^Fin_Pectoral_/.test(k))), Fin_Caudal: { spread: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 0.5 }, Fin_Anal: { fold: 0.5 }, Fin_Pelvic: { fold: 1 } },
+});
+
+/** The states solved on a tier mesh (the ground, the planted arms, the settled body): a bare statePose call answers them
+ * from the shipped file (round B4). */
+export const SOLVED_STATES = ['land', 'reach', 'rest'];
+/** No tier mesh, ground, hero result or body pose: nothing to solve with. */
+const isBare = (o = {}) => !(o.tierMesh || o.ground || o.hero || o.pose || o.fins || o.pelvic || o.pressPelvic);
+const SHIPPED = new Map();
+/** The shipped states file (build.mjs writes it beside the tier GLBs: { [tier]: { [state]: { pose, groundMM, … }, crawl,
+ * transitions } }): `file`, else $TOBIHAZE_STATES, else out/tiers/states.json next to this module. */
+export function shippedStates(file = null) {
+  const f = file ?? process.env.TOBIHAZE_STATES ?? fileURLToPath(new URL('./out/tiers/states.json', import.meta.url));
+  if (!SHIPPED.has(f)) {
+    if (!fs.existsSync(f)) throw new Error(`statePose: called without a tier mesh, and no shipped states at ${f} (run build.mjs, or pass o.tierMesh / o.statesFile)`);
+    SHIPPED.set(f, JSON.parse(fs.readFileSync(f, 'utf8')));
+  }
+  return SHIPPED.get(f);
+}
+/** One state of one tier as the build shipped it: { pose, ground: { y }, shipped } (round B4, poses P4: statePose's
+ * answer without a tier mesh, so the shots, the tests and contactsFor read the poses the GLBs carry). */
+export function shippedState(state, tier = 'hero', file = null) {
+  const S = shippedStates(file)[tier]?.[state];
+  if (!S?.pose) throw new Error(`statePose: no shipped '${state}' for ${tier} (run build.mjs, or pass o.tierMesh)`);
+  return { pose: structuredClone(S.pose), ground: Number.isFinite(S.groundMM) ? { y: S.groundMM, from: 'shipped' } : null, shipped: true };
+}
 
 /**
  * The reference states' poses (joint channel values as AXES reads them; the viewer's pose objects): the ONE source the
@@ -1576,35 +1942,49 @@ export const STATE_MORPHS = {
  *          'weld'), the front raised RIG.reach.raise°
  *   rest   prone (A030, A002, B067): the lobes laid back on the flank in fins.mjs's rest pose (def.restPose: the fold is
  *          authored in it; the shoulder as channels) plus RIG.rest's offsets, the blade joints at rest, every fin folded
- *   water  swimming (A061): half of the rig's swim wave over the rear two thirds, the paddles beside the flank, out and
- *          forward (RIG.water's channels), their fans spread, the caudal spread, the dorsal and anal fins folded
+ *   water  the bottom rest under water (round B4; A061, A060, A029, behaviour §3.3): the body straight, the paddles beside
+ *          the flank, out and forward (RIG.water's channels), their fans spread, the caudal closed into a spear, every
+ *          median fin and the pelvic cup folded (B3's water, with the swim wave and the caudal fan, is now `swim`)
+ *   swim   swimming (behaviour §3.3, carangiform): half of the rig's swim wave over the rear two thirds, the paddles as in
+ *          the water, the caudal spread, D1 folded, D2 and the anal fin half raised
+ * Called bare (no tier mesh, ground, hero result or pose) for a state solved on a mesh, or for a lighter tier, the build's
+ * shipped pose (shippedState), so every caller reads the same poses (round B4).
  * @returns { pose (with `morph`), ground? (land, reach: from solveArmPlant), solved? }
  */
 export function statePose(state, tier = 'hero', o = {}) {
   // (round B3: statePose(state, tier, o); statePose(state, o) is the hero's. A lighter tier's is the hero's carried over:
   // o.hero, the hero's result, or solved here)
   if (tier && typeof tier === 'object') { o = tier; tier = 'hero'; }
+  // (round B4, poses P4: called bare (no tier mesh, ground, hero result or body pose), the states the build solved on the
+  // hero's tier mesh and shipped (shippedState: out/tiers/states.json, every tier's own entry), so a bare call answers the
+  // same pose as the GLBs' extras; B3's bare 'rest' was the unsettled one and its bare 'land' threw. The water and the
+  // swim need no mesh and are solved here on the hero as before)
+  if (isBare(o) && (tier !== 'hero' || SOLVED_STATES.includes(state))) return shippedState(state, tier, o.statesFile);
   if (tier !== 'hero') return stateForTier(o.hero ?? statePose(state, 'hero', o), tier, o);
   const both = (j, v) => ({ [`${j}L`]: v, [`${j}R`]: structuredClone(v) });
-  if (state === 'water') {
+  if (state === 'water' || state === 'swim') {
     const amp = [1, 2, 3.5, 5, 6.5, 7.5, 8, 9], Wt = RIG.water;
-    const wave = Object.fromEntries(SPINE_BEND.map((j, i) => [j, { yaw: +(amp[i] * Math.sin(0.3 + i)).toFixed(2) }]));
-    return { pose: { ...wave, ...both('J_pec', { swing: Wt.swing, protraction: Wt.protraction, depression: Wt.depression, twist: Wt.twist }), ...both('J_pecFin', { flexion: Wt.junction, sweep: Wt.sweep ?? 0 }), morph: structuredClone(STATE_MORPHS.water) } };
+    // (round B4: the water state is the bottom rest under water, A061: the body straight; the swim keeps B3's half wave)
+    const wave = state === 'swim' ? Object.fromEntries(SPINE_BEND.map((j, i) => [j, { yaw: +(amp[i] * Math.sin(0.3 + i)).toFixed(2) }])) : {};
+    return { pose: { ...wave, ...both('J_pec', { swing: Wt.swing, protraction: Wt.protraction, depression: Wt.depression, twist: Wt.twist }), ...both('J_pecFin', { flexion: Wt.junction, sweep: Wt.sweep ?? 0 }), morph: structuredClone(STATE_MORPHS[state]) } };
   }
   if (state === 'rest') {
-    const pose = { morph: structuredClone(STATE_MORPHS.rest) };
-    const rp = BLADE.restPose;
-    for (const S of ['L', 'R']) {
-      if (rp) {
-        const qs = S === 'L' ? rp.object.J_pecL : mirrorQuatObj(rp.object.J_pecL);
-        const f = fitChannels(`J_pec${S}`, quatToFish(qs)).values;
-        for (const [c, d] of Object.entries(RIG.rest)) if (c in f) f[c] = +(f[c] + d).toFixed(3);
-        pose[`J_pec${S}`] = f;
-      } else pose[`J_pec${S}`] = { protraction: -45, depression: -40 };
-    }
+    const pose = { morph: structuredClone(STATE_MORPHS.rest) }, Rr = RIG.rest;
+    // (round B4) the arm down and back to the mud, the furled blade flat on it (A030): RIG.rest.arm where no tier mesh
+    // is given, else solved on the settled body (below)
+    for (const S of ['L', 'R']) for (const [j, v] of Object.entries(Rr.arm)) pose[`${j}${S}`] = { ...v };
     // (round B3) the whole underside laid on the ground (settleOnGround, RIG.bend.rest: B2's prone fish lay on its folded
     // pelvic fin with the rear third floating, the peduncle 1.46 mm and the caudal 1.44 mm over the mud; A030, B067)
-    if (o.tierMesh && RIG.bend?.rest) { const st = settleOnGround(pose, { skin: o.tierMesh, fins: o.fins ?? {} }, RIG.bend.rest); return { pose: st.pose, ground: { y: st.groundMM, from: 'settleOnGround (the lowest posed point)' }, settled: st }; }
+    if (o.tierMesh && RIG.bend?.rest) {
+      // (round B4: the pectorals left out of the settle: the arms are laid on the ground it finds)
+      const finsNoPec = Object.fromEntries(Object.entries(o.fins ?? {}).filter(([k]) => !/^Fin_Pectoral_/.test(k)));
+      const st = settleOnGround(pose, { skin: o.tierMesh, fins: finsNoPec }, RIG.bend.rest);
+      const body = Object.fromEntries(Object.entries(st.pose).filter(([j]) => !/^J_pec/.test(j)));
+      const sol = solveArmPlant(body, null, { y: st.groundMM + Rr.lift }, { mode: 'prop', sides: ['L'], sole: { L: plantedSole('L', { state: 'flat', morph: { furl: 1 } }) }, prop: { face: false, lobeFwd: Rr.lobeFwd, lobeOut: Rr.lobeOut, heelSink: 0, toeAz: 0 }, junction: Rr.junction, lock: [['J_pecTip', 'flex']], seed: { L: Object.fromEntries(Object.entries(Rr.arm).map(([j, v]) => [`${j}L`, v])) } });
+      const L = Object.fromEntries(Object.entries(sol.pose).filter(([j]) => /^J_pec.*L$/.test(j)));
+      const out = { ...st.pose, ...L, ...Object.fromEntries(Object.entries(L).map(([j, v]) => [j.replace(/L$/, 'R'), structuredClone(v)])), morph: pose.morph };
+      return { pose: out, ground: { y: st.groundMM, from: 'settleOnGround (the lowest posed point)' }, settled: st, arm: sol.sides.L };
+    }
     return { pose };
   }
   if (state === 'land' || state === 'reach') {
@@ -1621,15 +2001,27 @@ export function statePose(state, tier = 'hero', o = {}) {
       o = { ...o, pose: body, ground: { y: st.groundMM }, settled: st, ...(press ? { pelvic: null, pressPelvic: press } : {}) };
     }
     let sol;
-    if (state === 'land') sol = solveArmPlant({ ...eyes, ...(o.pose ?? {}) }, o.tierMesh ?? null, o.ground ?? null, { raise: RIG.prop.raise, pelvic: o.pelvic ?? null });
+    if (state === 'land' && RIG.prop.plane) {
+      // (round B4: the planar leg, planeArm; solveArmPlant with every channel held reports its contact and posture)
+      const body = proppedPose(RIG.prop.raise, { ...eyes, ...(o.pose ?? {}) });
+      let g = o.ground?.y;
+      if (g === undefined) { const keep = notArm(o.tierMesh), s1 = JOINTS[J.J_sp1].at[0]; g = lowestPosed(o.tierMesh, poseWorldHero(body), (v) => keep(v) && o.tierMesh.position[v * 3] > s1).y; }
+      const pa = planeArm(body, g, o.plane ?? {});
+      const fixed = { L: pa.values };
+      sol = solveArmPlant(body, null, { y: g }, { prop: { face: true }, fixed, seed: { L: pa.values, R: pa.values }, seedOnly: true, pelvic: o.pelvic ?? null });
+      sol.plane = { tL: pa.tL, sweep: pa.sweep, heightMM: pa.heightMM, pitchDeg: pa.pitchDeg, converged: pa.converged };
+    } else if (state === 'land') sol = solveArmPlant({ ...eyes, ...(o.pose ?? {}) }, o.tierMesh ?? null, o.ground ?? null, { raise: RIG.prop.raise, pelvic: o.pelvic ?? null });
     else {
-      const R = RIG.reach, body = proppedPose(R.raise, { ...eyes, ...(o.pose ?? {}) });
-      const ref = solveArmPlant(body, o.tierMesh ?? null, o.ground ?? null, { sides: ['L'] });
-      const g = ref.ground.y, sh = ref.sides.L.shoulderMM;
-      const d2r = Math.PI / 180, lobe = [-Math.cos(R.lobe[0] * d2r) * Math.cos(R.lobe[1] * d2r), -Math.sin(R.lobe[0] * d2r), Math.cos(R.lobe[0] * d2r) * Math.sin(R.lobe[1] * d2r)];
-      const tgt = [sh[0] - R.aheadMM, g, sh[2] + R.outMM];
-      sol = solveArmPlant(body, null, { y: g }, { mode: 'weld', target: { L: tgt, R: [tgt[0], tgt[1], -tgt[2]] }, lobe: { L: lobe }, lobeW: R.lobeW, junction: R.junction, junctionW: 0.5, flat: R.flat });
-      sol.ground = ref.ground;
+      // (round B4) the reach (A023, A070): the half-spread fan laid flat on the mud ahead (plantedSole 'flat'), the lobe
+      // toward forward-down, the fan's centre `aheadHL` ahead of and `outHL` out of the shoulder; the left solved, the
+      // right mirrored
+      const Rc = RIG.reach, body = proppedPose(Rc.raise, { ...eyes, ...(o.pose ?? {}) });
+      let g = o.ground?.y;
+      if (g === undefined) { const keep = notArm(o.tierMesh), s1 = JOINTS[J.J_sp1].at[0]; g = lowestPosed(o.tierMesh, poseWorldHero(body), (v) => keep(v) && o.tierMesh.position[v * 3] > s1).y; }
+      const one = solveArmPlant(body, null, { y: g + Rc.lift }, { sides: ['L'], sole: { L: plantedSole('L', { state: 'flat', morph: { spread: Rc.spread } }) }, prop: { face: true, flexion: Rc.junction, faceW: 0, bladeFaceW: 0, lobeFwd: Rc.lobeFwd, lobeOut: Rc.lobeOut, aheadHL: Rc.aheadHL, outHL: Rc.outHL, contactW: Rc.contactW, toeW: 0, planeW: 0, junctionW: 0.2, sweep: Rc.sweep, sweepW: Rc.sweepW, heelSink: 0, seed: Rc.seed }, lock: [['J_pecTip', 'flex']] });
+      const L = Object.fromEntries(Object.entries(one.pose).filter(([j]) => /^J_pec.*L$/.test(j)));
+      sol = { ...one, pose: { ...one.pose, ...Object.fromEntries(Object.entries(L).map(([j, v]) => [j.replace(/L$/, 'R'), structuredClone(v)])) }, ground: { y: +g.toFixed(4), from: o.ground ? 'given' : 'the skin\'s lowest under the rear' } };
+      sol.pose.morph = { ...(sol.pose.morph ?? {}), Fin_Pectoral_L: { spread: Rc.spread }, Fin_Pectoral_R: { spread: Rc.spread } };
     }
     if (o.pressPelvic) { const pr = pressPelvic(sol.pose, o.pressPelvic, sol.ground.y); sol.pose = pr.pose; sol.pelvic = pr.result; }
     if (o.settled) sol.settled = o.settled;
@@ -1652,6 +2044,10 @@ const mirrorQuatObj = (q) => [q[0], -q[1], -q[2], q[3]];
  * @returns { pose (J_pelvic pitch, morph Fin_Pelvic press w), result: { pitch, w, gapMM, note? } }
  */
 export function pressPelvic(pose, pelvic, g) {
+  // (round B4: the trunk key's press family, fins.mjs def.presses (pressLow, press, pressHigh, pressDeep by their depth
+  // under the bases), blended along the family at J_pelvic 0: pressFamily)
+  const fam = pelvicPressFamily(pelvic);
+  if (fam.length > 1) return pressFamily(pose, pelvic, g, fam);
   const names = pelvic.names ?? TIER_JOINTS.hero, k = pelvic.targets.names.indexOf('press'), D = pelvic.targets.deltas[k];
   const ids = Int32Array.from({ length: pelvic.position.length / 3 }, (_, i) => i);
   const at = (x, w = 1) => {
@@ -1668,6 +2064,76 @@ export function pressPelvic(pose, pelvic, g) {
     else { const x = at(a0, 0) > 0 ? +bisect((y) => at(y, 0), a0, 0).toFixed(3) : a0; result = { pitch: x, w: 0, gapMM: +at(x, 0).toFixed(4), note: 'no press: the cup tilted up to clear the ground' }; }
   } else { const x = +bisect((y) => at(y), a0, b0).toFixed(3); result = { pitch: x, w: 1, gapMM: +at(x).toFixed(4) }; }
   const out = { ...pose, J_pelvic: { ...(pose.J_pelvic ?? {}), pitch: result.pitch }, morph: { ...(pose.morph ?? {}), Fin_Pelvic: { ...(pose.morph?.Fin_Pelvic ?? {}), press: result.w } } };
+  return { pose: out, result };
+}
+
+/** J_pelvic's clean ranges for the cup's blend-shape weights ({ fold, spread, press… }: AXES J_pelvic `coupled`, round
+ * B4): { pitch: [lo, hi], roll: [lo, hi], cornerSum (|roll|/end + max(0, pitch)/end ≤ it), from: the entries applied }. */
+export function pelvicRange(w = {}, A = AXES.joints.J_pelvic) {
+  const on = A.coupled.filter((c) => c.morph && c.morph.reduce((s, k) => s + (w[k] ?? 0), 0) >= c.min);
+  const use = on.length ? on : A.coupled.filter((c) => c.bare);
+  const cut = (k) => use.reduce((r, c) => [Math.max(r[0], c[k][0]), Math.min(r[1], c[k][1])], [...A.channels[k].range]);
+  return { pitch: cut('pitch'), roll: cut('roll'), cornerSum: A.cornerSum ?? null, from: use.map((c) => c.note) };
+}
+/** A J_pelvic pose clamped into the clean range of the cup's blend-shape weights (pelvicRange, the corners cut): { pitch,
+ * roll }. */
+export function clampPelvic({ pitch = 0, roll = 0 } = {}, w = {}) {
+  const r = pelvicRange(w), p = clamp(pitch, r.pitch[0], r.pitch[1]);
+  const rEnd = roll >= 0 ? r.roll[1] : -r.roll[0], share = r.cornerSum ? Math.min(1, r.cornerSum - Math.max(0, p) / r.pitch[1]) : 1;
+  return { pitch: p, roll: Math.sign(roll) * Math.min(Math.abs(roll), Math.max(0, share) * rEnd) };
+}
+
+/** The pelvic press family's target names the cup has, shallowest first (fins.mjs def.presses' depthHL, round B4 trunk;
+ * B3's lone 'press' otherwise). */
+let PELVIC_DEF;
+export function pelvicPressFamily(pelvic) {
+  if (PELVIC_DEF === undefined) PELVIC_DEF = FINS?.finDefinitions?.(BODY_SCULPT)?.find((d) => d.name === 'Fin_Pelvic') ?? null;
+  const have = new Set(pelvic.targets?.names ?? []), P = PELVIC_DEF?.presses;
+  if (P) { const fam = Object.entries(P).sort((a, b) => a[1].depthHL - b[1].depthHL).map(([nm]) => nm).filter((nm) => have.has(nm)); if (fam.length) return fam; }
+  return have.has('press') ? ['press'] : [];
+}
+
+/**
+ * The pelvic cup pressed onto the ground by the press family (round B4; the trunk key's fins.mjs presses, each authored
+ * for a chest height: the reach's low chest to a 30° prop; B3's one press reached the ground at 15° only, the cup short
+ * by 0.6–2.5 mm at 25–35° and tilted bare in the reach). At J_pelvic 0 the cup is eased along the family (t: −1 the bare
+ * cup, 0 the shallowest press, k the k-th, fractions blending the two either side) until its lowest skinned point is on
+ * the ground (bisection: deeper presses reach lower; below the bare dish, t −2 … −1, the cup eased into its 'fold' for a
+ * chest lower than the dish is deep); only where the deepest press is still short, or the folded cup already under the
+ * ground, J_pelvic's pitch is searched within RIG.pelvicPress.pitch (+ the cup's rear down), inside the clean ranges
+ * (AXES J_pelvic `coupled`).
+ * @returns as pressPelvic: { pose (J_pelvic pitch, morph Fin_Pelvic weights), result: { pitch, weights, t, gapMM, note? } }
+ */
+function pressFamily(pose, pelvic, g, fam) {
+  const names = pelvic.names ?? TIER_JOINTS.hero, ids = Int32Array.from({ length: pelvic.position.length / 3 }, (_, i) => i);
+  const D = fam.map((nm) => pelvic.targets.deltas[pelvic.targets.names.indexOf(nm)]);
+  // (t < −1, where the cup has a 'fold': the bare dish eased into the cup folded flat under the belly, t = −2 folded: a chest
+  // lower than the bare dish is deep, e.g. the reach's, where every press and the bare dish reach under the ground)
+  const fold = pelvic.targets.names.includes('fold') ? pelvic.targets.deltas[pelvic.targets.names.indexOf('fold')] : null, tMin = fold ? -2 : -1;
+  const weightsAt = (t) => { const w = {}; if (t < 0) { if (t > -1) w[fam[0]] = 1 + t; else if (t < -1 && fold) w.fold = Math.min(1, -1 - t); return w; } const i = Math.min(fam.length - 1, Math.floor(t)), f = t - i; if (f > 1e-9 && i + 1 < fam.length) { w[fam[i]] = 1 - f; w[fam[i + 1]] = f; } else w[fam[i]] = 1; return w; };
+  const at = (t, x) => {
+    const w = weightsAt(t), P = Float32Array.from(pelvic.position);
+    fam.forEach((nm, k) => { if (w[nm]) for (let q = 0; q < P.length; q++) P[q] += w[nm] * D[k][q]; });
+    if (w.fold) for (let q = 0; q < P.length; q++) P[q] += w.fold * fold[q];
+    const Wd = poseWorldHero({ ...pose, J_pelvic: { ...(pose.J_pelvic ?? {}), pitch: x } }), Q = skinSome(P, pelvic.skin, Wd, ids, names);
+    let m = Infinity; for (let i = 1; i < Q.length; i += 3) m = Math.min(m, Q[i]); return m - g;
+  };
+  const bisect = (f, a, b) => { const sa = Math.sign(f(a)); for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (Math.sign(f(m)) === sa) a = m; else b = m; } return (a + b) / 2; };
+  const tMax = fam.length - 1;
+  // (the pitch searched within the press's range and the clean range of the cup's shape at that t: AXES J_pelvic coupled)
+  const pr = (t) => { const r = pelvicRange(weightsAt(t)).pitch; return [Math.max(RIG.pelvicPress.pitch[0], r[0]), Math.min(RIG.pelvicPress.pitch[1], r[1])]; };
+  let t = 0, pitch = 0, note;
+  if (at(tMax, 0) > 0) {
+    t = tMax; const b0 = pr(t)[1];
+    if (at(tMax, b0) > 0) { pitch = b0; note = 'the deepest press cannot reach the ground'; } else pitch = bisect((x) => at(tMax, x), 0, b0);
+  } else if (at(tMin, 0) < 0) {
+    t = tMin; const a0 = Math.min(0, pr(t)[0]);
+    if (at(tMin, a0) < 0) { pitch = a0; note = `the ${fold ? 'folded' : 'bare'} cup is under the ground at the least pitch`; } else pitch = bisect((x) => at(tMin, x), a0, 0);
+  } else t = bisect((y) => at(y, 0), tMin, tMax);
+  const w = Object.fromEntries(Object.entries(weightsAt(t)).map(([k, v]) => [k, +v.toFixed(4)])), wAll = Object.fromEntries([...fam, ...(fold ? ['fold'] : [])].map((nm) => [nm, w[nm] ?? 0]));
+  pitch = +pitch.toFixed(3);
+  const result = { pitch, weights: w, t: +t.toFixed(4), gapMM: +Math.max(0, at(t, pitch)).toFixed(4), ...(note ? { note } : {}) };
+  const out = { ...pose, J_pelvic: { ...(pose.J_pelvic ?? {}), pitch }, morph: { ...(pose.morph ?? {}), Fin_Pelvic: { ...(pose.morph?.Fin_Pelvic ?? {}), ...wAll } } };
   return { pose: out, result };
 }
 
@@ -1689,6 +2155,191 @@ export function stateForTier(S, tier, o = {}) {
   const bare = RIG.eyeLiftBare;
   for (const S2 of ['L', 'R']) { const e = p[`J_eye${S2}`]; if (e?.t && !hasUp(S2)) e.t = [e.t[0], Math.min(e.t[1], bare), e.t[2]]; }
   return { pose: p, ground: S.ground ?? null };
+}
+
+// ------------------------------------------------------------------------------------------------ transitions
+
+/**
+ * The transitions between the reference states (round B4, poses P2: B3 shipped static states only, and a runtime blend
+ * of their channels swept the planted blade through the ground: land→rest 2.8 mm under it, land→water 4.7, land→reach
+ * 0.5). Each pair is one rule the runtime follows from `from` to `to` (and backwards, u → 1 − u):
+ *   e(u) = u²(3 − 2u)               the ease (the plant left and reached slowly while the lift rises fast)
+ *   body(u) = lerp(from, to, e(u))  every channel but the arms', the non-pectoral fins' weights, the ground (groundMM)
+ *   arms(u) = lerp(from, to, e(u)) + sin(πu) · lift   the arms' channels (J_pec*: L as written, R the same values, the
+ *                                    rig's mirror), the pectoral blend shapes lerped
+ * `lift` (deg per channel, the left arm's) is solved here on the hero's tier mesh: along the first of RIG.transition.lift's
+ * directions that works, the least scale whose arc keeps every blade vertex at or above the body's lowest point (the
+ * ground; within the endpoints' own clearance when a state holds its blade lower, e.g. a paddle under the belly) and
+ * whose peak lifts the blade `clearMM` off, with no blade vertex inside the body (ray parity on the posed skin). The arc
+ * lifts the planted sole off, swings the arm over and sets it down again: no planted fin slides or sweeps through the mud.
+ * `keys` samples it (u, pose, groundMM) for a runtime that lerps keys instead (gated at 10 sub-steps between keys too).
+ * The pairs are the state graph's edges: land is the hub on land (reach ↔ rest and reach ↔ water go through land: the B4
+ * rest → reach arc found no lift that cleared the mud), water ↔ swim in the water; swim ↔ the land states through water.
+ */
+export const TRANSITIONS = [['land', 'rest'], ['land', 'reach'], ['land', 'water'], ['rest', 'water'], ['water', 'swim']];
+const isArmKey = (k) => /^J_pec/.test(k), isArmFin = (k) => /^Fin_Pectoral_/.test(k);
+const lerpChannels = (a = {}, b = {}, t) => {
+  const o = {};
+  for (const k of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
+    const x = a?.[k], y = b?.[k];
+    if (Array.isArray(x) || Array.isArray(y)) { const X = x ?? [0, 0, 0], Y = y ?? [0, 0, 0]; o[k] = X.map((v, i) => +(v + (Y[i] - v) * t).toFixed(6)); }
+    else o[k] = +((x ?? 0) + ((y ?? 0) - (x ?? 0)) * t).toFixed(4);
+  }
+  return o;
+};
+/** The two poses blended: the arms' channels and the pectoral blend shapes by `lam`, everything else by `mu` (channels
+ * and weights lerped as a runtime lerps them, a missing one 0). */
+export function blendPoses(A, B, lam, mu = lam) {
+  const out = {}, mo = {};
+  for (const k of new Set([...Object.keys(A), ...Object.keys(B)])) if (k !== 'morph') out[k] = lerpChannels(A[k], B[k], isArmKey(k) ? lam : mu);
+  for (const f of new Set([...Object.keys(A.morph ?? {}), ...Object.keys(B.morph ?? {})])) mo[f] = lerpChannels(A.morph?.[f], B.morph?.[f], isArmFin(f) ? lam : mu);
+  out.morph = mo;
+  return out;
+}
+/** A transition's pose at u: the blend at e(u) = u²(3 − 2u) (eased in and out: the arm leaves its plant slowly while the lift
+ * rises fast) plus sin(πu)·lift on both arms (left channels; the right the same values, the rig's mirror), each channel held
+ * in its AXES range. */
+export function transitionPose(A, B, u, lift = {}) {
+  const e = u * u * (3 - 2 * u), p = blendPoses(A, B, e, e), k = Math.sin(Math.PI * u);
+  for (const [j, ch] of Object.entries(lift)) for (const S of ['L', 'R']) {
+    const name = `${j}${S}`, rg = AXES.joints[name]?.channels;
+    p[name] = { ...(p[name] ?? {}) };
+    for (const [c, v] of Object.entries(ch)) { const r = rg?.[c]?.range ?? [-180, 180]; p[name][c] = +clamp((p[name][c] ?? 0) + k * v, r[0], r[1]).toFixed(4); }
+  }
+  return p;
+}
+/** Points inside a closed triangle soup (parity of the crossings of the ray along +s): a (y, z) bin grid. */
+function parityGrid(P, I, cell = 0.4) {
+  let y0 = Infinity, z0 = Infinity, y1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < P.length; i += 3) { y0 = Math.min(y0, P[i + 1]); y1 = Math.max(y1, P[i + 1]); z0 = Math.min(z0, P[i + 2]); z1 = Math.max(z1, P[i + 2]); }
+  const ny = Math.ceil((y1 - y0) / cell) + 1, nz = Math.ceil((z1 - z0) / cell) + 1, bins = new Array(ny * nz);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    const ya = Math.floor((Math.min(P[a + 1], P[b + 1], P[c + 1]) - y0) / cell), yb = Math.floor((Math.max(P[a + 1], P[b + 1], P[c + 1]) - y0) / cell);
+    const za = Math.floor((Math.min(P[a + 2], P[b + 2], P[c + 2]) - z0) / cell), zb = Math.floor((Math.max(P[a + 2], P[b + 2], P[c + 2]) - z0) / cell);
+    for (let iy = ya; iy <= yb; iy++) for (let iz = za; iz <= zb; iz++) (bins[iy * nz + iz] ??= []).push(t);
+  }
+  return (px, py, pz) => {
+    py += 1.37e-6; pz += 2.71e-6;
+    const iy = Math.floor((py - y0) / cell), iz = Math.floor((pz - z0) / cell);
+    if (iy < 0 || iz < 0 || iy >= ny || iz >= nz) return false;
+    let n = 0;
+    for (const t of bins[iy * nz + iz] ?? []) {
+      const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+      const ay = P[a + 1] - py, az = P[a + 2] - pz, by = P[b + 1] - py, bz = P[b + 2] - pz, cy = P[c + 1] - py, cz = P[c + 2] - pz;
+      const d1 = ay * bz - az * by, d2 = by * cz - bz * cy, d3 = cy * az - cz * ay;
+      if (!((d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0))) continue;
+      const s = d1 + d2 + d3; if (Math.abs(s) < 1e-30) continue;
+      if ((P[a] * d2 + P[b] * d3 + P[c] * d1) / s > px) n++;
+    }
+    return n % 2 === 1;
+  };
+}
+/**
+ * A pose measured on a tier for the transitions: the body's lowest point (the skin the arms do not carry and every fin
+ * but the pectorals: the ground under it), the pectoral blades' lowest, their clearance (blade − body, mm), and with
+ * `inside` the blade vertices inside the posed skin deeper than `depthMM` (to the nearest skin vertex; `parts.skin.indices`
+ * needed).
+ */
+export function armClearance(pose, parts, { inside = false, depthMM = 0.05 } = {}) {
+  const names = parts.skin.names ?? TIER_JOINTS.hero, Wd = poseWorldHero(pose), keep = (parts._keep ??= notArm({ ...parts.skin, names }));
+  const ids = (parts._ids ??= Int32Array.from({ length: parts.skin.position.length / 3 }, (_, v) => v).filter((v) => keep(v)));
+  const Ps = inside ? skinPacked(parts.skin.position, parts.skin.skin, Wd, { names }) : skinSome(parts.skin.position, parts.skin.skin, Wd, ids, names);
+  let body = Infinity;
+  if (inside) for (const v of ids) body = Math.min(body, Ps[v * 3 + 1]); else for (let i = 1; i < Ps.length; i += 3) body = Math.min(body, Ps[i]);
+  let blade = Infinity; const bladeP = [];
+  for (const [nm, f] of Object.entries(parts.fins ?? {})) {
+    const P = Float32Array.from(f.position);
+    for (const [k, w] of Object.entries(pose.morph?.[nm] ?? {})) { const i = f.targets?.names?.indexOf(k) ?? -1; if (i < 0 || !w) continue; const D = f.targets.deltas[i]; for (let q = 0; q < P.length; q++) P[q] += w * D[q]; }
+    const Q = skinPacked(P, f.skin, Wd, { names });
+    let m = Infinity; for (let i = 1; i < Q.length; i += 3) m = Math.min(m, Q[i]);
+    if (isArmFin(nm)) { blade = Math.min(blade, m); bladeP.push(Q); } else body = Math.min(body, m);
+  }
+  const out = { bodyMM: body, bladeMM: blade, clearMM: blade - body };
+  if (inside) {
+    const isIn = parityGrid(Ps, parts.skin.indices);
+    // (each inside vertex's depth: its distance to the posed skin's nearest triangle; the mask marks those deeper than
+    // `depthMM`, the fleshy root lens sitting a hair inside the lobe's skin left out)
+    const cell = 0.3, grid = new Map(), key = (x, y, z) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+    for (let v = 0; v < Ps.length / 3; v++) { const kk = key(Ps[v * 3], Ps[v * 3 + 1], Ps[v * 3 + 2]); let a = grid.get(kk); if (!a) grid.set(kk, (a = [])); a.push(v); }
+    const I = parts.skin.indices, vt = (parts._vt ??= (() => { const a = Array.from({ length: Ps.length / 3 }, () => []); for (let t = 0; t < I.length; t += 3) for (let q = 0; q < 3; q++) a[I[t + q]].push(t); return a; })());
+    const depth = (x, y, z) => {
+      // (the nearest skin vertex within 1.2 mm, then the exact distance to the triangles round the vertices within 0.3 mm of it)
+      let d = Infinity; const near = [], i0 = Math.floor(x / cell), j0 = Math.floor(y / cell), k0 = Math.floor(z / cell);
+      for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) for (let c = -4; c <= 4; c++) for (const v of grid.get(`${i0 + a},${j0 + b},${k0 + c}`) ?? []) { const e = Math.hypot(Ps[v * 3] - x, Ps[v * 3 + 1] - y, Ps[v * 3 + 2] - z); near.push([v, e]); d = Math.min(d, e); }
+      let best = Infinity, p = [x, y, z], seen = new Set();
+      for (const [v, e] of near) if (e < d + 0.3) for (const t of vt[v]) { if (seen.has(t)) continue; seen.add(t); const g = (q) => [Ps[I[t + q] * 3], Ps[I[t + q] * 3 + 1], Ps[I[t + q] * 3 + 2]]; const r = triDist(p, g(0), g(1), g(2)); if (Number.isFinite(r)) best = Math.min(best, r); }
+      return best;
+    };
+    const tot = bladeP.reduce((a, Q) => a + Q.length / 3, 0), mask = new Uint8Array(tot);
+    let n = 0, k = 0; for (const Q of bladeP) for (let i = 0; i < Q.length; i += 3, k++) if (isIn(Q[i], Q[i + 1], Q[i + 2]) && depth(Q[i], Q[i + 1], Q[i + 2]) > depthMM) { n++; mask[k] = 1; }
+    out.inside = n; out.insideMask = mask;
+  }
+  return out;
+}
+/**
+ * One transition solved (see TRANSITIONS): the lift along RIG.transition.lift's directions, the arc's samples and keys.
+ * @param A, B statePose results (hero)   @param parts { skin: { position, skin, names, indices }, fins: { [name]:
+ *   { position, skin, targets } } } (the hero's tier skin and fins)   @param o { clearMM, samples, keys }
+ * @returns { lift, direction, scale, minClearMM, peakClearMM, allowMM: [from, to], inside, keys: [{ u, pose, groundMM }],
+ *   keyMinClearMM, pass, note }
+ */
+export function transitionPlan(A, B, parts, o = {}) {
+  const C = { ...RIG.transition, ...o }, N = C.samples, us = Array.from({ length: N - 1 }, (_, i) => (i + 1) / N);
+  const cA = armClearance(A.pose, parts).clearMM, cB = armClearance(B.pose, parts).clearMM;
+  // (blade vertices the states themselves hold inside the skin, e.g. the fleshy root lens under the lobe's skin, the rest's
+  // fold laid on the flank: those may stay inside along the arc; any other is a blade through the body)
+  const mA = armClearance(A.pose, parts, { inside: true }).insideMask, mB = armClearance(B.pose, parts, { inside: true }).insideMask;
+  const newInside = (pose) => { const m = armClearance(pose, parts, { inside: true }).insideMask; let c = 0; for (let i = 0; i < m.length; i++) if (m[i] && !mA[i] && !mB[i]) c++; return c; };
+  // (the clearance a sample must keep: the ground, or the endpoints' own where a state holds its blade lower, lerped)
+  const allow = (u) => { const e = u * u * (3 - 2 * u); return Math.min(0, (1 - e) * cA + e * cB) - C.tolMM; };
+  const scaled = (d, s) => Object.fromEntries(Object.entries(d).map(([j, ch]) => [j, Object.fromEntries(Object.entries(ch).map(([c, v]) => [c, +(v * s).toFixed(3)]))]));
+  // (worst: the least of (clearance − allow) − clearMM·sin²(πu) over the arc's samples: ≥ 0 keeps the blade off the ground
+  // and lifts it clearMM at the arc's middle, the margin easing to 0 at the plants; plain: the least clearance − allow)
+  const run = (lift) => { let worst = Infinity, plain = Infinity, peak = -Infinity; for (const u of us) { const c = armClearance(transitionPose(A.pose, B.pose, u, lift), parts).clearMM - allow(u); worst = Math.min(worst, c - C.clearMM * Math.sin(Math.PI * u) ** 2); plain = Math.min(plain, c); peak = Math.max(peak, c); } return { worst, plain, peak }; };
+  const ok = (r) => r.worst >= 0;
+  const plain = run({});
+  let best = null;
+  if (ok(plain)) best = { lift: {}, direction: 'none', scale: 0, r: plain };
+  for (const [dn, d] of Object.entries(C.lift)) {
+    if (best) break;
+    if (!ok(run(scaled(d, C.maxDeg)))) continue;
+    let a = 0, b = C.maxDeg;
+    for (let i = 0; i < 12; i++) { const m = (a + b) / 2; if (ok(run(scaled(d, m)))) b = m; else a = m; }
+    const lift = scaled(d, Math.ceil(b)), r = run(lift);
+    // (no blade inside the body along the arc: else the next direction)
+    let ins = 0; for (const u of us) ins = Math.max(ins, newInside(transitionPose(A.pose, B.pose, u, lift)));
+    if (ins > 0) continue;
+    best = { lift, direction: dn, scale: Math.ceil(b), r };
+  }
+  const lift = best?.lift ?? {}, r = best?.r ?? plain;
+  // (the keys a key-lerping runtime takes, and their own gate: 10 sub-steps between keys)
+  const ku = Array.from({ length: C.keys + 1 }, (_, i) => i / C.keys);
+  const keys = ku.map((u) => { const pose = transitionPose(A.pose, B.pose, u, lift), m = armClearance(pose, parts); return { u: +u.toFixed(4), pose, groundMM: +Math.min(m.bodyMM, m.bladeMM).toFixed(4) }; });
+  let keyMin = Infinity;
+  for (let k = 0; k + 1 < keys.length; k++) for (let s = 1; s < 10; s++) { const t = s / 10, u = keys[k].u + (keys[k + 1].u - keys[k].u) * t; keyMin = Math.min(keyMin, armClearance(blendPoses(keys[k].pose, keys[k + 1].pose, t, t), parts).clearMM - allow(u)); }
+  let inside = 0; for (const u of us) inside = Math.max(inside, newInside(transitionPose(A.pose, B.pose, u, lift)));
+  return {
+    lift, direction: best?.direction ?? 'none (no direction cleared)', scale: best?.scale ?? null, minClearMM: +r.plain.toFixed(3), liftMarginMM: +r.worst.toFixed(3), peakClearMM: +r.peak.toFixed(3), endClearMM: [+cA.toFixed(3), +cB.toFixed(3)],
+    inside, keys, keyMinClearMM: +keyMin.toFixed(3), pass: !!best && keyMin >= 0 && inside === 0,
+  };
+}
+/**
+ * Every transition of TRANSITIONS on the hero (build.mjs writes them beside the states): { 'a>b': { from, to, rule,
+ * lift, curve, keys, gate } }, `b>a` the same arc backwards (u → 1 − u).
+ */
+export function stateTransitions(states, parts, o = {}) {
+  const out = {};
+  for (const [a, b] of o.pairs ?? TRANSITIONS) {
+    if (!states[a] || !states[b]) continue;
+    const T = transitionPlan(states[a], states[b], parts, o);
+    out[`${a}>${b}`] = {
+      from: a, to: b, ease: 'u²(3 − 2u)', curve: 'sin(πu)', lift: T.lift, liftDirection: T.direction,
+      rule: 'e(u) = u²(3 − 2u); body(u) = lerp(from, to, e(u)) (every channel but the arms\', the other fins\' weights, groundMM); arms(u) = lerp(from, to, e(u)) + sin(πu)·lift (J_pec*: `lift` is the left arm\'s, the right takes the same values, the rig\'s mirror; each channel held in its AXES range), the pectoral weights lerped; backwards (to→from) the same with u → 1 − u',
+      keys: T.keys, gate: { minClearMM: T.minClearMM, peakClearMM: T.peakClearMM, endClearMM: T.endClearMM, keyMinClearMM: T.keyMinClearMM, liftMarginMM: T.liftMarginMM, insideBlade: T.inside, pass: T.pass, note: 'clearance: the pectoral blades\' lowest point over the body\'s (the ground), mm, at 19 points of the arc (min, against the endpoints\' own lerped where a state holds the blade lower) and between the keys (10 sub-steps); insideBlade: blade vertices inside the posed skin (ray parity) that neither state holds inside' },
+    };
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------------------------------------ ground contacts
@@ -1728,7 +2379,10 @@ export function contactsFor(tierName, parts, o = {}) {
   const names = TIER_JOINTS[tierName], jIdx = Object.fromEntries(names.map((n, i) => [n, i]));
   const skin = { ...parts.skin, names };
   const pel = parts.fins?.Fin_Pelvic ? { position: parts.fins.Fin_Pelvic.position, skin: parts.fins.Fin_Pelvic.skin, names } : null;
-  const states = o.states ?? { land: statePose('land', { tierMesh: skin, pelvic: pel }), rest: statePose('rest'), water: statePose('water') };
+  // (round B4, poses P4: without o.states the tier's shipped states, statePose(state, tier) bare; B3 solved 'land' here
+  // without the fins and took the unsettled 'rest')
+  void pel;
+  const states = o.states ?? Object.fromEntries(Object.entries(shippedStates(o.statesFile)[tierName] ?? {}).filter(([, S]) => S?.pose).map(([st]) => [st, statePose(st, tierName, { statesFile: o.statesFile })]));
   const stations = o.stations ?? [1.5, 1.8, 2.1, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9];
   const out = {};
   const morphFin = (f, ws) => {

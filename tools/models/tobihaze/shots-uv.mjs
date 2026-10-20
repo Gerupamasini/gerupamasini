@@ -216,8 +216,14 @@ async function gatesCmd({ cache, tiers: which, json, log }) {
     const ci = ch.findIndex((c) => c.name === 'patch'), st = uvStats(m, ch, { size: MT[name].tex });
     const body = ['bodyL', 'bodyR'].map((nm) => st.charts.find((c) => c.name === nm).density.p50).reduce((a, b) => a + b) / 2;
     R.uv = { folds: st.total.folds, collapsed: st.total.collapsed, outside: st.total.outside, overlapTexels: st.total.overlap, texels: st.total.texels };
+    // (round B4: the bake's padding — triangles of an island within 3 texels of another island of their chart whose surface
+    // lies > 0.3 mm away: charts.bleedTriangles; 0 = every chart's islands either continue each other or stand apart)
+    { const { bleedTriangles } = await import('./charts.mjs'); const bl = bleedTriangles(m, ch, { size: MT[name].tex, gap: 3, mm: 0.3 }); R.uv.bleedTris = bl.reduce((a, b) => a + b, 0); }
     R.density = Object.fromEntries(st.charts.filter((c, i) => c.tris && !ch[i].hidden).map((c) => [c.name, +(c.density.p50 / HL * 1000).toFixed(2)]));
     R.patchOverBody = +(st.charts[ci].density.p50 / body).toFixed(2);
+    // (round B4: the skin's rects the tier leaves empty, as a share of its atlas — lod2 bakes its own layout,
+    // fishmesh BODY_LAYOUT_LOD2; the eyes' rects belong to the eye meshes and are not skin charts)
+    { const un = st.charts.map((c, i) => ({ c, r: ch[i].rect })).filter(({ c }) => !c.tris); R.unusedRects = { names: un.map(({ c }) => c.name), share: +un.reduce((a, { r }) => a + (r[2] - r[0]) * (r[3] - r[1]), 0).toFixed(4) }; }
     // the patch's islands (joined through shared vertices): where, and the area the skin shows of each
     const vis = visibleTriangles(P, I, { px: name === 'hero' ? 0.04 : name === 'lod1' ? 0.06 : 0.12 });
     const par = new Int32Array(nt).map((_, i) => i), f = (a) => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };

@@ -3,10 +3,12 @@
 // posed by the viewer from each shot's `pose`: nothing baked). PECT_SHOTS picks a batch:
 //   lobe    the bind arm close up (side, front, from above, 3/4, below, behind) on PECT_GLB (default the hero tier)
 //   prop    propped on the planted pectorals (rig statePose 'land'): A070, A005, B010, u1 cameras, the arm close up
-//   reach   the arm reaching forward (statePose 'reach'): A023, A070
-//   rest    prone, the arms folded back flat on the flank (statePose 'rest'): A030, B067, from above
+//   reach   the arm reaching forward, the half-spread fan flat on the mud (statePose 'reach'): A023, A070
+//   rest    prone, the arms down and back with the furled blades flat on the mud (statePose 'rest'): A030, B067, from above
 //   water   the paddles spread beside the flank (statePose 'water'): A061, A042, from above and the side
-//   crawl   the crawl's stance (rig crawlFrames): PECT_FRAMES frames from the side and the front, the welded tip marked
+//   raise   (round B4) the welded prop's keyframes at 10° and 25° (rig propFrames): A070, B010
+//   crawl   the crawl's full cycle (round B4, rig crawlCycle: stance and recovery): its keyframes from the side, 3/4 and
+//           above through one fixed camera
 // The poses come from PECT_STATES (repo-relative JSON, default tools/models/tobihaze/out/pectoral/states.json, written
 // by out/pectoral/t_pect.mjs --write from rig.mjs statePose / crawlFrames: the same source build.mjs writes into the GLBs) or,
 // without it, the hero GLB's own extras (FINAL_DIR/states.json: land, rest, water).
@@ -64,6 +66,7 @@ const LOBE = [
 ];
 const P = (st, list) => (STATES[st] ? list.map(([n, c, ex]) => clay(`${st}_${n}`, { ...CAM[c], ...(ex ?? {}) }, pose(st))) : []);
 const PROP = P('land', [['A070', 'A070'], ['A070c', 'A070c'], ['A005', 'A005'], ['A005c', 'A005c'], ['B010', 'B010'], ['u1', 'u1'], ['front', 'frontV'], ['top', 'top']]);
+const RAISE = [...P('prop10', [['A070', 'A070'], ['B010', 'B010']]), ...P('prop25', [['A070', 'A070'], ['B010', 'B010']])];
 const REACH = P('reach', [['A023', 'A023'], ['A070', 'A070c'], ['side', 'side'], ['front', 'frontV']]);
 const REST = P('rest', [['A030', 'A030'], ['A030c', 'A030c'], ['B067', 'B067'], ['top', 'top'], ['front', 'frontV']]);
 const WATER = P('water', [['A061', 'A061'], ['A061c', 'A061c'], ['A042', 'A042'], ['top', 'top'], ['side', 'side'], ['front', 'frontV']]);
@@ -72,8 +75,8 @@ const WATER = P('water', [['A061', 'A061'], ['A061c', 'A061c'], ['A042', 'A042']
 // over the welded tips; CRAWL_BOX exported so the strip can mark the weld in the images)
 const CR = STATES.crawl ?? [];
 export const CRAWL_BOX = box(-1.0, 2.4, -0.45, 0.75, -0.9, 0.9);
-export const CRAWL_VIEWS = { side: { ...CAM.side, fit: CRAWL_BOX, margin: 0.04 }, q34: { azim: 55, elev: 18, fov: 24, fit: CRAWL_BOX, margin: 0.04 } };
+export const CRAWL_VIEWS = { side: { ...CAM.side, fit: CRAWL_BOX, margin: 0.04 }, q34: { azim: 55, elev: 18, fov: 24, fit: CRAWL_BOX, margin: 0.04 }, top: { azim: 0, elev: 90, ortho: true, topUp: -1, fit: CRAWL_BOX, margin: 0.04 } };
 const CRAWL = CR.flatMap((f, i) => Object.entries(CRAWL_VIEWS).map(([k, v]) => clay(`crawl_${String(i).padStart(2, '0')}_${k}`, v, { ...f.pose, ground: true })));
-const SETS = { lobe: LOBE, prop: PROP, reach: REACH, rest: REST, water: WATER, crawl: CRAWL };
+const SETS = { lobe: LOBE, prop: PROP, raise: RAISE, reach: REACH, rest: REST, water: WATER, crawl: CRAWL };
 const pick = process.env.PECT_SHOTS ?? 'lobe';
 export const SHOTS = pick.split(',').flatMap((k) => SETS[k] ?? Object.values(SETS).flat().filter((s) => s.name === k));

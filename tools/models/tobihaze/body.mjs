@@ -16,15 +16,18 @@
 // from s 0.95 to the vent; within 0.0005 HL of its convex hull past the throat's bend), 0.036–0.040 HL under the
 // head's underside at 0.30–0.45 TL (B067 0.035–0.046, A030's lit belly edge), so from the front only a thin crescent
 // shows under the chin (0.040 HL deep, |z| ≤ 0.18: B002, u5); the back eases down from the nape, so the deepest
-// section is 0.134 TL at 0.32 TL, 1.076 × the head's depth (BD at the pectoral base 1.04); the rear trunk 0.02–0.03 HL
-// lower at 0.60–0.75 TL; every station within 0.0095 TL of A030 at 0.30–0.80 TL in top, bottom and depth (the photo's
-// bottom read as the mean of its lit edge and its contact line; B2 0.0137 top / 0.0112 bottom). The tail compressed
-// (W/D ≈ 0.6) holding its depth to the caudal base, then (round B3, B2's flat end plate read as a brush plugged into a
-// metal band) tapering on past it into the fin's fleshy base: half-width 0.063 HL at the caudal base easing to 0.010
-// HL 0.24 HL behind it (|dw/ds| ≤ 0.29, no bevel), its sides near parallel there, the dorsal and ventral margins
-// converging into the folded fin's outline (A070, A017, A067, A030), its end a rounded tongue over the middle rays (from
-// 0.20 HL behind the caudal base at the margins to 0.32 at mid-depth: the scaled base reaching furthest onto the
-// middle of the fin); the caudal's principal rays start under that skin (fins.mjs). Widths as A036 seen from above (0.12 TL at 0.30, 0.083 at 0.54, 0.046 at 0.76). Round to egg-shaped in
+// section is 0.134 TL at 0.32 TL, 1.076 × the head's depth (BD at the pectoral base 1.04); round B4 (scratchpad
+// ref/work/b4_trunk) brought the rear trunk's mid-line down where B3 still bowed up against A030 (0.0087 / 0.0095 TL
+// high at 0.70 TL): the back falls faster behind the D2's middle and runs level from 0.71 TL to the caudal base, the
+// belly lower under the anal fin, so every station at 0.35–0.75 TL is within 0.0037 TL of A030 in top and bottom (the
+// photo's bottom read as the mean of its lit edge and its contact line; B3 0.0087 / 0.0095, B2 0.0137 / 0.0112; the
+// front belly's 0.005 at 0.30 TL as B3 left it). The tail
+// compressed (W/D ≈ 0.6) and tapering from 0.80 TL (half-width 0.063 HL at the caudal base, |dw/ds| ≤ 0.29, no bevel)
+// to the scaled skin's end at the caudal base (round B4: K.tailEnd 0.03 HL past SL, a straight vertical boundary, as the
+// scales stop in A070, A017, A067 and A030; B3's skin ran on 0.20–0.32 HL past SL as a rounded tongue, a spatula over a
+// short fin, and B2's flat end plate read as a brush plugged into a metal band): the caudal fin's own fleshy base
+// (fins.mjs: a sheath round its rays' bases, as thick as the body where the skin ends) carries the peduncle's taper on
+// into the fin. Widths as A036 seen from above (0.12 TL at 0.30, 0.083 at 0.54, 0.046 at 0.76). Round to egg-shaped in
 // front, compressed behind, with no step.
 import { HEAD } from './anatomy.mjs';
 import { HEAD_SCULPT, headSDF, loftTables, loftSDF } from './head.mjs';
@@ -76,27 +79,29 @@ const ARMJ = armJoints(ARM);
 export const BODY_SCULPT = {
   // the trunk loft: it starts inside the head behind the opercle with the head loft's own section there (w and nL at
   // s 1.05–1.30 as head.mjs's loft has them, yW and nU close to it, so the head's morph into the trunk adds no waist), and
-  // runs past the caudal base into the fin's fleshy base; same columns as the head loft. Seen from above the body
+  // runs to the skin's end just past the caudal base (tailEnd; its last rows only shape the spline there); same columns
+  // as the head loft. Seen from above the body
   // behind the gill margin is 0.92 W at 1.3 HL (B047) and tapers from there without a step (0.87 W at 1.5, 0.81 W at
   // 1.75: A036, measurements.md §4.2). The belly (yB, round B3) sags from the throat (−0.012 at 1.05) to −0.050 at
   // 1.8 and rises again to the vent (the lower section a little fuller, nL 2.35–2.45, so the belly rests broad on the
   // mud as A030's and B067's do); the back (yT) eases down from the nape (0.627 at 1.3, 0.613 at 1.75) and drops from
-  // the D1's end with the three photos (A030, A002, A070), the rear trunk 0.02–0.03 HL lower than B2's at 0.60–0.75 TL
-  // (A030, A002), the tail's mid-line at 0.233 HL at the caudal base. The sections flatten a little toward the tail
+  // the D1's end with the three photos (A030, A002, A070); round B4 the rear trunk's mid-line 0.010–0.03 HL lower again
+  // at 2.40–3.70 (the back falling faster to 3.40 and level at 0.388 from 3.50 to 4.10, the belly lower under the anal
+  // fin and level along it, −0.001 to 0.005 HL from 2.6 to 3.4, so the prone fish lies along it: A030 within 0.0037 TL
+  // at 0.35–0.75 TL, where B3 bowed 0.009 TL up at 0.70 TL), yW following the mid-height,
+  // the tail's mid-line at 0.233 HL at the caudal base. The sections flatten a little toward the tail
   // (nU, nL 2.15–2.2: flanks broad enough for the wet band of light behind the anus, body_fins_colour §1.2). The
-  // peduncle (W/D 0.58 at 4.04, 0.41 at the caudal base; body_fins_colour §1.2, §6.1, A036) runs on past the caudal base
-  // as the caudal fin's fleshy base (round B3): its half-width 0.063 HL at 4.17 easing to 0.010 at 4.41 and 0.008 at
-  // the tongue's tip (|dw/ds| ≤ 0.29, the sides near parallel over the last 0.1 HL so the fin's own fleshy base takes
-  // over without a crease), its top falling and its bottom rising into the folded fin's margins (its depth 0.304 HL at
-  // 4.17, 0.24 at 4.37 where the end's margins are)
+  // peduncle (W/D 0.58 at 4.04, 0.41 at the caudal base; body_fins_colour §1.2, §6.1, A036) tapers on to the skin's end
+  // (half-width 0.057 HL where its rounding starts, |dw/ds| ≤ 0.29), its depth 0.304 HL at the caudal base; the fin's
+  // sheath (fins.mjs) takes that section over
   trunk: {
-    s:  [1.05, 1.15, 1.30, 1.50, 1.75, 2.00, 2.25, 2.40, 2.50, 2.80, 3.10, 3.40, 3.70, 3.95, 4.04, 4.10, 4.15, 4.20, 4.25, 4.30, 4.35, 4.40, 4.50],
-    w:  [0.320, 0.322, 0.321, 0.305, 0.283, 0.256, 0.236, 0.225, 0.218, 0.198, 0.172, 0.146, 0.121, 0.100, 0.090, 0.080, 0.068, 0.054, 0.040, 0.027, 0.0170, 0.0105, 0.0080],
-    yT: [0.623, 0.626, 0.627, 0.618, 0.613, 0.606, 0.592, 0.566, 0.550, 0.506, 0.460, 0.420, 0.398, 0.390, 0.388, 0.387, 0.386, 0.380, 0.369, 0.356, 0.343, 0.330, 0.304],
-    yB: [-0.012, -0.0255, -0.0365, -0.047, -0.0498, -0.0492, -0.0452, -0.019, -0.004, 0.012, 0.030, 0.035, 0.047, 0.066, 0.073, 0.077, 0.079, 0.082, 0.086, 0.090, 0.095, 0.100, 0.110],
-    yW: [0.235, 0.236, 0.232, 0.218, 0.210, 0.210, 0.212, 0.214, 0.215, 0.220, 0.226, 0.232, 0.234, 0.234, 0.234, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233],
-    nU: [2.10, 1.95, 1.95, 2.00, 2.05, 2.05, 2.05, 2.05, 2.05, 2.10, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
-    nL: [2.60, 2.50, 2.45, 2.40, 2.35, 2.30, 2.20, 2.17, 2.15, 2.15, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
+    s:  [1.05, 1.15, 1.30, 1.50, 1.75, 2.00, 2.25, 2.40, 2.50, 2.80, 3.10, 3.40, 3.70, 3.95, 4.04, 4.10, 4.15, 4.20, 4.25, 4.30],
+    w:  [0.320, 0.322, 0.321, 0.305, 0.283, 0.256, 0.236, 0.225, 0.218, 0.198, 0.172, 0.146, 0.121, 0.100, 0.090, 0.080, 0.068, 0.054, 0.040, 0.027],
+    yT: [0.623, 0.626, 0.627, 0.618, 0.613, 0.606, 0.592, 0.560, 0.540, 0.498, 0.445, 0.393, 0.388, 0.388, 0.388, 0.387, 0.386, 0.380, 0.369, 0.356],
+    yB: [-0.012, -0.0255, -0.0365, -0.047, -0.0498, -0.0492, -0.0452, -0.019, -0.004, 0.000, 0.004, 0.005, 0.027, 0.066, 0.073, 0.077, 0.079, 0.082, 0.086, 0.090],
+    yW: [0.235, 0.236, 0.232, 0.218, 0.210, 0.210, 0.212, 0.211, 0.210, 0.210, 0.2055, 0.2035, 0.219, 0.233, 0.234, 0.233, 0.233, 0.233, 0.233, 0.233],
+    nU: [2.10, 1.95, 1.95, 2.00, 2.05, 2.05, 2.05, 2.05, 2.05, 2.10, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
+    nL: [2.60, 2.50, 2.45, 2.40, 2.35, 2.30, 2.20, 2.17, 2.15, 2.15, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
   },
   // behind the opercle the head's field morphs into the trunk's over this range (the head's own features end at the
   // opercle; a cut and a union would leave a ring where the two sections differ)
@@ -152,13 +157,14 @@ export const BODY_SCULPT = {
   // anal from 0.52 TL (preanal 62 % SL) to 0.705 TL, opposite D2 and ending a little before it (base 0.185 TL; Murdy 0.166).
   // The D1 stands in a shallow groove instead of on a ridge (body_fins_colour §2.3: it "folds into a groove"): its keel
   // sunk under the skin and a furrow `groove.depth` deep along its base (0.005–0.006 HL below the lips at mid-fin),
-  // faded out at both ends; round B3 the anal fin likewise (its keel sunk, a furrow along the ventral midline over
-  // groove.s, past the fin's end where its folded rays reach): the folded fin lies in it, its lowest point ≤ 0.009 HL
-  // under the ventral line (B2: 0.029, the lowest point of the resting fish's tail)
+  // faded out at both ends; the anal fin likewise (its keel sunk, a furrow along the ventral midline over groove.s, past
+  // the fin's end where its folded rays reach): the folded fin lies in it (round B4: `depth` 0.022, the furrow reaching
+  // full depth sooner, `fade` sin^0.2 over `n` 24 steps, so the front rays' spines lie in it too: no vertex of the folded
+  // fin under the ventral line on hero and lod1; B3 0.0088 HL at the first ray, B2 0.029)
   keels: {
     d1: { s: [1.48, 2.255], radius: 0.015, inset: 0.020, groove: { depth: 0.007, r: 0.02 } },
     d2: { s: [2.43, 3.57], radius: 0.020, inset: 0.012 },
-    anal: { s: [2.58, 3.50], radius: 0.018, inset: 0.020, groove: { depth: 0.016, r: 0.022, s: [2.56, 3.84] } },
+    anal: { s: [2.58, 3.50], radius: 0.018, inset: 0.020, groove: { depth: 0.022, r: 0.022, s: [2.56, 3.84], fade: 0.2, n: 24 } },
     blend: 0.03,
   },
   // the anus (pre-anus 56.7 % SL, Itoh 1999: 0.477 TL) a small pit on the ventral midline, and the urogenital papilla
@@ -169,12 +175,13 @@ export const BODY_SCULPT = {
   papilla: { s: [2.42, 2.51], sink: 0.010, drop: 0.004, r: [0.024, 0.011], flat: 0.75, blend: 0.012 },
   // the caudal base (SL; the hypural joint): the fin's rays fan out from the hypural plate just behind it (fins.mjs)
   caudalBase: 4.17,
-  // the end of the fin's fleshy base (round B3; B2 ended the body at a flat plate at 4.24 with the rays on its face, the
-  // brush in a metal band of both reviews): a cut at s at the margins, bowed back by `bulge` at mid-depth into a rounded
-  // tongue over the middle rays (the scaled base reaching furthest onto the fin's middle; a straight end margin still
-  // read as a band in the clay side views), rounded by `blend`, where the body is 0.008–0.014 HL thick a side and the
-  // fin's own fleshy base takes over at that thickness
-  tailEnd: { s: 4.37, blend: 0.012, bulge: 0.12 },
+  // the end of the scaled skin (round B4): a straight cut at s, 0.03 HL past the caudal base (the photos' scales stop
+  // at SL, within 0.05–0.08 HL), rounded by `blend`; the trunk's table has tapered the peduncle to 0.054 HL a side
+  // (0.30 HL deep) there, and the caudal fin's sheath (fins.mjs) takes over at that thickness and carries the taper on
+  // over the rays' bases. B3 bowed the cut back by `bulge` 0.12 into a rounded
+  // tongue to 4.37 over the middle rays (read as a skin tongue on the fin; the rays a brush in a band behind it); B2
+  // ended the body at a flat plate at 4.24
+  tailEnd: { s: 4.20, blend: 0.012, bulge: 0 },
 };
 
 /** The trunk loft's sampled tables (for fin placement and the rig: top, bottom, half-width per station). */
@@ -271,9 +278,9 @@ export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
   const grooveOf = (spec, top) => {
     const GR = spec.groove;
     if (!GR) return null;
-    const pts = [], radii = [], n = 12, [s0, s1] = GR.s ?? spec.s;
+    const pts = [], radii = [], n = GR.n ?? 12, [s0, s1] = GR.s ?? spec.s;
     for (let i = 0; i <= n; i++) {
-      const s = s0 - 0.02 + ((s1 - s0 + 0.06) * i) / n, a = Math.sin((Math.PI * i) / n) ** 0.5, q = prof.at(s);
+      const s = s0 - 0.02 + ((s1 - s0 + 0.06) * i) / n, a = Math.sin((Math.PI * i) / n) ** (GR.fade ?? 0.5), q = prof.at(s);
       pts.push([s, top ? q.yT + GR.r - GR.depth * a : q.yB - GR.r + GR.depth * a, 0]); radii.push(GR.r);
     }
     return tube(pts, radii);
