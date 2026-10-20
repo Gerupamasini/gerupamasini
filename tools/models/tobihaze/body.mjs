@@ -96,7 +96,10 @@ function flatLimb(a, b, ra, rb, flat, faceN) {
   };
 }
 
-/** The whole fish's distance function in HL units (s, y, z). */
+/** The whole fish's distance function in HL units (s, y, z). H: the head's sculpt (a sealed copy for the coarser
+ * tiers). f.head is the head's own field (with .parts and .cup, for the head rig), f.cup its eye cups, and
+ * f.parts(x, y, z) the head's parts plus the body's: the fields before and after the pectoral lobes and the pelvic base
+ * are united in (the rig's share of each), the lobe's and the pelvic base's own fields, the head–trunk morph weight. */
 export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
   const head = headSDF({ ...H, floorY: -10 }, { cut: false });
   const trunk = loftSDF(loftTables(K.trunk, 4096));
@@ -120,25 +123,58 @@ export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
   };
   const kD1 = keel(K.keels.d1, true), kD2 = keel(K.keels.d2, true), kA = keel(K.keels.anal, false);
   const F = K.floor;
-  return (x, y, z) => {
-    const za = Math.abs(z);
+  // the field in its stages: the head morphed into the trunk with the floor and the keels, then the pelvic base, then
+  // the pectoral lobes (left and right by |z|)
+  const core = (x, y, z) => {
     const wj = smoothstep(K.join.from, K.join.to, x);
     const dt = smax(trunk(x, y, z), x - K.tailEnd.s, K.tailEnd.blend);
     let d = wj <= 0 ? head(x, y, z) : wj >= 1 ? dt : head(x, y, z) * (1 - wj) + dt * wj;
     // the head's flat floor (as head.mjs applies it), fading out behind the gill opening
     const fade = smoothstep(F.fadeFrom, F.fadeTo, x) * F.fadeDepth;
     d = smax(d, F.y - fade - y, F.blend);
-    d = smin(d, Math.min(kD1(x, y, z), kD2(x, y, z), kA(x, y, z)), K.keels.blend);
-    d = smin(d, pelvic(x, y, z), K.pelvicBase.blend);
-    d = smin(d, smin(root(x, y, za), Math.min(lobeA(x, y, za), lobeB(x, y, za)), 0.02), P.blend);
-    return d;
+    return smin(d, Math.min(kD1(x, y, z), kD2(x, y, z), kA(x, y, z)), K.keels.blend);
   };
+  const lobe = (x, y, za) => smin(root(x, y, za), Math.min(lobeA(x, y, za), lobeB(x, y, za)), 0.02);
+  const f = (x, y, z) => {
+    const d = smin(core(x, y, z), pelvic(x, y, z), K.pelvicBase.blend);
+    return smin(d, lobe(x, y, Math.abs(z)), P.blend);
+  };
+  f.head = head;
+  f.cup = head.cup;
+  f.parts = (x, y, z) => {
+    const noPelvic = core(x, y, z), dp = pelvic(x, y, z), noLobe = smin(noPelvic, dp, K.pelvicBase.blend);
+    const dl = lobe(x, y, Math.abs(z));
+    return {
+      ...head.parts(x, y, z), wj: smoothstep(K.join.from, K.join.to, x),
+      noPelvic, pelvic: dp, noLobe, lobe: dl, d: smin(noLobe, dl, P.blend),
+    };
+  };
+  return f;
 }
 
-/** The whole fish's distance in mm (fish frame) for a head length of HLmm. */
+/** Where a point lies along the pectoral lobe (HL; side +1 left, −1 right): t from 0 at the shoulder through 1 at the
+ * elbow to 2 at the wrist (nearest point of the polyline; past either end it runs on), r its distance from the axis. */
+export function lobeParam(p, side = 1, K = BODY_SCULPT) {
+  const P = K.pectoral, q = [p[0], p[1], p[2] * side];
+  let best = null;
+  [[P.shoulder, P.elbow, 0], [P.elbow, P.wrist, 1]].forEach(([a, b, k], i) => {
+    const ab = sub(b, a), L2 = dot(ab, ab);
+    let t = dot(sub(q, a), ab) / L2;
+    // clamp at the inner joint only (the ends run on)
+    if (i === 0) t = Math.min(t, 1); else t = Math.max(t, 0);
+    const c = add(a, mul(ab, t)), r = Math.hypot(...sub(q, c));
+    if (!best || r < best.r) best = { t: k + t, r };
+  });
+  return best;
+}
+
+/** The whole fish's distance in mm (fish frame) for a head length of HLmm; .hl is the field in HL (with .head, .cup and
+ * .parts). */
 export function fishSDFmm(HLmm, K = BODY_SCULPT, H = HEAD_SCULPT) {
   const f = fishSDF(K, H), k = 1 / HLmm;
-  return (x, y, z) => f(x * k, y * k, z * k) * HLmm;
+  const g = (x, y, z) => f(x * k, y * k, z * k) * HLmm;
+  g.hl = f;
+  return g;
 }
 
 /** Landmarks for the fins and the rig (HL, fish frame; left side where sided). */

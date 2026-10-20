@@ -6,11 +6,13 @@
 //   socket  the inside of each dermal cup                                                            L [0.37, 0.56], R [0.46, 0.56], 0.08 square
 //   lobe    each pectoral arm, a cylinder about its own axis (seam against the flank)                 L [0.56, 0.56], R [0.56, 0.72], 0.16 × 0.14
 // The texel density is about 0.0019 HL (0.03 mm) per texel on the hero in every chart; [0.80, 0.56] – [1, 1] is free.
-import { HL, HEAD } from './anatomy.mjs';
+import { HL, HEAD, EYE_MM } from './anatomy.mjs';
 import { HEAD_SCULPT } from './head.mjs';
 import { BODY_SCULPT, fishSDFmm, trunkProfile } from './body.mjs';
 import { azimuthal, cylinder, limb, vec } from './charts.mjs';
 import { tierMesh, ready } from './tiers.mjs';
+import { surfaceNets } from './mesher.mjs';
+import { fixWinding } from './headrig.mjs';
 import { smoothstep } from './sdf.mjs';
 
 export { ready };
@@ -81,4 +83,73 @@ export function bodyCharts(K = BODY_SCULPT) {
 export function bodyTierMesh(o, K = BODY_SCULPT) {
   const { charts, prefer } = bodyCharts(K);
   return tierMesh(fishSDFmm(HL, K), BODY_BOX, { ...o, charts, prefer });
+}
+
+/** The mesh with only the triangles `keep(t)` accepts, its vertices compacted (`source`: new vertex → old). */
+export function filterTriangles(mesh, keep) {
+  const n = mesh.position.length / 3, remap = new Int32Array(n).fill(-1), tris = [];
+  let m = 0;
+  for (let t = 0; t < mesh.indices.length / 3; t++) {
+    if (!keep(t)) continue;
+    for (let k = 0; k < 3; k++) { const v = mesh.indices[t * 3 + k]; if (remap[v] < 0) remap[v] = m++; tris.push(remap[v]); }
+  }
+  const source = new Uint32Array(m), position = new Float32Array(m * 3), normal = new Float32Array(m * 3);
+  for (let v = 0; v < n; v++) {
+    const j = remap[v];
+    if (j < 0) continue;
+    source[j] = v;
+    position.set(mesh.position.subarray(v * 3, v * 3 + 3), j * 3);
+    normal.set(mesh.normal.subarray(v * 3, v * 3 + 3), j * 3);
+  }
+  return { position, normal, indices: Uint32Array.from(tris), source };
+}
+
+/** Only the largest edge-connected component (the surface nets also mesh closed bubbles inside the sculpt, such as the
+ * mouth cavity behind the closed slit: never seen, but they cost triangles and fold the UV charts). */
+export function keepLargestComponent(mesh) {
+  const n = mesh.position.length / 3, parent = new Int32Array(n).map((_, i) => i);
+  const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  const I = mesh.indices;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = find(I[t]), b = find(I[t + 1]), c = find(I[t + 2]);
+    parent[b] = a; parent[find(c)] = a;
+  }
+  const count = new Map();
+  for (let t = 0; t < I.length; t += 3) { const r = find(I[t]); count.set(r, (count.get(r) ?? 0) + 1); }
+  let best = -1, bestN = -1;
+  for (const [r, c] of count) if (c > bestN) { best = r; bestN = c; }
+  const out = filterTriangles(mesh, (t) => find(I[t * 3]) === best);
+  out.dropped = I.length / 3 - bestN;
+  return out;
+}
+
+/** Without the triangles lying wholly inside a resting eye globe (more than `margin` HL under its surface): the globe
+ * mesh covers them, the head rig gives them the eye joint alone, and the blink keeps them inside the lowered globe. */
+export function pruneInsideGlobes(mesh, { margin = 0.004 } = {}) {
+  const r = EYE_MM.radius - margin * HL, c = EYE_MM.center, P = mesh.position, I = mesh.indices;
+  const inside = (v) => {
+    const x = P[v * 3] - c[0], y = P[v * 3 + 1] - c[1], z = Math.abs(P[v * 3 + 2]) - c[2];
+    return x * x + y * y + z * z < r * r;
+  };
+  const out = filterTriangles(mesh, (t) => !(inside(I[t * 3]) && inside(I[t * 3 + 1]) && inside(I[t * 3 + 2])));
+  out.pruned = I.length / 3 - out.indices.length / 3;
+  return out;
+}
+
+/**
+ * The whole fish's dense skin at a cell of h mm (fish frame mm): surface nets of the field, triangles wound with their
+ * neighbours, only the outer skin (no inner bubbles), nothing hidden inside the globes. `source` maps each vertex to the
+ * raw surface-nets vertex.
+ * @param o { h, field?: distance (mm; default the full sculpt), box?, log? }
+ */
+export function fishDense({ h, field, box = BODY_BOX, log = () => {} }) {
+  const f = field ?? fishSDFmm(HL);
+  const raw = surfaceNets(f, box, h, { log });
+  const turned = fixWinding(raw.indices);
+  const a = keepLargestComponent(raw);
+  const b = pruneInsideGlobes(a);
+  const source = new Uint32Array(b.source.length);
+  for (let i = 0; i < source.length; i++) source[i] = a.source[b.source[i]];
+  log(`dense h ${h}: ${b.position.length / 3} vertices, ${b.indices.length / 3} triangles (turned ${turned}, dropped ${a.dropped} in bubbles, pruned ${b.pruned} inside the globes)`);
+  return { position: b.position, normal: b.normal, indices: b.indices, source, field: f, stats: { turned, dropped: a.dropped, pruned: b.pruned } };
 }
