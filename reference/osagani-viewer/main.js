@@ -58,7 +58,8 @@ function showLod(m, l) {
   m.lod.levels.forEach((lv, i) => { lv.object.visible = i === l; });
 }
 
-const chela = () => chelaFor(S.sex ? 'f' : 'm', S.cw);
+// (`arm` overrides the arm's scale: the scan's claw compared at its own size)
+const chela = () => { const c = chelaFor(S.sex ? 'f' : 'm', S.cw); return S.arm ? { ...c, arm: S.arm } : c; };
 function lookFor() {
   if (S.clay) return new ClayLook(S.sex, chela().male);
   return new OsaganiLook({ seed: S.seed * 13.7, sex: S.sex, maleChela: chela().male, juvenile: S.juvenile, morph: S.morph, palmBlue: S.palmBlue, mud: S.mud, value: 1 });
@@ -246,7 +247,7 @@ window.__os = {
     return { min: b.min.toArray(), max: b.max.toArray() };
   },
   set(o) {
-    for (const k of ['lod', 'sex', 'clay', 'cw', 'pose', 'hideLegs', 'ortho', 'floor', 'bg', 'body', 'scan', 'scanXf', 'scanClay', 'morph', 'seed', 'mud', 'palmBlue', 'juvenile', 'wet', 'mudFloor', 'behave', 'threat']) if (o[k] !== undefined) S[k] = o[k];
+    for (const k of ['arm', 'lod', 'sex', 'clay', 'cw', 'pose', 'hideLegs', 'ortho', 'floor', 'bg', 'body', 'scan', 'scanXf', 'scanClay', 'morph', 'seed', 'mud', 'palmBlue', 'juvenile', 'wet', 'mudFloor', 'behave', 'threat']) if (o[k] !== undefined) S[k] = o[k];
     if (o.legs !== undefined) S.legs = o.legs ?? {};
     if (o.view) { S.view = o.view; studio(o.view); } else if (crab) showLod(crab, S.lod);
     if (o.floor !== undefined && floorMesh) floorMesh.visible = S.floor && S.pose !== 'bind';

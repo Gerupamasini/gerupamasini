@@ -676,9 +676,9 @@ export function createCrabBehavior(o: CrabOptions) {
         break;
       }
     }
-    // the male's long fingers kept at the mud's surface however low the body sits (resting by the burrow, feeding):
-    // ≈ 11 mm of fingertip height a radian of `lev`
-    if (male && st.mode !== 'DEFEND') G.lev += Math.max(0, LIFT.stand * 1.05 - st.lift) / 11;
+    // the male's fingers kept at the mud's surface however low the body sits (resting by the burrow, feeding): the palm
+    // turned up at the wrist, ≈ 30 mm of fingertip height a radian of `cp` in the standing pose
+    if (male && st.mode !== 'DEFEND') G.cp += Math.max(0, LIFT.stand * 1.12 - st.lift) / 30;
   }
 
   // ------------------------------------------------------------ the pose

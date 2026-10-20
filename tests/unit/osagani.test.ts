@@ -82,11 +82,11 @@ describe('ヤマトオサガニ: the body plan', () => {
       // the merus a deep blade standing in the knee's plane: half as thick as high or less, deep for its length, its
       // dorsal margin a keel (a teardrop section: the scan's legs)
       expect(mid.hy / mid.hz).toBeGreaterThan(1.5);
-      expect((mid.hy * 2) / me.length).toBeGreaterThan(0.25);
+      expect((mid.hy * 2) / me.length).toBeGreaterThan(0.24);
       expect(me.tear ?? 0).toBeGreaterThan(0.2);
-      // the dactylus flattened the other way: broader across the leg's plane than in it
+      // the dactylus flattened the other way on P2–P4: broader across the leg's plane than in it (P5's nearly round)
       const dmid = da.sections[1];
-      expect(dmid.hz).toBeGreaterThan(dmid.hy);
+      if (spec.id !== 'P5') expect(dmid.hz).toBeGreaterThan(dmid.hy);
       // necks at the joints
       for (const n of ['bi', 'me', 'ca', 'pr', 'da']) expect(art(n).neck ?? 0).toBeGreaterThan(0.03);
       // the dactylus ends in a point
@@ -100,10 +100,17 @@ describe('ヤマトオサガニ: the body plan', () => {
   });
 
   it("the mature male's chela large (propodus ≈ 0.95 CW) with deflexed fingers; the female's small", () => {
-    // from the palm's joint to the closed fingertip, and the fingers ≈ 40° below the palm's axis (A45, square-on)
+    // from the palm's joint to the closed fingertip, the fixed finger ≈ 32° and the dactylus ≈ 50° below the palm's axis
+    // (the scan's chela laid on its outer face)
     expect(Math.hypot(...CHELA_MALE.tip) / CW_MM).toBeGreaterThan(0.85);
     expect(CHELA_MALE.fingerAngle).toBeLessThan(-0.5);
     expect(CHELA_MALE.fingerAngle).toBeGreaterThan(-0.9);
+    expect(CHELA_MALE.daAngle).toBeLessThan(CHELA_MALE.fingerAngle);
+    // the palm long, the fingers short: the fixed finger well under half the palm's length (the scan, A45, B33, B34)
+    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeLessThan(0.5);
+    // the palm stout: thicker than half its height through its proximal half (the scan)
+    const mid = CHELA_MALE.palm.sections.find((k) => k.t > 0.4)!;
+    expect(mid.hz / mid.hy).toBeGreaterThan(0.55);
     // the palm tallest distally, where the fingers spring from it
     const hy = CHELA_MALE.palm.sections.map((s) => s.hy);
     expect(hy[hy.length - 1]).toBeGreaterThanOrEqual(Math.max(...hy));

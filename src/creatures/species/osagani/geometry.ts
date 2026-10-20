@@ -694,7 +694,7 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
       if (leg.id === 'P1' && (pc.finger || spec.name === 'da')) {
         const male = flag === FLAG.MALE_CHELA;
         const fixed = !!pc.finger;
-        const [t0, t1] = fixed ? [0.06, 0.93] : [0.12, 0.92];
+        const [t0, t1] = fixed ? [0.32, 0.93] : [0.12, 0.92];
         const count = lod.fingerTeeth ? (male ? 15 : 11) : 0;
         const a = fixed ? 0 : Math.PI;
         for (let k = 0; k < count; k++) {
@@ -777,10 +777,10 @@ function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
     tube([P('cx'), P('me'), P('me', L[2] * 0.5), P('ca'), P('pr'), P('da'), tip], [0.7 * b, 0.85 * b, b, 0.62 * b, 0.6 * b, 0.3 * b, 0.1], part, 0, true);
     return;
   }
-  tube([P('cx'), P('me'), P('ca'), P('ca', 5.0)], [1.4, 1.5, 1.8, 1.6], part);
+  tube([P('cx'), P('me'), P('ca'), P('ca', leg.lengths[3])], [1.8, 2.4, 2.9, 2.7], part);
   // the chelae: a palm and the two fingers each (the male's long, the female's small)
   for (const [ch, flag, daBone] of [[CHELA_MALE, FLAG.MALE_CHELA, 'da'], [CHELA_FEMALE, FLAG.FEMALE_CHELA, 'daF']] as const) {
-    const L = ch.palm.length, h = ch.palm.sections[3].hy;
+    const L = ch.palm.length, h = Math.max(...ch.palm.sections.map((k) => k.hy)) * 0.75;
     const fa = ch.fingerAngle, fl = ch.finger.length;
     const fx = ch.fingerAt[0] + Math.cos(fa) * fl, fy = ch.fingerAt[1] + Math.sin(fa) * fl;
     const cy = ch.palm.sections[ch.palm.sections.length - 1].cy ?? 0;

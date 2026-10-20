@@ -43,11 +43,13 @@
  *              together ≈ 0.4 CW across with a gap between them (B61, B64, A47, A45): the merus above (the "white
  *              ovals" of the field photographs: A19, A25, A47, B4, B12, B29; bluish in B39, B40) and the ischium below,
  *              the exopod along the outer edge, the palp at the inner upper corner
- *  - chelipeds the mature male's large and long: propodus 0.82 CW at CW 30 (Wada 2018), the palm elongate and
- *              compressed, the fingers deflexed ≈ 30°, a large wedge-shaped tooth on the fixed finger's cutting edge
- *              at a distance from its base, the cutting edges brown (A45, B12, B33, B34, B8, B29); the merus a long
- *              three-sided prism fringed with setae (B2, B34). The female's (and the immature male's) small, slender,
- *              with pointed, little-deflexed fingers (A47, B62, B68)
+ *  - chelipeds the mature male's large and long: propodus 0.82 CW at CW 30 (Wada 2018), the palm long and stout (the
+ *              scan's: 0.53 as high as long, thick through its proximal half), the fingers short and deflexed — the
+ *              fixed finger ≈ 32°, the dactylus arched ≈ 50° over it — their tips curving in, a large wedge-shaped tooth
+ *              on the fixed finger's cutting edge at a distance from its base, the cutting edges brown (the scan; A45,
+ *              B12, B33, B34, B8, B29); the merus a long three-sided prism fringed with setae, the carpus long and stout
+ *              (the scan; B2, B34). The female's (and the immature male's) small, slender, with pointed, little-deflexed
+ *              fingers (A47, B62, B68)
  *  - walking   long: P2 < P3 < P4 > P5, 1.02, 1.31, 1.35, 0.71 CW from merus to dactylus, the merus over 0.4 of it
  *  legs        (the scan's legs along their axes). The meri deep blades standing in the knee's plane, ≈ 0.21 CW high
  *              and half as thick, a teardrop in section — the dorsal margin a thin keel set with spinules, the ventral
@@ -64,7 +66,7 @@
  * right, so that both frames are right-handed and a positive turn about z always lifts).
  */
 
-import { DORSUM, WALL } from './scanfit';
+import { DORSUM, LEGS, WALL } from './scanfit';
 
 export const CW_MM = 35;
 /** model carapace width (m): the geometry is built for a 35 mm crab and scaled to the individual */
@@ -364,28 +366,31 @@ export interface LegSpec {
 
 const S = (t: number, hy: number, hz: number, cy = 0, cz = 0): SectionKnot => ({ t, hy, hz, cy, cz });
 
-/** a walking leg's article lengths (mm) and its sections: the merus's, the carpus's and the propodus's height (in the
- *  knee's plane) and thickness (across it), the dactylus's thickness (in the plane) and breadth (across it), full mm */
+/** a walking leg's article lengths (mm), its sections' lean (rad, + the dorsal edge back) on the merus, the carpus and
+ *  the propodus, and the merus's keel (`tear`); the sections themselves are the scan's (`LEGS`) */
 export interface WalkingDims {
   cx: number; bi: number; me: number; ca: number; pr: number; da: number;
-  meH: number; meT: number; caH: number; caT: number; prH: number; prT: number; daT: number; daB: number;
-  /** the sections' lean (rad, + the dorsal edge back) of the merus, the carpus and the propodus, and the merus's keel */
   lean: [number, number, number];
   tear: number;
 }
 
 /**
- * A walking leg, from the CC0 scan's legs (sections cut square to each article's axis, 0.25 mm voxels; its 1.28 times
- * to CW 35). Never a cylinder: the merus a deep blade standing in the knee's plane — twice as high as thick, its
- * dorsal margin drawn to a thin keel leaning ≈ 15° back, set with spinules and a subdistal spine, the ventral margin
- * blunt, full and fringed with setae (the thickness across it 0.87 · 1 · 1 · 0.95 · 0.87 · 0.7 · 0.55 · 0.35 from
- * the ventral margin to the keel); the carpus a rounded box ≈ 1.2 times as high as thick, crested above; the propodus
- * a high oval ≈ 1.7 times as high as thick, setose below; the dactylus a slender blade flattened the other way, broad
- * across the plane, to a sharp, slightly down-curved point (B70, A1). Each narrowed a little at its proximal joint
- * (B65, B70). The leg's plane is turned on the hind legs (`BIND.roll`): the meri's faces look up and back from above.
+ * A walking leg, from the CC0 scan's legs (sections cut square to each article's chord every 5 % of its length, 0.25 mm
+ * voxels; its 1.28 times to CW 35: `LEGS`). Every article its own shape, never a cylinder: the merus a deep blade
+ * standing in the knee's plane, highest a third of the way out and its ventral margin rising towards the knee, the
+ * dorsal margin a thin keel leaning ≈ 15° back, set with spinules and a subdistal spine, the ventral margin blunt, full
+ * and fringed with setae; the carpus narrow at the knee and widening distally while it thins, crested above; the
+ * propodus a high oval tapering distally and bowed a little up; the dactylus flattened the other way, broad across the
+ * plane, arched, to a sharp, slightly down-curved point (B70, A1). Each narrowed a little at its proximal joint (B65,
+ * B70). The leg's plane is turned on the hind legs (`BIND.roll`): the meri's faces look up and back from above.
  */
-function walkingLeg(id: LegId, coxa: V3, yaw: number, D: WalkingDims): LegSpec {
-  const mh = D.meH / 2, mt = D.meT / 2, ch = D.caH / 2, ct = D.caT / 2, ph = D.prH / 2, pt = D.prT / 2, dt = D.daT / 2, db = D.daB / 2;
+function walkingLeg(id: Exclude<LegId, 'P1'>, coxa: V3, yaw: number, D: WalkingDims): LegSpec {
+  const T = LEGS[id];
+  const rows = (r: number[][]) => r.map(([t, hy, hz, cy, cz]) => S(t, hy, hz, cy, cz));
+  const mh = Math.max(...T.me.map((r) => r[1])), mt = Math.max(...T.me.map((r) => r[2]));
+  // (the dactylus beyond the scan's blunt tips: on along its arch to a sharp point)
+  const d = T.da[T.da.length - 1];
+  const da = [...rows(T.da), S(0.85, 0.62 * d[1], 0.58 * d[2], 0.6 * d[3], 0.6 * d[4]), S(0.95, 0.16, 0.14, 0.2 * d[3]), S(1, 0.03, 0.03, 0)];
   // (each section's lean: a turn about the article's axis, its dorsal edge towards posterior)
   const [lm, lc, lp] = D.lean;
   return {
@@ -398,33 +403,32 @@ function walkingLeg(id: LegId, coxa: V3, yaw: number, D: WalkingDims): LegSpec {
       { name: 'bi', length: D.bi, n: 2.4, neck: 0.05, twist: [[0, 0], [1, lm * 0.6]], sections: [S(0, 0.58 * mh + 0.3, 0.92 * mt + 0.1), S(0.45, 0.7 * mh + 0.1, 0.95 * mt), S(1, 0.8 * mh, 0.9 * mt, -0.06 * mh)] },
       // merus: the deep blade, keeled above
       {
-        name: 'me', length: D.me, n: 2.4, nz: 2.1, tear: D.tear, neck: 0.04, twist: [[0, lm * 0.8], [1, lm]],
-        sections: [S(0, 0.82 * mh, 0.88 * mt, -0.05 * mh), S(0.1, 0.92 * mh, 0.96 * mt), S(0.4, 1.0 * mh, 1.0 * mt), S(0.85, 0.94 * mh, 0.95 * mt), S(1, 0.8 * mh, 0.84 * mt)],
+        name: 'me', length: D.me, n: 2.4, nz: 2.1, tear: D.tear, neck: 0.04, twist: [[0, lm * 0.8], [1, lm]], sections: rows(T.me),
         costae: [[0, 0.14, 0.18], [Math.PI / 2, 0.05, 0.45], [Math.PI, 0.05, 0.5]],
         serrate: { a: 0.08, t0: 0.12, t1: 0.86, count: 14, length: 0.34 },
         spines: [{ t: 0.9, a: 0.12, length: 0.8, r: 0.22, lean: 0.95 }],
       },
-      // carpus: shorter, a rounded box, a crest along its upper face (A1)
-      { name: 'ca', length: D.ca, n: 2.6, nz: 2.4, tear: 0.18, neck: 0.1, twist: [[0, lm], [0.3, lc], [1, lc]], sections: [S(0, 0.74 * ch, 0.8 * ct), S(0.22, 0.95 * ch, 0.97 * ct), S(0.8, 1.0 * ch, 1.0 * ct), S(1, 0.9 * ch, 0.9 * ct)], costae: [[0, 0.12, 0.3]] },
-      // propodus: a high oval, a little narrower distally, stiff setae below (A1)
-      { name: 'pr', length: D.pr, n: 2.3, nz: 2.1, tear: 0.2, neck: 0.08, twist: [[0, lc], [0.3, lp], [1, lp]], sections: [S(0, 0.82 * ph, 0.84 * pt), S(0.15, 0.97 * ph, 0.97 * pt), S(0.6, 1.0 * ph, 1.0 * pt), S(1, 0.82 * ph, 0.86 * pt)], costae: [[0, 0.08, 0.35]] },
+      // carpus: widening distally, a crest along its upper face (A1)
+      { name: 'ca', length: D.ca, n: 2.6, nz: 2.4, tear: 0.18, neck: 0.1, twist: [[0, lm], [0.3, lc], [1, lc]], sections: rows(T.ca), costae: [[0, 0.12, 0.3]] },
+      // propodus: a high oval tapering distally, stiff setae below (A1)
+      { name: 'pr', length: D.pr, n: 2.3, nz: 2.1, tear: 0.2, neck: 0.08, twist: [[0, lc], [0.3, lp], [1, lp]], sections: rows(T.pr), costae: [[0, 0.08, 0.35]] },
       // dactylus: a slender blade, broad across the leg's plane, to the sharp, slightly down-curved tip (B70, A1)
-      { name: 'da', length: D.da, n: 2.1, neck: 0.08, sections: [S(0, 0.9 * dt, 0.86 * db), S(0.12, dt, db), S(0.45, 0.85 * dt, 0.82 * db, -0.06), S(0.8, 0.5 * dt, 0.42 * db, -0.2), S(0.95, 0.16, 0.14, -0.33), S(1, 0.03, 0.03, -0.4)] },
+      { name: 'da', length: D.da, n: 2.1, neck: 0.08, sections: da },
     ],
   };
 }
 
 /**
- * The leg pairs measured on the scan (mm at CW 35; the scan's sections a few per cent under its own figures, for the
- * setae and the scan's bloom): the meri long and deep — P3's 0.61 CW long and 0.21 CW high (B24, B65 from above, A45,
- * A47 from the front) — P4 the longest leg, 1.35 CW from merus to dactylus; P2 smaller throughout; P5 short, its
- * propodus a flat oval. (P2's dactylus is short on the scan, its tip lost: set from P3's proportions.)
+ * The leg pairs' article lengths measured on the scan from joint to joint (mm at CW 35): the meri long — P3's 0.61 CW
+ * (B24, B65 from above, A45, A47 from the front) — P4 the longest leg, 1.35 CW from merus to dactylus; P2 smaller
+ * throughout; P5 short, its propodus a flat oval. (P2's dactylus is short on the scan, its tip lost: set from P3's
+ * proportions.) The sections' leans read off the scan's sections at mid-length.
  */
 export const WALKING: Record<'P2' | 'P3' | 'P4' | 'P5', WalkingDims> = {
-  P2: { cx: 1.7, bi: 1.9, me: 18.9, ca: 5.6, pr: 6.4, da: 4.8, meH: 5.0, meT: 3.25, caH: 3.75, caT: 2.75, prH: 3.4, prT: 2.0, daT: 1.1, daB: 1.95, lean: [0.28, 0.2, 0.2], tear: 0.5 },
-  P3: { cx: 1.9, bi: 2.6, me: 21.5, ca: 8.0, pr: 9.4, da: 6.8, meH: 7.3, meT: 3.7, caH: 4.4, caT: 3.65, prH: 4.6, prT: 2.85, daT: 1.25, daB: 2.2, lean: [0.4, 0.15, 0.0], tear: 0.5 },
-  P4: { cx: 1.7, bi: 1.9, me: 21.3, ca: 8.4, pr: 9.7, da: 7.8, meH: 7.3, meT: 3.25, caH: 4.0, caT: 3.2, prH: 4.7, prT: 2.4, daT: 1.3, daB: 1.65, lean: [0.15, 0.1, -0.4], tear: 0.3 },
-  P5: { cx: 1.8, bi: 2.4, me: 10.0, ca: 4.3, pr: 6.3, da: 4.2, meH: 5.6, meT: 2.05, caH: 3.6, caT: 1.7, prH: 4.4, prT: 1.45, daT: 1.1, daB: 1.8, lean: [0.12, -0.35, -0.45], tear: 0.5 },
+  P2: { cx: 1.7, bi: 1.9, me: 18.9, ca: 5.6, pr: 6.4, da: 4.8, lean: [0.28, 0.2, 0.2], tear: 0.5 },
+  P3: { cx: 1.9, bi: 2.6, me: 21.5, ca: 8.0, pr: 9.4, da: 6.8, lean: [0.4, 0.15, 0.0], tear: 0.5 },
+  P4: { cx: 1.7, bi: 1.9, me: 21.3, ca: 8.4, pr: 9.7, da: 7.8, lean: [0.15, 0.1, -0.4], tear: 0.3 },
+  P5: { cx: 1.8, bi: 2.4, me: 10.0, ca: 4.3, pr: 6.3, da: 4.2, lean: [0.12, -0.35, -0.45], tear: 0.5 },
 };
 
 /**
@@ -434,20 +438,22 @@ export const WALKING: Record<'P2' | 'P3' | 'P4' | 'P5', WalkingDims> = {
  * the meri's as they stand on the scan: forward and out on the front legs, out on P4, out and a little back on P5.
  */
 export function legSpecs(): LegSpec[] {
+  // the cheliped's arm, from the scan's left cheliped: its merus and carpus cut square to their chords, at the scan's own
+  // proportions to the body (Wada's (2018) allometry is the propodus's: the chela alone is drawn larger, `CHELA_MALE`)
   const P1: LegSpec = {
     id: 'P1', coxa: [8.0, 4.2, 5.2], yaw: 0.7,
     articles: [
-      { name: 'cx', length: 2.4, n: 2.3, sections: [S(0, 1.5, 1.6), S(0.5, 1.6, 1.7), S(1, 1.45, 1.5)] },
-      { name: 'bi', length: 3.0, n: 2.3, neck: 0.15, sections: [S(0, 1.2, 1.25), S(0.3, 1.35, 1.35), S(1, 1.55, 1.45)] },
-      // merus: a long three-sided prism, its lower margins fringed with setae (B2, B34)
+      { name: 'cx', length: 2.4, n: 2.3, sections: [S(0, 1.6, 1.7), S(0.5, 1.75, 1.85), S(1, 1.7, 1.75)] },
+      { name: 'bi', length: 3.0, n: 2.3, neck: 0.15, sections: [S(0, 1.35, 1.4), S(0.3, 1.5, 1.55), S(1, 1.65, 1.75)] },
+      // merus: a long three-sided prism, stout, its inner face swelling, its lower margins fringed with setae (B2, B34)
       {
-        name: 'me', length: 8.6, n: 2.25, neck: 0.04, tri: [0.13, Math.PI / 2],
-        sections: [S(0, 1.75, 1.55), S(0.07, 1.95, 1.65), S(0.5, 2.35, 1.85, 0.1), S(0.9, 2.45, 1.92, 0.12), S(1, 2.2, 1.75)],
+        name: 'me', length: 11.0, n: 2.25, neck: 0.04, tri: [0.13, Math.PI / 2],
+        sections: [S(0, 1.67, 1.81, 0, 0.22), S(0.1, 1.88, 2.03, 0.07, 0.36), S(0.35, 2.17, 2.25, 0.29, 0.58), S(0.6, 2.25, 2.32, 0.43, 0.65), S(0.8, 2.17, 1.96, 0.36, 0.36), S(0.9, 1.99, 1.59, 0.13, 0.04), S(1, 1.67, 1.59, 0.22, 0.11)],
         costae: [[Math.PI / 2, 0.14, 0.2], [Math.PI, 0.1, 0.25]],
         serrate: { a: Math.PI / 2 + 0.35, t0: 0.2, t1: 0.92, count: 10, length: 0.22 },
       },
-      // carpus: short and rounded, its inner angle blunt (B33, B34)
-      { name: 'ca', length: 5.0, n: 2.2, neck: 0.1, sections: [S(0, 1.7, 1.6), S(0.25, 2.3, 2.1), S(0.75, 2.45, 2.2), S(1, 2.2, 1.9)], costae: [[0.0, 0.12, 0.3]] },
+      // carpus: stout, widening distally to the palm's joint, its inner angle blunt (B33, B34)
+      { name: 'ca', length: 7.4, n: 2.3, neck: 0.1, sections: [S(0, 1.45, 1.81, 0.72, 0.07), S(0.15, 1.62, 2.04, 0.75, 0.09), S(0.3, 1.73, 2.07, 0.69, 0.06), S(0.5, 1.96, 2.17, 0.79, 0), S(0.7, 2.2, 2.07, 0.66, -0.25), S(0.85, 2.35, 1.8, 0.51, -0.53), S(1, 2.1, 1.72, 0.47, -0.14)], costae: [[0.0, 0.12, 0.3]] },
     ],
   };
   const P2 = walkingLeg('P2', [14.0, 2.6, -1.0], 0.75, WALKING.P2);
@@ -473,41 +479,44 @@ export interface ChelaSpec {
 }
 
 /**
- * The mature male's chela: the palm elongate, tall and compressed, its upper margin a straight blunt crest and its lower
- * margin falling away distally so that the palm is tallest (≈ 0.6 its length) where the fingers spring from it; the
- * fixed finger broad-based, taking the palm's whole lower half and running on from its lower margin; the dactylus
- * hinged at the upper distal corner, broad and arched over the fixed finger. Measured on the outer face seen square-on
- * (A45; the obliquer B33, B34 foreshorten the palm and make the fingers look steeper): the fingers' axes ≈ 38° and ≈ 42°
- * below the palm's, the closed tips 1.6 palm-lengths out. The large wedge-shaped tooth on the fixed finger's cutting
- * edge at a distance from its base (Wada 2018), the cutting edges finely toothed (B33, B34, A45, B12, B29). Propodus
- * (palm and fixed finger) ≈ 0.95 CW at this size (Wada 2018: log PL = −1.719 + 2.105 log CW, 0.97 CW at CW 35).
+ * The mature male's chela, from the CC0 scan's left chela (a mature male: its PL 0.70 of its CW, on Wada's (2018) curve
+ * for its size) laid flat on its outer face and measured every 0.75–1.5 mm along the palm and every tenth of each
+ * finger, then 1.38 times to the PL of a male of CW 35 (Wada 2018: log PL = −1.719 + 2.105 log CW, 0.97 CW). The palm
+ * long and stout — 25 mm, its height rising from 5 mm at the carpus to 14 mm where the fingers spring from it, its upper
+ * margin straight from a third of the way along and its lower margin falling distally; 7.3 mm thick through its
+ * proximal half (thicker than the photographs' foreshortened palms suggested), thinning to 3 mm at the fingers. The
+ * fingers short: the fixed finger 11 mm from the palm's lower distal corner, ≈ 32° below the palm's axis, broad-based
+ * with the large wedge-shaped tooth on its cutting edge two-fifths of the way out (Wada 2018); the dactylus 15 mm from
+ * its hinge at the upper distal corner, arched, ≈ 50° down over the fixed finger, broad and lobed on its cutting edge
+ * near its base. Both fingers curve in towards the other claw at their tips (the scan's fingers from above; A45, B33,
+ * B34: the tips meet before the face). The cutting edges finely toothed (B33, B34, A45, B12, B29).
  */
 export const CHELA_MALE: ChelaSpec & { tooth: { t: number; h: number } } = {
   palm: {
-    name: 'pr', length: 19.5, n: 2.25, neck: 0.035,
-    // (the upper margin nearly straight at y ≈ 3.8, the lower margin falling from −2.2 to −7.8)
-    sections: [S(0, 2.2, 1.35), S(0.06, 3.3, 1.5, -0.25), S(0.2, 4.7, 1.6, -0.9), S(0.45, 5.4, 1.66, -1.5), S(0.75, 5.75, 1.62, -1.9), S(1, 5.8, 1.55, -2.0)],
+    name: 'pr', length: 25.2, n: 2.25, neck: 0.035,
+    sections: [S(0, 2.2, 1.7, 0, 0.15), S(0.055, 3.45, 2.01, 0.71, -0.21), S(0.11, 3.62, 2.5, 0.88, -0.26), S(0.164, 3.97, 2.85, 1.22, -0.31), S(0.247, 4.83, 3.21, 1.74, 0), S(0.33, 5.18, 3.45, 2.09, 0.36), S(0.41, 5.52, 3.49, 2.43, 0.48), S(0.49, 5.69, 3.63, 2.6, 0.39), S(0.575, 6.04, 3.49, 2.6, 0.36), S(0.66, 6.21, 3.27, 2.78, 0), S(0.74, 6.38, 3.03, 2.6, -0.25), S(0.82, 6.38, 2.6, 2.6, -0.47), S(0.9, 6.73, 2.22, 2.26, -0.63), S(1, 6.9, 1.58, 1.74, -0.9)],
     // the palm's upper margin a blunt crest, its lower margin rounded (B33)
     costae: [[0.0, 0.3, 0.2], [Math.PI, 0.16, 0.32]],
   },
   finger: {
-    // its base the palm's distal lower half, narrowing fast and then evenly to the tip (A45)
-    name: 'pr', length: 16.0, n: 2.3,
-    sections: [S(0, 4.0, 1.55), S(0.16, 3.9, 1.5), S(0.35, 2.3, 1.35), S(0.6, 1.7, 1.12), S(0.85, 0.85, 0.74, -0.1), S(1, 0.1, 0.1, -0.25)],
+    // from inside the palm's lower distal corner, broad-based, the tooth's swelling two-fifths out, curving in at its tip
+    name: 'pr', length: 10.9, n: 2.3,
+    sections: [S(0, 2.1, 1.26, 1.24, 0.29), S(0.2, 2.1, 1.26, 1.24, 0.29), S(0.3, 2.18, 1.26, 1.04, 0.29), S(0.4, 2.42, 1.28, 1.05, 0.79), S(0.5, 1.95, 1.2, 0.81, 1.37), S(0.6, 1.66, 1.1, 0.3, 2.46), S(0.7, 1.42, 1.0, 0, 3.33), S(0.8, 1.3, 0.9, -0.21, 4.2), S(0.9, 0.8, 0.65, -0.1, 4.5), S(0.97, 0.33, 0.3, 0, 4.3), S(1, 0.12, 0.1, 0.15, 4.1)],
     costae: [[Math.PI, 0.12, 0.3]],
   },
-  fingerAt: [17.1, -1.5],
-  fingerAngle: -0.66,
+  fingerAt: [22.77, -2.35],
+  fingerAngle: -0.553,
   da: {
-    name: 'da', length: 18.4, n: 2.3, neck: 0.03,
-    sections: [S(0, 1.6, 1.3), S(0.1, 1.75, 1.38), S(0.4, 1.7, 1.25, -0.25), S(0.7, 1.3, 1.0, -0.6), S(0.9, 0.7, 0.6, -0.9), S(1, 0.12, 0.12, -1.0)],
+    // arched: broad and lobed on its cutting edge over its proximal half, curving in at its tip
+    name: 'da', length: 14.8, n: 2.3, neck: 0.03,
+    sections: [S(0, 1.52, 1.43, 1.01, -0.88), S(0.1, 1.63, 1.43, 0.9, -0.88), S(0.2, 2.5, 1.5, 0.41, -0.71), S(0.3, 2.98, 1.27, -0.22, -0.69), S(0.4, 2.73, 1.13, 0.14, -0.63), S(0.5, 2.62, 0.98, 0.37, -0.27), S(0.6, 1.63, 0.91, 1.48, 0.14), S(0.7, 1.77, 0.85, 1.46, 0.65), S(0.8, 1.52, 0.8, 1.34, 1.44), S(0.9, 0.9, 0.6, 0.61, 2.1), S(0.97, 0.33, 0.3, 0.21, 2.44), S(1, 0.12, 0.1, 0.11, 2.44)],
     costae: [[0.0, 0.18, 0.22]],
   },
-  hinge: [18.2, 2.6],
-  daAngle: -0.69,
-  tip: [29.8, -11.3],
+  hinge: [24.56, 6.62],
+  daAngle: -0.865,
+  tip: [32.08, -8.1],
   /** the wedge tooth on the fixed finger (t along the finger, its height mm) */
-  tooth: { t: 0.32, h: 1.4 },
+  tooth: { t: 0.38, h: 1.0 },
 };
 
 /**
