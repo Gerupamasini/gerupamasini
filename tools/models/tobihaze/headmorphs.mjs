@@ -47,6 +47,113 @@ export const MORPH_DRIVE = {
   eyesUpR: { joint: 'J_eyeR', channel: 'lift', per: 0.08, unit: 'HL' },
 };
 
+/**
+ * The shipped meshes' blend shapes by group (round B3: the morph textures' GPU memory). three.js packs every target of a
+ * mesh for every one of its vertices (RGBA32F, position and normal, rows of 4096), and B2's one Head carried all ten
+ * targets on its 27,986 vertices: 9.18 MB, most of it zeros (the gum moves 232 of them, the vent none). The skin is
+ * split instead by the groups that move each triangle: a triangle any eye shape moves goes to `Head_Orbit`, else one the
+ * mouth's shapes move to `Head_Mouth`, else one the face's (the throat and the cheeks' inflation) move to `Head` (lod1:
+ * the same names), the rest to the static `Body`; each mesh carries every target that moves any of its vertices, so a
+ * vertex two meshes share moves alike in both and no seam opens.
+ */
+export const MORPH_GROUPS = { eyes: ['blinkL', 'blinkR', 'eyesUpL', 'eyesUpR'], mouth: ['gape', 'gum', 'vent'], face: ['throat', 'inflate', 'inflateMid'] };
+// (no 'eye' in the names: the viewer and the runtime take a mesh named so for an eye globe)
+export const MORPH_MESH = { eyes: 'Head_Orbit', mouth: 'Head_Mouth', face: 'Head' };
+/** The same with each eye's shapes a group of their own (lod1: its orbit mesh holds ~2,000 vertices, at the edge of a
+ * texture row of 4,096 texels (2,048 vertices with their normals), past which its cost doubles: split by side its meshes
+ * stay far below it). The two eyes' shared strip over the brow is `Head_Orbits`. */
+export const MORPH_GROUPS_SIDES = { eyesL: ['blinkL', 'eyesUpL'], eyesR: ['blinkR', 'eyesUpR'], mouth: MORPH_GROUPS.mouth, face: MORPH_GROUPS.face };
+export const MORPH_MESH_SIDES = { eyesL: 'Head_OrbitL', eyesR: 'Head_OrbitR', 'eyesL+eyesR': 'Head_Orbits', mouth: 'Head_Mouth', face: 'Head' };
+/** Per tier (round B3): displacements (mm, `d`) and normal deltas (unit vectors, `n`) under these are dropped (hero 5 µm
+ * and 0.6°, lod1 20 µm and 1.7°: below a pixel at any distance the tier is drawn at; they spread the shapes' supports over
+ * the whole head, the inflation's 25,865 hero vertices falling to 17,451, for nothing a viewer could see; `by`: per
+ * target), `draw`, the morph-texture bytes a mesh of its own must save to be worth its draw (splitByMorphs' penalty), and
+ * `sides`: the eyes' shapes grouped by side (MORPH_GROUPS_SIDES). */
+export const MORPH_EPS = { hero: { d: 0.005, n: 0.01, draw: 0.5e6 }, lod1: { d: 0.02, n: 0.03, draw: 0.05e6, sides: true } };
+
+/** Zeroes the negligible part of blend shapes in place: per vertex, both its displacement and its normal delta when the
+ * displacement is under eps.d and the normal delta under eps.n. Returns { name: vertices left moving }. */
+export function pruneMorphs(morph, eps) {
+  const out = {};
+  for (const k of morph.names) {
+    const d = morph.d[k], n = morph.n?.[k], nv = d.length / 3, ed = eps.by?.[k]?.d ?? eps.d, en = eps.by?.[k]?.n ?? eps.n;
+    let c = 0;
+    for (let v = 0; v < nv; v++) {
+      const a = Math.hypot(d[v * 3], d[v * 3 + 1], d[v * 3 + 2]), b = n ? Math.hypot(n[v * 3], n[v * 3 + 1], n[v * 3 + 2]) : 0;
+      if (a < ed && b < en) { d.fill(0, v * 3, v * 3 + 3); if (n) n.fill(0, v * 3, v * 3 + 3); } else c++;
+    }
+    out[k] = c;
+  }
+  return out;
+}
+
+/** The GPU bytes three.js (r16x–r18x WebGLMorphtargets) gives a mesh's morph targets: one RGBA32F texel per vertex and
+ * attribute (position, normal) per target, in rows of `maxTexture`. */
+export function morphTexBytes(nVertices, nTargets, withNormals = true, maxTexture = 4096) {
+  if (!nTargets) return 0;
+  const width = nVertices * (withNormals ? 2 : 1), rows = Math.ceil(width / maxTexture);
+  return (rows > 1 ? maxTexture * rows : width) * 16 * nTargets;
+}
+
+/**
+ * The skin's triangles split into meshes by the blend-shape groups that move them (MORPH_GROUPS): one mesh per set of
+ * groups moving a triangle's vertices, each with every target that moves any of its vertices, then merged pairwise
+ * while a merge saves more morph-texture memory than `penalty` bytes (the cost of a draw) — the fewest meshes the memory
+ * allows. Named by their groups (MORPH_MESH: Head_Orbit, Head_Mouth, Head; a merged one by its first group, `order`).
+ * @param indices the skin's triangles   @param morph { names, d, n } per vertex of the skin
+ * @param o { groups, names, order, penalty (bytes; default 0.25 MB) }
+ * @returns { meshes: [{ group, name, tris: Uint32Array (triangle ids), targets: [names], vertices, bytes }], still:
+ *   Uint32Array (the static triangles), dropped: [targets moving no vertex], bytes }
+ */
+export function splitByMorphs(indices, morph, { groups = MORPH_GROUPS, names = MORPH_MESH, order = ['eyes', 'mouth', 'face'], penalty = 0.25e6 } = {}) {
+  const nv = Math.max(...Object.values(morph.d).map((d) => d.length / 3)), nT = indices.length / 3;
+  const mv = {}, live = [];
+  for (const k of morph.names) {
+    const d = morph.d[k], n = morph.n?.[k], m = new Uint8Array(nv);
+    let any = false;
+    for (let v = 0; v < nv; v++) if (d[v * 3] || d[v * 3 + 1] || d[v * 3 + 2] || (n && (n[v * 3] || n[v * 3 + 1] || n[v * 3 + 2]))) { m[v] = 1; any = true; }
+    mv[k] = m; if (any) live.push(k);
+  }
+  const groupOf = Object.fromEntries(Object.entries(groups).flatMap(([g, ks]) => ks.map((k) => [k, g])));
+  for (const k of live) if (!groupOf[k]) throw new Error(`splitByMorphs: ${k} is in no group`);
+  const sets = new Map(), still = [];
+  for (let t = 0; t < nT; t++) {
+    const ks = new Set();
+    for (let q = 0; q < 3; q++) { const v = indices[t * 3 + q]; for (const k of live) if (mv[k][v]) ks.add(k); }
+    if (!ks.size) { still.push(t); continue; }
+    const key = order.filter((g) => [...ks].some((k) => groupOf[k] === g)).join('+');
+    if (!sets.has(key)) sets.set(key, { groups: key.split('+'), tris: [], verts: new Set(), targets: new Set() });
+    const m = sets.get(key); m.tris.push(t); for (let q = 0; q < 3; q++) m.verts.add(indices[t * 3 + q]); for (const k of ks) m.targets.add(k);
+  }
+  const cost = (m) => morphTexBytes(m.verts.size, m.targets.size);
+  let list = [...sets.values()];
+  for (;;) {
+    let best = null;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const u = { verts: new Set([...list[i].verts, ...list[j].verts]), targets: new Set([...list[i].targets, ...list[j].targets]) };
+      const gain = cost(list[i]) + cost(list[j]) + penalty - cost(u);
+      if (gain > 0 && (!best || gain > best.gain)) best = { i, j, gain, u };
+    }
+    if (!best) break;
+    const a = list[best.i], b = list[best.j];
+    const merged = { groups: order.filter((g) => a.groups.includes(g) || b.groups.includes(g)), tris: [...a.tris, ...b.tris], verts: best.u.verts, targets: best.u.targets };
+    list = list.filter((_, k) => k !== best.i && k !== best.j).concat([merged]);
+  }
+  // (names: the first group's mesh name, then the next groups' as suffixes when two meshes would share it)
+  list.sort((a, b) => order.indexOf(a.groups[0]) - order.indexOf(b.groups[0]) || a.groups.length - b.groups.length);
+  const taken = new Set();
+  const meshes = list.map((m) => {
+    // (the longest leading run of its groups that has a name of its own, e.g. eyesL+eyesR → Head_Orbits)
+    let name = names[m.groups[0]];
+    for (let i = m.groups.length; i > 1; i--) { const k = names[m.groups.slice(0, i).join('+')]; if (k && !taken.has(k)) { name = k; break; } }
+    for (let i = 1; taken.has(name) && i < m.groups.length; i++) name = `${name}_${m.groups[i][0].toUpperCase()}${m.groups[i].slice(1)}`;
+    taken.add(name);
+    const targets = morph.names.filter((k) => m.targets.has(k));
+    return { group: m.groups.join('+'), name, tris: Uint32Array.from(m.tris.sort((x, y) => x - y)), targets, vertices: m.verts.size, bytes: cost(m) };
+  });
+  return { meshes, still: Uint32Array.from(still), dropped: morph.names.filter((k) => !live.includes(k)), bytes: meshes.reduce((a, m) => a + m.bytes, 0) };
+}
+
 const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 const solve3 = (A, q) => {
   const [a, b, c, d, e, f, g, h, i] = A;
@@ -294,9 +401,16 @@ export function skinWith(pos, skin, jointNames, W) {
  * lining and the rest of the head hold), solved at the full lift (solveBindDelta), split across the midline into
  * eyesUpL / eyesUpR as the blink is; its normals the posed surface's own (the skinned rest normals over a stretched
  * collar shaded it in stripes).
+ * Round B3 (`smooth` 'displacement', 30 rings, 2,500 passes): B2's corrective relaxed the free skin's positions over 10
+ * rings, which flattened the cup's lips and left the dermal cup's lining under the globe (eye share 0.1–0.5 against the
+ * rims' 1) as a frayed skirt below the window: on the shipped hero tier at the land state's lift (0.06 HL) 130 web edges
+ * more than 2× and 0.15 mm longer (123 of them within 0.03 mm of the globe), 11 new flipped facets, area 0.25 at the
+ * 0.1st percentile; at 0.08 HL 450 / 22 / 0.06. Relaxing the displacement instead (a harmonic lift from the eye-borne
+ * skin into the still head over about 0.17 HL of the cup and the collar, the relief carried along) gives 0 / 0 / 0.78 at
+ * 0.06 and 0 / 2 / 0.75 at 0.08 (b3_rig t_web).
  * The rest geometry is untouched (the shapes are 0 at rest).
  */
-export const EYES_UP = { lift: 0.08, iters: 120, lambda: 0.5, share: 1e-4, rings: 10, layShare: 0 };
+export const EYES_UP = { lift: 0.08, iters: 2500, lambda: 0.5, share: 1e-4, rings: 30, layShare: 0, smooth: 'displacement' };
 
 /** The eyes-up corrective's targets (HL, bind frame) on a head mesh: { L, R, both, E (world displacement), mask, pose }. */
 export function eyesUpTargets(head, skin, K, headSDF, o = {}) {
@@ -325,12 +439,18 @@ export function eyesUpTargets(head, skin, K, headSDF, o = {}) {
   const nb = Array.from({ length: nV }, () => []);
   for (let t = 0; t < I0.length; t += 3) for (const [a, b] of [[I0[t], I0[t + 1]], [I0[t + 1], I0[t + 2]], [I0[t + 2], I0[t]]]) { if (free[a]) nb[a].push(b); if (free[b]) nb[b].push(a); }
   const tmp = new Float32Array(q.length);
+  // (C.smooth 'position': B2's, the free skin's positions relaxed toward their neighbours' mean, which also flattens the
+  // rest shape's own relief there; 'displacement' (round B3): the displacement from the bind relaxed instead, a harmonic
+  // stretch between the eye-borne skin and the still head that keeps the cup's lips and the interorbital groove)
+  const disp = C.smooth === 'displacement';
+  if (disp) for (let i = 0; i < q.length; i++) q[i] -= P0[i];
   for (let it = 0; it < C.iters; it++) {
     tmp.set(q);
     for (let v = 0; v < nV; v++) { if (!free[v] || !nb[v].length) continue; const a = [0, 0, 0]; for (const u of nb[v]) for (let k = 0; k < 3; k++) a[k] += q[u * 3 + k] / nb[v].length; for (let k = 0; k < 3; k++) tmp[v * 3 + k] = (1 - C.lambda) * q[v * 3 + k] + C.lambda * a[k]; }
     q.set(tmp);
-    for (let v = 0; v < nV; v++) if (free[v]) lay(v);
+    if (C.layShare && !disp) for (let v = 0; v < nV; v++) if (free[v]) lay(v);
   }
+  if (disp) for (let i = 0; i < q.length; i++) q[i] += P0[i];
   const E = new Float32Array(nV * 3), mask = new Float32Array(nV);
   for (let v = 0; v < nV; v++) if (free[v]) { mask[v] = 1; for (let k = 0; k < 3; k++) E[v * 3 + k] = q[v * 3 + k] - P0[v * 3 + k]; }
   const both = solveBindDelta(P0, skin, JOINT_NAMES, W, E, { mask });

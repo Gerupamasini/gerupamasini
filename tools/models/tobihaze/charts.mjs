@@ -44,13 +44,16 @@ export function cylinder(s0, s1, axisY) {
  * section's arc length up to φ: the texels then lie evenly round the section instead of evenly in angle.
  */
 export function halfCylinder(s0, s1, axisY, side, { margin = 0.12, arc = null } = {}) {
-  const span = Math.PI + 2 * margin;
+  // (margin: one for both midlines, or [ventral, dorsal]: round B3's far tier reaches further over the ventral one,
+  // where its long triangles span the broad flat throat)
+  const [mV, mD] = Array.isArray(margin) ? margin : [margin, margin];
+  const span = Math.PI + mV + mD;
   return (p) => {
     let ph = Math.atan2(p[2] * side, -(p[1] - axisY(p[0]))); // 0 ventral, π/2 lateral, π dorsal
     if (ph < -Math.PI / 2) ph += TAU; // just over the dorsal midline: past π
     let b;
-    if (arc && ph >= 0 && ph <= Math.PI) b = (margin + arc(p[0], ph) * Math.PI) / span;
-    else b = (ph + margin) / span;
+    if (arc && ph >= 0 && ph <= Math.PI) b = (mV + arc(p[0], ph) * Math.PI) / span;
+    else b = (ph + mV) / span;
     return [(p[0] - s0) / (s1 - s0), b, Math.hypot(p[2], p[1] - axisY(p[0]))];
   };
 }

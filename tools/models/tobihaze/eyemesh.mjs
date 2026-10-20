@@ -1,10 +1,13 @@
 // The トビハゼ's eye globes as tier meshes (build.mjs): eye.mjs's globe (the skin cap and the window with its pupil and
 // iris ring) at a tier's ring counts, in the object frame and on the body texture's atlas (fishmesh.mjs BODY_LAYOUT).
-//   hero, lod1  one mesh, local to its eye joint (origin = the globe's centre, the joint's pivot), drawn by two nodes:
-//               Eye_L under J_eyeL as it is, Eye_R under J_eyeR scaled [−1, 1, 1] (the right globe is the left one's
-//               mirror image exactly: eye.mjs builds the right frame as the left's mirror; three.js flips the culling
-//               of a mirrored node, and the budget counts the mesh once). The gaze turns these nodes about the globe's
-//               centre (rig.mjs AXES.eyes); the joints only translate (the blink's drop, the eyes raised).
+//   hero, lod1  one mesh a side, local to its eye joint (origin = the globe's centre, the joint's pivot): Eye_L under
+//               J_eyeL, Eye_R under J_eyeR, the right built with side −1 (eye.mjs builds the right frame as the left's
+//               mirror image and winds it the other way: the right globe is the left's mirror image exactly, with its
+//               own tangents). Round B3: B2 drew the left mesh twice, Eye_R under a node scaled [−1, 1, 1], but three.js
+//               (r186 normal_vertex: vBitangent = cross(vNormal, vTangent) · tangent.w, flipped only for a BackSide
+//               material) does not turn the bitangent over for a mirroring node, so the right globe's normal map would
+//               have read with its green channel inverted. The gaze turns these nodes about the globe's centre (rig.mjs
+//               AXES.eyes); the joints only translate (the blink's drop, the eyes raised).
 //   lod2        both globes placed at rest in the object frame, to be merged into the Body (its material, J_head 255)
 // The mesh is split into the skin (drawn with the Body material) and the window (the clay round's Cornea and Iris
 // materials as its two parts, the pupil and the iris ring; `window` is the two as one primitive for a tier that draws
@@ -17,8 +20,9 @@ import { eyeGlobe } from './eye.mjs';
 import { BODY_LAYOUT } from './fishmesh.mjs';
 import { vertexTangents } from './tiers.mjs';
 
-/** The ring counts per tier (triangles = 2·nt·np per globe): hero 5,120, lod1 384, lod2 112 (8 columns: an octagon from
- * every side, where B1's 6 showed a hexagon in the far renders). */
+/** The ring counts per tier (triangles = 2·nt·np − 2·np per globe: the two poles' fans, without the zero-area facets
+ * eyeGlobe's pole rows make, compact): hero 4,992, lod1 352, lod2 96 (8 columns: an octagon from every side, where B1's
+ * 6 showed a hexagon in the far renders). */
 export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 16 }, lod2: { nt: 7, np: 8 } };
 
 /** eyeGlobe's uv (u = azimuth / 2π, v = ρ / 2: the window v ≤ 0.5, the skin 0.5 … 1) on the atlas: `part` 'window' maps
@@ -33,8 +37,17 @@ export function eyePartUV(uv, part, layout = BODY_LAYOUT) {
   return out;
 }
 
-/** Only the vertices `indices` use, renumbered: { position, normal, uv, indices, tangent? }. */
-function compact(P, N, UV, indices, { tangents = true } = {}) {
+/** Only the vertices `indices` use, renumbered, without the triangles two of whose corners coincide (eyeGlobe's pole
+ * rows are a ring of vertices at one point: half the facets on a pole's ring have no area, wasted triangles that also
+ * gave point-to-triangle tools NaN): { position, normal, uv, indices, tangent? }. */
+function compact(P, N, UV, indices0, { tangents = true } = {}) {
+  const same = (a, b) => P[a * 3] === P[b * 3] && P[a * 3 + 1] === P[b * 3 + 1] && P[a * 3 + 2] === P[b * 3 + 2];
+  const kept = [];
+  for (let t = 0; t < indices0.length; t += 3) {
+    const a = indices0[t], b = indices0[t + 1], c = indices0[t + 2];
+    if (!same(a, b) && !same(b, c) && !same(a, c)) kept.push(a, b, c);
+  }
+  const indices = kept;
   const map = new Map(), idx = new Uint32Array(indices.length), order = [];
   for (let i = 0; i < indices.length; i++) {
     let j = map.get(indices[i]);
@@ -71,8 +84,6 @@ export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangent
   }
   const uvSkin = eyePartUV(g.uv, 'skin', layout), uvWin = eyePartUV(g.uv, 'window', layout);
   const uv = Float32Array.from(g.uv, (_, i) => (g.uv[(i | 1)] <= 0.5 ? uvWin[i] : uvSkin[i]));
-  const indices = new Uint32Array(g.skin.length + g.cornea.length);
-  indices.set(g.skin); indices.set(g.cornea, g.skin.length);
   const o = { tangents };
   const parts = {
     skin: compact(position, normal, uvSkin, g.skin, o),
@@ -80,6 +91,12 @@ export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangent
     pupil: compact(position, normal, uvWin, g.pupil, o),
     iris: compact(position, normal, uvWin, g.iris, o),
   };
+  // (all: the skin's and the window's triangles in the globe's own numbering, the pole rows' zero-area facets left out
+  // as the parts leave them)
+  const P = position, same = (a, b) => P[a * 3] === P[b * 3] && P[a * 3 + 1] === P[b * 3 + 1] && P[a * 3 + 2] === P[b * 3 + 2];
+  const all = [];
+  for (const src of [g.skin, g.cornea]) for (let t = 0; t < src.length; t += 3) { const a = src[t], b = src[t + 1], c = src[t + 2]; if (!same(a, b) && !same(b, c) && !same(a, c)) all.push(a, b, c); }
+  const indices = Uint32Array.from(all);
   return { position, normal, uv, indices, parts, triangles: indices.length / 3 };
 }
 

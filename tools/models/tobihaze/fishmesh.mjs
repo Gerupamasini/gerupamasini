@@ -17,8 +17,9 @@
 // The body texture is square (2048² hero, 1024² lod1, 256² lod2); BODY_LAYOUT ([x0, y0, x1, y1], v down) sizes each
 // chart for about 0.0019 HL (0.031 mm) of skin per texel at 2048 on the body and 0.0015 on the face (shots-uv.mjs
 // tiers reports it per chart):
-//   bodyL, bodyR   one side each of the body from s 0.43 HL to the tail's end, round from the ventral midline to the
-//                  dorsal one by arc length (half cylinders, no wrap: the seams lie on the midlines, under the keels
+//   bodyL, bodyR   one side each of the body from s 0.43 HL to the tail's end (round B3: to the end of the caudal's
+//                  fleshy base, body.mjs tailEnd, the seam along its rounded edge), round from the ventral midline to
+//                  the dorsal one by arc length (half cylinders, no wrap: the seams lie on the midlines, under the keels
 //                  and fins)
 //   head           the face, snout and the front of the eye turret, azimuthal about the forward axis
 //   domeL, domeR   the skin round each eye globe facing away from its centre within 0.1 HL of the globe (the domes,
@@ -29,7 +30,8 @@
 //                  half-width of its axis), a tube about the smoothed shoulder → elbow → wrist curve (read from
 //                  BODY_SCULPT at build time: the bent arm) with a parallel-transported reference (seam medial),
 //                  running from just inside the shoulder to just past the wrist's end cap
-//   tailCap        the peduncle's end (its end plate), azimuthal about +s
+//   tailCap        (B2: the peduncle's end plate, azimuthal about +s; unused since the body halves run to the tail's
+//                  end, round B3: a spare rect for the patch)
 //   mouthRoof, mouthFloor   the gape slit's walls (hero) and the lips' margins facing down / up onto the slit's plane
 //                  (the upper lip's underside, the lower lip's top within LIP.band of the mouth's line), flat on the
 //                  closed mouth's plane
@@ -69,8 +71,9 @@ const axialReady = import('./rig.mjs').then((R) => {
 }).catch(() => { AXIAL = null; });
 export const ready = Promise.all([tiersReady, axialReady]);
 
-/** The meshing box (fish mm): snout to the peduncle's end, the pectoral lobes and the eye domes inside. */
-export const BODY_BOX = { min: [-0.08 * HL, -0.16 * HL, -0.62 * HL], max: [4.32 * HL, 0.85 * HL, 0.62 * HL] };
+/** The meshing box (fish mm): snout to the peduncle's end, the pectoral lobes and the eye domes inside (round B3: the
+ * peduncle runs on past the caudal base as the fin's fleshy base, its bowed end at s 4.49 HL: the box to 4.56). */
+export const BODY_BOX = { min: [-0.08 * HL, -0.16 * HL, -0.62 * HL], max: [4.56 * HL, 0.85 * HL, 0.62 * HL] };
 
 /** Atlas rectangles [x0, y0, x1, y1] (share of the square body texture, v down); gutters ≥ 0.01 between them. Each
  * chart's rect is sized for 0.0019 HL (0.031 mm) of surface per texel at 2048 over the part of its projection the skin
@@ -118,7 +121,7 @@ export const CHART_CROP = {
 
 /** The rects the patch may also fill at a tier that leaves them empty (lod2 has no slit, pockets or lining, lod1 no
  * slit or pockets): the atlas is baked per tier from the position under each texel, so any free rect serves. */
-export const SPARE_CHARTS = ['mouthRoof', 'mouthFloor', 'gillRoofL', 'gillFloorL', 'gillRoofR', 'gillFloorR', 'socketL', 'socketR'];
+export const SPARE_CHARTS = ['mouthRoof', 'mouthFloor', 'gillRoofL', 'gillFloorL', 'gillRoofR', 'gillFloorR', 'socketL', 'socketR', 'tailCap'];
 
 /** The lips' margins (hero): the band about the closed mouth's line (HL) whose down / up-facing skin (|n_y| > ny)
  * goes with the slit's walls (bodyCharts), in front of s. */
@@ -128,7 +131,11 @@ export const LIP = { s: 0.36, band: 0.05, ny: 0.55 };
 export const TIERS = {
   hero: { h: 0.09, field: 'full', regions: { head: 45000, trunk: 31000 }, locks: ['lips', 'gill', 'cup'], tex: 2048, minIsland: 48 },
   lod1: { h: 0.16, field: 'sealed', regions: { head: 5000, trunk: 3900 }, locks: ['cupRing', 'lining'], morphWeights: { blinkL: 2, blinkR: 2, inflate: 0.25 }, tex: 1024, repairClose: 3 },
-  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, axialAttrs: 1, tex: 256, pad: 1, repairClose: 1, minIsland: 2 },
+  // (lod2's body halves reach 0.85 rad over the ventral midline, where its long triangles span the broad flat throat
+  // (round B3: with B2's 0.35 a 7–18-triangle island of 50–85 mm² under the throat went to the patch), 0.25 over the
+  // dorsal one: the halves' texels 5 % coarser round the body); its lobes' turn takes 0.75 of their rect's height (its
+  // few long triangles round the arm cross the seam by more than the hero's 0.14: 7 went outside, to the patch)
+  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, axialAttrs: 1, tex: 256, pad: 1, repairClose: 1, minIsland: 2, margin: [0.85, 0.25], lobeShare: 0.75 },
 };
 
 /** The tier's field (fish mm, .hl in HL with .head / .parts / .cup). */
@@ -142,8 +149,12 @@ const S_HEAD = 1.32, S_CHART = 0.45;
 const memo = new Map();
 
 /** The body halves' arc-length tables: per station s (HL) the share of the section's arc from the ventral midline up
- * to each angle, measured on the field (rays from the body's axis to where they first leave the skin). */
-function sectionArcs(field, axisY, { s0 = 0.40, s1 = 4.30, ds = 0.05, na = 48 } = {}) {
+ * to each angle, measured on the field along rays from the body's axis: to where they last leave the skin (`outer`,
+ * round B3: the outer skin the halves keep, so a cavity or a pocket the ray crosses first — the throat's at s 0.45–0.6,
+ * whose first exit lies 0.13 HL inside the floor, the gill pocket under the opercle's flap — no longer bends the
+ * table: B2's first exit there squeezed the cheek's underside into a sliver of v, 2 islands of 340 and 270 triangles
+ * to the patch) or where they first leave it (B2). */
+function sectionArcs(field, axisY, { s0 = 0.40, s1 = 4.30, ds = 0.05, na = 48, outer = false } = {}) {
   const ns = Math.round((s1 - s0) / ds) + 1, tab = new Float32Array(ns * (na + 1));
   for (let i = 0; i < ns; i++) {
     const s = (s0 + i * ds) * HL, yc = axisY(s);
@@ -151,8 +162,15 @@ function sectionArcs(field, axisY, { s0 = 0.40, s1 = 4.30, ds = 0.05, na = 48 } 
     for (let j = 0; j <= na; j++) {
       const ph = (Math.PI * j) / na, dy = -Math.cos(ph), dz = Math.sin(ph);
       let r = 0, step = 0.012 * HL, inside = field(s, yc, 0) < 0;
+      if (outer) {
+        // (the last sample inside along the ray, out to 0.9 HL)
+        let last = -1;
+        for (let q = 0; q * step < 0.9 * HL; q++) if (field(s, yc + dy * q * step, dz * q * step) < 0) last = q * step;
+        if (last < 0) { pts.push([yc, 0]); continue; }
+        r = last; inside = true;
+      }
       if (!inside) { pts.push([yc, 0]); continue; }
-      while (r < HL && field(s, yc + dy * (r + step), dz * (r + step)) < 0) r += step;
+      if (!outer) while (r < HL && field(s, yc + dy * (r + step), dz * (r + step)) < 0) r += step;
       let lo = r, hi = r + step;
       for (let k = 0; k < 12; k++) { const m = (lo + hi) / 2; if (field(s, yc + dy * m, dz * m) < 0) lo = m; else hi = m; }
       pts.push([yc + dy * lo, dz * lo]);
@@ -161,6 +179,8 @@ function sectionArcs(field, axisY, { s0 = 0.40, s1 = 4.30, ds = 0.05, na = 48 } 
     tab[i * (na + 1)] = 0;
     for (let j = 1; j <= na; j++) { acc += Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]); tab[i * (na + 1) + j] = acc; }
     for (let j = 1; j <= na; j++) tab[i * (na + 1) + j] /= acc || 1;
+    // (past the tail's end the axis is outside the skin: the station takes the last one's table, or the angle's share)
+    if (!(acc > 0)) for (let j = 0; j <= na; j++) tab[i * (na + 1) + j] = i > 0 ? tab[(i - 1) * (na + 1) + j] : j / na;
   }
   return (sMM, ph) => {
     const fs = Math.max(0, Math.min(ns - 1, (sMM / HL - s0) / ds)), i = Math.min(ns - 2, Math.floor(fs)), ts = fs - i;
@@ -187,8 +207,17 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
     const sh = s / HL, w = smoothstep(1.0, 1.4, sh);
     return w <= 0 ? yC : (1 - w) * yC + w * prof.at(Math.max(1.05, sh)).yc * HL;
   };
+  // (round B3: the body halves run to the tail's very end: the peduncle goes on past the caudal base as the fin's thin
+  // fleshy base (body.mjs tailEnd, bowed back `bulge` at mid-depth), whose two faces the halves map round from the
+  // ventral midline to the dorsal one as they do the trunk's, the seam along the end's rounded edge; B2's tailCap, an
+  // azimuthal view from s 4.10 along +s, saw that tongue edge-on: 2,519 dense triangles to the patch)
+  const sEnd = (K.tailEnd?.s ?? 4.24) + (K.tailEnd?.bulge ?? 0) + 0.03;
   const key = JSON.stringify(K);
-  if (!memo.has(key)) memo.set(key, sectionArcs(fishSDFmm(HL, K), axisY));
+  if (!memo.has(key)) {
+    // (the outer skin without the pectoral lobes, which have their own charts)
+    const FH = fishSDFmm(HL, K).hl, noLobe = (x, y, z) => FH.parts(x / HL, y / HL, z / HL).noLobe * HL;
+    memo.set(key, sectionArcs(noLobe, axisY, { s1: Math.max(4.30, Math.ceil(sEnd / 0.05) * 0.05), outer: true }));
+  }
   const arc = memo.get(key);
   const E = HEAD.eye, re = E.d / 2, g = vec.norm(HEAD_SCULPT.cup.open);
   const P = K.pectoral, mm = (v) => v.map((c) => c * HL);
@@ -204,8 +233,9 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const charts = [];
   const add = (name, c) => { charts.push({ name, rect: L[name], ...(CHART_CROP[name] && !o.noCrop ? { crop: CHART_CROP[name] } : {}), ...c }); return charts.length - 1; };
   const cHead = add('head', { keep: 'outer', project: azimuthal([sC, yC, 0], [-1, 0, 0], [0, 1, 0], Math.PI * 0.56) });
-  const cBodyL = add('bodyL', { keep: 'outer', project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, 1, { margin, arc }) });
-  const cBodyR = add('bodyR', { keep: 'outer', project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, -1, { margin, arc }) });
+  const sB1 = Math.max(4.25, sEnd) * HL;
+  const cBodyL = add('bodyL', { keep: 'outer', project: halfCylinder(0.43 * HL, sB1, axisY, 1, { margin, arc }) });
+  const cBodyR = add('bodyR', { keep: 'outer', project: halfCylinder(0.43 * HL, sB1, axisY, -1, { margin, arc }) });
   const ec = (s) => [E.s * HL, E.y * HL, E.z * HL * s];
   const cSockL = add('socketL', { project: azimuthal(ec(1), [-g[0], -g[1], -g[2]], [1, 0, 0], Math.PI * 0.75) });
   const cSockR = add('socketR', { project: azimuthal(ec(-1), [-g[0], -g[1], g[2]], [1, 0, 0], Math.PI * 0.75) });
@@ -215,7 +245,8 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const ls = o.lobeShare ?? 0.86;
   const cLobeL = add('lobeL', { wrapV: true, wrapShare: ls, project: limbPath(lobePts(1), [0, 0, 1], -lobeT0, lobeT1) });
   const cLobeR = add('lobeR', { wrapV: true, wrapShare: ls, project: limbPath(lobePts(-1), [0, 0, -1], -lobeT0, lobeT1) });
-  const cTail = add('tailCap', { keep: 'outer', project: azimuthal([4.10 * HL, axisY(4.10 * HL), 0], [1, 0, 0], [0, 1, 0], Math.PI * 0.55) });
+  // (B2's tail-end chart: no skin prefers it since round B3; its rect is a spare for the patch)
+  add('tailCap', { keep: 'outer', project: azimuthal([4.10 * HL, axisY(4.10 * HL), 0], [1, 0, 0], [0, 1, 0], Math.PI * 0.55) });
   // the slit's walls flat on the plane of the closed mouth (s, z): the roof (facing down) and the floor (facing up)
   const gY = HEAD_SCULPT.gape.yFront * HL;
   const mouthF = { o: [0.20 * HL, gY, 0], e0: [1, 0, 0], e1: [0, 0, 1], out: [0, 1, 0] };
@@ -303,7 +334,7 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
       // body, where the flank in front of it hid it, and its crop cut t < 0.10: a ring of patch round every root)
       if (a.t >= lobeTmin && a.r < Math.min(lobeR, 1.25 * armHalf(a.t) + 0.01) && lobeShareAt(q) > 0.5) return s > 0 ? cLobeL : cLobeR;
     }
-    if (q[0] > 4.15) return cTail;
+    // (the tail's end: the body halves' since round B3, see sEnd; the tailCap rect is left to the patch, SPARE_CHARTS)
     if (p[0] < sC) return cHead;
     return s > 0 ? cBodyL : cBodyR;
   };
@@ -745,7 +776,7 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
       if (nd) log(`locked the split vertices and their ${nd} triangles`);
     }
   }
-  const B = bodyCharts(K, { layout: o.layout, interior: classes, margin: T.simplifyFirst ? 0.35 : 0.12 });
+  const B = bodyCharts(K, { layout: o.layout, interior: classes, margin: T.margin ?? (T.simplifyFirst ? 0.35 : 0.12), lobeShare: T.lobeShare });
   const { charts, prefer, index, forceTri, fallback } = B;
   const lobes = new Set([index.lobeL, index.lobeR]);
   const regions = T.regions

@@ -13,7 +13,13 @@
 //   p_*   the pelvic base under the chest (side, from below and in front) and the front views that show whether the trunk
 //         stays inside the head's outline (f_level: straight on; m_u5: the owner's u5, the fish's front raised ~12° so the
 //         camera sits that much below the bind fish's axis)
-//   e_*   the peduncle's end plate (from above and below, square on: the taper of its half-width, the plate's edge)
+//   e_*   the peduncle's end (from above and below, square on: the taper of its half-width; round B3: the fleshy base
+//         running on into the fin, to s 4.44)
+//   k_*   round B3: the caudal junction on a GLB with the fins (the tier GLBs, or the trunk's clay-with-fins builds),
+//         the caudal folded as on land (pose morph Fin_Caudal.fold; ignored where the mesh has no such target) and in
+//         the bind, from the side, 3/4, above, behind and below, and from the tail photos' cameras (A070, A030, A067,
+//         A017) framed on the tail; n_* the folded anal fin in its furrow; q_* the pelvic cup pressed (morph
+//         Fin_Pelvic.press) from the side, the front, below and 3/4
 // (round B1: the matched photos and the overlays are in the scratchpad's ref/cmp/b1_trunk_*.jpg; the photos' cameras
 // for A030 / A002 are near-lateral telephoto shots, u1 a low close shot from in front of the right side, B010 / A005 the
 // same fish from above its left side, B067 the left side from a little in front, B002 from about 30° above the snout;
@@ -34,8 +40,13 @@ export const MEASURE = {
 const M = Object.fromEntries(Object.entries(MEASURE).map(([k, v]) => [k, box(...v)]));
 const lobeBox = box(0.80, 1.75, -0.40, 0.70, -0.05, 0.62), chest = box(0.70, 1.80, -0.40, 0.75, -0.62, 0.62);
 // the head–trunk junction behind the gill cover (for rings or steps in the highlights) and the tail's end
-const junction = box(0.85, 1.65, -0.15, 0.70, -0.40, 0.40), tail = box(3.40, 4.40, 0.0, 0.55, -0.15, 0.15), vent = box(2.20, 2.75, -0.15, 0.20, -0.15, 0.15);
-const plate = box(3.95, 4.30, 0.05, 0.42, -0.12, 0.12), pelvis = box(0.85, 1.55, -0.10, 0.35, -0.30, 0.30);
+const junction = box(0.85, 1.65, -0.15, 0.70, -0.40, 0.40), tail = box(3.40, 4.50, 0.0, 0.55, -0.15, 0.15), vent = box(2.20, 2.75, -0.15, 0.20, -0.15, 0.15);
+const plate = box(3.95, 4.50, 0.05, 0.42, -0.12, 0.12), pelvis = box(0.85, 1.55, -0.10, 0.35, -0.30, 0.30);
+// (round B3: the caudal junction with the fin, the tail with the folded fin, the anal fin's furrow, the pressed pelvic)
+const cjun = box(3.95, 4.60, 0.0, 0.48, -0.15, 0.15), ctail = box(3.30, 4.98, -0.02, 0.55, -0.15, 0.15);
+const analBox = box(2.30, 3.90, -0.12, 0.25, -0.12, 0.12), pelPress = box(0.85, 1.65, -0.35, 0.35, -0.35, 0.35);
+const FOLD = { morph: { Fin_Caudal: { fold: 1 }, Fin_Anal: { fold: 1 }, Fin_Dorsal1: { fold: 1 }, Fin_Dorsal2: { fold: 1 }, Fin_Pelvic: { fold: 1 } } };
+const PRESS = { morph: { Fin_Pelvic: { press: 1 } } };
 const clay = (name, view) => ({ name, mode: 'clay', view: { fit: 'body', margin: 0.06, ...view } });
 const sil = (name, view) => ({ name, mode: 'silhouette', view: { margin: 0, ...view } });
 
@@ -94,4 +105,23 @@ export const SHOTS = [
   { name: 'e_under', mode: 'clay', view: { azim: 0, elev: -90, topUp: 1, ortho: true, fit: plate, margin: 0.06 } },
   { name: 'e_side', mode: 'clay', view: { azim: 90, elev: 0, ortho: true, fit: plate, margin: 0.06 } },
   { name: 'e_q34', mode: 'clay', view: { azim: 140, elev: 20, fov: 22, fit: plate, margin: 0.06 } },
+  // round B3: the caudal junction (folded as on land, and in the bind), the tail photos' cameras, the anal furrow, the
+  // pressed pelvic cup
+  { name: 'k_side_fold', mode: 'clay', pose: FOLD, view: { azim: 90, elev: 3, fov: 18, fit: cjun, margin: 0.06 } },
+  { name: 'k_side_bind', mode: 'clay', view: { azim: 90, elev: 3, fov: 18, fit: cjun, margin: 0.06 } },
+  { name: 'k_q34_fold', mode: 'clay', pose: FOLD, view: { azim: 130, elev: 25, fov: 20, fit: cjun, margin: 0.06 } },
+  { name: 'k_q34_bind', mode: 'clay', view: { azim: 130, elev: 25, fov: 20, fit: cjun, margin: 0.06 } },
+  { name: 'k_top_fold', mode: 'clay', pose: FOLD, view: { azim: 0, elev: 90, topUp: 1, fov: 18, fit: cjun, margin: 0.06 } },
+  { name: 'k_rear_fold', mode: 'clay', pose: FOLD, view: { azim: 160, elev: 10, fov: 20, fit: cjun, margin: 0.06 } },
+  { name: 'k_under_fold', mode: 'clay', pose: FOLD, view: { azim: 60, elev: -30, fov: 20, fit: cjun, margin: 0.06 } },
+  { name: 'k_A070', mode: 'clay', pose: FOLD, view: { azim: 92, elev: 5, fov: 16, fit: ctail, margin: 0.04 } },
+  { name: 'k_A030', mode: 'clay', pose: FOLD, view: { azim: -90, elev: 4, fov: 16, fit: ctail, margin: 0.04 } },
+  { name: 'k_A067', mode: 'clay', pose: FOLD, view: { azim: 75, elev: 18, fov: 16, fit: ctail, margin: 0.04 } },
+  { name: 'k_A017', mode: 'clay', pose: FOLD, view: { azim: 70, elev: 30, fov: 16, fit: ctail, margin: 0.04 } },
+  { name: 'n_side_fold', mode: 'clay', pose: FOLD, view: { azim: 90, elev: -4, fov: 20, fit: analBox, margin: 0.04 } },
+  { name: 'n_low_fold', mode: 'clay', pose: FOLD, view: { azim: 60, elev: -35, fov: 20, fit: analBox, margin: 0.04 } },
+  { name: 'q_side_press', mode: 'clay', pose: PRESS, view: { azim: 90, elev: -3, fov: 22, fit: pelPress, margin: 0.04 } },
+  { name: 'q_front_press', mode: 'clay', pose: PRESS, view: { azim: 0, elev: -8, fov: 22, fit: pelPress, margin: 0.04 } },
+  { name: 'q_under_press', mode: 'clay', pose: PRESS, view: { azim: 0, elev: -90, topUp: 1, fov: 22, fit: pelPress, margin: 0.04 } },
+  { name: 'q_q34_press', mode: 'clay', pose: PRESS, view: { azim: 50, elev: -25, fov: 22, fit: pelPress, margin: 0.04 } },
 ];

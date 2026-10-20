@@ -1,12 +1,17 @@
-// The fins' numeric gates (round B2; round B1's in tools/models/tobihaze/out/fins/test-fins.mjs, all kept):
+// The fins' numeric gates (round B2, updated for round B3 at its integration: the one-lobe pectoral's longer blade and
+// fleshy base, the caudal's roots embedded in the peduncle's tongue, the denser far cards; each B2 gate a B3 design
+// replaces is kept as a 'report (B2 design)' line beside its replacement; round B1's in out/fins/test-fins.mjs):
 //   node tools/models/tobihaze/test-fins.mjs [--json out.json] [--body <module.mjs>:<export>] [--fins <module.mjs>]
 //   [--verbose]  (--body: another sculpt to test against, e.g. a trunk owner's work in progress, default body.mjs
 //   BODY_SCULPT; --fins: another fins module, e.g. an earlier round's copy, for a before / after table)
 //  1 triangles: hero D1 ≤ 6k, D2 ≤ 6k, anal ≤ 5k, caudal ≤ 7k, pectoral ≤ 4k each, pelvic ≤ 4k (≤ 40k all);
-//    lod1 ≤ 4k all and each fin ≤ 1/5 of its hero; lod2 cards ≤ 8 triangles each (≤ 60 all), every state of a card
-//    (bind, fold; the pectorals' plant) the same vertices
+//    lod1 ≤ 4k all and each fin ≤ 1/5 of its hero; lod2 cards ≤ 20 triangles each (≤ 100 all; round B3: the far fish's
+//    spread fins and pressed cup need 5 pectoral, 7 caudal and 11 pelvic stations, B2's ≤ 8 / ≤ 60 reported; the lod2
+//    tier stays within class M's 1.5k), every state of a card (def.cardTargets) the same vertices
 //  2 the base row (rayT 0) within 0.01 HL of the skin, never outside it by more than 0.002 HL (no gap) (the distance
-//    to the skin: the field over its gradient, or marched where the limbs' field is not a distance)
+//    to the skin: the field over its gradient, or marched where the limbs' field is not a distance); round B3: the
+//    pectoral's measured at its rays' centrelines (mesh.root: its fleshy lenses lie up to 0.015 HL inside the lobe by
+//    design), every base vertex still none outside; the caudal's roots embedded in the tongue by design (gate 10)
 //  3 no vertex inside the body farther than 0.02 HL from its root, in the bind and in every target at weight 1 (the
 //    pectoral's fold in the arm's rest pose it is authored in, against the trunk there)
 //  4 the right pectoral = the left mirrored (z → −z) with every triangle rewound, its normals mirrored
@@ -17,20 +22,24 @@
 //  8 shape against the photo measurements (hero): D1 height / BD half raised 0.55-0.75 (A070 0.72, B067 0.57, lit.
 //    0.59), erect 0.88-0.97 (A001 0.93), folded ≤ 0.035 HL over the back (a streak in a groove: A030, BFC §2.3); D2
 //    erect 0.35-0.45 BD (A065, A001; BFC 0.45); anal / D2 erect 0.7-0.95; caudal tip at TL ± 0.02 HL, folded tip below
-//    the axis by < 0.08 HL, folded length 2.2-2.8 × peduncle depth (2.4); pectoral (the shared design of round B2):
-//    blade 0.44-0.48 HL, shoulder → blade tip 0.85-0.95 HL, ray bases across ≥ 0.85 of the wrist's width, spread fan
-//    120-150° with a radius (median ray tip from the bases' middle) 0.41-0.47 HL; pelvic 0.3-0.5 HL long, its bind cup
+//    the axis by < 0.08 HL, folded length 2.2-2.8 × peduncle depth (2.4); pectoral (round B3's one lobe: u1 0.60 HL of
+//    furled fin, A070 0.45, B067 0.48): blade 0.45-0.50 HL, shoulder → blade tip 0.80-0.95 HL, ray bases across ≥ 0.85
+//    of the junction's width, spread fan 120-150° with a radius (median ray tip from the bases' middle) 0.41-0.49 HL,
+//    lobe ÷ blade reported (B2's anatomy review asked ≤ 0.7); pelvic 0.3-0.5 HL long, its bind cup
 //    a dish from the front (deepest point ≤ 0.13 HL under its root, depth / half-span ≤ 0.75)
 //  9 the fins keep clear of each other: D1 folded ends before D2 (Lee 1995), D2 and anal folded before the caudal's
 //    procurrent rays, the pelvic ≥ 0.01 HL from the pectoral blades in every bind-space state pairing
-// 10 the caudal springs from the peduncle's end plate: the first and last principal rays' bases within 0.02 HL of the
-//    end's dorsal and ventral skin; the side outline (body ∪ fin, bind and fold) without a notch deeper than 0.006 HL
-//    over s plate − 0.15 … plate + 0.25; at hero the body's half-width just in front of each ray's base ≤ 2.5 × its
-//    root lens' half-thickness (the fleshy base)
+// 10 the caudal springs from the peduncle: the first and last principal rays' bases within 0.02 HL of the dorsal and
+//    ventral skin just in front of them; the side outline (body ∪ fin, bind and fold) without a notch deeper than
+//    0.006 HL over s plate − 0.15 … plate + 0.25; round B3 (the rays rooted on a hypural plate inside the peduncle's
+//    tongue, def.plate): every principal ray's base inside the body, and each ray inside the body from its base for
+//    ≥ 0.08 HL along it in bind, fold and spread (B2's 'body half-width ÷ root lens ≤ 2.5' measured the end-plate
+//    design: reported)
 // 11 the pectoral's plant: the sole (each ray past its turn, def.sole.from) one plane: its normal within 2° of
 //    def.sole.normal, all its vertices within 0.15 mm of the plane's lowest (the ground once levelled), its underside
 //    (lens points facing the ground) within 0.10 mm; the inner blade continues the forearm (the middle rays' bases →
-//    heel within 10° of elbow → wrist); the heel 0.15-0.20 HL from the bases
+//    heel within 10° of elbow → wrist); the heel 0.25-0.32 HL from the bases (round B3: u1's short distal sole on a
+//    0.5 HL blade; B2's 0.15-0.20 reported)
 // 12 the pectoral's fold, in the arm's rest pose: the blade past rayT 0.3 lies on the flank, 0 … 0.3 mm off the trunk's
 //    skin (A030, A040, B067)
 // 13 the pelvic's fold hugs the belly: every vertex past 0.02 HL from its root no more than 0.01 HL under the belly's
@@ -38,7 +47,9 @@
 // 14 posed (rig.mjs finWeights; the axial chain J_sp1 … J_caudal at ±8° pitch, then ±8° yaw a joint, and round B1's
 //    tail-up arch): the folded D1, D2, anal and caudal no more than 0.05 mm inside the posed body past rayT 0.15 (the
 //    body's skin there follows rig.axialRow; a point is unposed through the body's own blend of the joints and tested
-//    against the bind field); reported beside it, the rule round B2 proposes for finWeights (mesh.foldS)
+//    against the bind field; round B3: the caudal against its clearance field def.space, the body but for the inside of
+//    the tongue its roots are embedded in, and none of its vertices hidden in the bind coming out posed); reported beside
+//    it, the rule round B2 proposes for finWeights (mesh.foldS)
 // 15 texel density (hero), see there; 16 the lod2 cards follow the hero's states, see there
 import fs from 'node:fs';
 import path from 'node:path';
@@ -107,15 +118,16 @@ for (const d of defs) {
   gate(`tris lod1 ${d.name}`, l, `≤ hero/5 (${Math.floor(h / 5)})`, l <= h / 5);
   const c0 = finCard(d), c = c0.indices.length / 3;
   cardT += c; cardMax = Math.max(cardMax, c);
-  for (const st of d.type === 'pectoral' ? ['fold', 'plant'] : ['fold']) {
+  for (const st of d.cardTargets ?? (d.type === 'pectoral' ? ['fold', 'plant'] : ['fold'])) {
     const cs = finCard(d, { state: st });
     if (cs.position.length !== c0.position.length || cs.indices.some((v, i) => v !== c0.indices[i])) cardSame = false;
   }
 }
 gate('tris hero all fins', heroT, '≤ 40000', heroT <= 40000);
 gate('tris lod1 all fins', lod1T, '≤ 4000', lod1T <= 4000);
-gate('tris lod2 cards (max each / all)', `${cardMax} / ${cardT}`, '≤ 8 / ≤ 60', cardMax <= 8 && cardT <= 60);
-gate('lod2 cards: fold / plant states the same vertices and triangles as the bind', cardSame, 'true', cardSame);
+gate('tris lod2 cards (max each / all)', `${cardMax} / ${cardT}`, '≤ 20 / ≤ 100', cardMax <= 20 && cardT <= 100);
+gate('tris lod2 cards (max each / all; report: B2\'s budget)', `${cardMax} / ${cardT}`, 'report (≤ 8 / ≤ 60)', true);
+gate('lod2 cards: every card state the same vertices and triangles as the bind', cardSame, 'true', cardSame);
 
 const TG = {};
 const faceN = (pos, I, t) => {
@@ -130,13 +142,22 @@ for (const tier of ['hero', 'lod1']) {
     let finite = true;
     for (const arr of [m.position, m.normal, m.uv, m.rayT, m.ray, m.baseS]) for (const v of arr) if (!Number.isFinite(v)) finite = false;
     // 2 base row
-    let bMax = 0, bOut = -Infinity;
+    let bMax = 0, bOut = -Infinity, cMax = 0;
+    const centre = d.type === 'pectoral' && m.root, seen = new Set();
     for (let i = 0; i < n; i++) {
       if (m.rayT[i] > 1e-9) continue;
       const dd = depthMM(m.position[i * 3], m.position[i * 3 + 1], m.position[i * 3 + 2]);
       bMax = Math.max(bMax, Math.abs(dd)); bOut = Math.max(bOut, dd);
+      // (round B3, the pectoral: its rays' centrelines, the root point under each base vertex)
+      if (centre) { const key = `${m.root[i * 3].toFixed(4)},${m.root[i * 3 + 1].toFixed(4)},${m.root[i * 3 + 2].toFixed(4)}`; if (!seen.has(key)) { seen.add(key); cMax = Math.max(cMax, Math.abs(depthMM(m.root[i * 3], m.root[i * 3 + 1], m.root[i * 3 + 2]))); } }
     }
-    gate(`${tier} ${d.name} base |d| max (HL) / outside max`, `${fmt(bMax)} / ${fmt(bOut)}`, '≤ 0.01 / ≤ 0.002', bMax <= 0.01 && bOut <= 0.002);
+    if (d.type === 'caudal') {
+      gate(`${tier} ${d.name} base: roots inside the body (outside max, HL; embedded by design, gate 10)`, fmt(bOut), '≤ 0.002', bOut <= 0.002);
+      gate(`${tier} ${d.name} base |d| max (HL; report: B2's end-plate design)`, fmt(bMax), 'report (≤ 0.01)', true);
+    } else if (centre) {
+      gate(`${tier} ${d.name} base: ray centrelines |d| max (HL) / every base vertex outside max`, `${fmt(cMax)} / ${fmt(bOut)}`, '≤ 0.01 / ≤ 0.002', cMax <= 0.01 && bOut <= 0.002);
+      gate(`${tier} ${d.name} base |d| max over the lenses (HL; report: the fleshy base lies inside the lobe)`, fmt(bMax), 'report (B2 ≤ 0.01)', true);
+    } else gate(`${tier} ${d.name} base |d| max (HL) / outside max`, `${fmt(bMax)} / ${fmt(bOut)}`, '≤ 0.01 / ≤ 0.002', bMax <= 0.01 && bOut <= 0.002);
     // 3 + 6 per state
     const tg = buildFinTargets(d, m);
     (TG[tier] ??= {})[d.name] = tg;
@@ -280,12 +301,13 @@ const st = (name, state, tier = 'hero') => {
   {
     const d = D.Fin_Pectoral_L, Pc = K.pectoral, sh = Pc.shoulder;
     const blade = Math.max(...d.rays.map((r) => r.len));
-    gate('shape pectoral blade (longest ray, HL)', fmt(blade), '0.44-0.48', inRange(blade, 0.44, 0.48));
+    gate('shape pectoral blade (longest ray, HL)', fmt(blade), '0.45-0.50', inRange(blade, 0.45, 0.50));
     const arm = Math.hypot(...sub(Pc.elbow, sh)) + Math.hypot(...sub(Pc.wrist, Pc.elbow));
-    gate('shape pectoral arm shoulder → wrist (HL; the trunk\'s, design 0.40-0.45)', fmt(arm), 'report', true);
+    gate('shape pectoral lobe shoulder → junction (HL; the pectoral key\'s design 0.30-0.45)', fmt(arm), '0.30-0.45', inRange(arm, 0.30, 0.45));
+    gate('shape pectoral lobe ÷ blade (report: B2\'s anatomy review asked ≤ 0.7)', fmt(arm / blade), 'report', true);
     const { P, n } = st('Fin_Pectoral_L', 'bind');
     let far = 0; for (let i = 0; i < n; i++) far = Math.max(far, Math.hypot(P[i * 3] - sh[0], P[i * 3 + 1] - sh[1], P[i * 3 + 2] - sh[2]));
-    gate('shape pectoral shoulder → blade tip (HL)', fmt(far), '0.85-0.95', inRange(far, 0.85, 0.95));
+    gate('shape pectoral shoulder → blade tip (HL)', fmt(far), '0.80-0.95', inRange(far, 0.80, 0.95));
     const span = Math.hypot(...sub(d.rays[0].base, d.rays[d.rays.length - 1].base)), wrist = 2 * Pc.radius[2];
     gate('shape pectoral ray bases across / the wrist\'s width', `${fmt(span)} / ${fmt(wrist)} = ${fmt(span / wrist)}`, '≥ 0.85', span / wrist >= 0.85);
     const S = st('Fin_Pectoral_L', 'spread'), m = S.m;
@@ -296,7 +318,7 @@ const st = (name, state, tier = 'hero') => {
     const c = d.rays.map((r) => r.base).reduce((p, q) => p.map((v, i) => v + q[i] / d.rays.length), [0, 0, 0]);
     const rad = d.rays.map((r, k) => { const tip = tipOf(k); return Math.hypot(S.P[tip * 3] - c[0], S.P[tip * 3 + 1] - c[1], S.P[tip * 3 + 2] - c[2]); }).sort((x, y) => x - y);
     const med = (rad[6] + rad[7]) / 2;
-    gate('shape pectoral spread fan radius (median ray tip from the bases\' middle, HL)', fmt(med), '0.41-0.47', inRange(med, 0.41, 0.47));
+    gate('shape pectoral spread fan radius (median ray tip from the bases\' middle, HL)', fmt(med), '0.41-0.49', inRange(med, 0.41, 0.49));
   }
   {
     const { P, n } = st('Fin_Pelvic', 'bind');
@@ -387,7 +409,23 @@ const st = (name, state, tier = 'hero') => {
     let a = 0, b = 0.3; for (let i = 0; i < 40; i++) { const mm = (a + b) / 2; if (F(s, y, mm) < 0) a = mm; else b = mm; }
     if (hz > 0) worstR = Math.max(worstR, a / hz);
   });
-  gate('caudal: body half-width at the plate ÷ the root lens\' half-thickness (worst ray)', fmt(worstR), '≤ 2.5', worstR <= 2.5);
+  gate('caudal: body half-width at the plate ÷ the root lens\' half-thickness (worst ray; report: B2\'s end-plate design)', fmt(worstR), 'report (≤ 2.5)', true);
+  // (round B3) the roots embedded: each principal ray's base inside the body, and the ray inside it from its base for
+  // ≥ 0.08 HL (its own vertices near the ray line ordered up the ray: the first one outside the body)
+  let baseOut = -Infinity; pr.forEach((r) => { baseOut = Math.max(baseOut, F(...r.base)); });
+  gate('caudal: principal ray bases inside the body (field max, HL)', fmt(baseOut), '< 0', baseOut < 0);
+  for (const state of ['bind', 'fold', 'spread']) {
+    const { P } = st('Fin_Caudal', state);
+    const per = pr.map((r) => {
+      const k = d.rays.indexOf(r), vs = [];
+      for (let i = 0; i < m.position.length / 3; i++) if (Math.abs(m.ray[i] - k) < 0.12) vs.push(i);
+      vs.sort((a, b) => m.rayT[a] - m.rayT[b]);
+      for (const i of vs) if (F(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]) >= 0) return m.rayT[i] * r.len;
+      return r.len;
+    });
+    const inner = per.slice(1, -1), lo = Math.min(...per), loIn = Math.min(...inner);
+    gate(`caudal ${state}: principal rays inside the body from the base (HL; min all / inner 15 / marginal pair)`, `${fmt(lo)} / ${fmt(loIn)} / ${fmt(per[0])}, ${fmt(per[per.length - 1])}`, '≥ 0.08', lo >= 0.08);
+  }
 }
 
 // 11 the pectoral's plant
@@ -416,7 +454,7 @@ const st = (name, state, tier = 'hero') => {
   const u = nrm(sub(K.pectoral.wrist, K.pectoral.elbow));
   const mid = [(d.rays.length - 1) >> 1, d.rays.length >> 1].map((k) => d.rays[k].base).reduce((a, b) => a.map((v, i) => (v + b[i]) / 2));
   const heel = so.heel.map((v) => v / HL), inner = nrm(sub(heel, mid)), ang = Math.acos(dot(inner, u)) * DEG, hd = Math.hypot(...sub(heel, mid));
-  gate('plant: inner blade (bases → heel) vs the forearm (deg) / heel from the bases (HL)', `${fmt(ang)} / ${fmt(hd)}`, '≤ 10 / 0.15-0.20', ang <= 10 && hd >= 0.15 && hd <= 0.2);
+  gate('plant: inner blade (bases → heel) vs the lobe (deg) / heel from the bases (HL)', `${fmt(ang)} / ${fmt(hd)}`, '≤ 10 / 0.25-0.32', ang <= 10 && hd >= 0.25 && hd <= 0.32);
 }
 
 // 12 the pectoral's fold in the arm's rest pose: on the flank
@@ -496,23 +534,30 @@ else {
     }
     return { joints, weights };
   };
+  // (round B3: the caudal's roots are embedded in the peduncle's tongue, so its test field is its clearance field
+  // def.space (the body but for the tongue's inside), and the vertices hidden in the body in the bind must stay hidden)
+  const pose14 = { ...poses, 'caudal yaw 30°': { J_caudal: [[0, 1, 0], 30] } };
   for (const name of ['Fin_Dorsal1', 'Fin_Dorsal2', 'Fin_Anal', 'Fin_Caudal']) {
     const d = D[name], m = meshes.hero[name], tg = TG.hero[name], kf = tg.names.indexOf('fold'), n = m.position.length / 3;
+    const sp = d.space ? d.space('fold') : null;
+    const hidden = sp ? new Set([...Array(n).keys()].filter((v) => fmm(...[0, 1, 2].map((c) => m.position[v * 3 + c] + tg.deltas[kf][v * 3 + c])) / HL < -0.001)) : null;
     for (const [wn, w] of [['rig.finWeights', finWeights(d, m)], ...(m.foldS ? [['proposed foldS rule (report)', proposed({ ...m, type: d.type })]] : [])]) {
-      for (const [pn, pose] of Object.entries(poses)) {
+      for (const [pn, pose] of Object.entries(sp ? pose14 : poses)) {
         const W = posed(pose);
-        let inside = 0, worst = 0;
+        let inside = 0, worst = 0, out = 0, worstOut = 0;
         for (let v = 0; v < n; v++) {
-          // (past the root's ease, where finWeights blends the fin's own rule in from the body's row)
-          if (m.rayT[v] < 0.15) continue;
           const p = [0, 1, 2].map((c) => m.position[v * 3 + c] + tg.deltas[kf][v * 3 + c]);
           const ws = []; for (let k = 0; k < 4; k++) if (w.weights[v * 4 + k]) ws.push([w.joints[v * 4 + k], w.weights[v * 4 + k] / 255]);
-          const M = blend(W, ws), q = ap(M.R, p).map((c, i) => c + M.t[i]);
-          const dd = fmm(...unpose(W, q)) * HL;
+          const M = blend(W, ws), q = ap(M.R, p).map((c, i) => c + M.t[i]), u = unpose(W, q);
+          if (hidden?.has(v)) { const dd = fmm(...u); if (dd > 0) { out++; worstOut = Math.max(worstOut, dd * HL); } }
+          // (past the root's ease, where finWeights blends the fin's own rule in from the body's row)
+          if (m.rayT[v] < 0.15) continue;
+          const dd = sp ? sp.f(u.map((c) => c / HL)) * HL : fmm(...u) * HL;
           if (dd < -0.05) { inside++; worst = Math.min(worst, dd); }
         }
         const report = wn !== 'rig.finWeights';
-        gate(`posed ${pn} (${wn}): ${name} folded, vertices > 0.05 mm inside the body`, `${inside} (deepest ${fmt(worst)} mm)`, report ? 'report' : '0', report || inside === 0);
+        gate(`posed ${pn} (${wn}): ${name} folded, vertices > 0.05 mm inside the ${sp ? 'clearance field (def.space)' : 'body'}`, `${inside} (deepest ${fmt(worst)} mm)`, report ? 'report' : '0', report || inside === 0);
+        if (hidden && !report) gate(`posed ${pn}: ${name} folded, of the ${hidden.size} vertices hidden in the bind body, come out`, `${out} (max ${fmt(worstOut)} mm)`, '0', out === 0);
       }
     }
   }

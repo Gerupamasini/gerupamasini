@@ -6,6 +6,13 @@
 //                                                                the work dir and write a GLB with a UV checker
 //   node tools/models/tobihaze/shots-uv.mjs hausdorff            the hero against its dense mesh, per face region
 //   node tools/models/tobihaze/shots-uv.mjs sil                  lod1 / lod2 silhouettes against the hero's (pixel IoU)
+//   node tools/models/tobihaze/shots-uv.mjs gates --cache <hero data> [--tiers hero,lod1,lod2] [--json <file>]
+//                                                                the tiers as build.mjs makes them (heroData's dense mesh
+//                                                                charted anew, lighterSkin): topology (welded by source and
+//                                                                by position), UV folds / collapsed / outside / overlap,
+//                                                                texel density, tangents, the patch's islands — where, and
+//                                                                how much of each the skin shows from 42 directions (round
+//                                                                B3) — and lod2's axial edges and dome charts
 //   node tools/models/tobihaze/shots-uv.mjs render [--port 5324] [--which tex,clay,ncheck] the checker GLBs (textured),
 //                                                                the hero against the dense mesh (clay macros) and the
 //                                                                tangent-space checker normal maps, through render.mjs
@@ -58,7 +65,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-  const WORK = process.env.UV_WORK ?? '/tmp/claude-0/-home-user-gerupamasini/2d93d55d-46eb-5657-8d95-9431085fe97d/scratchpad/ref/work/b2_mesh';
+  const WORK = process.env.UV_WORK ?? '/tmp/claude-0/-home-user-gerupamasini/2d93d55d-46eb-5657-8d95-9431085fe97d/scratchpad/ref/work/b3_tech/uv';
   const OUT = path.join(here, 'out', 'mesh');
   fs.mkdirSync(WORK, { recursive: true }); fs.mkdirSync(OUT, { recursive: true });
   const t0 = Date.now();
@@ -69,8 +76,9 @@ async function main() {
   if (cmd === 'hausdorff') return hausdorffCmd({ WORK, log, report });
   if (cmd === 'sil') return silCmd({ WORK, OUT, log, report });
   if (cmd === 'render') return renderCmd({ WORK, OUT, log, port: Number(arg('--port', 5324)), which: arg('--which', 'tex,clay') });
+  if (cmd === 'gates') return gatesCmd({ cache: arg('--cache', null), tiers: arg('--tiers', 'hero,lod1,lod2').split(','), json: arg('--json', null), log });
   if (cmd === 'morphs') return morphsCmd({ WORK, log, report, h: Number(arg('--h', 0.09)), weights: arg('--weights', '0,0.05,0.25').split(',').map(Number) });
-  console.log('usage: shots-uv.mjs seal | tiers [hero,lod1,lod2] | hausdorff | sil | render [--port 5324] | morphs');
+  console.log('usage: shots-uv.mjs seal | tiers [hero,lod1,lod2] | hausdorff | sil | gates --cache <file> | render [--port 5324] | morphs');
 }
 
 // ---- the extra attributes: proxy head morphs (the jaw dropped 20° about J_jaw, each cup lowered 0.08 HL, the cheeks
@@ -125,6 +133,138 @@ async function morphsCmd({ WORK, log, report, h, weights }) {
     log(`weight ${w}: ${Object.entries(row).map(([k, r]) => `${k} max ${r.max.toFixed(4)} p99 ${r.p99.toFixed(4)} mm`).join(' | ')}`);
   }
   report('morphs', out);
+}
+
+// ---- gates: the skin tiers as build.mjs makes them (round B3)
+/** The triangles that win a pixel of an orthographic z-buffer from any of `nDir` directions (a Fibonacci sphere),
+ * `px` mm per pixel: Uint8Array per triangle. */
+export function visibleTriangles(P, I, { nDir = 42, px = 0.05 } = {}) {
+  const nt = I.length / 3, vis = new Uint8Array(nt), n = P.length / 3, X = new Float32Array(n), Y = new Float32Array(n), Z = new Float32Array(n);
+  for (let d = 0; d < nDir; d++) {
+    const z = 1 - (2 * (d + 0.5)) / nDir, r = Math.sqrt(1 - z * z), ph = d * Math.PI * (3 - Math.sqrt(5)), D = [r * Math.cos(ph), r * Math.sin(ph), z];
+    const a = Math.abs(D[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    let e1 = [D[1] * a[2] - D[2] * a[1], D[2] * a[0] - D[0] * a[2], D[0] * a[1] - D[1] * a[0]];
+    const l1 = Math.hypot(...e1); e1 = e1.map((x) => x / l1);
+    const e2 = [D[1] * e1[2] - D[2] * e1[1], D[2] * e1[0] - D[0] * e1[2], D[0] * e1[1] - D[1] * e1[0]];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let v = 0; v < n; v++) {
+      const p0 = P[v * 3], p1 = P[v * 3 + 1], p2 = P[v * 3 + 2];
+      X[v] = p0 * e1[0] + p1 * e1[1] + p2 * e1[2]; Y[v] = p0 * e2[0] + p1 * e2[1] + p2 * e2[2]; Z[v] = p0 * D[0] + p1 * D[1] + p2 * D[2];
+      x0 = Math.min(x0, X[v]); y0 = Math.min(y0, Y[v]); x1 = Math.max(x1, X[v]); y1 = Math.max(y1, Y[v]);
+    }
+    const W = Math.ceil((x1 - x0) / px) + 2, H = Math.ceil((y1 - y0) / px) + 2, zb = new Float32Array(W * H).fill(-Infinity), id = new Int32Array(W * H).fill(-1);
+    for (let t = 0; t < nt; t++) {
+      const A = I[t * 3], B = I[t * 3 + 1], C = I[t * 3 + 2];
+      const ax = (X[A] - x0) / px, ay = (Y[A] - y0) / px, bx = (X[B] - x0) / px, by = (Y[B] - y0) / px, cx = (X[C] - x0) / px, cy = (Y[C] - y0) / px;
+      const den = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+      if (Math.abs(den) < 1e-12) continue;
+      const i0 = Math.max(0, Math.floor(Math.min(ax, bx, cx))), i1 = Math.min(W - 1, Math.ceil(Math.max(ax, bx, cx)));
+      const j0 = Math.max(0, Math.floor(Math.min(ay, by, cy))), j1 = Math.min(H - 1, Math.ceil(Math.max(ay, by, cy)));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = i + 0.5, y = j + 0.5, w1 = ((bx - x) * (cy - y) - (cx - x) * (by - y)) / den, w2 = ((cx - x) * (ay - y) - (ax - x) * (cy - y)) / den, w3 = 1 - w1 - w2;
+        if (w1 < 0 || w2 < 0 || w3 < 0) continue;
+        const zz = w1 * Z[A] + w2 * Z[B] + w3 * Z[C], k = j * W + i;
+        if (zz > zb[k]) { zb[k] = zz; id[k] = t; }
+      }
+    }
+    for (let k = 0; k < id.length; k++) if (id[k] >= 0) vis[id[k]] = 1;
+  }
+  return vis;
+}
+
+async function gatesCmd({ cache, tiers: which, json, log }) {
+  const { HEAD_SCULPT } = await import('./head.mjs');
+  const { marginCurve } = await import('./headrig.mjs');
+  const { BODY_SCULPT } = await import('./body.mjs');
+  const { meshTopology, TIERS: MT, ready, bodyTierMesh, morphAttrs } = await import('./fishmesh.mjs');
+  const { uvStats } = await import('./charts.mjs');
+  const { tangentCheck } = await import('./tiers.mjs');
+  const { JOINTS } = await import('./rig.mjs');
+  const { heroData, lighterSkin } = await import('./build.mjs');
+  await ready;
+  const H = await heroData({ cache, log: () => {} });
+  const tiers = {};
+  // (the hero's tier charted anew from the cached dense mesh: the cache keeps the tier it was made with)
+  if (which.includes('hero')) tiers.hero = bodyTierMesh('hero', { dense: H.dense, extraAttrs: morphAttrs(['blinkL', 'blinkR', 'gape', 'vent', 'inflate', 'throat'].map((k) => H.D[k])) });
+  for (const t of ['lod1', 'lod2']) if (which.includes(t)) tiers[t] = lighterSkin(t, H, () => {}).tier;
+  const E = HEAD.eye, re = E.d / 2, sOp = marginCurve(HEAD_SCULPT.opercle.path), PC = BODY_SCULPT.pectoral;
+  const where = (c, cls, src) => {
+    const [s, y, z] = c.map((x) => x / HL);
+    if (cls.mouth?.[src]) return 'mouth walls';
+    if (cls.gill?.[src]) return 'gill pocket';
+    if (Math.hypot(s - E.s, y - E.y, Math.abs(z) - E.z) < re + 0.1) return 'eye';
+    if (s < 0.36 && y < 0.25) return 'lips/mouth';
+    if (y > 0.12 && y < 0.45 && Math.abs(s - sOp(y)) < 0.08) return 'gill cover';
+    if (s < 1.32 && y < 0.06 && Math.abs(z) < 0.35) return 'cheek/throat';
+    if (s > 0.95 && s < 1.5 && Math.hypot(s - PC.shoulder[0], y - PC.shoulder[1], Math.abs(z) - PC.shoulder[2]) < 0.18) return 'arm root';
+    if (s > 1.0 && s < 1.9 && Math.abs(z) > 0.25 && y < 0.4) return 'arm';
+    if (s < 1.32) return 'head other';
+    if (s > 4.0) return 'tail';
+    return 'trunk';
+  };
+  const triArea = (P, I, t) => { const a = I[t * 3] * 3, b = I[t * 3 + 1] * 3, c = I[t * 3 + 2] * 3; const u = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]], v = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]]; return 0.5 * Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]); };
+  const chain = ['J_root', 'J_sp1', 'J_sp2', 'J_sp3', 'J_sp4', 'J_sp5', 'J_sp6', 'J_sp7', 'J_caudal'].map((nm) => JOINTS.find((j) => j.name === nm).at[0] / HL);
+  const out = {};
+  for (const [name, m] of Object.entries(tiers)) {
+    const R = {}, I = m.indices, P = m.position, nt = I.length / 3;
+    const ch = m.charts.map((c) => ({ ...c, hidden: c.hidden ?? c.name === 'hidden', relay: c.relay ?? c.name === 'patch' }));
+    const topo = meshTopology(m, { weld: m.source });
+    // (welded by position too: two dense vertices at one point, as where lod1's kept lining meets the outer skin)
+    const pk = new Map(), wpos = new Uint32Array(P.length / 3);
+    for (let v = 0; v < P.length / 3; v++) { const k = `${P[v * 3].toFixed(5)},${P[v * 3 + 1].toFixed(5)},${P[v * 3 + 2].toFixed(5)}`; let j = pk.get(k); if (j === undefined) { j = pk.size; pk.set(k, j); } wpos[v] = j; }
+    R.topology = { tris: topo.F, vertices: P.length / 3, components: topo.components, open: topo.open, nonManifold: topo.nonManifold, nonManifoldByPosition: meshTopology(m, { weld: wpos }).nonManifold, genus: topo.genus };
+    const ci = ch.findIndex((c) => c.name === 'patch'), st = uvStats(m, ch, { size: MT[name].tex });
+    const body = ['bodyL', 'bodyR'].map((nm) => st.charts.find((c) => c.name === nm).density.p50).reduce((a, b) => a + b) / 2;
+    R.uv = { folds: st.total.folds, collapsed: st.total.collapsed, outside: st.total.outside, overlapTexels: st.total.overlap, texels: st.total.texels };
+    R.density = Object.fromEntries(st.charts.filter((c, i) => c.tris && !ch[i].hidden).map((c) => [c.name, +(c.density.p50 / HL * 1000).toFixed(2)]));
+    R.patchOverBody = +(st.charts[ci].density.p50 / body).toFixed(2);
+    // the patch's islands (joined through shared vertices): where, and the area the skin shows of each
+    const vis = visibleTriangles(P, I, { px: name === 'hero' ? 0.04 : name === 'lod1' ? 0.06 : 0.12 });
+    const par = new Int32Array(nt).map((_, i) => i), f = (a) => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+    const own = new Map();
+    for (let t = 0; t < nt; t++) if (m.triChart[t] === ci) for (let k = 0; k < 3; k++) { const v = I[t * 3 + k], u = own.get(v); if (u === undefined) own.set(v, t); else { const a = f(u), b = f(t); if (a !== b) par[b] = a; } }
+    const isl = new Map();
+    for (let t = 0; t < nt; t++) if (m.triChart[t] === ci) { const r = f(t); if (!isl.has(r)) isl.set(r, []); isl.get(r).push(t); }
+    const byWhere = {};
+    let nv = 0, area = 0;
+    for (const g of isl.values()) {
+      const c = [0, 0, 0]; let A = 0, Av = 0;
+      for (const t of g) { const a = triArea(P, I, t); A += a; if (vis[t]) Av += a; for (let k = 0; k < 3; k++) for (let q = 0; q < 3; q++) c[q] += P[I[t * 3 + k] * 3 + q] / (g.length * 3); }
+      const w = where(c, m.classes ?? {}, m.source[I[g[0] * 3]]), B = (byWhere[w] ??= { islands: 0, tris: 0, visibleMM2: 0 });
+      B.islands++; B.tris += g.length;
+      if (Av > 0.05 * A && Av > 0.02) { B.visibleMM2 = +(B.visibleMM2 + Av).toFixed(2); nv++; area += Av; }
+    }
+    const sizes = [...isl.values()].map((g) => g.length);
+    R.patch = { tris: sizes.reduce((a, b) => a + b, 0), islands: sizes.length, singles: sizes.filter((x) => x === 1).length, visibleIslands: nv, visibleMM2: +area.toFixed(2), byWhere };
+    const tc = tangentCheck(m.normal, m.tangent);
+    R.tangents = { vertices: tc.n, bad: tc.bad };
+    if (name === 'lod2') {
+      const S = m.source, seen = new Set();
+      let over = 0, worst = 0;
+      const sp = (s) => { for (let i = 0; i + 1 < chain.length; i++) if (s <= chain[i + 1]) return chain[i + 1] - chain[i]; return chain[chain.length - 1] - chain[chain.length - 2]; };
+      for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) {
+        const a = I[t * 3 + k], b = I[t * 3 + (k + 1) % 3], key = Math.min(S[a], S[b]) * 1e7 + Math.max(S[a], S[b]);
+        if (seen.has(key)) continue; seen.add(key);
+        const sa = P[a * 3] / HL, sb = P[b * 3] / HL, mid = (sa + sb) / 2;
+        if (mid < chain[0] || mid > chain[chain.length - 1]) continue;
+        const r = Math.abs(sa - sb) / sp(mid); if (r > 0.6) over++; worst = Math.max(worst, r);
+      }
+      R.axialEdges = { over06: over, worst: +worst.toFixed(2) };
+      // (the skin round each globe by chart, per side: the two eyes charted alike)
+      const domes = { L: {}, R: {} };
+      for (let t = 0; t < nt; t++) {
+        const c = [0, 1, 2].map((q) => (P[I[t * 3] * 3 + q] + P[I[t * 3 + 1] * 3 + q] + P[I[t * 3 + 2] * 3 + q]) / 3 / HL), sd = c[2] >= 0 ? 'L' : 'R';
+        const r = Math.hypot(c[0] - E.s, c[1] - E.y, Math.abs(c[2]) - E.z);
+        if (r > re + 0.1 || r < re - 0.01) continue;
+        const nm = ch[m.triChart[t]].name; domes[sd][nm] = (domes[sd][nm] ?? 0) + 1;
+      }
+      R.domes = domes;
+    }
+    out[name] = R;
+    log(`${name} ${JSON.stringify(R)}`);
+  }
+  if (json) fs.writeFileSync(json, JSON.stringify(out, null, 1));
+  return out;
 }
 
 // ---- seal: the sealed and far fields' topology at h 0.16 and 0.40 (raw surface nets, then the tier's dense skin)

@@ -7,11 +7,14 @@
 //      about 0.6 of the body depth when half raised (A070, B067, B014), 0.9-1.0 erect (A001, B062, A065); folded it lies
 //      low along the back, a streak in its groove (A030; ≤ 0.035 HL over the skin), and stops short of D2 (Lee 1995).
 //   D2 I,12, long and low, rounded in front, even height (0.38-0.45 BD erect: A065, A001).
-//   anal I,11, low, mirroring D2 on the belly (0.4-0.5 BD erect: A065).
-//   caudal 17 principal rays (the outermost of each lobe unbranched) from the peduncle's end plate, their bases on a
-//      straight line down its face over its whole depth, a fleshy, scaled base as thick as the plate running on over
-//      their roots, and procurrent rays (6 dorsal, 6 ventral) along the peduncle's edges in front: the outline runs on
-//      from the peduncle into the fin (A017, A070, A067); on land folded into a pointed lanceolate spear, its tip a
+//   anal I,11, low, mirroring D2 on the belly (0.4-0.5 BD erect: A065); folded into a furrow along the ventral midline
+//      (round B3: body.mjs keels.anal.groove; B2's folded fin hung 0.029 HL under the belly).
+//   caudal 17 principal rays (the outermost of each lobe unbranched) from the hypural plate just behind the caudal base,
+//      their bases on a straight line down the midplane under the skin of the peduncle's fleshy end (round B3: the body
+//      tapers on past the caudal base into the fin, the rays run 0.19–0.27 HL under its skin and the fin's own fleshy
+//      base takes over at its end as thick as it; B2's flat end plate with the rays on its face read as a brush in a
+//      metal band), and procurrent rays (6 dorsal, 6 ventral) along the peduncle's margins in front: the outline runs
+//      on from the peduncle into the fin (A017, A070, A067); on land folded into a pointed lanceolate spear, its tip a
 //      little below the body's axis and its lower margin the straighter and longer (A017, A070, A059); relaxed
 //      rounded-lanceolate; spread rounded (A061, A065); the lowest rays thickened distally (Murdy 1989).
 //   pectoral (round B2's shared design: the owner's "developed pectoral fins") the arm (body.mjs) 0.40-0.45 HL from the
@@ -23,7 +26,8 @@
 //      ground, pointing back and out (A070, A005, u1, B010).
 //   pelvic I,5 a side: two fins joined in front by a frenum and along their inner rays by a membrane about half their
 //      length, the rear margin notched: a shallow cup open to the rear under the chest, a dish seen from the front
-//      (Murdy, Lee, Itoh; B014, B010), 0.3-0.5 HL long; folded flat back under the belly (B067).
+//      (Murdy, Lee, Itoh; B014, B010), 0.3-0.5 HL long; folded flat back under the belly (B067); on land pressed on the
+//      ground under the chest (u1, B010, A005: round B3's 'press').
 //
 // Geometry. Every ray is a raised round ridge on both faces of the membrane: a lens-shaped tube (half-width w across the
 // fin, half-thickness h through it) along the ray's centre line, the membrane sheet running from the edge of one ray's
@@ -46,6 +50,10 @@
 //            flank) and carried back to the bind through the wrist: tangent to the skin, ≤ 0.3 mm off it, in that pose
 //   spread   erect / the fan fully open (the pectoral's paddle)
 //   flex     (caudal) the fin's rear bent to the fish's left (+z); a negative weight bends it to the right
+//   press    (pelvic, round B3) the cup pressed on the ground in LAND: each ray dives from its base and lies on a plane
+//            FIN_SCULPT.pelvic.press.drop under the bases, tilted as the ground is in the head's frame with the front
+//            raised 15° (def.press: its normal and a point, fish mm), J_pelvic left near 0 (B2 tilted the rigid cup 21°
+//            until its rear rim touched: a vertical sail)
 //   plant    (pectoral) the inner blade furled along the forearm to the heel, the rest turned into one plane, the sole
 //            (def.sole): flat when the forearm stands as a leg (FIN_SCULPT.pectoral.plant lean / splay; the rig's IK,
 //            rig.mjs solveArmPlant, levels it exactly by def.sole.normal), its rays fanned back and out, pressed flat on
@@ -56,13 +64,16 @@
 //
 // Interface (body_contract §5): FIN_SCULPT, FIN_ATLAS, finDefinitions(K), buildFinMesh(def, { sub, nt, m?, relief? }),
 // buildFinTargets(def, mesh, { normals? }) → { names, deltas (mm), normals }, finCard(def, { state? }),
-// finCardTargets(def) → { names ['fold'(, 'plant')], deltas, normals } (the far tier's card blend shapes),
+// finCardTargets(def) → { names (def.cardTargets, else ['fold'(, 'plant')]), deltas, normals } (the far tier's card
+// blend shapes; round B3: the caudal's fold / spread / flex, the pelvic's fold / spread / press),
 // finTierParams(tier). Besides the contract's fields a mesh carries `build` (its options; buildFinTargets rebuilds from
 // them for a copied mesh), the median fins' and the caudal's `foldS` (fish mm: each vertex's s when folded, for the
 // rig: see rig.mjs finWeights) and, not enumerable, `root` (the root point under every vertex, mm). The pectoral defs
 // carry `bladePivot` (mm: the plant's heel, the ankle the sole turns on, for the rig's J_pecBlade), `sole` (the planted
 // sole's plane, point, heel, heel axis and toe, for the rig's IK and the contacts) and `restPose` (the arm's rest pose
-// the fold is authored in, as joint rotations); the caudal def carries `plate` (the end plate the rays spring from).
+// the fold is authored in, as joint rotations); the caudal def carries `plate` (the hypural plate's s, the fleshy end's
+// s, the skin's top and bottom at the plate) and `space` (the field it is kept clear of: the body but for the inside of
+// its fleshy end, where the roots run by design; test-fins' gate 3 reads it); the pelvic def `press` (the plane).
 // UVs: u across the rays by their spacing, v along them by length (uvMap), the same on every tier and card.
 // Weights (rig.mjs finWeights): D1, D2 and the anal fin by each vertex's baseS (the axial row of the body under its
 // root; round B2 asks the rig to blend toward foldS by rayT, so a folded ray's tip follows the arched back), the caudal
@@ -137,7 +148,9 @@ export const FIN_SCULPT = {
   // D2 I,12
   d2: {
     keel: 'd2', inset: [0.015, 0.03], spines: 1,
-    len: [0.16, 0.27, 0.31, 0.33, 0.335, 0.335, 0.335, 0.335, 0.335, 0.33, 0.32, 0.30, 0.28],
+    // (× 0.92 at round B3's integration, the trunk key's request: with B3's belly the erect D2 stood 0.455 BD, over the
+    // gate's 0.45 and B2's review's 0.38-0.42 (A065, A001 0.355-0.395); now ≈ 0.42, anal / D2 ≈ 0.87)
+    len: [0.1472, 0.2484, 0.2852, 0.3036, 0.3082, 0.3082, 0.3082, 0.3082, 0.3082, 0.3036, 0.2944, 0.276, 0.2576],
     angle: { bind: [36, 26], spread: [66, 52], fold: [5, 3] },
     spineAngle: { bind: 46, spread: 80, fold: 7 },
     bend: { bind: 8, spread: 3, fold: 0 },
@@ -146,67 +159,78 @@ export const FIN_SCULPT = {
   },
   // anal I,11
   anal: {
-    keel: 'anal', inset: [0.015, 0.03], spines: 1,
+    keel: 'anal', inset: [0.015, 0.03], spines: 1, foldNormalHint: true, foldSurface: { margin: 0.001, stagger: 0.0004 },
     len: [0.12, 0.22, 0.26, 0.28, 0.29, 0.295, 0.30, 0.30, 0.30, 0.29, 0.28, 0.265],
-    angle: { bind: [32, 24], spread: [62, 48], fold: [6, 4] },   // (fold 6–4: the shorter keel of round B1 shingles its 12 rays closer; at 5–3, 1.35 % of the folded faces turned against their normals)
+    angle: { bind: [32, 24], spread: [62, 48], fold: [3, 2] }, foldLift: 26,   // (fold 6–4: the shorter keel of round B1 shingles its 12 rays closer; at 5–3, 1.35 % of the folded faces turned against their normals)
     spineAngle: { bind: 40, spread: 74, fold: 7 },
     bend: { bind: 8, spread: 3, fold: 0 },
     reach: 0.97, notch: 0.03, notchPow: 0.85,
     pleat: { bind: 0.007, spread: 0.002, fold: 0.011 }, sag: { bind: 0.004, spread: 0.001, fold: 0.003 },
   },
-  // caudal: 17 principal rays from the peduncle's end plate (the hypural plate: their bases on a straight line down the
-  // plate's face, read from the body's field, the outermost `edge` HL inside its dorsal and ventral corners so the fan
-  // covers the plate's whole depth and no corner of the body shows past the first and last ray), dorsal and ventral
-  // procurrent rays along its edges in front (procS from the plate); principal lengths a lanceolate profile peaking at
-  // `tipAt` of the fan (dorsal 0 → ventral 1, below the middle: the tip under the axis, the lower margin the longer),
-  // the longest reaching TL (`tipS`, HL) from its base; angles (deg, from the body's axis, + up) of the dorsal-most and
-  // ventral-most principal rays per state (bind: rounded-lanceolate, half way between the folded spear and the spread
-  // fan; round B1's 8° / −4° was a parallel brush); `flesh`: the fin's fleshy, scaled base (the peduncle's skin running
-  // on over the ray roots): the principal rays' lenses at their roots as thick as `k` × the plate's half-width there
-  // and as wide as `w` × the gap to the next ray (so they close up into one corrugated surface), held over `hold` HL
-  // (swelling by `swell` past the face's rounded rim, which hides under it) and easing to the bare ray by `over`
+  // caudal (round B3: no end plate any more; B2's flat face with the rays on it read as a brush in a metal band): 17
+  // principal rays from the hypural plate `plateS` HL behind the caudal base, their bases on a straight line down the
+  // midplane under the skin of the peduncle's fleshy end (body.mjs: the body tapers on past the caudal base, half-width
+  // 0.063 → 0.010 HL over 0.21 HL, to K.tailEnd.s), the outermost `edge` HL inside its dorsal and ventral margins, so
+  // the rays run 0.19 HL inside the flesh before they leave it (A070, A017, A067: the scaled base covers the ray roots and
+  // the outline runs straight on into the fin); dorsal and ventral procurrent rays along the peduncle's margins in front
+  // (procS from the hypural plate), lying on them; principal lengths a lanceolate profile peaking at `tipAt` of the fan
+  // (dorsal 0 → ventral 1, below the middle: the tip under the axis, the lower margin the longer), the longest reaching
+  // TL (`tipS`, HL) from its base; angles (deg, from the body's axis, + up) of the dorsal-most and ventral-most principal
+  // rays per state (bind: rounded-lanceolate, half way between the folded spear and the spread fan; fold: the spear,
+  // its margins running on from the tapering peduncle's); `flesh`: where the rays leave the body's end the fin's own
+  // fleshy base takes over as thick as it (`k` × the body's half-width just before its end where the ray crosses it, at
+  // least `min`), the lenses as wide as `w` × the gap to the next ray (closing up into one corrugated slab), held to the
+  // body's end and easing to the bare ray over `over` HL past it
   caudal: {
-    principal: 17, edge: 0.012, spanMin: 0.40, tipS: 80 / HL, tipAt: 0.69, upperDrop: [0.5, 1.4], lowerDrop: [0.14, 1.5],
+    principal: 17, plateS: 0.02, edge: 0.018, tipS: 80 / HL, tipAt: 0.69, upperDrop: [0.5, 1.4], lowerDrop: [0.14, 1.5],
     angle: { bind: [16, -12], spread: [36, -28], fold: [-9, 2], flex: [16, -12] },
-    procS: [-0.265, -0.225, -0.185, -0.145, -0.105, -0.068],   // from the plate's face
+    procS: [-0.25, -0.21, -0.17, -0.13, -0.09, -0.05],   // from the hypural plate
     procLen: { dorsal: [0.035, 0.06, 0.09, 0.125, 0.165, 0.21], ventral: [0.04, 0.07, 0.10, 0.14, 0.18, 0.23] },
-    procAngle: { bind: [14, 18], spread: [22, 30], fold: [-2, -4], flex: [14, 18] },
-    flesh: { k: 0.96, w: 0.47, over: 0.10, hold: 0.02, swell: 0.10 },
+    procAngle: { bind: [14, 18], spread: [22, 30], fold: [1, 0.5], flex: [14, 18] },
+    flesh: { k: 0.95, min: 0.003, thin: 0.06, w: 0.47, over: 0.06, square: 0.85 },
     thick: 3,            // the lowest principal rays thickened distally
     segScale: 0.5,       // its rows are far apart: the segments' joints only hinted
     flex: 38,            // deg the rays curl to the side at full flex
     reach: 0.97, procReach: 0.93, notch: 0.025, notchPow: 0.9,
     pleat: { bind: 0.005, spread: 0.002, fold: 0.008, flex: 0.005 }, sag: { bind: 0.004, spread: 0.001, fold: 0.002, flex: 0.004 },
   },
-  // pectoral blade (the shared design of round B2: the arm 0.40–0.45 HL from the shoulder to a spatulate wrist as wide
-  // as the fin's base, the blade 0.44–0.48 HL, the whole fin 0.85–0.95 HL from the shoulder to the longest ray's tip;
-  // MEAS 0.80–0.84, Murdy 25.8 % SL = 1.07 HL, B067's folded blade ≈ 0.55 HL): 14 rays whose bases run straight across
-  // the wrist's end, `span` × its width (the lobe's width there, BODY_SCULPT.pectoral.radius[2] × 2), `depth` HL under
-  // its end face; lengths `maxLen` in the middle of the fan, `edgeLen` of that at its edges, the fan rounded; fan angles
-  // (deg) in the lobe's flat plane (+ towards the lobe's wv edge: the trailing edge when the arm stands as a leg),
-  // turned by `turn`; the blade cupped towards the body (`curl`).
-  //   plant (A070, A005, u1, B010): the inner blade continues the forearm, its rays furled (`plant.inner`: the fan's
-  //     angles, converging) down to a heel `plant.heel` HL from the middle rays' bases, where each ray turns (over
-  //     `plant.over`) into one plane, the sole: flat on the ground when the forearm stands `plant.lean` deg forward of
-  //     the vertical and `plant.splay` deg out with its broad face outward (the rig's IK, rig.mjs solveArmPlant, levels
-  //     it exactly: def.sole carries the plane); the sole's rays fanned from `plant.sole[0]` (deg from out towards
-  //     back; the trailing edge's ray) to `plant.sole[1]` (the leading edge's): back and out; on the ground the rays'
-  //     lenses are flattened on their lower side to `plant.flat` of their thickness (pressed rays)
-  //   fold (A030, A040, B067): authored with the arm in the rest pose (fins.mjs restArmPose: the upper arm and forearm
-  //     laid back flush on the flank, `rest.droop` deg below the horizontal, `rest.gap` HL off it; def.restPose carries
-  //     the joints' rotations), the blade's rays furled (`fan.fold`) and hugging the flank (the trunk's skin) back from
-  //     the wrist, their lower faces `rest.margin` HL off it, reached over `rest.ramp` HL; then carried back to the bind
-  //     through the wrist's inverse
+  // pectoral blade (round B3's pectoral system: one muscular lobe 0.36 HL from the shoulder to the lobe/fin junction,
+  // body.mjs; the blade 0.45–0.50 HL; the whole fin 0.80–0.90 HL from the shoulder to the longest ray's tip: MEAS
+  // 0.80, A070 0.84; Murdy's 25.8 % SL = 1.07 HL is the longest): 14 rays whose bases run straight across the lobe's
+  // end, `span` × its width (BODY_SCULPT.pectoral.radius[2] × 2), `depth` HL under its end; lengths `maxLen` in the
+  // middle of the fan, `edgeLen` of that at its edges, the fan rounded; fan angles (deg) in the lobe's flat plane (+
+  // towards its leading edge wv, ray 0's side), turned by `turn`; the blade cupped (`curl`, + towards the outer face n).
+  // The fleshy fin base (B2's cuff: the lobe ended in a 0.047 HL thick face and the 0.007 HL blade started inside it):
+  // the rays' lenses at their roots as thick as `flesh.k` × the lobe's end (its half-width × fl[2]) and as wide as
+  // `flesh.w` × their spacing (closing up into one corrugated surface over the bases, the caudal's mechanism), held over
+  // `flesh.hold` HL and easing to the bare ray by `flesh.over`, so the lobe's skin runs on over the rays' bases.
+  //   furl (the land default: u1, A001, B010, A005, A070; Pace & Gibb 2009: rays furled on land): the rays bundled
+  //     (`fan.furl`: near parallel, the bundle 0.11–0.15 HL wide as the photos' furled blades 0.08–0.12) with the
+  //     membrane pleated between them (`pleat.furl`)
+  //   plant (from furl; A001, u1, B010, A070): the inner blade continues the junction's line to a heel `plant.heel` HL
+  //     from the middle rays' bases, where each ray turns (over `plant.over`) `plant.ankle` deg toward the outer face n
+  //     (forward when the lobe stands as a leg, its outer face forward) into one plane, the sole (def.sole: the rig's
+  //     IK, rig.mjs solveArmPlant, levels it), its rays splayed ±`plant.splay` deg, pressed flat on their ground side
+  //     (lenses flattened to `plant.flat` of their thickness), the tips bent under load by the rig (J_pecTip; `plant.tipCurl` 0: the sole one plane within 0.10 mm)
+  //   fold (A030, A002, B067): authored with the arm in the rest pose (restArmPose: the lobe laid back flush on the
+  //     flank, `rest.droop` deg below the horizontal, `rest.gap` HL off it; def.restPose carries the shoulder's
+  //     rotation), the rays furled (`fan.fold`), swept `rest.sweep` deg up from the lobe's line (B067: the folded fan
+  //     swept up and back) and hugging the flank (the trunk's skin) back from the junction, their lower faces
+  //     `rest.margin` HL off it, reached over `rest.ramp` HL; then carried back to the bind through the shoulder's inverse
   //   spread (A061): the paddle, the fan opened 144°, flat
+  //   prop: the junction's nominal flexion (deg, toward n) in the propped stance, the far tier's card bakes it into its
+  //     'plant' (lod2 has the arm as J_pecL alone) and the rig's IK holds the hero's junction near it
   pectoral: {
-    rays: 14, span: 0.9, depth: 0.006, maxLen: 0.46, edgeLen: 0.62,
-    fan: { bind: [44, -44], spread: [72, -72], fold: [8, -8] },
-    turn: { bind: 6, spread: 4, fold: 0 },
-    curl: { bind: 8, spread: 3, fold: 0, plant: 0 },
-    plant: { heel: 0.18, over: 0.06, lean: 12, splay: 10, inner: [-3, 3], sole: [80, 10], flat: 0.25 },
-    rest: { droop: 12, droop2: 14, gap: 0.004, from: 0.85, margin: 0.0012, ramp: 0.07 },
+    rays: 14, span: 0.9, depth: 0.012, maxLen: 0.50, edgeLen: 0.62,
+    flesh: { k: 0.86, w: 0.5, hold: 0.02, over: 0.12 },
+    fan: { bind: [34, -34], spread: [72, -72], fold: [3, -3], furl: [2.5, -2.5] },
+    turn: { bind: 0, spread: 0, fold: 0, furl: 0 },
+    curl: { bind: 6, spread: 3, fold: 0, furl: 3, plant: 0 },
+    plant: { heel: 0.29, over: 0.06, ankle: 46, roll: 20, splay: 7, flat: 0.3, tipCurl: 0, solePleat: 0.05 },
+    prop: { junction: 26 },
+    rest: { droop: 8, sweep: 12, gap: 0.004, from: 0.45, margin: 0.0012, ramp: 0.07 },
     reach: 0.97, notch: 0.04, notchPow: 0.85,
-    pleat: { bind: 0.005, spread: 0.0015, fold: 0.002, plant: 0.0005 }, sag: { bind: 0.004, spread: 0.001, fold: 0.0015, plant: 0.0005 },
+    pleat: { bind: 0.004, spread: 0.0015, fold: 0.002, furl: 0.023, plant: 0.012 }, sag: { bind: 0.004, spread: 0.001, fold: 0.0015, furl: 0.003, plant: 0.0005 },
   },
   // pelvic: per side the spine and 5 soft rays, bases along a short transverse line on the pelvic base (s from the base
   // centre, z), each ray's direction as (phi: deg round the vertical, 0 back, 90 out; beta: deg down from horizontal);
@@ -223,9 +247,17 @@ export const FIN_SCULPT = {
     frenum: { bind: [180, 45], spread: [180, 55] },
     foldPhi: [7, 5, 3.5, 2.5, 1.5, 0.6], foldLift: 18, foldMargin: 0.0003,
     curl: { bind: 8, spread: 8, fold: 0 },
+    // press (round B3; LAND, u1, B010, A005: the cup pressed on the ground under the chest, not a rigid tilted sail):
+    // the ground a plane `drop` HL under the lowest ray base (u1: the pelvic base 0.14 HL over the mud; 0.222 in the rig's
+    // integrated land state, where the settled chest holds the bases 1.3 mm higher: with 0.14 the rig had to tilt the
+    // pressed cup 21° to reach the ground, the sail again; round B3 integration, rig request), tilted `tilt`
+    // deg (rising toward the tail: the ground in the head's frame with the front raised by the rig's 15°, J_pelvic at 0);
+    // each ray dives from its base at `dive` deg below the plane's tangent, fanned at `phi` (deg round the vertical, as
+    // above; the frenum forward), and turns over its last `knee` HL onto the plane, its lower face `margin` HL over it
+    press: { drop: 0.222, tilt: 15, dive: 60, knee: 0.05, margin: 0.0006, phi: [98, 72, 52, 35, 20, 7], frenumPhi: 180 },
     frenumReach: 0.55, reach: 0.96, medialReach: 0.5, medialNotch: 0.12, notch: 0.03, notchPow: 0.85,
     rootDepth: 0.006, rayScale: 0.72,
-    pleat: { bind: 0.004, spread: 0.0015, fold: 0.0015 }, sag: { bind: 0.003, spread: 0.001, fold: 0.0015 },
+    pleat: { bind: 0.004, spread: 0.0015, fold: 0.0015, press: 0.0008 }, sag: { bind: 0.003, spread: 0.001, fold: 0.0015, press: 0.0006 },
   },
   // the atlas mapping (uvMap): no ray slot narrower than this share of the mean
   uv: { minSlot: 0.15, lenPow: 1.5, flesh: 0.45 },
@@ -237,7 +269,7 @@ export const FIN_SCULPT = {
     hero: {
       Fin_Dorsal1: { relief: true, m: 3, sub: 3, nt: 38 },
       Fin_Dorsal2: { relief: true, m: 4, sub: 2, nt: 22 },
-      Fin_Anal: { relief: true, m: 4, sub: 2, nt: 20 },
+      Fin_Anal: { relief: true, m: 3, sub: 2, nt: 20 },   // (round B3: hexagonal rays, no branched crests: in the groove's fold the split crests turned 9 % of the faces over)
       Fin_Caudal: { relief: true, m: 4, sub: 2, nt: 20 },
       Fin_Pectoral_L: { relief: true, m: 4, sub: 2, nt: 14 },
       Fin_Pectoral_R: { relief: true, m: 4, sub: 2, nt: 14 },
@@ -379,7 +411,14 @@ function medianDef(key, name, ctx) {
       // the folded ray hugs the skin: at every point its direction is the local tangent turned out by the fold angle,
       // after a short knuckle at its root that lifts it clear of the skin (the folded rays lie shingled, each over the
       // next, not pressed into one layer)
-      return { hug: (p, l) => { const fr = ctx.midFrame(p[0], up), b = lerp((S.foldLift ?? FIN_SCULPT.fold.lift) * DEG, a, smoothstep(0, FIN_SCULPT.fold.knuckle, l)); return add(mul(fr.T, Math.cos(b)), mul(fr.O, Math.sin(b))); } };
+      const hug = (p, l) => { const fr = ctx.midFrame(p[0], up), b = lerp((S.foldLift ?? FIN_SCULPT.fold.lift) * DEG, a, smoothstep(0, FIN_SCULPT.fold.knuckle, l)); return add(mul(fr.T, Math.cos(b)), mul(fr.O, Math.sin(b))); };
+      // (round B3, the anal fin: held at a height over the skin instead (S.foldSurface): its lens' half-width over the
+      // groove's floor, plus `margin`, the front rays `stagger` a ray higher (each over the next), so the folded fin
+      // lies in its groove instead of hanging under the belly)
+      const FS = S.foldSurface;
+      if (!FS) return { hug };
+      const pr = rayProfile(r.kind), c0 = ctx.f(r.base), L = r.len, dz = FS.stagger * (n - 1 - k);
+      return { hug, surface: (l) => lerp(c0, pr.w * (1 - (1 - pr.tip) * Math.pow(l / L, 0.9)) + FS.margin + dz, smoothstep(0, FIN_SCULPT.fold.knuckle * 1.5, l)) };
     }
     const sb = S.bend[st in S.bend ? st : 'bind'];
     return { dir: add(mul(r.T0, Math.cos(a)), mul(r.O0, Math.sin(a))), bend: { toward: r.T0, angle: sb * DEG } };
@@ -387,59 +426,78 @@ function medianDef(key, name, ctx) {
   const panels = rays.slice(1).map(() => ({ reach0: S.reach, reach1: S.reach, flat0: S.flatReach, flat1: S.flatReach, notch: S.notch, flatNotch: S.flatNotch, notchPow: S.notchPow }));
   return {
     name, type: 'median', dorsal, joint: 'spine', rect: FIN_ATLAS[name], rays, panels,
-    targets: ['fold', 'spread'], state, hint: () => [0, 0, 1], pleat: S.pleat, sag: S.sag,
+    targets: ['fold', 'spread'], state, hint: () => [0, 0, 1], pleat: S.pleat, sag: S.sag, ...(S.foldNormalHint ? { normalHint: (st) => st === 'fold' } : {}),
   };
 }
 
 /**
- * The peduncle's end plate as the body's field has it (HL): its face's s at mid-depth, the dorsal and ventral ends of
- * its face (where the skin's end bends forward past `bendS` from the face: the corners' rounding), and the face's s and
- * the body's half-width at a height y (just in front of the face).
+ * The peduncle's end as the body's field has it (HL), round B3: the hypural plate `plateS` behind the caudal base (the
+ * principal rays' bases, in the midplane under the skin), the body's fleshy end behind it tapering to K.tailEnd.s, and
+ * along it the midline skin's top and bottom (tabulated to the end: the procurrent rays lie on them) with their frame
+ * (as ctx.midFrame, which stops at s 4.3); `halfW(y, s)` the body's half-width; `space`: the field the caudal is kept
+ * clear of (fins.mjs rayCurves / evaluate, test-fins' gate 3), the body's own but for the flesh behind the hypural plate
+ * inside its side outline, where the principal rays' roots run under the skin by design.
  */
 function endPlate(ctx) {
-  const K = ctx.K, q = ctx.prof.at(K.caudalBase);
-  const s0 = K.caudalBase - 0.12;
-  const faceS = (y) => (ctx.f([s0, y, 0]) >= 0 ? null : ctx.along([s0, y, 0], [1, 0, 0], 0.5)[0]);
-  const mid = faceS(q.yc);
-  // the face's extent: from the middle up and down while the end stays within bendS of the middle's s (the corners)
-  const bendS = 0.012;
-  const edge = (dir) => {
-    let a = q.yc, b = q.yc + dir * 0.6;
-    for (let i = 0; i < 40; i++) { const m = (a + b) / 2, s = faceS(m); if (s !== null && s > mid - bendS) a = m; else b = m; }
-    return a;
+  const K = ctx.K, S = FIN_SCULPT.caudal;
+  const sH = K.caudalBase + S.plateS, sE = K.tailEnd.s + Math.max(0, K.tailEnd.bulge ?? 0), s0 = sH - 0.36, ds = 0.004, sLast = K.tailEnd.s - 0.004;
+  const n = Math.ceil((sLast - s0) / ds), tab = { 1: new Float64Array(n + 1), [-1]: new Float64Array(n + 1) };
+  for (const up of [1, -1])
+    for (let i = 0; i <= n; i++) {
+      const s = Math.min(sLast, s0 + i * ds), yc = ctx.prof.at(Math.min(s, K.caudalBase)).yc;
+      const q = ctx.prof.at(s), mid = (q.yT + q.yB) / 2;
+      tab[up][i] = ctx.along([s, ctx.f([s, yc, 0]) < 0 ? yc : mid, 0], [0, up, 0], 0.5)[1];
+    }
+  const edgeY = (s, up) => { const x = clamp((s - s0) / ds, 0, n - 1e-9), i = Math.floor(x); return lerp(tab[up][i], tab[up][i + 1], x - i); };
+  const frame = (s, up) => {
+    const h = 0.008, sl = (edgeY(s + h, up) - edgeY(s - h, up)) / (2 * h), T = nrm([1, sl, 0]);
+    return { y: edgeY(s, up), T, O: up > 0 ? nrm([-sl, 1, 0]) : nrm([sl, -1, 0]) };
   };
   const halfW = (y, s) => { const p = [s, y, 0]; return ctx.f(p) >= 0 ? 0 : ctx.along(p, [0, 0, 1], 0.4)[2]; };
-  return { mid, top: edge(1), bottom: edge(-1), faceS, halfW, yc: q.yc, depth: q.yT - q.yB };
+  // the clearance field: past the hypural plate and inside the side outline the fleshy end hides the roots (g > 0)
+  const g = (p) => Math.min(p[0] - sH, edgeY(p[0], 1) - p[1], p[1] - edgeY(p[0], -1));
+  const f = (p) => Math.max(ctx.f(p), g(p)), e = 1e-4;
+  const grad = (p) => [0, 1, 2].map((c) => { const a = p.slice(), b = p.slice(); a[c] += e; b[c] -= e; return (f(a) - f(b)) / (2 * e); });
+  const id = (p) => p.slice();
+  return { sH, sE, top: edgeY(sH, 1), bottom: edgeY(sH, -1), edgeY, frame, halfW, yc: ctx.prof.at(K.caudalBase).yc, space: { f, grad, to: id, from: id } };
 }
 
-/** The caudal fin: procurrent rays along the peduncle's edges, the principal rays from its end plate. */
+/** The caudal fin: procurrent rays along the peduncle's margins, the principal rays from the hypural plate under the
+ * skin of the peduncle's fleshy end, their own fleshy base taking over where they leave it. */
 function caudalDef(ctx) {
-  const S = FIN_SCULPT.caudal, K = ctx.K, B = FIN_SCULPT.base;
-  const plate = endPlate(ctx);
-  // (a domed end has no flat face to speak of: then the fan spans `spanMin` of the depth either side of the axis, on the dome)
-  const yTop = Math.max(plate.top - S.edge, plate.yc + S.spanMin * plate.depth), yBot = Math.min(plate.bottom + S.edge, plate.yc - S.spanMin * plate.depth);
+  const S = FIN_SCULPT.caudal, B = FIN_SCULPT.base;
+  const plate = endPlate(ctx), sH = plate.sH, sE = plate.sE;
+  const yTop = plate.top - S.edge, yBot = plate.bottom + S.edge;
   const rays = [];
   const proc = (up, j) => {
-    const s = plate.mid + S.procS[j], fr = ctx.midFrame(s, up);
+    const s = sH + S.procS[j], fr = plate.frame(s, up);
     return { base: sub([s, fr.y, 0], mul(fr.O, B.depth * 0.7)), len: S.procLen[up > 0 ? 'dorsal' : 'ventral'][j], kind: 'proc', simple: true, up, j, T0: fr.T, O0: fr.O };
   };
   const NP = S.procS.length;
   for (let j = 0; j < NP; j++) rays.push(proc(1, j));
-  // the principal rays' bases straight down the plate's face (on a domed end: its curve), `depth` in from it; the
-  // longest ray reaching tipS from its base along its bind direction
+  // the principal rays' bases straight down the hypural plate in the midplane; the longest ray reaching tipS from its
+  // base along its bind direction
   const prof = (u) => (u < S.tipAt ? 1 - S.upperDrop[0] * ((S.tipAt - u) / S.tipAt) ** S.upperDrop[1]
     : 1 - S.lowerDrop[0] * ((u - S.tipAt) / (1 - S.tipAt)) ** S.lowerDrop[1]);
-  const kTip = Math.round(S.tipAt * (S.principal - 1)), aTip = lerp(S.angle.bind[0], S.angle.bind[1], kTip / (S.principal - 1)) * DEG;
-  const bases = [];
+  const angleOf = (st, u) => lerp(S.angle[st][0], S.angle[st][1], u) * DEG;
+  const kTip = Math.round(S.tipAt * (S.principal - 1)), uTip = kTip / (S.principal - 1);
+  const maxLen = (S.tipS - sH) / Math.cos(angleOf('bind', uTip)) / prof(uTip);
+  // the fleshy base where a ray leaves the body's end (the seam: where the end's rounding starts; the body's sides are
+  // near parallel there, its taper eased out): a slab `k` × the body's half-width along the ray's path (the least over
+  // the bind's and the fold's paths, so it never stands out of the skin before the seam), its thickness held to the
+  // seam and eased out over `thin` HL past it, the lenses' width held closed (one slab) a little longer and eased out
+  // over `over`
+  const bl = ctx.K.tailEnd.blend ?? 0.01;
   for (let k = 0; k < S.principal; k++) {
-    const u = k / (S.principal - 1), y = lerp(yTop, yBot, u);
-    const fs = plate.faceS(y) ?? plate.mid;
-    bases.push({ base: [fs - B.depth, y, 0], u, hw: plate.halfW(y, fs - B.depth) });
-  }
-  const maxLen = (S.tipS - bases[kTip].base[0]) / Math.cos(aTip) / prof(bases[kTip].u);
-  for (let k = 0; k < S.principal; k++) {
-    const { base, u, hw } = bases[k];
-    rays.push({ base, len: maxLen * prof(u), kind: 'soft', simple: k === 0 || k === S.principal - 1, thick: k >= S.principal - S.thick, u, flesh: { h: Math.max(0, Math.min(S.flesh.k * hw, hw - 0.0025)), over: S.flesh.over, hold: S.flesh.hold, swell: S.flesh.swell, w: (S.flesh.w * (yTop - yBot)) / (S.principal - 1) } });
+    const u = k / (S.principal - 1), y = lerp(yTop, yBot, u), base = [sH, y, 0];
+    // (where the ray's path leaves the body, by the end or a margin, in the bind and the fold; the seam the later one)
+    const paths = ['bind', 'fold'].map((st) => { const yAt = (s) => y + (s - sH) * Math.tan(angleOf(st, u)); let s = sH; while (s < sE + 0.1 && ctx.f([s, yAt(s), 0]) < 0) s += 0.002; return { yAt, out: s - bl }; });
+    const sSeam = Math.max(...paths.map((p) => p.out));
+    let wS = Infinity;
+    for (const p of paths) for (let s = sH + 0.04; s <= p.out + 1e-9; s += 0.01) wS = Math.min(wS, plate.halfW(p.yAt(s), s));
+    const h = Math.max(S.flesh.min, S.flesh.k * (Number.isFinite(wS) ? wS : 0)), l = (s) => (s - sH) / Math.cos(angleOf('fold', u)), l0 = l(sSeam);
+    rays.push({ base, len: maxLen * prof(u), kind: 'soft', simple: k === 0 || k === S.principal - 1, thick: k >= S.principal - S.thick, u, embed: l0,
+      flesh: { h, hold: l0, over: l0 + S.flesh.thin, swell: 0, wEase: [l0 + S.flesh.thin * 0.5, l0 + S.flesh.thin * 0.5 + S.flesh.over], w: (S.flesh.w * (yTop - yBot)) / (S.principal - 1) } });
   }
   for (let j = NP - 1; j >= 0; j--) rays.push(proc(-1, j));
   const state = (st, k) => {
@@ -448,10 +506,10 @@ function caudalDef(ctx) {
     if (r.kind === 'proc') {
       const A = S.procAngle[key], a = lerp(A[0], A[1], r.j / (NP - 1)) * DEG, up = r.up;
       spec = st === 'fold'
-        ? { hug: (p, l) => { const fr = ctx.midFrame(p[0], up), b = lerp(FIN_SCULPT.fold.lift * DEG, a, smoothstep(0, FIN_SCULPT.fold.knuckle, l)); return add(mul(fr.T, Math.cos(b)), mul(fr.O, Math.sin(b))); } }
+        ? { hug: (p, l) => { const fr = plate.frame(p[0], up), b = lerp(FIN_SCULPT.fold.lift * DEG, a, smoothstep(0, FIN_SCULPT.fold.knuckle, l)); return add(mul(fr.T, Math.cos(b)), mul(fr.O, Math.sin(b))); } }
         : { dir: add(mul(r.T0, Math.cos(a)), mul(r.O0, Math.sin(a))) };
     } else {
-      const a = lerp(S.angle[key][0], S.angle[key][1], r.u) * DEG;
+      const a = angleOf(key, r.u);
       spec = { dir: [Math.cos(a), Math.sin(a), 0] };
     }
     if (st === 'flex') spec.curl = { toward: [0, 0, 1], angle: S.flex * DEG, pow: 1.6 };
@@ -465,8 +523,10 @@ function caudalDef(ctx) {
   return {
     name: 'Fin_Caudal', type: 'caudal', joint: 'spine', rect: FIN_ATLAS.Fin_Caudal, rays, panels,
     targets: ['fold', 'spread', 'flex'], state, hint: () => [0, 0, 1], pleat: S.pleat, sag: S.sag, segScale: S.segScale, rowPow: 1.3,
-    plate: { s: plate.mid, top: plate.top, bottom: plate.bottom },
-    cardRays: [0, NP, NP + S.tipAt * (S.principal - 1), NP + S.principal - 1, rays.length - 1],
+    plate: { s: sH, end: sE, top: plate.top, bottom: plate.bottom },
+    space: () => plate.space, fleshSquare: S.flesh.square, cardTargets: ['fold', 'spread', 'flex'],
+    // (7 stations, round B3 integration, tech request: the far card's spread fan within 0.95 mm of the hero's in the water)
+    cardRays: [0, NP, NP + 0.5 * S.tipAt * (S.principal - 1), NP + S.tipAt * (S.principal - 1), NP + (S.principal - 1) * (1 + S.tipAt) / 2, NP + S.principal - 1, rays.length - 1],
   };
 }
 
@@ -508,104 +568,95 @@ function lensHalf(def, r, t) {
 }
 
 /**
- * The left arm's rest pose (A030, A040, B067), the frame the pectoral 'fold' is authored in: the upper arm swung back
- * about the shoulder until it lies along the flank `rest.droop` deg below the horizontal, its medial face `rest.gap` HL
- * off the trunk's skin all along (its thickness read from the sculpt: radius × fl and the muscle belly), its broad face
- * against the flank; the forearm likewise, `rest.droop2` deg down, the elbow straightened to follow the flank; the wrist
- * at rest (the blade's fold is the blend shape). Returns the joints' rotations (fish frame: J_pec about the shoulder
- * from the bind, J_pecElbow local to it, J_pecWrist identity) and the wrist's rigid transform `to` (bind → rest) with
- * its inverse `from`.
+ * The left arm's rest pose (A030, A002, B067), the frame the pectoral 'fold' is authored in (round B3: one lobe): the
+ * lobe turned about the shoulder until it lies back along the flank `rest.droop` deg below the horizontal, its medial
+ * face `rest.gap` HL off the trunk's skin past `rest.from` of its length (its thickness read from the sculpt: radius ×
+ * fl and the muscle belly; the root half fans into the flank: the shoulder sits on it and the rig's halo carries the
+ * flank there), its outer face out (against the flank's normal at the junction). Returns the shoulder's rotation Q
+ * (fish frame, from the bind), the junction's rest place W, the rigid transform `to` (bind → rest) with its inverse
+ * `from`, and the joints' quaternions (J_pec; the junction's identity: the blade's fold is the blend shape).
  */
 function restArmPose(ctx) {
   const K = ctx.K, P = K.pectoral, R = FIN_SCULPT.pectoral.rest, bare = ctx.bare();
-  const S = P.shoulder, E0 = P.elbow, W0 = P.wrist;
-  const L1 = len3(sub(E0, S)), L2 = len3(sub(W0, E0)), u1 = nrm(sub(E0, S)), u2 = nrm(sub(W0, E0));
+  const S = P.shoulder, W0 = P.wrist, L = len3(sub(W0, S)), u = nrm(sub(W0, S));
   const nA = P.axes?.n ?? [0, 0, 1], fl = P.fl ?? [P.flat, P.flat, P.flat], bl = P.belly;
-  const thick1 = (t) => (P.radius[0] + (P.radius[1] - P.radius[0]) * t + (bl ? bl.amp * Math.exp(-(((t - bl.at) / bl.w) ** 2)) : 0)) * (fl[0] + (fl[1] - fl[0]) * t);
-  const thick2 = (t) => (P.radius[1] + (P.radius[2] - P.radius[1]) * t) * (fl[1] + (fl[2] - fl[1]) * t);
-  // a segment from p0, `len` long, `droop` deg below the horizontal and turned in until its medial face is `gap` off
-  // the flank at its tightest past `from` of its length (the upper arm's root half fans into the flank: the shoulder
-  // sits on it, and the rig's halo carries the flank there)
-  const lay = (p0, len, droop, thick, from) => {
-    const at = (zc) => nrm([Math.cos(droop * DEG), -Math.sin(droop * DEG), zc]);
-    const clearance = (zc) => { let m = Infinity; const d = at(zc); for (let i = 0; i <= 8; i++) { const t = from + (1 - from) * (i / 8); m = Math.min(m, bare.f(add(p0, mul(d, t * len))) - thick(t)); } return m - R.gap; };
-    let a = -1.5, b = 1.5;
-    for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (clearance(m) < 0) a = m; else b = m; }
-    return add(p0, mul(at(b), len));
-  };
-  const E = lay(S, L1, R.droop, thick1, R.from), W = lay(E, L2, R.droop2, thick2, 0);
-  const nf1 = nrm(bare.grad(E));
-  const Q1 = m3.between(frameOf(u1, nA), frameOf(sub(E, S), nf1));
-  // (the elbow: the shortest turn from the forearm as the shoulder carried it onto the flank's line: its axis square to
-  // the forearm, so the rig's elbow channels (flexion about n, bend about w) make it; no twist)
-  const a2 = m3.apply(Q1, u2), b2 = nrm(sub(W, E)), ax = cross(a2, b2), sa = len3(ax);
-  const Re = sa < 1e-9 ? [[1, 0, 0], [0, 1, 0], [0, 0, 1]] : (() => {
-    const k = mul(ax, 1 / sa), ang = Math.atan2(sa, dot(a2, b2));
-    return [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((e) => rotAbout(e, k, ang));
-  })();
-  // (rotAbout of the basis gives the columns; as rows: transpose)
-  const Q2 = m3.mul(m3.T(Re), Q1);
-  const QT = m3.T(Q2);
-  const to = (x) => add(E, m3.apply(Q2, sub(x, E0)));
-  const from = (y) => add(E0, m3.apply(QT, sub(y, E)));
-  return { Q1, Q2, E, W, to, from, quats: { shoulder: m3.quat(Q1), elbow: m3.quat(m3.mul(m3.T(Q1), Q2)), wrist: [0, 0, 0, 1] } };
+  const tm = clamp(len3(sub(P.elbow, S)) / L, 0.2, 0.8);
+  const quad = (v, t) => v[0] * (((t - tm) * (t - 1)) / tm) + v[1] * ((t * (t - 1)) / (tm * (tm - 1))) + v[2] * ((t * (t - tm)) / (1 - tm));
+  const thick = (t) => (quad(P.radius, t) + (bl ? bl.amp * Math.exp(-(((t - bl.at) / bl.w) ** 2)) : 0)) * quad(fl, t);
+  // the lobe from the shoulder, `droop` deg below the horizontal and turned in until its medial face is `gap` off the
+  // flank at its tightest past `from` of its length
+  const at = (zc) => nrm([Math.cos(R.droop * DEG), -Math.sin(R.droop * DEG), zc]);
+  const clearance = (zc) => { let m = Infinity; const d = at(zc); for (let i = 0; i <= 10; i++) { const t = R.from + (1 - R.from) * (i / 10); m = Math.min(m, bare.f(add(S, mul(d, t * L))) - thick(t)); } return m - R.gap; };
+  let a = -1.5, b = 1.5;
+  for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (clearance(m) < 0) a = m; else b = m; }
+  const W = add(S, mul(at(b), L));
+  const Q = m3.between(frameOf(u, nA), frameOf(sub(W, S), nrm(bare.grad(W))));
+  const QT = m3.T(Q);
+  const to = (x) => add(S, m3.apply(Q, sub(x, S)));
+  const from = (y) => add(S, m3.apply(QT, sub(y, S)));
+  return { Q, Q2: Q, W, to, from, quats: { shoulder: m3.quat(Q), junction: [0, 0, 0, 1] } };
 }
 
-/** The pectoral blade (left; the right is built as its mirror image). */
+/** The pectoral blade (left; the right is built as its mirror image): round B3's fin on the one-lobe arm. */
 function pectoralDef(ctx) {
   const S = FIN_SCULPT.pectoral, P = ctx.K.pectoral, PL = S.plant;
-  // the lobe's frame at the wrist, as body.mjs builds the lobe: u along elbow→wrist, n through its thickness (the arm's
-  // broad face normal, BODY_SCULPT.pectoral.axes.n: the lateral axis made perpendicular to the UPPER arm, which the
-  // forearm, bent in the face's plane, shares), wv across its flat width (the trailing edge when the arm stands as a leg)
-  const u = nrm(sub(P.wrist, P.elbow));
+  // the lobe's frame at the junction, as body.mjs builds the lobe: u along it (shoulder → junction), n its outer face's
+  // normal (BODY_SCULPT.pectoral.axes.n made square to u), wv across its flat width toward its leading edge (ray 0)
+  const u = nrm(sub(P.wrist, P.shoulder));
   const n = nrm(perp(P.axes?.n ?? [0, 0, 1], u));
   const wv = cross(n, u);
-  const r = P.radius[2], N = S.rays, half = S.span * r;
+  const r = P.radius[2], N = S.rays, half = S.span * r, hEnd = r * (P.fl?.[2] ?? P.flat);
   const lenAt = (x) => S.maxLen * (S.edgeLen + (1 - S.edgeLen) * Math.pow(Math.max(0, 1 - x * x), 0.7));
   const rays = [];
+  const spacing = (2 * half) / (N - 1);
   for (let k = 0; k < N; k++) {
     const x = k / (N - 1);
-    // straight across the spatulate wrist: from inside the lobe out along u to its end's skin, then `depth` in
+    // straight across the lobe's end: from inside the lobe out along u to its end's skin, then `depth` in (along the
+    // lobe's axis, not the skin's normal: the bases stay on their straight line however round the end's corners are);
+    // the fleshy base over them as thick as the lobe's end
     const skin = ctx.along(add(P.wrist, add(mul(u, -0.04), mul(wv, lerp(half, -half, x)))), u, 0.3);
-    // (in along the lobe's axis, not the skin's normal: the bases stay on their straight line across the wrist however round
-    // its end's corners are)
     const base = sub(skin, mul(u, S.depth));
-    rays.push({ base, len: lenAt(2 * x - 1), kind: 'soft', simple: k === 0 || k === N - 1, lead: k === 0, x });
+    const F = S.flesh;
+    rays.push({ base, len: lenAt(2 * x - 1), kind: 'soft', simple: k === 0 || k === N - 1, lead: k === 0, x, flesh: { h: F.k * hEnd * Math.sqrt(Math.max(0.3, 1 - (lerp(0.9, -0.9, x)) ** 2)), w: F.w * spacing, hold: F.hold, over: F.over, swell: 0 } });
   }
   const fanDir = (deg) => add(mul(u, Math.cos(deg * DEG)), mul(wv, Math.sin(deg * DEG)));
-  const toBindFrame = (F, v) => add(add(mul(u, dot(v, F[0])), mul(n, dot(v, F[1]))), mul(wv, dot(v, F[2])));
-
-  // ---- plant: the planted forearm's frame (world: forward −s, up +y, out +z): from the vertical leg (u down, n out,
-  // wv back) leaned `lean` forward and `splay` out; up, back and out read in it give the sole's plane and its rays'
-  // toes in the bind's (u, n, wv)
-  let F = [[0, -1, 0], [0, 0, 1], [1, 0, 0]];
-  F = F.map((v) => rotAbout(v, [0, 0, 1], -PL.lean * DEG)).map((v) => rotAbout(v, [-1, 0, 0], PL.splay * DEG));
-  const nS = nrm(toBindFrame(F, [0, 1, 0])), back = nrm(toBindFrame(F, [1, 0, 0])), out = nrm(toBindFrame(F, [0, 0, 1]));
   const mid = mul(add(rays[(N - 1) >> 1].base, rays[N >> 1].base), 0.5);
+
+  // ---- plant (from furl): the inner blade along the furled fan to the heel, then turned `ankle` deg toward the outer
+  // face n into the sole's plane (spanned by the sole's direction and wv), its rays splayed ±splay in it; nS the sole's
+  // normal away from the ground (−u at a 90° ankle)
+  const an = PL.ankle * DEG, sDir = nrm(add(mul(u, Math.cos(an)), mul(n, Math.sin(an))));
+  // (the sole rolled `plant.roll` deg about its own length, its leading (outer) edge down: flat on the ground when the lobe
+  // leans that far out of the stroke's plane, the blade's hinges square to the body's axis: rig.mjs RIG.prop.lobeOut)
+  const ro = (PL.roll ?? 0) * DEG, nS0 = nrm(sub(mul(n, Math.cos(an)), mul(u, Math.sin(an))));
+  const nS = nrm(add(mul(nS0, Math.cos(ro)), mul(wv, Math.sin(ro)))), wS = nrm(sub(mul(wv, Math.cos(ro)), mul(nS0, Math.sin(ro))));
   const O = add(mid, mul(u, PL.heel));
   const plantRay = rays.map((ray) => {
-    const din = fanDir(lerp(PL.inner[0], PL.inner[1], ray.x));
-    const c = lerp(PL.sole[0], PL.sole[1], ray.x) * DEG;
-    const toe = nrm(perp(add(mul(out, Math.cos(c)), mul(back, Math.sin(c))), nS));
+    const din = fanDir(lerp(S.fan.furl[0], S.fan.furl[1], ray.x));
+    const sp = lerp(PL.splay, -PL.splay, ray.x) * DEG, toe = nrm(add(mul(sDir, Math.cos(sp)), mul(wS, Math.sin(sp))));
     // the turn's start so that the ray, once turned, runs in the sole's plane: its height there is h0 + a·(din·nS) + I
     let I = 0;
     const M = 64;
     for (let i = 0; i < M; i++) I += (dot(slerp(din, toe, smoothstep(0, 1, (i + 0.5) / M)), nS) * PL.over) / M;
     const a = -(dot(sub(ray.base, O), nS) + I) / dot(din, nS);
-    return { din, toe, at: Math.max(0.02, a) };
+    return { din, toe, at: Math.max(0.05, a) };
   });
 
-  // ---- fold: in the arm's rest pose, hugging the bare trunk's flank
+  // ---- fold: in the arm's rest pose, hugging the bare trunk's flank, swept `rest.sweep` deg up from the lobe's line
   const rest = restArmPose(ctx), bare = ctx.bare();
-  const Dref = m3.apply(rest.Q2, u), Wref = m3.apply(rest.Q2, wv);
+  const Dl = m3.apply(rest.Q, u), Wl = m3.apply(rest.Q, wv);
+  // (up on the flank: the lobe's line turned toward its leading edge, which the rest pose keeps uppermost)
+  const sw = S.rest.sweep * DEG * Math.sign(Wl[1] || 1);
+  const Dref = nrm(add(mul(Dl, Math.cos(sw)), mul(Wl, Math.sin(sw)))), Wref = nrm(sub(mul(Wl, Math.cos(sw)), mul(Dl, Math.sin(sw))));
   const restSpace = { to: rest.to, from: rest.from, f: bare.f, grad: bare.grad };
 
   const state = (st, k) => {
     const ray = rays[k], x = ray.x;
-    const fan = (key) => ({ dir: fanDir(lerp(S.fan[key][0], S.fan[key][1], x) + S.turn[key]), curl: { toward: mul(n, -1), angle: S.curl[key] * DEG, pow: 2 } });
+    const fan = (key) => ({ dir: fanDir(lerp(S.fan[key][0], S.fan[key][1], x) + (S.turn[key] ?? 0)), curl: { toward: n, angle: (S.curl[key] ?? 0) * DEG, pow: 2 } });
     if (st === 'plant') {
-      const pr = plantRay[k];
-      return { dir: pr.din, turn: { to: pr.toe, at: pr.at, over: PL.over }, sole: pr.at + PL.over };
+      const pr = plantRay[k], L = ray.len;
+      // (the tips bent a little up off the ground past 0.85 of the ray, as rays bend under the load: Pace & Gibb 2009)
+      return { dir: pr.din, turn: { to: pr.toe, at: pr.at, over: PL.over }, sole: pr.at + PL.over, tip: { from: 0.85 * L, toward: nS, angle: PL.tipCurl * DEG } };
     }
     if (st === 'plantHalf') {
       // half way: every step's direction half way between the bind's and the plant's (the rays keep their length)
@@ -629,13 +680,16 @@ function pectoralDef(ctx) {
   const hintPlant = nrm(add(n, nS));
   const hint = (st) => (st === 'plant' || st === 'plantHalf' ? hintPlant : n);
   const def = {
-    name: 'Fin_Pectoral_L', type: 'pectoral', side: 'L', joint: 'J_pecWristL', rect: FIN_ATLAS.Fin_Pectoral_L, rays, panels,
-    targets: ['fold', 'spread', 'plant', 'plantMid'], state, hint, pleat: S.pleat, sag: S.sag, rowPow: 1.25,
+    name: 'Fin_Pectoral_L', type: 'pectoral', side: 'L', joint: 'J_pecFinL', rect: FIN_ATLAS.Fin_Pectoral_L, rays, panels,
+    targets: ['fold', 'spread', 'furl', 'plant', 'plantMid'], cardTargets: ['fold', 'spread', 'furl', 'plant'],
+    state, hint, pleat: S.pleat, sag: S.sag, rowPow: 1.25,
     space: (st) => (st === 'fold' ? restSpace : null),
-    cardRays: [0, (N - 1) / 2, N - 1], cardBend: (k) => Math.min(0.95, (plantRay[k].at + 0.5 * PL.over) / rays[k].len),
+    // (5 stations, round B3 integration, tech request: 3 left the far paddle 0.59 of the hero's area in the water; the
+    // margin row 3 % out (cardOut): lod2 → hero max in bind 0.68 → 0.56 mm, land 0.58 → 0.36, water 1.01 → 0.86)
+    cardRays: [0, (N - 1) / 4, (N - 1) / 2, (3 * (N - 1)) / 4, N - 1], cardOut: 1.03, cardBend: (k) => Math.min(0.95, (plantRay[k].at + 0.5 * PL.over) / rays[k].len),
     rowBreaks: (k) => [0, 0.5, 1].map((f) => (plantRay[k].at + f * PL.over) / rays[k].len).filter((t) => t > 0.02 && t < 0.97),
-    frame: { u, n, wv, wrist: P.wrist },
-    plantFrame: { nS, back, out, O, rays: plantRay },
+    frame: { u, n, wv, wrist: P.wrist, mid },
+    plantFrame: { nS, sDir, O, rays: plantRay },
     rest,
   };
   return def;
@@ -653,8 +707,17 @@ function pelvicDef(ctx) {
   const left = one(1), right = one(-1).reverse();
   const rays = [{ ...F }, ...left, ...right, { ...F, end: true }];
   const dirOf = (phi, beta, side) => [Math.cos(phi * DEG) * Math.cos(beta * DEG), -Math.sin(beta * DEG), side * Math.sin(phi * DEG) * Math.cos(beta * DEG)];
+  // the press state's ground (S.press): its normal and a point on it
+  const PR = S.press, yBase = Math.min(...rays.map((r) => r.base[1]));
+  const PN = [-Math.sin(PR.tilt * DEG), Math.cos(PR.tilt * DEG), 0], P0 = [c0, yBase - PR.drop, 0];
   const state = (st, k) => {
     const r = rays[k], key = st in S.phi ? st : 'bind';
+    if (st === 'press') {
+      // down from the base at `dive` below the ground's tangent, turned onto the ground over the last `knee` above it
+      const side = r.side || 1, L = r.len, phi = (r.kind === 'frenum' ? PR.frenumPhi : PR.phi[r.i]) * DEG;
+      const tf = nrm(perp([Math.cos(phi), 0, side * Math.sin(phi)], PN)), td = nrm(add(mul(tf, Math.cos(PR.dive * DEG)), mul(PN, -Math.sin(PR.dive * DEG))));
+      return { at: (l, p) => { const hc = (r.kind === 'frenum' ? 0.002 : lensHalf(defRef, r, l / L).h) + PR.margin; return slerp(tf, td, smoothstep(0, PR.knee, dot(sub(p, P0), PN) - hc)); } };
+    }
     if (st === 'fold') {
       // back along the belly, hugging it: the skin's tangent turned `foldPhi` out, lifted `foldLift` off it over a short
       // knuckle, then held at the lens' thickness off the skin (the frenum straight back on the midline)
@@ -682,14 +745,20 @@ function pelvicDef(ctx) {
     else if (k === nl) panels.push({ reach0: S.medialReach, reach1: S.medialReach, notch: S.medialNotch, notchPow: 1.2 });
     else panels.push({ reach0: S.reach, reach1: S.reach, notch: S.notch, notchPow: S.notchPow });
   }
-  // the outer face of the cup: down and out from its middle
-  const mid = [c0 + 0.12, PB.c[1] - 0.08, 0];
+  // the outer face of the cup: down and out from its middle (round B3: from the ray bases' height, the belly moved)
+  const mid = [c0 + 0.12, yBase - 0.058, 0];
   const hint = () => [0, -1, 0];
   const hintAt = (p) => nrm(add([0, -1, 0], mul(nrm(sub(p, mid)), 0.6)));
   const defRef = {
     name: 'Fin_Pelvic', type: 'pelvic', joint: 'J_pelvic', rect: FIN_ATLAS.Fin_Pelvic, rays, panels,
-    targets: ['fold', 'spread'], state, hint, hintAt, pleat: S.pleat, sag: S.sag, rayScale: S.rayScale,
-    cardRays: [1, 3.5, nl + 0.5, 2 * nl - 2.5, 2 * nl],
+    targets: ['fold', 'spread', 'press'], state, hint, hintAt, pleat: S.pleat, sag: S.sag, rayScale: S.rayScale,
+    // (the far tier's card: 11 stations round the cup's outline, both medial lobes and the notch between them (round B2's 5
+    // covered 0.49 of the hero's area from below; these 0.82–0.86 in the bind, fold, spread and press, 20 triangles)
+    cardRays: [1, 2.5, 4, 5.3, nl, nl + 0.5, nl + 1, nl + 1.7, nl + 3, nl + 4.5, 2 * nl], cardTargets: ['fold', 'spread', 'press'],
+    // (the margin row 4 % out, round B3 integration, tech request: the card covered 0.82-0.86 of the hero cup from below,
+    // now 0.88-0.94, IoU 0.83-0.86)
+    cardOut: 1.04,
+    press: { normal: PN.map((c) => +c.toFixed(6)), point: P0.map((c) => +(c * HL).toFixed(4)) },
   };
   return defRef;
 }
@@ -698,9 +767,9 @@ function pelvicDef(ctx) {
 function mirrorDef(L) {
   const m = (p) => [p[0], p[1], -p[2]];
   return {
-    ...L, name: 'Fin_Pectoral_R', side: 'R', joint: 'J_pecWristR', rect: FIN_ATLAS.Fin_Pectoral_R,
+    ...L, name: 'Fin_Pectoral_R', side: 'R', joint: 'J_pecFinR', rect: FIN_ATLAS.Fin_Pectoral_R,
     rays: L.rays.map((r) => ({ ...r, base: m(r.base) })), mirrorOf: L,
-    frame: { u: m(L.frame.u), n: m(L.frame.n), wv: m(L.frame.wv), wrist: m(L.frame.wrist) },
+    frame: { u: m(L.frame.u), n: m(L.frame.n), wv: m(L.frame.wv), wrist: m(L.frame.wrist), mid: m(L.frame.mid) },
   };
 }
 
@@ -736,23 +805,32 @@ export function finDefinitions(K = BODY_SCULPT) {
 }
 
 /**
- * The left pectoral's data for the rig and the runtime (fish mm / fish-frame unit vectors, bind space):
- *   bladePivot  the heel (the middle rays' turn in 'plant', half way through it): the J_pecBlade pivot, the ankle the
- *               sole turns on (its flex axis: sole.axis)
- *   sole        the planted sole (blend shape 'plant' at 1): { normal (its plane's normal, away from the ground: the
- *               world's up once the rig stands the arm so), point (its centroid), heel (= bladePivot), axis (the heel
- *               line, across the rays), toe (its mean ray direction), lean / splay (deg: the forearm's posture it is
- *               flat in: leaned forward of the vertical and out, its broad face outward), heelHL (from the middle rays'
- *               bases), from: { rayT (per ray: the sole starts here) } }
- *   restPose    the arm's rest pose the 'fold' is authored in (restArmPose): local rotations as quaternions [x, y, z, w]
- *               about the joints' bind pivots, { fish: { J_pecL, J_pecElbowL, J_pecWristL }, object: { … } } (bind
- *               rotations are identity, so object-frame local = the viewer's / glTF's)
+ * The left pectoral's data for the rig and the runtime (fish mm / fish-frame unit vectors, bind space; round B3):
+ *   junctionPivot  the middle of the rays' bases: the J_pecFin pivot (the lobe/fin junction, the radial–ray joint)
+ *   bladePivot     the heel (the middle rays' turn in 'plant', half way through it): the J_pecMid pivot, the ankle the
+ *                  sole turns on (its flex axis: sole.axis)
+ *   tipPivot       the planted sole's middle rays at `tipAt` of their length: the J_pecTip pivot (the tips bending
+ *                  under load, the roll-off)
+ *   flexAxis       the blade joints' common flex axis (wv: across the rays; + bends the distal part toward the outer
+ *                  face n, which faces forward when the lobe stands as a leg)
+ *   sole           the planted sole (blend shape 'plant' at 1): { normal (its plane's normal, away from the ground: the
+ *                  world's up once the rig stands the arm so), point (its centroid), heel (= bladePivot), axis (the heel
+ *                  line, across the rays), toe (its mean ray direction), tip (the middle rays' tips: the crawl's welded
+ *                  point), ankle (deg), heelHL (from the middle rays' bases), from: { rayT (per ray: the sole starts) } }
+ *   restPose       the arm's rest pose the 'fold' is authored in (restArmPose): the shoulder's local rotation as a
+ *                  quaternion [x, y, z, w] about its bind pivot, { fish: { J_pecL }, object: { J_pecL } } (bind rotations
+ *                  are identity, so object-frame local = the viewer's / glTF's); the blade's joints at rest
+ *   prop           { junctionDeg }: the junction's nominal flexion in the propped stance (FIN_SCULPT.pectoral.prop)
  */
+const TIP_AT = 0.8;
 function pectoralExtras(d) {
   const S = FIN_SCULPT.pectoral, PF = d.plantFrame, n = d.rays.length;
   const curves = rayCurves(d, 'plant');
   const mids = [(n - 1) >> 1, n >> 1];
-  const heel = mul(mids.map((k) => curveAt(curves[k], (PF.rays[k].at + 0.5 * S.plant.over) / d.rays[k].len)).reduce((a, b) => add(a, b)), 0.5);
+  const avgMid = (t) => mul(mids.map((k) => curveAt(curves[k], t(k))).reduce((a, b) => add(a, b)), 0.5);
+  const heel = avgMid((k) => (PF.rays[k].at + 0.5 * S.plant.over) / d.rays[k].len);
+  // (the welded tip: the middle ray's tip vertex itself, its pleat included, so the contact is a vertex of the mesh)
+  const tipP = avgMid(() => TIP_AT), tipEnd = sampler(d, 'plant').frame(n >> 1, 1).C;
   let sum = [0, 0, 0], cnt = 0, toe = [0, 0, 0];
   const from = [];
   curves.forEach((c, k) => {
@@ -763,27 +841,34 @@ function pectoralExtras(d) {
   });
   const point = cnt ? mul(sum, 1 / cnt) : heel;
   const r4 = (v) => v.map((c) => +c.toFixed(4)), r6 = (v) => v.map((c) => +c.toFixed(6));
-  d.bladePivot = mul(heel, HL);
+  d.junctionPivot = r4(mul(d.frame.mid, HL));
+  d.bladePivot = r4(mul(heel, HL));
+  d.tipPivot = r4(mul(tipP, HL));
+  d.flexAxis = r6(d.frame.wv);
   d.sole = {
-    normal: r6(PF.nS), point: r4(mul(point, HL)), heel: r4(mul(heel, HL)), axis: r6(nrm(cross(d.frame.n, PF.nS))), toe: r6(nrm(toe)),
-    lean: S.plant.lean, splay: S.plant.splay, heelHL: S.plant.heel, from: { rayT: from },
+    normal: r6(PF.nS), point: r4(mul(point, HL)), heel: r4(mul(heel, HL)), axis: r6(d.frame.wv), toe: r6(nrm(toe)), tip: r4(mul(tipEnd, HL)),
+    ankle: S.plant.ankle, heelHL: S.plant.heel, from: { rayT: from },
   };
   const q = d.rest.quats;
   d.restPose = {
-    note: 'the arm\'s rest pose the pectoral fold is authored in (fins.mjs restArmPose): local rotations about the joints\' bind pivots',
-    fish: { J_pecL: r6(q.shoulder), J_pecElbowL: r6(q.elbow), J_pecWristL: q.wrist },
-    object: { J_pecL: r6(quatToObject(q.shoulder)), J_pecElbowL: r6(quatToObject(q.elbow)), J_pecWristL: q.wrist },
+    note: 'the arm\'s rest pose the pectoral fold is authored in (fins.mjs restArmPose): the shoulder\'s local rotation about its bind pivot; the blade\'s joints at rest',
+    fish: { J_pecL: r6(q.shoulder) },
+    object: { J_pecL: r6(quatToObject(q.shoulder)) },
   };
+  d.prop = { junctionDeg: S.prop.junction };
+  // (the furled blade's tip: the crawl's welded point when the blade crutches furled, and the ray's direction there)
+  { const SF = sampler(d, 'furl'), F1 = SF.frame(n >> 1, 1); d.furl = { tip: r4(mul(F1.C, HL)), tipDir: r6(F1.T) }; }
 }
 
 /** The right pectoral's copies of the left's extras, mirrored (z → −z; rotations as axial vectors). */
 function mirrorExtras(R) {
   const L = R.mirrorOf, mp = (p) => [p[0], p[1], -p[2]], mq = (q) => [-q[0], -q[1], q[2], q[3]];
-  R.bladePivot = mp(L.bladePivot);
-  R.sole = { ...L.sole, normal: mp(L.sole.normal), point: mp(L.sole.point), heel: mp(L.sole.heel), axis: mp(L.sole.axis), toe: mp(L.sole.toe) };
-  const f = L.restPose.fish;
-  const fish = { J_pecR: mq(f.J_pecL), J_pecElbowR: mq(f.J_pecElbowL), J_pecWristR: f.J_pecWristL };
+  R.junctionPivot = mp(L.junctionPivot); R.bladePivot = mp(L.bladePivot); R.tipPivot = mp(L.tipPivot); R.flexAxis = mp(L.flexAxis);
+  R.sole = { ...L.sole, normal: mp(L.sole.normal), point: mp(L.sole.point), heel: mp(L.sole.heel), axis: mp(L.sole.axis), toe: mp(L.sole.toe), tip: mp(L.sole.tip) };
+  const fish = { J_pecR: mq(L.restPose.fish.J_pecL) };
   R.restPose = { note: L.restPose.note, fish, object: Object.fromEntries(Object.entries(fish).map(([k, q]) => [k, quatToObject(q)])) };
+  R.prop = { ...L.prop };
+  R.furl = { tip: mp(L.furl.tip), tipDir: mp(L.furl.tipDir) };
 }
 
 // ------------------------------------------------------------------------------------------------ ray curves
@@ -809,6 +894,8 @@ function rayCurves(def, st) {
       let d = spec.at ? spec.at(l, p) : spec.hug ? spec.hug(p, l) : spec.turn ? slerp(spec.dir, spec.turn.to, smoothstep(spec.turn.at, spec.turn.at + spec.turn.over, l)) : spec.dir;
       if (spec.bend) d = turnToward(d, spec.bend.toward, spec.bend.angle * (l / L));
       if (spec.curl) d = turnToward(d, spec.curl.toward, spec.curl.angle * (l / L) ** (spec.curl.pow ?? 2));
+      // (the planted pectoral's tips bent under load past `tip.from`)
+      if (spec.tip && l > spec.tip.from) d = turnToward(d, spec.tip.toward, spec.tip.angle * ((l - spec.tip.from) / Math.max(1e-6, L - spec.tip.from)));
       return d;
     };
     let p = space ? space.to(r.base) : r.base.slice();
@@ -871,7 +958,9 @@ const tangentAt = (c, t) => {
 function finNormal(def, curves, st, k, t) {
   const n = def.rays.length, C = curveAt(curves[k], t), T = tangentAt(curves[k], t);
   const Cp = k > 0 ? curveAt(curves[k - 1], t) : null, Cn = k < n - 1 ? curveAt(curves[k + 1], t) : null;
-  let N = cross(T, sub(Cn ?? C, Cp ?? C));
+  // (a fin may take its normal from the hint alone in a state (def.normalHint: the folded anal fin, whose rays lie along
+  // one another, round B3), where the line through the neighbours runs along the ray)
+  let N = def.normalHint?.(st) ? [0, 0, 0] : cross(T, sub(Cn ?? C, Cp ?? C));
   const hint = def.hintAt ? def.hintAt(C) : def.hint(st);
   if (len3(N) < 1e-9) N = perp(hint, T);
   N = nrm(N);
@@ -928,13 +1017,19 @@ function sampler(def, st, flat = false) {
     if (r.flesh && !flat) {
       // (held over the face's rounded rim, swelling a little past it so the rim hides under it, then easing out)
       const e = 1 - smoothstep(r.flesh.hold, r.flesh.over, l), sw = 1 + r.flesh.swell * smoothstep(0, r.flesh.hold, l);
-      if (e > 0) { h = Math.max(h, r.flesh.h * sw * e); w = Math.max(w, Math.min(r.flesh.w, 0.49 * gap) * e); box = e; }
+      // (round B3: the lenses' width may ease out on its own, later than their thickness (wEase, l), so the slab stays
+      // closed while it thins to the bare rays)
+      const ew = r.flesh.wEase ? 1 - smoothstep(r.flesh.wEase[0], r.flesh.wEase[1], l) : e;
+      if (e > 0 || ew > 0) { h = Math.max(h, r.flesh.h * sw * e); w = Math.max(w, Math.min(r.flesh.w, 0.49 * gap) * ew); box = ew; }
     }
     // (the planted sole: the rays pressed flat on their ground side)
     const press = specs[k].sole !== undefined && l > specs[k].sole ? FIN_SCULPT.pectoral.plant.flat : 1;
     // the pleat: the rays alternately to either side, growing to the tip (the edge rays half)
     const sg = (k % 2 ? 1 : -1) * (k === 0 || k === n - 1 || r.kind === 'frenum' ? 0.5 : 1) * (r.kind === 'frenum' ? 0 : 1);
-    const Cq = add(C, mul(N, sg * pleatAmp * Math.pow(t, 0.8)));
+    // (planted: the pleats of the furled inner blade flattened over the sole, to `plant.solePleat` of theirs; none over a
+    // fleshy base: the rays lie side by side in it, round B3)
+    const pa = specs[k].sole !== undefined ? pleatAmp * lerp(1, FIN_SCULPT.pectoral.plant.solePleat ?? 1, smoothstep(specs[k].sole - 0.1, specs[k].sole - 0.02, l)) : pleatAmp;
+    const Cq = add(C, mul(N, sg * pa * Math.pow(t, 0.8) * (1 - box)));
     return { C: Cq, T, N, B: Bv, w, h, press, box };
   };
   /** The membrane of panel k (between rays k and k+1) at f across it and tau up it (its edges e0, e1 at tk, tj on the rays). */
@@ -1074,7 +1169,8 @@ function evaluate(def, lay, st) {
     const key = `${k}:${f.toFixed(5)}`;
     if (!rootCache.has(key)) {
       const a = def.rays[k].base, b = def.rays[k + 1].base;
-      rootCache.set(key, def.type === 'pectoral'
+      // (between embedded roots, the caudal's under the skin of the peduncle's end: on their line, not the skin)
+      rootCache.set(key, def.type === 'pectoral' || def.rays[k].embed || def.rays[k + 1].embed
         ? lerp3(a, b, f) : ctx.root(lerp3(a, b, f), B.depth));
     }
     return rootCache.get(key);
@@ -1094,7 +1190,7 @@ function evaluate(def, lay, st) {
     }
     if (F.press < 1 && y < 0) y *= F.press;
     // (the caudal's fleshy base: the lens squared off towards a box, so the root lenses close up into one slab)
-    if (F.box > 0) { const k = 1 - 0.6 * F.box; x = Math.sign(x) * Math.abs(x) ** k; y = Math.sign(y) * Math.abs(y) ** k; }
+    if (F.box > 0) { const k = 1 - (def.fleshSquare ?? 0.6) * F.box; x = Math.sign(x) * Math.abs(x) ** k; y = Math.sign(y) * Math.abs(y) ** k; }
     return { p: add(F.C, add(mul(F.B, x * F.w), mul(F.N, y * F.h))), F };
   };
   for (let i = 0; i < nV; i++) {
@@ -1386,8 +1482,9 @@ export function buildFinTargets(def, mesh, { normals: withNormals = true } = {})
 }
 
 /**
- * The far tier's fin: 8 triangles over the outline (five stations across the fin, each from its root to the membrane's
- * margin; the pectoral three stations, each from its root over the plant's heel to the margin), with the fin's uv rect
+ * The far tier's fin: a strip of triangles over the outline (stations across the fin, def.cardRays: five by default,
+ * round B3's pectoral five, caudal seven, pelvic eleven; each from its root to the membrane's margin, pushed out by
+ * def.cardOut, the pectoral's over the plant's heel), with the fin's uv rect
  * and the mesh attributes; the bind's outline, or another state's ({ state: 'fold' | 'spread' | 'plant' | … }: the same
  * vertices and triangles in every state, so the far tier's merged Fins mesh can carry them as blend shapes:
  * finCardTargets).
@@ -1408,7 +1505,9 @@ export function finCard(def, { state = 'bind' } = {}) {
     const p = def.panels[k], La = def.rays[k].len, Lb = def.rays[k + 1].len;
     const L0 = La * (p.flat0 ?? p.reach0), L1 = Lb * (p.flat1 ?? p.reach1), Lm = Math.max(L0, L1);
     const E = 1 - (p.flatNotch ?? p.notch) * Math.pow(Math.sin(Math.PI * f), p.notchPow ?? 1);
-    const tk = Math.min(E * Lm, L0) / La, tj = Math.min(E * Lm, L1) / Lb;
+    // (def.cardOut: the margin row pushed out along the rays, at most to their tips: a card's chords between its stations
+    // cut inside the fin's curved margin; round B3 integration, the pelvic's)
+    const co = def.cardOut ?? 1, tk = Math.min(1, (co * Math.min(E * Lm, L0)) / La), tj = Math.min(1, (co * Math.min(E * Lm, L1)) / Lb);
     const b = lerp3(def.rays[k].base, def.rays[k + 1].base, f);
     pts.push(b);
     attr.push({ a, t: 0, l: 0, s: b[0] });
@@ -1454,10 +1553,25 @@ export function finCard(def, { state = 'bind' } = {}) {
  * on the merged Fins mesh, driven like the hero's, the far fish folds and plants as the near one does.
  */
 export function finCardTargets(def) {
-  const bind = finCard(def), names = def.type === 'pectoral' ? ['fold', 'plant'] : ['fold'];
+  // (round B3, the pectorals: their card's states and, for 'plant', the junction's nominal prop flexion baked in: the far
+  // tier has the arm as J_pecL alone; the right card's from the left's, mirrored)
+  if (def.type === 'pectoral' && def.mirrorOf) {
+    const L = finCardTargets(def.mirrorOf), fz = (a) => a.map((v, i) => (i % 3 === 2 ? -v : v));
+    return { names: L.names, deltas: L.deltas.map(fz), normals: L.normals.map(fz) };
+  }
+  const bind = finCard(def), names = def.cardTargets ?? (def.type === 'pectoral' ? ['fold', 'plant'] : ['fold']);
   const deltas = [], normals = [];
   for (const st of names) {
     const c = finCard(def, { state: st });
+    if (def.type === 'pectoral' && st === 'plant' && def.prop?.junctionDeg) {
+      const piv = mul(def.frame.mid, HL), ax = def.frame.wv, a = def.prop.junctionDeg * DEG;
+      // (+ toward the outer face n: the sense whose turn of u leans toward n)
+      const sg = dot(cross(ax, def.frame.u), def.frame.n) >= 0 ? 1 : -1;
+      for (let i = 0; i < c.position.length; i += 3) {
+        const p = rotAbout(sub([c.position[i], c.position[i + 1], c.position[i + 2]], piv), ax, sg * a), q = rotAbout([c.normal[i], c.normal[i + 1], c.normal[i + 2]], ax, sg * a);
+        c.position.set(add(p, piv), i); c.normal.set(q, i);
+      }
+    }
     deltas.push(c.position.map((v, i) => v - bind.position[i]));
     normals.push(c.normal.map((v, i) => v - bind.normal[i]));
   }

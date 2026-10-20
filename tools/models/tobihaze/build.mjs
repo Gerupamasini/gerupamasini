@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The トビハゼ model as one GLB per tier (round B1: the clay stage, with its rig, blend shapes and LOD tiers; the
+// The トビハゼ model as one GLB per tier (rounds B1–B3: the clay stage, with its rig, blend shapes and LOD tiers; the
 // textures are the next round). The pieces:
 //   skin    the whole fish's sculpt (head.mjs + body.mjs) meshed per tier (fishmesh.mjs bodyTierMesh: the hero's full
 //           sculpt at h 0.09 mm, lod1's sealed one at 0.16, lod2's far one at 0.40), UV-charted on the body atlas
@@ -7,10 +7,12 @@
 //           weight rows on the hero's dense mesh (heroRig), the head's blend shapes solved on its packed skin
 //           (headmorphs.mjs); lod1 and lod2 carry both over from the hero's dense mesh by tissue class (transfer.mjs)
 //           and re-solve the blend shapes against their own reduced skins (26 and 12 joints)
-//   eyes    eyemesh.mjs: one globe mesh under the eye joints (Eye_L, and Eye_R mirrored), merged into the Body at lod2
+//   eyes    eyemesh.mjs: a globe mesh under each eye joint (Eye_L; Eye_R the left's mirror image built as its own mesh
+//           with its own tangents, round B3), merged into the Body at lod2
 //   teeth   teeth.mjs: the fitted tooth rows (hero), on J_premax and J_imj
-//   fins    fins.mjs: the seven fins with their blend shapes (fold, spread, flex, plant + plantMid); lod2: one card each,
-//           merged into one alpha-tested `Fins` mesh
+//   fins    fins.mjs: the seven fins with their blend shapes (fold, spread; the caudal's flex; the pectorals' furl, plant +
+//           plantMid; the pelvic's press); lod2: one card each, merged into one alpha-tested `Fins` mesh with every card's
+//           states, the far cup's J_pelvic pitch and the reference states' correctives as blend shapes
 // The hero's dense mesh, its rows and blend shapes are computed once (heroData) and reused by every tier.
 //   node tools/models/tobihaze/build.mjs [--tier hero|lod1|lod2|all] [--out <dir>] [--clay] [--cache <file>] [--hero-h <mm>]
 // --out defaults to tools/models/tobihaze/out/tiers/ (shipping into src/assets/ is a later round); --cache keeps the
@@ -18,11 +20,15 @@
 // (several minutes); --clay writes clay materials (the only kind this round: without it the build says so and writes
 // clay all the same).
 //
-// Meshes per tier (class M budget, body_contract §6):
-//   hero  Head (the skin in front of 1.32 HL but the arms, plus whatever the head's blend shapes move: blinkL, blinkR,
-//         throat, gape, gum, vent, inflate, inflateMid), Body (the rest), Eye (nodes Eye_L, Eye_R), Mouth_Teeth, Fin_*
-//   lod1  Body (blinkL, blinkR, throat, inflate, inflateMid), Eye, Fin_*
+// Meshes per tier (class M budget, body_contract §6; round B3: the skin split by the blend-shape groups that move it,
+// headmorphs.splitByMorphs, each morph mesh carrying only its own targets, the rest a static Body):
+//   hero  Head_Orbit (blinkL, blinkR, eyesUpL, eyesUpR; inflate, inflateMid where the cheeks reach it), Head_Mouth (gape,
+//         gum; throat, inflate, inflateMid), Head (throat, inflate, inflateMid), Body (static), Eye_L, Eye_R,
+//         Mouth_Teeth, Fin_* (the hero's vent target moves nothing and is dropped: the gill slit opens by J_opercL/R)
+//   lod1  Head_OrbitL (blinkL, eyesUpL), Head_Orbits (both sides' and the cheeks' shapes where they meet), Head_OrbitR
+//         (blinkR, eyesUpR), Head (throat, inflate, inflateMid), Body (static), Eye_L, Eye_R, Fin_*
 //   lod2  Body (with both eyes), Fins (MASK)
+// (the exact target list per mesh is in each tier's extras tobihaze.morphs and the build report's headSplit)
 // Materials (clay): Tobihaze_Body (the skin, the eye's skin cap, the teeth by their swatch), Tobihaze_Fin (BLEND,
 // double-sided; lod2 Tobihaze_Fins, MASK), Tobihaze_Cornea (the eye's pupil, dark gloss) and Tobihaze_Iris (Cornea)
 // (the iris ring under the cornea): the viewer's clay mode keys on those names.
@@ -33,15 +39,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { vertexNormals, mergeParts, compactIndices } from '../../lib/gobyTiers.mjs';
-import { HL, TL, SL, EYE_MM, toObject, dirToObject } from './anatomy.mjs';
+import { HL, TL, SL, S0, EYE_MM, toObject, dirToObject } from './anatomy.mjs';
 import { HEAD_SCULPT, headSDF } from './head.mjs';
 import { BODY_SCULPT, trunkProfile } from './body.mjs';
 import { morphNormals, BLINK_DROP } from './headrig.mjs';
 import { bodyTierMesh, fishDense, tierField, morphAttrs, tierMorphAttrs, ready, BODY_LAYOUT, TIERS as MESH_TIERS, rectUVWH } from './fishmesh.mjs';
 import { vertexTangents, tangentCheck } from './tiers.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, finCard, finCardTargets, finTierParams } from './fins.mjs';
-import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, poseWorldHero, skinPacked, statePose, contactsFor, contactGaps, poseForTier, mirrorErrors, limitExcess, AXES } from './rig.mjs';
-import { headMorphs, solveBindDelta, poseWorldFor, skinWith, wrapMorph, MORPH_ORDER, MORPH_EXTRA, MORPH_DRIVERS, MORPH_DRIVE } from './headmorphs.mjs';
+import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, poseWorldHero, skinPacked, statePose, crawlFrames, fishToQuatObj, contactsFor, contactGaps, poseForTier, mirrorErrors, limitExcess, AXES } from './rig.mjs';
+import { headMorphs, solveBindDelta, poseWorldFor, skinWith, wrapMorph, MORPH_ORDER, MORPH_EXTRA, MORPH_DRIVERS, MORPH_DRIVE, MORPH_EPS, MORPH_GROUPS_SIDES, MORPH_MESH_SIDES, pruneMorphs, splitByMorphs } from './headmorphs.mjs';
 import { vertexGrid, tissueClass, transferRows } from './transfer.mjs';
 import { eyeMeshForTier, eyesAtRest, EYE_TIERS } from './eyemesh.mjs';
 import { teethMesh } from './teeth.mjs';
@@ -57,7 +63,9 @@ const logDefault = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).
  * shapes and the mesh that carries them. */
 export const TIERS = {
   hero: { mesh: 'hero', eye: EYE_TIERS.hero, fins: 'hero', teeth: true, morphs: [...MORPH_ORDER, ...MORPH_EXTRA], morphMesh: 'Head' },
-  lod1: { mesh: 'lod1', eye: EYE_TIERS.lod1, fins: 'lod1', teeth: false, morphs: ['blinkL', 'blinkR', 'throat', 'inflate', 'inflateMid'], morphMesh: 'Body' },
+  // (round B3: lod1 has the eyes-up correctives too, re-solved on its skin as its other shapes, so its alert eyes lift as
+  // the hero's: B2 held lod1's lift to liftBareM, 0.47 mm under the hero's at the switch; the morph meshes as the hero's)
+  lod1: { mesh: 'lod1', eye: EYE_TIERS.lod1, fins: 'lod1', teeth: false, morphs: ['blinkL', 'blinkR', 'throat', 'inflate', 'inflateMid', 'eyesUpL', 'eyesUpR'], morphMesh: 'Head' },
   lod2: { mesh: 'lod2', eye: EYE_TIERS.lod2, fins: 'card', teeth: false, morphs: [], merged: true },
 };
 const P = 'Tobihaze';
@@ -67,11 +75,13 @@ const HERO_ATTR_MORPHS = ['blinkL', 'blinkR', 'gape', 'vent', 'inflate', 'throat
 const LOD1_ATTR_MORPHS = ['blinkL', 'blinkR', 'inflate'];
 /** The fins' blend shapes' drivers (fins.mjs): fold and spread are opposite (drive one at a time). */
 const FIN_DRIVERS = {
+  press: 'pelvic: w, the cup pressed flat on the ground under the chest (LAND; each ray from its base onto a plane under the bases, the front raised 15°; J_pelvic near 0)',
   fold: 'w: the fin folded (median fins down along the back / belly, the caudal closed into its spear, the pectoral fan closed, the pelvic laid back); drive fold or spread, not both',
   spread: 'w: the fin erect / its fan fully open (fold or spread, not both)',
   flex: 'caudal: w > 0 bends the fin\'s rear to the fish\'s left (+X), w < 0 to the right',
-  plant: 'pectoral: w, the blade flexed at the wrist and laid flat across the lobe\'s end (on the ground when the lobe stands as a leg)',
+  plant: 'pectoral: w, the blade furled and planted: the inner blade along the junction\'s line to the heel, the distal part turned forward into the sole and pressed flat, the tips splayed (the rig\'s J_pecTip bends them under load; on the ground when the lobe stands as a leg; rig solveArmPlant levels it); from furl, not with it',
   plantMid: 'pectoral: 4·w·(1 − w) of plant (keeps the rays their length half way)',
+  furl: 'pectoral: w, the rays bundled into a narrow fan, the membrane pleated between them (its surface ~70 % of the spread fan\'s; the land default: the crawl\'s crutch, rig crawlFrames, its tip the welded contact); drive furl or plant, not both',
 };
 
 // ------------------------------------------------------------------------------------------------ frames
@@ -309,6 +319,13 @@ export function lighterSkin(tierName, H, log = logDefault) {
         const w = H.W[nm], E = carry(w.E), S = transferRows({ ...src, rows: Float32Array.from(w.support), J: 1 }, dst, { grid: H.grid, normal: true });
         const mask = new Float32Array(n); for (let v = 0; v < n; v++) mask[v] = S[v] > 0.5 ? 1 : 0;
         for (let i = 0; i < E.length; i++) E[i] /= HL;
+        // (round B3, lod1's eyes-up: the cup's lining the tier keeps inside the resting globe rides the lifted globe whole,
+        // hidden in it: the hero has no skin there to carry a lift from. A shrink-wrap onto the hero's posed stalk, as the
+        // blink's, was tried and dropped: 135 web edges over 2× at the land lift against 2)
+        if (/^eyesUp[LR]$/.test(nm)) {
+          const sd = nm.endsWith('L') ? 1 : -1, lift = w.pose[`J_eye${nm.slice(-1)}`].t[1], ec = EYE_MM.center, P = tier.position;
+          for (let v = 0; v < n; v++) if (Math.hypot(P[v * 3] - ec[0], P[v * 3 + 1] - ec[1], P[v * 3 + 2] - sd * ec[2]) < EYE_MM.radius - 0.005) { E[v * 3] = 0; E[v * 3 + 1] = lift; E[v * 3 + 2] = 0; mask[v] = 1; }
+        }
         const Wp = poseWorldFor(w.pose, names);
         d = solveBindDelta(posHL, skin, names, Wp, E, { mask });
         // (the solve's residual: the posed skin against the carried world displacement, where the shape acts)
@@ -397,7 +414,7 @@ function tierAxes(tierName, morphNames = []) {
   const axes = structuredClone(axesForTier(tierName));
   const keep = new Set(TIER_JOINTS[tierName]);
   const jaw = axes.joints?.J_jaw?.channels?.angle;
-  if (tierName === 'lod1' && jaw) { jaw.range = [jaw.range[0], Math.min(jaw.range[1], 30)]; jaw.note = 'lod1: clamped to 30° (the sealed skin has no slit; the gape and gum shapes are hero only)'; }
+  if (tierName === 'lod1' && jaw) { jaw.range = [jaw.range[0], Math.min(jaw.range[1], 30)]; jaw.note = 'lod1: clamped to 30° (the sealed skin has no slit; the gape and gum shapes are hero only)'; jaw.tierClamp = true; }
   // (round B2: lod1's blink is a shrink-wrap of its kept hood and lining onto the hero's closed hood, so the globe
   // stays covered with the joint's own drop: B1's blinkGlobeExtraDropM is gone)
   for (const S of ['L', 'R']) {
@@ -406,13 +423,45 @@ function tierAxes(tierName, morphNames = []) {
     if (axes.eyes?.[S] && !morphNames.includes(`eyesUp${S}`)) { axes.eyes[S].liftM = j?.liftBareM ?? axes.eyes[S].liftM; axes.eyes[S].alertLiftM = Math.min(axes.eyes[S].alertLiftM, axes.eyes[S].liftM); }
   }
   if (axes.head?.poses) {
-    const bone = new Set();
+    const bone = new Set(), fixed = {};
+    const mPerHL = HL * 0.001, names = new Set(morphNames);
     for (const [k, P] of Object.entries(axes.head.poses)) {
       if (!P || typeof P !== 'object') continue;
-      axes.head.poses[k] = Object.fromEntries(Object.entries(P).filter(([j]) => { if (!/^J_/.test(j)) return true; if (keep.has(j)) return true; bone.add(j); return false; }));
+      const Q = Object.fromEntries(Object.entries(P).filter(([j]) => { if (!/^J_/.test(j)) return true; if (keep.has(j)) return true; bone.add(j); return false; }));
+      // (round B3 integration, tech P4: a reference pose within the tier's own ranges and naming only blend shapes the
+      // tier has: lod1's gapeFull asked J_jaw 70° of its 30°, the hero's inflated J_operc 26° of 20°, lod2's blink named
+      // blinkL/R; the hero's vent target is dropped (it moves nothing). What was clamped or dropped is listed in `fixed`)
+      for (const [j, ch] of Object.entries(Q)) {
+        if (!/^J_/.test(j) || !ch || typeof ch !== 'object') continue;
+        const A = axes.joints?.[j];
+        for (const [c, v] of Object.entries(ch)) {
+          if (c === 't' && A?.translate?.rangeM && Array.isArray(v)) {
+            const [lo, hi] = A.translate.rangeM.map((m) => m / mPerHL), y = Math.min(hi, Math.max(lo, v[1]));
+            if (Math.abs(y - v[1]) > 1e-9) { (fixed[k] ??= []).push(`${j}.t ${v[1]} → ${+y.toFixed(6)} HL`); ch.t = [v[0], +y.toFixed(6), v[2]]; }
+            continue;
+          }
+          const C = A?.channels?.[c], r = C?.range;
+          if (!r || typeof v !== 'number' || (v >= r[0] && v <= r[1])) continue;
+          if (C.tierClamp) { const y = Math.min(r[1], Math.max(r[0], v)); (fixed[k] ??= []).push(`${j}.${c} ${v} → ${y} (the tier's clamp)`); ch[c] = y; }
+          else {
+            // (a range the head rig's own reference pose passes, e.g. the inflated cheeks' J_operc 26° against 20°: the range
+            // widened to the pose, which the accepted head is posed in, rather than the pose cut)
+            C.range = [Math.min(r[0], v), Math.max(r[1], v)]; C.rangeNote = `widened to ${k}'s ${v} (the head rig's reference pose)`;
+            (fixed[k] ??= []).push(`${j}.${c} range → [${C.range.join(', ')}]`);
+          }
+        }
+      }
+      if (Q.morph) {
+        const kept = Object.fromEntries(Object.entries(Q.morph).filter(([m]) => names.has(m)));
+        const gone = Object.keys(Q.morph).filter((m) => !names.has(m));
+        if (gone.length) (fixed[k] ??= []).push(`morph ${gone.join(', ')} dropped (not on this tier)`);
+        if (Object.keys(kept).length) Q.morph = kept; else delete Q.morph;
+      }
+      axes.head.poses[k] = Q;
     }
     axes.head.boneOnly = [...bone].sort();
     axes.head.boneOnlyNote = 'joints of the head rig that this tier does not ship (their motion is in the blend shapes or rides a kept ancestor): dropped from the poses';
+    if (Object.keys(fixed).length) { axes.head.posesFixed = fixed; axes.head.posesFixedNote = 'the reference poses held to this tier: channels the tier clamps cut to it, ranges the head rig\'s own poses pass widened to them, blend shapes the tier lacks dropped'; }
   }
   return axes;
 }
@@ -425,8 +474,63 @@ function heroTierSkin(H) {
 }
 
 /** The fins of a tier, built once: { [name]: { def, mesh, targets: { names, deltas, normals }, w (hero-space packed
- * weights) } } (hero / lod1: buildFinMesh with buildFinTargets; lod2: finCard with finCardTargets). */
+ * weights) } } (hero / lod1: buildFinMesh with buildFinTargets; lod2: finCard with cardStateTargets). */
 const FIN_CACHE = new Map();
+/**
+ * A far-tier card's states as blend shapes (round B3: B2's cards had fold and plant only, so the far fish in the water
+ * kept a 12° caudal brush and closed paddles while the near tiers spread them, and popped at every lod1↔lod2 switch;
+ * the room tanks load lod2 underwater at every preset): fins.mjs finCardTargets (def.cardTargets, the fins owners'
+ * states with what a state needs baked in, e.g. the pectoral plant's junction flexion: the far arm is J_pecL alone),
+ * then every other state the near tiers' fin takes (def.targets but the in-between correctives *Mid, which ride their
+ * state at 4w(1 − w)) as finCard(def, { state }) − finCard(def): spread for every fin, the caudal's flex, the pelvic's
+ * press. { names, deltas, normals } like buildFinTargets'.
+ */
+function cardStateTargets(def, bind) {
+  const T = finCardTargets(def), names = [...T.names], deltas = [...T.deltas], normals = [...T.normals];
+  for (const st of def.targets ?? []) {
+    if (names.includes(st) || /Mid$/.test(st)) continue;
+    const c = finCard(def, { state: st });
+    names.push(st);
+    deltas.push(Float32Array.from(c.position, (v, i) => v - bind.position[i]));
+    normals.push(Float32Array.from(c.normal, (v, i) => v - bind.normal[i]));
+  }
+  return { names, deltas, normals };
+}
+/**
+ * The far tier's pelvic cup turned as J_pelvic turns it (round B3: lod2 keeps 12 joints, J_pelvic's weights ride J_head,
+ * so B2's far cup stayed untilted in LAND, 2.0 mm over the hero's ground): the card in the land state's own shape (its
+ * blend shapes at the land weights) turned about J_pelvic's pivot by the land state's pitch pL, as a blend shape
+ * `pitch` (delta and normal delta, fish mm) whose weight J_pelvic.pitch / pL is exact at LAND. null when the land
+ * state leaves the cup within 0.5° of its bind (nothing to carry) or turns it the other way (a drive needs per > 0).
+ */
+function pelvicPitchTarget(fin, pose) {
+  const pL = pose?.J_pelvic?.pitch ?? 0;
+  if (!fin || !(pL > 0.5)) return null;
+  const c = fin.mesh, T = fin.targets, w = pose.morph?.[fin.def.name] ?? {}, n = c.position.length / 3;
+  const X = Float64Array.from(c.position), Nn = Float64Array.from(c.normal);
+  T.names.forEach((k, i) => { const wk = w[k] ?? 0; if (!wk) return; for (let q = 0; q < X.length; q++) { X[q] += wk * T.deltas[i][q]; Nn[q] += wk * T.normals[i][q]; } });
+  // (the channel's axis in the object frame → the fish frame: dirToObject is (s, y, z) → (z, y, −s), a rotation)
+  const ao = AXES.joints.J_pelvic.channels.pitch.axis, a0 = [-ao[2], ao[1], ao[0]], al = Math.hypot(...a0), ax = a0.map((x) => x / al);
+  const th = (pL * Math.PI) / 180, cs = Math.cos(th), sn = Math.sin(th), piv = JOINTS[J.J_pelvic].at;
+  const rot = (v) => { const d = ax[0] * v[0] + ax[1] * v[1] + ax[2] * v[2], cr = [ax[1] * v[2] - ax[2] * v[1], ax[2] * v[0] - ax[0] * v[2], ax[0] * v[1] - ax[1] * v[0]]; return [0, 1, 2].map((k) => v[k] * cs + cr[k] * sn + ax[k] * d * (1 - cs)); };
+  const delta = new Float32Array(n * 3), dnormal = new Float32Array(n * 3);
+  for (let v = 0; v < n; v++) {
+    const r = rot([X[v * 3] - piv[0], X[v * 3 + 1] - piv[1], X[v * 3 + 2] - piv[2]]), m = rot([Nn[v * 3], Nn[v * 3 + 1], Nn[v * 3 + 2]]);
+    for (let k = 0; k < 3; k++) { delta[v * 3 + k] = r[k] + piv[k] - X[v * 3 + k]; dnormal[v * 3 + k] = m[k] - Nn[v * 3 + k]; }
+  }
+  return { pL, delta, dnormal };
+}
+/** The states with the far cards' own weights merged into their poses' morphs (lod2Morph: { [state]: { [fin]: { [target]:
+ * w } } }: the cup's `pitch`, the states' correctives), so lod2's contacts and extras pose the cards as the viewer
+ * does; the states themselves when there are none (hero, lod1). */
+function withCardMorphs(states, lod2Morph) {
+  if (!Object.keys(lod2Morph).length) return states;
+  return Object.fromEntries(Object.entries(states).map(([k, S]) => {
+    const pose = structuredClone(S.pose);
+    for (const [fin, ws] of Object.entries(lod2Morph[k] ?? {})) pose.morph = { ...(pose.morph ?? {}), [fin]: { ...(pose.morph?.[fin] ?? {}), ...ws } };
+    return [k, { ...S, pose }];
+  }));
+}
 function tierFins(tierName, H) {
   if (FIN_CACHE.has(tierName)) return FIN_CACHE.get(tierName);
   const defs = finDefinitions(BODY_SCULPT), body0 = { position: H.dense.position, indices: H.dense.indices, rows: H.rig.rows, grid: H.grid };
@@ -434,58 +538,110 @@ function tierFins(tierName, H) {
   const out = {};
   for (const def of defs) {
     const mesh = TP ? buildFinMesh(def, TP[def.name]) : finCard(def);
-    const targets = TP ? buildFinTargets(def, mesh) : finCardTargets(def);
+    const targets = TP ? buildFinTargets(def, mesh) : cardStateTargets(def, mesh);
     out[def.name] = { def, mesh, targets, w: finWeights(def, mesh, { body: body0 }) };
   }
   FIN_CACHE.set(tierName, out);
   return out;
 }
 
-/** The wrist's counter-turn in the REST state (deg, AXES J_pecWristL/R channels; the right's mirror themselves). */
-const REST_WRIST = { flexion: 1, bend: -5 };
-/** The paddles in the WATER state (deg, AXES channels, both sides). */
-const WATER_ARM = { shoulder: { swing: 25, abduction: 30, protraction: 20 }, elbow: { flexion: 20 } };
 /**
- * The reference states every tier is posed in (rig.statePose, solved once on the hero): land (the front raised, the
- * pectoral soles planted flat by solveArmPlant on the hero's tier skin, the pelvic cup pressed onto the same ground),
- * rest (prone, the arms in fins.mjs's rest pose, every fin folded) and water (the swim wave, the paddles spread).
+ * The reference states every tier is posed in (rig.statePose, solved once on the hero; round B3: rig.statePose is the
+ * one source, no overrides here): land (the front raised, the pectoral soles planted flat by solveArmPlant on the hero's
+ * tier skin, the pelvic cup pressed onto the same ground), rest (prone, the arms in fins.mjs's rest pose, every fin
+ * folded) and water (the swim wave, the paddles spread beside the flank). rig.statePose('reach') and rig.crawlFrames
+ * give the reach and the crawl's stance from the same rig.
  */
 export function heroStates(H) {
   if (H.states) return H.states;
   const fins = tierFins('hero', H), pel = fins.Fin_Pelvic;
   const tierMesh = { position: H.tier.position, skin: heroTierSkin(H), names: TIER_JOINTS.hero };
-  const land = statePose('land', { tierMesh, pelvic: { position: pel.mesh.position, skin: pel.w, names: TIER_JOINTS.hero } });
-  // REST: the rig's (fins.mjs restPose, the shoulder abducted RIG.rest.abduction = 4° more so the arm's medial face
-  // clears the flank) with the wrist turned back in by REST_WRIST, so the furled blade the shoulder's 4° carried out
-  // lies on the flank again: its rayT > 0.3 vertices' distance to the posed hero skin p50 0.58 → 0.25 mm, p95 0.71 →
-  // 0.39, max 0.79 → 0.45, none inside (integrator's search, b2_build scripts/rest_search.mjs; bend −5.5° and more
-  // puts the blade's edge through the flank)
-  const rest = statePose('rest');
-  for (const S of ['L', 'R']) rest.pose[`J_pecWrist${S}`] = { ...(rest.pose[`J_pecWrist${S}`] ?? {}), ...REST_WRIST };
-  // WATER: the rig's swim wave and fin states with the paddles brought forward and in (REST_WATER_ARM): the rig's
-  // swing 51.5° / abduction 43.5° held the fan 1.4 mm behind the shoulder on a long arm 5.3 mm off the flank; these put
-  // it 3.5 mm ahead of the shoulder, 3.5 mm off the flank, its face 30° from the horizontal toward the side (A061), the
-  // arm root clean (rig harness, h 0.09: area p001 0.563, 0 new flips, 0 new self-penetration; inside AXES' ranges and
-  // coupled limits; b2_build rigscripts/t_water.mjs)
+  // (round B3: the fins with their blend shapes, so the land and rest states lay the folded fins and the belly on the
+  // ground (rig settleOnGround) and press the pelvic cup by its own 'press' shape (rig pressPelvic))
+  const finParts = Object.fromEntries(Object.entries(fins).map(([k, f]) => [k, { position: f.mesh.position, skin: f.w, names: TIER_JOINTS.hero, targets: { names: f.targets.names, deltas: f.targets.deltas } }]));
+  const land = statePose('land', { tierMesh, pelvic: finParts.Fin_Pelvic, fins: finParts });
+  // (round B3 integration: the reach (A023, A070: the arm forward, the planted blade's tip ahead of the shoulder) as a
+  // fourth reference state, solved the same way, so every tier's extras carry its pose and contacts)
+  const reach = statePose('reach', { tierMesh, pelvic: finParts.Fin_Pelvic, fins: finParts });
+  const rest = statePose('rest', { tierMesh, fins: finParts });
   const water = statePose('water');
-  for (const S of ['L', 'R']) { water.pose[`J_pec${S}`] = { ...WATER_ARM.shoulder }; water.pose[`J_pecElbow${S}`] = { ...WATER_ARM.elbow }; }
-  H.states = { land, rest, water };
+  H.states = { land, reach, rest, water };
   return H.states;
 }
 
-/** A state's pose for a tier: lod2's one-bone arms aimed (rig.poseForTier), the eye lift held within the bare joint's
- * range where the tier has no eyesUp corrective, the eyesUp weights driven where it has. */
-function tierStatePose(pose, tierName, morphNames) {
-  const p = structuredClone(poseForTier(pose, tierName));
-  const bare = AXES.joints.J_eyeL?.translate?.liftBareM / (HL * 0.001);
-  for (const S of ['L', 'R']) {
-    const e = p[`J_eye${S}`];
-    if (!e?.t) continue;
-    if (!TIER_JOINTS[tierName].includes(`J_eye${S}`)) { delete p[`J_eye${S}`]; continue; }
-    if (morphNames.includes(`eyesUp${S}`)) { const d = MORPH_DRIVE[`eyesUp${S}`]; p.morph = { ...(p.morph ?? {}), Head: { ...(p.morph?.Head ?? {}), [`eyesUp${S}`]: +Math.min(1, Math.max(0, e.t[1] / d.per)).toFixed(4) } }; }
-    else if (Number.isFinite(bare)) e.t = [e.t[0], Math.min(e.t[1], +bare.toFixed(4)), e.t[2]];
-  }
-  return p;
+/**
+ * The crawl's stance for a tier (round B3 integration; rig.crawlFrames, the pectoral key's: the furled blades' tips
+ * welded while the body moves over them, Pace & Gibb 2009): the hero's solved on its tier skin, lod1's on its own skin
+ * with its own tip (o.tier 'lod1': lod1 has no J_pecTip, so the hero's frames would slide its tip 2.2 mm), lod2's the
+ * hero's carried over (rig.stateForTier: lod2's one-bone arms aimed, not welded). The frames' poses add the land state's
+ * folded median fins (the crawl is a land gait).
+ * @returns { frames: [{ phase, raise, pose, tipErrMM }], weldMM, weldM, strideMM, groundMM, note }
+ */
+function tierCrawl(tierName, H, tierMesh, morphNames) {
+  const land = H.states?.land?.pose?.morph ?? {};
+  const keepFins = Object.fromEntries(Object.entries(land).filter(([k]) => !/^Fin_Pectoral_/.test(k) && k !== 'Fin_Pelvic'));
+  const withFins = (pose) => ({ ...pose, morph: { ...keepFins, ...(pose.morph ?? {}) } });
+  let C;
+  if (tierName === 'lod2') {
+    // (lod2 keeps J_pecL alone and a straight card: the hero's shoulder rotation leaves the furled card's tip 8 mm off the
+    // weld (the hero's arm bends at the junction and the heel). Per frame and side the card's furl eased toward its plant
+    // (plant w: the shoulder → tip length from 13.4 to 12.0 mm) so its tip lies as far from the shoulder as the weld does,
+    // and the shoulder turned by the least rotation that lays the tip on the weld; where even the planted card is longer,
+    // its tip on the ground toward the weld, never under it: cardTipFromWeldMM)
+    const hero = (H.crawl ??= crawlFrames({ position: H.tier.position, skin: heroTierSkin(H), names: TIER_JOINTS.hero }));
+    const card = tierFins('lod2', H).Fin_Pectoral_L, kF = card.targets.names.indexOf('furl'), kP = card.targets.names.indexOf('plant'), sh = JOINTS[J.J_pecL].at;
+    const cardAt = (w, v) => [0, 1, 2].map((c) => card.mesh.position[v * 3 + c] + (1 - w) * card.targets.deltas[kF][v * 3 + c] + w * card.targets.deltas[kP][v * 3 + c]);
+    let tv = 0, far = -1;
+    for (let v = 0; v < card.mesh.position.length / 3; v++) { const q = cardAt(0, v), d = Math.hypot(q[0] - sh[0], q[1] - sh[1], q[2] - sh[2]); if (d > far) { far = d; tv = v; } }
+    const lenAt = (w) => { const q = cardAt(w, tv); return Math.hypot(q[0] - sh[0], q[1] - sh[1], q[2] - sh[2]); };
+    const wFor = (d) => { if (d >= lenAt(0)) return 0; if (d <= lenAt(1)) return 1; let a = 0, b = 1; for (let i = 0; i < 30; i++) { const m = (a + b) / 2; if (lenAt(m) > d) a = m; else b = m; } return (a + b) / 2; };
+    const mv = (R, v) => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
+    const mm = (A, B) => [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c]));
+    const tr = (A) => [A[0], A[3], A[6], A[1], A[4], A[7], A[2], A[5], A[8]];
+    const between = (a, b) => {
+      const na = Math.hypot(...a), nb = Math.hypot(...b), u = a.map((x) => x / na), w = b.map((x) => x / nb);
+      const ax = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], sn = Math.hypot(...ax), cs = u[0] * w[0] + u[1] * w[1] + u[2] * w[2];
+      if (sn < 1e-9) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      const [x, y, z] = ax.map((c) => c / sn), C = 1 - cs;
+      return [cs + x * x * C, x * y * C - z * sn, x * z * C + y * sn, y * x * C + z * sn, cs + y * y * C, y * z * C - x * sn, z * x * C - y * sn, z * y * C + x * sn, cs + z * z * C];
+    };
+    const frames = hero.frames.map((f) => {
+      const pose = statePose('land', 'lod2', { hero: { pose: f.pose }, morphNames }).pose, W = poseWorldHero(pose), err = {};
+      for (const S of ['L', 'R']) {
+        const m = S === 'L' ? 1 : -1, Ws = W[`J_pec${S}`], Wp = W[JOINTS[J[`J_pec${S}`]].parent];
+        const at = JOINTS[J[`J_pec${S}`]].at, weld = [hero.weld[0], hero.weld[1], hero.weld[2] * m];
+        const shW = mv(Ws.R, at).map((c, i) => c + Ws.t[i]), dist = Math.hypot(...weld.map((c, i) => c - shW[i])), w = wFor(dist), L = lenAt(w);
+        // (where the card is longer than the shoulder's distance to the weld, its tip on the ground at that length, toward
+        // the weld: on the ground plane through the weld, round the point under the shoulder)
+        let aim = weld;
+        if (L > dist + 1e-6) {
+          const hgt = shW[1] - weld[1], hz = [weld[0] - shW[0], weld[2] - shW[2]], rw = Math.hypot(...hz), rho = Math.sqrt(Math.max(0, L * L - hgt * hgt));
+          aim = rw > 1e-9 ? [shW[0] + (hz[0] * rho) / rw, weld[1], shW[2] + (hz[1] * rho) / rw] : weld;
+        }
+        const tip = cardAt(w, tv), tp = [tip[0], tip[1], tip[2] * m], tipW = mv(Ws.R, tp).map((c, i) => c + Ws.t[i]);
+        const Rx = between(tipW.map((c, i) => c - shW[i]), aim.map((c, i) => c - shW[i]));
+        pose[`J_pec${S}`] = fishToQuatObj(mm(tr(Wp.R), mm(Rx, Ws.R)));
+        pose.morph = { ...(pose.morph ?? {}), [`Fin_Pectoral_${S}`]: { furl: +(1 - w).toFixed(4), plant: +w.toFixed(4) } };
+        err[S] = +Math.hypot(...aim.map((c, i) => c - weld[i])).toFixed(3);
+      }
+      return { ...f, pose, cardTipFromWeldMM: err };
+    });
+    C = { ...hero, frames };
+  } else if (tierName === 'hero') C = (H.crawl ??= crawlFrames(tierMesh));
+  else C = crawlFrames(tierMesh, { tier: tierName });
+  const r4 = (v) => +(+v).toFixed(4);
+  return {
+    frames: C.frames.map((f) => ({ phase: r4(f.phase), raise: r4(f.raise), pose: withFins(f.pose), ...(f.tipErrMM !== undefined && tierName !== 'lod2' ? { tipErrMM: r4(f.tipErrMM) } : {}), ...(f.cardTipFromWeldMM ? { cardTipFromWeldMM: f.cardTipFromWeldMM } : {}) })),
+    weldMM: C.weld.map(r4), weldM: toObject(C.weld).map((c) => +c.toFixed(7)), strideMM: r4(C.strideMM), groundMM: r4(C.ground?.y ?? C.ground),
+    note: tierName === 'lod2' ? 'lod2: the hero\'s frames, the card\'s furl eased toward its plant so its tip lies as far from the shoulder as the weld, each shoulder (J_pecL/R, a quaternion) turned so the tip lies on the weld, or, where even the planted card is longer, on the ground toward it (cardTipFromWeldMM)' : `rig.crawlFrames on this tier's skin${tierName === 'lod1' ? ' (J_pecTip held at 0, its own tip welded)' : ''}: the furled blades' tips (fins.mjs def.furl.tip) welded at weldMM (fish mm in the first frame's frame: the world) while J_root's t moves the body strideMM forward`,
+  };
+}
+
+/** A state's pose for a tier: rig.statePose(state, tier) (round B3: the one source; the hero's carried over, the eye lift
+ * held within liftBareM where the tier has no eyesUp corrective, and no weights written for the joint-driven correctives:
+ * B2 wrote eyesUp 0.75 here, which a blink in the alert state could not take back). */
+function tierStatePose(state, S, tierName, morphNames) {
+  return tierName === 'hero' ? structuredClone(S.pose) : statePose(state, tierName, { hero: S, morphNames }).pose;
 }
 
 /** The posed fish's footprint for the runtime's contacts between animals (src/creatures/physics/contacts.ts BodyBuild,
@@ -496,7 +652,9 @@ function footprintOf(body, armShare) {
     if (armShare(v) > 0.5) continue;
     zmax = Math.max(zmax, Math.abs(body.position[v * 3 + 2])); ylo = Math.min(ylo, body.position[v * 3 + 1]); yhi = Math.max(yhi, body.position[v * 3 + 1]);
   }
-  return { width: +((2 * zmax) / TL).toFixed(4), height: +((yhi - ylo) / TL).toFixed(4), core: +(SL / TL).toFixed(4), ahead: +(-(SL / 2) / TL).toFixed(4), note: 'BodyBuild shares of TL: the body without the arms and fins; core = SL (the fish without its caudal fin); ahead: the core\'s centre is SL/2 behind the model\'s origin (the snout tip)' };
+  // (round B3: the model's origin is the fish frame's s = S0 = TL/2 (anatomy.toObject), not the snout tip; the core's centre
+  // (s = SL/2) lies S0 − SL/2 = 6.4 mm ahead of it: + 0.0799 TL. B2 wrote −(SL/2)/TL, half a TL behind the fish)
+  return { width: +((2 * zmax) / TL).toFixed(4), height: +((yhi - ylo) / TL).toFixed(4), core: +(SL / TL).toFixed(4), ahead: +((S0 - SL / 2) / TL).toFixed(4), note: 'BodyBuild shares of TL (src/creatures/physics/contacts.ts): the body without the arms and fins, measured once on the hero and written alike into every tier; core = SL (the fish without its caudal fin); ahead: the core\'s centre (s = SL/2) ahead of the model\'s origin (s = S0 = TL/2, anatomy.toObject)' };
 }
 
 /** The GPU memory of a mesh's morph targets as three.js (r16x–r18x WebGLMorphtargets) packs them: one RGBA32F texel
@@ -569,43 +727,47 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   const pick = (w, map) => { const j = new Uint8Array(map.length * 4), ww = new Uint8Array(map.length * 4); map.forEach((v, i) => { j.set(w.joints.subarray(v * 4, v * 4 + 4), i * 4); ww.set(w.weights.subarray(v * 4, v * 4 + 4), i * 4); }); return { joints: j, weights: ww }; };
   const morphExtras = (names) => ({ targetNames: names, drivers: Object.fromEntries(names.map((k) => [k, MORPH_DRIVERS[k]])), drive: Object.fromEntries(names.map((k) => [k, MORPH_DRIVE[k]])) });
   const keys = ['position', 'normal', 'tangent', 'uv'];
-  let morphMeshName = null, headSplit = null;
-  if (tierName === 'hero') {
-    // Head: the head region (fishmesh: centroid in front of 1.32 HL, the arms excluded) and every triangle that
-    // touches a vertex the head's blend shapes move (position or normal), so the Body's vertices on their border all
-    // stay still in every shape and the two meshes never part
-    const n = body.position.length / 3, moves = new Uint8Array(n);
-    for (const nm of morph.names) { const d = morph.d[nm], dn = morph.n[nm]; for (let v = 0; v < n; v++) if (Math.abs(d[v * 3]) + Math.abs(d[v * 3 + 1]) + Math.abs(d[v * 3 + 2]) > 0 || Math.abs(dn[v * 3]) + Math.abs(dn[v * 3 + 1]) + Math.abs(dn[v * 3 + 2]) > 1e-6) moves[v] = 1; }
-    const I = body.indices;
-    const inHead = (t) => body.region[t] === 0 || moves[I[t * 3]] || moves[I[t * 3 + 1]] || moves[I[t * 3 + 2]];
-    let grown = 0; for (let t = 0; t < I.length / 3; t++) if (body.region[t] !== 0 && inHead(t)) grown++;
-    const hm = subMesh(body, inHead, keys), bm = subMesh(body, (t) => !inHead(t), keys);
-    const hw = pick(bodySkin, hm.map), bw = pick(bodySkin, bm.map);
-    const targets = morph.names.map((k) => deltasToObject(Float32Array.from({ length: hm.map.length * 3 }, (_, i) => morph.d[k][hm.map[(i / 3) | 0] * 3 + (i % 3)])));
-    const normalTargets = morph.names.map((k) => dirsToObject(Float32Array.from({ length: hm.map.length * 3 }, (_, i) => morph.n[k][hm.map[(i / 3) | 0] * 3 + (i % 3)])));
-    addMeshNode('Head', [gb.primitive({ ...bodyAttrs(hm, hw), targets, normalTargets })], { ...morphExtras(morph.names), tobihaze: { part: 'head' } }, { tobihaze: { part: 'head' } }, { weights: morph.names.map(() => 0) });
-    addMeshNode('Body', [gb.primitive(bodyAttrs(bm, bw))], { tobihaze: { part: 'body' } }, { tobihaze: { part: 'body' } });
-    morphMeshName = 'Head';
-    headSplit = { head: hm.indices.length / 3, body: bm.indices.length / 3, grownIntoHead: grown };
-    log(`hero skin: Head ${hm.indices.length / 3} + Body ${bm.indices.length / 3} triangles (${grown} trunk/arm triangles in the Head: the blend shapes reach them)`);
-  } else if (!lod2) {
-    const targets = morph.names.map((k) => deltasToObject(morph.d[k])), normalTargets = morph.names.map((k) => dirsToObject(morph.n[k]));
-    addMeshNode('Body', [gb.primitive({ ...bodyAttrs(body, bodySkin), targets, normalTargets })], { ...morphExtras(morph.names), tobihaze: { part: 'body' } }, { tobihaze: { part: 'body' } }, { weights: morph.names.map(() => 0) });
-    morphMeshName = 'Body';
+  let headSplit = null;
+  const morphMeshes = [];
+  if (!lod2 && morph) {
+    // (round B3) the skin split by the blend-shape groups that move it (headmorphs.splitByMorphs): Head_Orbit (the blinks
+    // and the eyes-up), Head_Mouth (the gape's), Head (the face's: the throat and the cheeks' inflation), each carrying
+    // only the targets that move its vertices, and the static Body; the negligible deltas dropped first (MORPH_EPS) and the
+    // targets that move nothing left out (the hero's vent: headrig VENT_CORR relaxes nothing by the n17 head's design,
+    // lambda 0 and endR 0, so the slit opens by J_opercL/R alone, on the full fish as on build-pose's head). B2 shipped one
+    // Head with all ten targets on 27,986 vertices (9.18 MB of morph textures) and lod1's Body with five on all 5,486
+    // (0.98 MB). A vertex two meshes share moves alike in both (each mesh has every target moving any of its vertices)
+    const ME = MORPH_EPS[tierName] ?? MORPH_EPS.hero, pruned = pruneMorphs(morph, ME);
+    const sp = splitByMorphs(body.indices, morph, { penalty: ME.draw, ...(ME.sides ? { groups: MORPH_GROUPS_SIDES, names: MORPH_MESH_SIDES, order: ['eyesL', 'eyesR', 'mouth', 'face'] } : {}) });
+    const vecs = (sm, src, k, f) => f(Float32Array.from({ length: sm.map.length * 3 }, (_, i) => src[k][sm.map[(i / 3) | 0] * 3 + (i % 3)]));
+    for (const m of sp.meshes) {
+      const set = new Set(m.tris), sm = subMesh(body, (t) => set.has(t), keys), w = pick(bodySkin, sm.map);
+      const targets = m.targets.map((k) => vecs(sm, morph.d, k, deltasToObject)), normalTargets = m.targets.map((k) => vecs(sm, morph.n, k, dirsToObject));
+      addMeshNode(m.name, [gb.primitive({ ...bodyAttrs(sm, w), targets, normalTargets })], { ...morphExtras(m.targets), tobihaze: { part: 'head', group: m.group } }, { tobihaze: { part: 'head', group: m.group } }, { weights: m.targets.map(() => 0) });
+      morphMeshes.push({ name: m.name, names: m.targets, vertices: sm.map.length, triangles: m.tris.length });
+    }
+    const still = new Set(sp.still), bm = subMesh(body, (t) => still.has(t), keys);
+    addMeshNode('Body', [gb.primitive(bodyAttrs(bm, pick(bodySkin, bm.map)))], { tobihaze: { part: 'body' } }, { tobihaze: { part: 'body' } });
+    morph.names = morph.names.filter((k) => !sp.dropped.includes(k));
+    headSplit = { meshes: morphMeshes.map(({ name, names, vertices, triangles }) => ({ name, targets: names, vertices, triangles })), body: bm.indices.length / 3, dropped: sp.dropped, moving: pruned };
+    log(`${tierName} skin: ${morphMeshes.map((m) => `${m.name} ${m.triangles} triangles / ${m.vertices} vertices (${m.names.join(', ')})`).join('; ')}; Body ${bm.indices.length / 3}${sp.dropped.length ? `; dropped ${sp.dropped.join(', ')} (no vertex moves)` : ''}`);
   }
 
   // ---- the eyes (each part with its own UVs and per-vertex tangents: eyemesh.eyeMeshForTier)
   const tangentGate = {};
   const gateTangent = (name, normal, tangent) => { if (!tangent) return; const c = tangentCheck(normal, tangent, { tol: 1e-3 }); tangentGate[name] = { n: c.n, bad: c.bad, maxDot: +c.maxDot.toExponential(2), maxLen: +(c.maxLen ?? 0).toExponential(2) }; };
   if (!lod2) {
-    const e = eyeMeshForTier(TB.eye);
-    const prims = [[e.parts.skin, mats.body, 'skin'], [e.parts.pupil, mats.cornea, 'pupil'], [e.parts.iris, mats.iris, 'iris']]
-      .filter(([p]) => p.indices.length)
-      .map(([p, m, k]) => { gateTangent(`Eye.${k}`, p.normal, p.tangent); return gb.primitive({ position: p.position, normal: p.normal, tangent: p.tangent ?? null, uv: p.uv, indices: compactIndices(p.indices, p.position.length / 3), material: m }); });
-    const mesh = gb.addMesh('Eye', prims, { tobihaze: { part: 'eye' } });
-    meshTris.Eye = e.triangles;
+    // (round B3: a mesh a side, the right built as the left's mirror image with its own tangents (eyemesh side −1), its
+    // node not scaled: three.js does not turn the bitangent over for a mirroring node, so B2's Eye_R under scale
+    // [−1, 1, 1] would have read the normal map's green channel inverted)
     for (const S of ['L', 'R']) {
-      const node = gb.addNode({ name: `Eye_${S}`, mesh, ...(S === 'R' ? { scale: [-1, 1, 1] } : {}), extras: { tobihaze: { eye: S, ...(S === 'R' ? { mirrored: true } : {}) } } });
+      const e = eyeMeshForTier({ ...TB.eye, side: S === 'R' ? -1 : 1 });
+      const prims = [[e.parts.skin, mats.body, 'skin'], [e.parts.pupil, mats.cornea, 'pupil'], [e.parts.iris, mats.iris, 'iris']]
+        .filter(([p]) => p.indices.length)
+        .map(([p, m, k]) => { gateTangent(`Eye_${S}.${k}`, p.normal, p.tangent); return gb.primitive({ position: p.position, normal: p.normal, tangent: p.tangent ?? null, uv: p.uv, indices: compactIndices(p.indices, p.position.length / 3), material: m }); });
+      const mesh = gb.addMesh(`Eye_${S}`, prims, { tobihaze: { part: 'eye', eye: S } });
+      meshTris[`Eye_${S}`] = e.triangles;
+      const node = gb.addNode({ name: `Eye_${S}`, mesh, extras: { tobihaze: { eye: S } } });
       const jn = gb.json.nodes[jointNodes[jIndex[`J_eye${S}`]]];
       jn.children = [...(jn.children ?? []), node];
     }
@@ -622,13 +784,17 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     addMeshNode('Mouth_Teeth', [gb.primitive({ position: posToObject(tm.position), normal: dirsToObject(tm.normal), tangent: dirsToObject(tm.tangent, 4), uv: tm.uv, indices: compactIndices(tm.indices, n), material: mats.body, extraAttributes: skinAttrs(toTier({ joints, weights })) })], { tobihaze: { part: 'teeth' } }, { tobihaze: { part: 'teeth' } });
   }
 
-  // ---- the fins
+  // ---- the fins (the reference states first: lod2's far cup carries the land state's J_pelvic pitch as a card shape)
+  const states0 = heroStates(H);
   const fins = tierFins(tierName, H);
   const defs = Object.values(fins).map((f) => f.def);
   const finMorphs = {}, finBind = {}, finParts = {};
   const gpu = { morphBytes4096: 0, morphBytes16384: 0, meshes: {} };
   const countMorph = (name, nv, nt, withN) => { const a = morphTextureBytes(nv, nt, withN, 4096), b = morphTextureBytes(nv, nt, withN, 16384); gpu.meshes[name] = { vertices: nv, targets: nt, normals: withN, bytes4096: a, bytes16384: b }; gpu.morphBytes4096 += a; gpu.morphBytes16384 += b; };
   let cardTargets = null;
+  // (lod2: per reference state, the far cards' own weights (the pelvic's `pitch`, the states' correctives), merged into
+  // the states' lod2 poses below)
+  const lod2Morph = {}, cardMorph = (st, fin, k, w) => { ((lod2Morph[st] ??= {})[fin] ??= {})[k] = +w.toFixed(4); };
   if (lod2) {
     // the eyes at rest, into the Body (its material; J_head)
     const eyes = eyesAtRest(TB.eye), jh = jIndex.J_head;
@@ -643,7 +809,7 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     meshTris.Body_skin = body.indices.length / 3; meshTris.Body_eyes = eyes.reduce((a, e) => a + e.indices.length / 3, 0);
     // the fin cards merged into one mesh, with each card's own states as blend shapes (round B2: B1's cards stayed in
     // the bind, so the planted pectoral cards hung under the hero's ground and D1 stood half raised at the LOD switch):
-    // `<state>_<fin>` (fold for every fin, plant for the pectorals), zero off the card's own vertices
+    // `<state>_<fin>` (round B3: every state of the fin: cardStateTargets), zero off the card's own vertices
     const lod2Parts = [], offsets = {};
     let at = 0;
     for (const def of defs) {
@@ -665,6 +831,57 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
         names.push(nm); targets.push(deltasToObject(d)); normalTargets.push(dirsToObject(dn));
         drive[nm] = { fin: def.name, target: st, note: `the ${def.name} card's '${st}' state: weight = the hero's / lod1's ${def.name} '${st}' weight` };
       });
+    }
+    // (the far cup turned by J_pelvic's pitch, which lod2 does not keep: weight = J_pelvic pitch / pL, from the joint
+    // where a pose gives none; tierStates writes it into the states)
+    const pp = pelvicPitchTarget(fins.Fin_Pelvic, states0.land?.pose);
+    if (pp) {
+      const o = offsets.Fin_Pelvic, d = new Float32Array(at * 3), dn = new Float32Array(at * 3), nm = 'pitch_Fin_Pelvic';
+      d.set(pp.delta, o * 3); dn.set(pp.dnormal, o * 3);
+      names.push(nm); targets.push(deltasToObject(d)); normalTargets.push(dirsToObject(dn));
+      drive[nm] = { fin: 'Fin_Pelvic', target: 'pitch', joint: 'J_pelvic', channel: 'pitch', per: +pp.pL.toFixed(4), note: `the pelvic card turned about J_pelvic's pivot by ${pp.pL.toFixed(2)}° (the land state's pitch; lod2 has no J_pelvic): weight = J_pelvic pitch / ${pp.pL.toFixed(2)}` };
+      const fp = finParts.Fin_Pelvic.targets;
+      finParts.Fin_Pelvic.targets = { names: [...fp.names, 'pitch'], deltas: [...fp.deltas, pp.delta] };
+      for (const [st, S] of Object.entries(states0)) cardMorph(st, 'Fin_Pelvic', 'pitch', Math.min(1, Math.max(0, (S.pose.J_pelvic?.pitch ?? 0) / pp.pL)));
+    }
+    // (each card a joint the far tier does not keep carries — the pectorals' junction, mid-blade and tips (lod2 keeps
+    // J_pecL alone), the pelvic's J_pelvic — in each reference state as the hero holds it: B2's far paddles kept the
+    // bind junction in WATER (the hero's J_pecFin flexion −15°, sweep 20°: 3.2 mm off, 0.57 of the hero's area). A
+    // corrective `<state>_<fin>`, weight 1 in that state only (the states' lod2 poses set it): the bind-frame displacement
+    // that lands the card, at that state's weights and skinned as lod2 skins it, on the card skinned by the hero's
+    // joints (headmorphs.solveBindDelta); none where the two are within 0.05 mm)
+    const keep2 = new Set(TIER_JOINTS.lod2), W2names = TIER_JOINTS.lod2;
+    for (const def of defs) {
+      const f = fins[def.name], c = f.mesh, hw = f.w, lw = toTier(f.w), n = c.position.length / 3;
+      let carried = false;
+      for (let i = 0; i < n * 4 && !carried; i++) if (hw.weights[i] && !keep2.has(TIER_JOINTS.hero[hw.joints[i]])) carried = true;
+      if (!carried) continue;
+      const T = finParts[def.name].targets, raw = {};
+      for (const [st, S] of Object.entries(states0)) {
+        const w = { ...(S.pose.morph?.[def.name] ?? {}), ...(lod2Morph[st]?.[def.name] ?? {}) };
+        // (X: the card at the state's weights as lod2 holds it, its targets as written (the pectoral plant's with the
+        // junction's nominal flexion baked in, the cup's pitch); R: the card in the fin's own state shapes, unbaked,
+        // which the hero's joints then carry)
+        const X = Float32Array.from(c.position), R = Float32Array.from(c.position);
+        T.names.forEach((k, i) => { if (w[k]) for (let q = 0; q < X.length; q++) X[q] += w[k] * T.deltas[i][q]; });
+        for (const [k, wk] of Object.entries(w)) {
+          if (!wk || !(def.targets ?? []).includes(k) || /Mid$/.test(k)) continue;
+          raw[k] ??= finCard(def, { state: k }).position;
+          for (let q = 0; q < R.length; q++) R[q] += wk * (raw[k][q] - c.position[q]);
+        }
+        const Ph = skinPacked(R, hw, poseWorldHero(S.pose)), W2 = poseWorldHero(poseForTier(S.pose, 'lod2'));
+        const P2 = skinPacked(X, lw, W2, { names: W2names });
+        let err = 0; for (let q = 0; q < X.length; q++) err = Math.max(err, Math.abs(Ph[q] - P2[q]));
+        if (err < 0.05) continue;
+        const E = Float32Array.from(Ph, (v, q) => v - X[q]), dl = solveBindDelta(X, lw, W2names, W2, E);
+        const X1 = Float32Array.from(X, (v, q) => v + dl[q]), N0 = vertexNormals(X, c.indices), N1 = vertexNormals(X1, c.indices);
+        const o = offsets[def.name], d = new Float32Array(at * 3), dn = new Float32Array(at * 3), nm = `${st}_${def.name}`;
+        d.set(dl, o * 3); dn.set(Float32Array.from(N1, (v, q) => v - N0[q]), o * 3);
+        names.push(nm); targets.push(deltasToObject(d)); normalTargets.push(dirsToObject(dn));
+        drive[nm] = { fin: def.name, target: st, state: st, note: `lod2 only: the ${def.name} card as the hero's joints (which lod2 drops) hold it in the reference state '${st}' (${err.toFixed(2)} mm off without it): weight 1 in that state` };
+        finParts[def.name].targets = { names: [...finParts[def.name].targets.names, st], deltas: [...finParts[def.name].targets.deltas, dl] };
+        cardMorph(st, def.name, st, 1);
+      }
     }
     cardTargets = { names, vertices: at };
     countMorph('Fins', at, names.length, true);
@@ -690,23 +907,27 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
       addMeshNode(def.name, [prim], { targetNames: tg.names, drivers: Object.fromEntries(tg.names.map((k) => [k, FIN_DRIVERS[k] ?? ''])), tobihaze: { part: 'fin', fin: def.name } }, { tobihaze: { fin: def.name } }, { weights: tg.names.map(() => 0) });
     }
   }
-  if (morphMeshName) { const nv = morphMeshName === 'Head' ? gb.json.accessors[gb.json.meshes.find((x) => x.name === 'Head').primitives[0].attributes.POSITION].count : body.position.length / 3; countMorph(morphMeshName, nv, morph.names.length, true); }
+  for (const m of morphMeshes) countMorph(m.name, m.vertices, m.names.length, true);
   if (tierName === 'hero') { const hm = H.tier; gateTangent('skin', hm.normal, hm.tangent); }
   else if (!lod2) gateTangent('skin', body.normal, body.tangent);
 
   // ---- the reference states and the ground contacts (rig.contactsFor on this tier's own posed skin and fins, in the
   // hero's states so every tier stands in the same pose; each contact bone-local on the tier joint that carries it)
-  const states = heroStates(H);
+  const states = withCardMorphs(heroStates(H), lod2Morph);
   const morphNamesOfTier = morph?.names ?? [];
   const cparts = { skin: { position: body.position, indices: body.indices, skin: bodySkin }, fins: finParts };
-  const cres = contactsFor(tierName, cparts, { states });
+  // (round B3: the tier's own pose of each state, rig.statePose(state, tier), for the contacts and the extras alike)
+  const tierStates = Object.fromEntries(Object.entries(states).map(([st, S]) => [st, { ...S, pose: tierStatePose(st, S, tierName, morphNamesOfTier) }]));
+  const cres = contactsFor(tierName, cparts, { states: tierStates });
   const gaps = contactGaps(tierName, cparts, cres);
   const contacts = {}, stateExtras = {};
   for (const [st, R] of Object.entries(cres)) {
     contacts[st] = R.contacts.map((c) => ({ ...c, gapMM: gaps[st][c.name] }));
-    const pose = tierStatePose(states[st].pose, tierName, morphNamesOfTier);
-    stateExtras[st] = { pose, groundMM: R.groundMM, groundM: +toObject([0, R.groundMM, 0])[1].toFixed(7), morphs: R.morphs };
+    stateExtras[st] = { pose: tierStates[st].pose, groundMM: R.groundMM, groundM: +toObject([0, R.groundMM, 0])[1].toFixed(7), morphs: R.morphs };
   }
+  // (round B3 integration: the crawl's stance per tier, rig.crawlFrames)
+  const crawl = tierCrawl(tierName, H, { position: body.position, skin: bodySkin, names: TIER_JOINTS[tierName] }, morphNamesOfTier);
+  log(`${tierName}: crawl ${crawl.frames.length} frames, stride ${crawl.strideMM} mm, tip error max ${Math.max(0, ...crawl.frames.map((f) => f.tipErrMM ?? 0))} mm`);
   const armShare = (v) => { const s = tierName === 'hero' ? body.source[v] : null; if (s !== null) return H.rig.m[s]; let a = 0; for (let q = 0; q < 4; q++) if (/^J_pec/.test(TIER_JOINTS[tierName][bodySkin.joints[v * 4 + q]])) a += bodySkin.weights[v * 4 + q] / 255; return a; };
 
   // ---- the root, its extras, the scene
@@ -733,29 +954,33 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     ...Object.fromEntries(Object.entries({ d1: 'Fin_Dorsal1', d2: 'Fin_Dorsal2', anal: 'Fin_Anal', caudal: 'Fin_Caudal', pelvic: 'Fin_Pelvic' }).filter(([, f]) => finBind[f]).map(([k, f]) => [k, pad(boundsOf([posToObject(finBind[f])]), 0.03 * HL * 0.001)])),
   };
   const morphs = {};
-  if (morphMeshName) morphs[morphMeshName] = { names: morph.names, drivers: Object.fromEntries(morph.names.map((k) => [k, MORPH_DRIVERS[k]])), drive: Object.fromEntries(morph.names.map((k) => [k, MORPH_DRIVE[k]])) };
+  for (const m of morphMeshes) morphs[m.name] = { names: m.names, drivers: Object.fromEntries(m.names.map((k) => [k, MORPH_DRIVERS[k]])), drive: Object.fromEntries(m.names.map((k) => [k, MORPH_DRIVE[k]])) };
+  if (headSplit?.dropped?.length) morphs.dropped = Object.fromEntries(headSplit.dropped.map((k) => [k, k === 'vent' ? 'no vertex moves: headrig VENT_CORR (round n17) relaxes nothing (lambda 0, endR 0); the gill slit opens by J_opercL/R alone (HEAD_POSES vent)' : 'no vertex moves']));
   if (Object.keys(finMorphs).length) morphs.fins = { targets: finMorphs, drivers: FIN_DRIVERS };
-  if (cardTargets) morphs.Fins = { names: cardTargets.names, note: '<state>_<fin>: each card\'s state as the hero\'s fin of that name takes it (fold; the pectorals\' plant)' };
-  const footprint = footprintOf(body, armShare);
+  if (cardTargets) morphs.Fins = { names: cardTargets.names, note: '<state>_<fin>: each card\'s state as the hero\'s fin of that name takes it (fold and spread for every card, the caudal\'s flex, the pectorals\' furl and plant, the pelvic\'s press; weight = the near tiers\' fin weight); pitch_Fin_Pelvic: driven by J_pelvic pitch (drive); <reference state>_<fin> (e.g. water_Fin_Pectoral_L): lod2-only correctives, weight 1 in that state\'s lod2 pose (the card as the hero\'s dropped joints hold it)' };
+  // (round B3: the hero's, the same in every tier)
+  const footprint = (H.footprint ??= footprintOf(H.tier, (v) => H.rig.m[H.tier.source[v]]));
   const rootNode = gb.addNode({
     name: `${P}_Adult`, children: [rootJoint],
     extras: {
       species: 'periophthalmus_modestus', commonName: 'トビハゼ', totalLength_mm: TL, standardLength_mm: +SL.toFixed(3),
       units: 'metres (+X the fish\'s left, +Y dorsal, +Z anterior)',
       tobihaze: {
-        tier: tierName, round: 'B2 clay', hlMM: +HL.toFixed(4), tlMM: TL, slMM: +SL.toFixed(3),
+        tier: tierName, round: 'B3 clay', hlMM: +HL.toFixed(4), tlMM: TL, slMM: +SL.toFixed(3),
         joints: kept.map((j) => j.name), remapFromHero: Array.from(remap),
         axes: tierAxes(tierName, morphNamesOfTier),
         morphs, regions, footprint,
         // per reference state: the pose (channel values by joint, AXES order; lod2's arms as quaternions), the ground
         // under it (fish mm and object y in m: the posed fish's lowest point) and the blend-shape weights it assumes
         states: stateExtras,
+        // the crawl's stance (rig.crawlFrames): frames of poses, the welded tip (fish mm and object m), the stride
+        crawl,
         // per state: [{ name, kind, bone (this tier's joint), local (object m from the joint's pivot in its bind frame:
         // bone · local is the point whatever the bone does), mm / obj (the posed point), groundGapMM, gapMM (the
         // bone-carried point's distance to this tier's posed surface) }]
         contacts,
         layout: BODY_LAYOUT,
-        eyes: lod2 ? { merged: 'Body', note: 'lod2: both globes at rest in the Body, on J_head' } : { mesh: 'Eye', nodes: ['Eye_L', 'Eye_R'], mirrored: 'Eye_R (node scale [-1, 1, 1])' },
+        eyes: lod2 ? { merged: 'Body', note: 'lod2: both globes at rest in the Body, on J_head' } : { meshes: ['Eye_L', 'Eye_R'], nodes: ['Eye_L', 'Eye_R'], note: 'a mesh a side, the right the left\'s mirror image with its own tangents (no mirroring node scale)' },
       },
       regions,
     },
@@ -764,10 +989,17 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   const buf = gb.toBuffer();
   if (outFile) { fs.mkdirSync(path.dirname(outFile), { recursive: true }); fs.writeFileSync(outFile, buf); }
   const tris = Object.entries(meshTris).filter(([k]) => !/^Body_(skin|eyes)$/.test(k)).reduce((a, [, t]) => a + t, 0);
-  const contactGate = Object.fromEntries(Object.entries(gaps).map(([st, g]) => { const w = Object.entries(g).sort((x, y) => y[1] - x[1])[0]; return [st, { maxGapMM: w?.[1] ?? null, worst: w?.[0] ?? null, n: Object.keys(g).length }]; }));
+  // (round B3 integration: a non-finite gap fails the gate; the max is taken over the finite ones: B2's sort put NaN anywhere)
+  const contactGate = Object.fromEntries(Object.entries(gaps).map(([st, g]) => {
+    const all = Object.entries(g), bad = all.filter(([, v]) => !Number.isFinite(v)).map(([k]) => k);
+    const w = all.filter(([, v]) => Number.isFinite(v)).sort((x, y) => y[1] - x[1])[0];
+    return [st, { maxGapMM: w?.[1] ?? null, worst: w?.[0] ?? null, n: all.length, nonFinite: bad, pass: !bad.length && (w?.[1] ?? 0) <= 1e-4 }];
+  }));
+  const failed = Object.entries(contactGate).filter(([, g]) => !g.pass);
+  if (failed.length) log(`${tierName}: CONTACT GATE FAILS: ${failed.map(([st, g]) => `${st} max ${g.maxGapMM} mm (${g.worst})${g.nonFinite.length ? `, non-finite ${g.nonFinite.join(', ')}` : ''}`).join('; ')}`);
   const res = {
     tier: tierName, tris, joints: sk.length, materials: gb.json.materials.length, images: (gb.json.images ?? []).length, meshes: meshTris, headSplit, file: outFile, bytes: buf.length, morphs: morph?.names ?? [],
-    tangentGate, contactGate, gpu, footprint, states: stateExtras, blinkWrap: morph?.blinkWrap ?? null, residual: morph?.residual ?? null, cardTargets,
+    tangentGate, contactGate, gpu, footprint, states: { ...stateExtras, crawl: crawl.frames.map((f) => ({ phase: f.phase, pose: f.pose, weldMM: crawl.weldMM })) }, crawl: { strideMM: crawl.strideMM, weldMM: crawl.weldMM, tipErrMM: crawl.frames.map((f) => f.tipErrMM ?? null) }, blinkWrap: morph?.blinkWrap ?? null, residual: morph?.residual ?? null, cardTargets,
     land: tierName === 'hero' ? { sides: states.land.solved.sides, ground: states.land.ground, pelvic: states.land.solved.pelvic ?? null } : undefined,
   };
   log(`${tierName}: ${tris} triangles (${Object.entries(meshTris).map(([k, v]) => `${k} ${v}`).join(', ')}), ${sk.length} joints, ${res.materials} materials → ${outFile ? path.relative(root, outFile) : '(not written)'} (${(buf.length / 1e6).toFixed(2)} MB)`);
@@ -779,7 +1011,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const which = arg('--tier', 'all');
   const outDir = path.resolve(arg('--out', path.join(here, 'out', 'tiers')));
   const clay = args.includes('--clay');
-  if (!clay) logDefault('round B2 has no textures yet: writing clay materials (--clay)');
+  if (!clay) logDefault('round B3 has no textures yet: writing clay materials (--clay)');
   const cache = arg('--cache', null);
   const heroH = arg('--hero-h', null);
   const hero = await heroData({ cache: cache ? path.resolve(cache) : null, h: heroH ? Number(heroH) : null });
