@@ -5,16 +5,20 @@
  *
  * Measured on the 70 photographs of the reference sheet (dorsal 4, 6, 19, 39, 55, 61, 62; ventral 6, 16, 18, 63, 70;
  * front 66; three-quarter 26–31, 64, 65; chelae 49, 61, 67; swimming legs 6, 47, 55, 61, 65; buried 13; defence 12,
- * 47, 53, 58) — never a generic crab:
+ * 47, 53, 58) — never a generic crab — and, in 3D, on the CC0 photogrammetric scan of a male (ffish.asia /
+ * floraZia.com on Sketchfab: the body's depth and heights, the margin's teeth, where the legs attach, the colours):
  *  - carapace  very broad: the length (front to posterior margin) only ≈ 0.47 CW (61: 0.46, 19: 0.48, 39: 0.47);
- *              its widest point is the tips of the lateral spines, 57 % of the length back from the front (61, 39)
+ *              its widest point is the tips of the lateral spines, a little over half the length back from the front
+ *              (52 % on the scan; 61, 39 suggested 57 %)
  *  - margins   nine anterolateral teeth a side counting the external orbital tooth, the ninth drawn out into the long
- *              lateral spine (≈ 0.13 CW from its base: 61, 39, 41, 44); teeth 2–8 sharp, forward-leaning triangles
- *              (≈ 3 mm) on a nearly straight, gently convex margin at ≈ 40° to the transverse axis; the posterolateral
+ *              lateral spine (≈ 0.11 CW from the middle of its base: 61, 39, 41, 44, the scan); teeth 2–8 short and
+ *              broad, hooked forward along the margin (≈ 2 mm, the notches shallow: the scan) on a nearly straight,
+ *              gently convex margin at ≈ 40° to the transverse axis; the posterolateral
  *              margins concave and smooth, the posterior margin short (≈ 0.28 CW) and nearly straight
  *  - front     four frontal teeth between the orbits, the median pair smaller (61, 64, 66); orbits as notches at the
  *              front corners with the short eyestalks in them; the eyes dark and glossy (19, 61)
- *  - dorsum    finely and densely granular (39, 61), the dome ≈ 0.1 CW above the margin (66); transverse granular
+ *  - dorsum    finely and densely granular (39, 61), the dome ≈ 0.1 CW above the lateral margin (66); a deep,
+ *              egg-shaped body, the front high and square (the scan: see RIM, DOME_H); transverse granular
  *              lines (frontal, protogastric, mesogastric and the long epibranchial line from the spine's base), and the
  *              three tubercles that name the species — one mesogastric, two cardiac (39)
  *  - chelipeds long (male: merus 0.32, carpus 0.11, palm 0.34, fingers 0.26 CW: 61), the merus with four spines on
@@ -26,7 +30,8 @@
  *  - swimming  P5 the paddle: merus and carpus short and broad, the propodus a flat oval blade (0.18 × 0.12 CW), the
  *  legs        dactylus a broad oval paddle (0.16 × 0.125 CW) with a dark distal margin and a fringe of setae (6, 47,
  *              55, 61, 65)
- *  - ventral   white to bluish white; broad sternum; the male abdomen a narrow T (18, 63), the female's broad (9, 70)
+ *  - ventral   ivory white (the scan; 18, 63); broad sternum, the abdomen lying flush in it; the male abdomen a narrow T
+ *              (18, 63), the female's broad (9, 70)
  * Frame: x the crab's left, y dorsal, z forward (anterior). Origin: under the carapace's centre on the plane of the
  * sternum (the crab's underside). The legs' own frames: x distal along the article, y dorsal, z anterior on the left
  * side (posterior on the right, so that both frames are right-handed and a positive turn about z always lifts).
@@ -47,16 +52,12 @@ export const CARAPACE = {
   back: -23.8,
   /** the centre the outline's rays start from (x, z) */
   centre: [0, -2] as V2,
-  /** height of the free margin above the sternum's plane: front, anterolateral, posterior */
-  marginFront: 13.6,
-  margin: 13.0,
-  marginBack: 9.8,
-  /** the dome above the margin (66: the body ≈ 0.23 CW deep) */
-  dome: 9.8,
   /** thickness of the free margin, and of the teeth's bases */
   edge: 0.9,
   /** the underside: the pleural line (the carapace meets the body wall over the coxae) and the sternum's edge */
-  pleural: { ax: 23.5, front: 19.5, back: -16.5, y: 6.2, yFront: 4.2, yBack: 5.0 },
+  // (the CC0 scan: high at the front, where it closes the tall front face under the frontal margin, and at the back,
+  // where the steep rear wall under the posterior border meets it)
+  pleural: { ax: 23.5, front: 21.0, back: -22.0, y: 6.2, yFront: 13.5, yBack: 8.5 },
   sternum: { ax: 19.0, front: 12.0, back: -17.0, y: 0.5 },
 };
 
@@ -87,7 +88,7 @@ export function marginTeeth(): ToothSpec[] {
     { name: 'T1', tip: [16.4, 22.1], length: 2.6, base: 1.9, lift: 0.3, thick: 1.0 },
   ];
   // T2–T8: evenly along the tips' gently convex arc from T1 to T8 (Bézier through the measured tips)
-  const p0: V2 = [16.4, 22.1], p1: V2 = [32.0, 15.0], p2: V2 = [42.2, 0.7];
+  const p0: V2 = [16.4, 22.1], p1: V2 = [32.0, 15.0], p2: V2 = [42.0, 1.7];
   const bez = (t: number): V2 => [
     (1 - t) * (1 - t) * p0[0] + 2 * t * (1 - t) * p1[0] + t * t * p2[0],
     (1 - t) * (1 - t) * p0[1] + 2 * t * (1 - t) * p1[1] + t * t * p2[1],
@@ -103,12 +104,18 @@ export function marginTeeth(): ToothSpec[] {
     const f = (L - acc[i - 1]) / Math.max(1e-9, acc[i] - acc[i - 1]);
     return bez((i - 1 + f) / N);
   };
-  const len = [3.0, 3.25, 3.35, 3.35, 3.3, 3.2, 3.15];
+  // short, broad-based teeth hooked forward along the margin, standing only ≈ 1 mm proud of its broad rim (the CC0
+  // scan: their tips lie on the photographs' arc, but the notches between them are shallow); T8 a small tooth at the
+  // spine's front base
+  const len = [1.9, 2.0, 2.05, 2.05, 2.0, 1.95, 1.1];
   for (let k = 1; k <= 7; k++) {
-    teeth.push({ name: `T${k + 1}`, tip: at(k / 7), length: len[k - 1], base: 2.05, lift: 0.35, thick: 1.0 });
+    // (T8's back corner is the spine's front one: close behind its tip, so the spine rises straight out of it)
+    teeth.push({ name: `T${k + 1}`, tip: at(k / 7), length: len[k - 1], base: k === 7 ? 0.9 : 2.05, lift: 0.35, thick: 1.0 });
   }
-  // the lateral spine: a long, robust cone straight out to the side, a little forward and up (61, 39, 41, 44)
-  teeth.push({ name: 'T9', tip: [50.0, -4.1], length: 12.6, base: 3.9, lift: 1.3, thick: 3.0, conical: true });
+  // the lateral spine: a long, robust cone straight out to the side, a little forward and up (61, 39, 41, 44); its tip
+  // where the CC0 scan has it, a little further forward than the photographs suggested (the length is from the
+  // middle of its base, which the margin decides)
+  teeth.push({ name: 'T9', tip: [50.0, -1.9], length: 11.0, base: 3.9, lift: 1.3, thick: 3.0, conical: true });
   return teeth;
 }
 
@@ -120,22 +127,90 @@ export function marginTeeth(): ToothSpec[] {
  */
 export const ENVELOPE_BACK: V2[] = [
   // behind the lateral spine: the concave posterolateral margin and the posterior margin (61, 39, 6)
-  [35.6, -6.7], [33.0, -8.4], [30.0, -10.6], [27.0, -13.1], [24.0, -15.9], [21.3, -18.3], [18.6, -20.3], [16.0, -21.7],
-  [13.6, -22.6], [10.5, -23.2], [7.0, -23.55], [3.5, -23.75], [0.0, -23.8],
+  [36.2, -5.4], [33.0, -7.6], [29.6, -10.2], [26.5, -12.9], [23.5, -15.7], [20.8, -18.1], [18.1, -20.1], [15.6, -21.6],
+  [13.3, -22.6], [10.5, -23.2], [7.0, -23.55], [3.5, -23.75], [0.0, -23.8],
 ];
 /** the orbit: a rounded notch between the inner orbital angle and the external orbital tooth (61, 19, 64) */
 export const ORBIT = { x0: 8.3, x1: 14.5, depth: 2.3, z: 21.3 };
 
-/**
- * Height of the free margin round the outline (`x`, `z` on the envelope): high at the front, level along the
- * anterolateral margin and the spine, falling over the posterolateral margin to the posterior border (66, 64).
+// ------------------------------------------------------------------ the dome and the margin's heights
+
+/*
+ * Heights measured on the CC0 photogrammetric scan of a male gazami (ffish.asia / floraZia.com, "CC0 ガザミ 🦀 ♂
+ * Swimming Crab, P. trituberculatus" on Sketchfab), scaled to CW 100 and set on its sternum, both sides averaged (the
+ * specimen leans 1.5° to one side). The carapace is no lens with thin edges but a deep, egg-shaped body: the crown
+ * 24.5 mm above the sternum a little before the centre, the front high and square (the frontal margin 21 mm up, the
+ * eyes in their orbits just under it, a tall front face below), the anterolateral margin falling from 21 at the orbit
+ * to 14 at the spine, the posterolateral margin lowest (13) and the posterior border high again (15) over a steep
+ * rear wall. The values are the margin's mid-thickness and the dome without the regional relief (`dorsalRelief`).
  */
+
+/** a C¹ curve through knots (xs ascending): cubic Hermite with finite-difference tangents, held level past the ends */
+export function spline(xs: readonly number[], ys: readonly number[], x: number): number {
+  const n = xs.length;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[n - 1]) return ys[n - 1];
+  let i = 0;
+  while (x > xs[i + 1]) i++;
+  const tan = (k: number) => (k === 0 ? (ys[1] - ys[0]) / (xs[1] - xs[0]) : k === n - 1 ? (ys[n - 1] - ys[n - 2]) / (xs[n - 1] - xs[n - 2]) : (ys[k + 1] - ys[k - 1]) / (xs[k + 1] - xs[k - 1]));
+  const h = xs[i + 1] - xs[i], t = (x - xs[i]) / h, t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * tan(i) + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * tan(i + 1);
+}
+
+/** a spline over the angle 0° … 180° about the centre, level across the midline at both ends (mirrored knots) */
+function angular(knots: readonly V2[], deg: number): number {
+  const n = knots.length;
+  const xs = [-knots[1][0], ...knots.map((k) => k[0]), 360 - knots[n - 2][0]];
+  const ys = [knots[1][1], ...knots.map((k) => k[1]), knots[n - 2][1]];
+  return spline(xs, ys, deg);
+}
+
+/** the angle (°, 0 the front centre … 180 the posterior centre) of (x, z) about the outline's centre */
+export function rimAngle(x: number, z: number): number {
+  return (Math.atan2(Math.abs(x), z - CARAPACE.centre[1]) * 180) / Math.PI;
+}
+
+/** the free margin's height (mm above the sternum) by its angle about the centre (the scan) */
+export const RIM: V2[] = [
+  [0, 20.75], [10, 21.15], [19, 21.35], [30, 20.85], [33, 20.35], [36, 19.95], [39, 19.35], [43, 18.75], [46, 18.35],
+  [50, 18.15], [56, 17.95], [62, 17.25], [67, 16.65], [72, 15.95], [77, 15.15], [81, 14.45], [85, 13.85], [88, 13.65],
+  [92, 13.15], [97, 12.65], [102, 12.55], [112, 12.45], [118, 12.55], [125, 13.45], [133, 14.15], [147, 14.05],
+  [162, 14.35], [180, 14.85],
+];
+
+/** height of the free margin round the outline (`x`, `z` on the envelope) */
 export function marginHeight(x: number, z: number): number {
-  const C = CARAPACE;
-  if (z > 10) return C.margin + (C.marginFront - C.margin) * Math.min(1, (z - 10) / 11) * (1 - Math.min(1, Math.abs(x) / 22) * 0.6);
-  if (z > -6) return C.margin;
-  const k = Math.min(1, (-6 - z) / 17.8);
-  return C.margin + (C.marginBack - C.margin) * (k * k * (3 - 2 * k));
+  return angular(RIM, rimAngle(x, z));
+}
+
+/**
+ * The dome over the margin (the scan, without the relief): rows at 0°, 15° … 180° about the centre, columns at
+ * s = 0, 0.2, 0.4, 0.6, 0.75, 0.9 of the way out to the (smoothed) outline; s = 1 is the margin itself. Flat and high
+ * forward of the centre; at the sides the shoulders fall steeply between s 0.5 and 0.8 to a broad, flatter rim; behind,
+ * a full rounded back.
+ */
+export const DOME_S = [0, 0.2, 0.4, 0.6, 0.75, 0.9];
+export const DOME_H: number[][] = [
+  [23.9, 24.2, 23.2, 22.7, 21.9, 21.4],  // 0°
+  [23.9, 24.2, 23.2, 22.7, 21.9, 21.4],  // 15°
+  [23.9, 24.1, 23.2, 22.4, 21.4, 20.9],  // 30°
+  [23.9, 23.9, 22.9, 21.7, 20.4, 19.2],  // 45°
+  [23.9, 23.6, 22.6, 21.2, 19.9, 18.2],  // 60°
+  [23.9, 23.2, 22.1, 20.4, 18.4, 16.2],  // 75°
+  [23.9, 22.9, 21.6, 18.8, 15.9, 14.4],  // 90°
+  [23.9, 22.9, 21.4, 18.9, 15.2, 12.5],  // 105°
+  [23.9, 23.1, 21.6, 19.4, 17.2, 14.2],  // 120°
+  [23.9, 23.1, 21.7, 19.7, 17.9, 15.6],  // 135°
+  [23.9, 23.2, 21.8, 20.2, 18.2, 15.6],  // 150°
+  [23.9, 23.2, 21.9, 20.4, 18.8, 15.9],  // 165°
+  [23.9, 23.2, 21.9, 20.7, 19.1, 16.4],  // 180°
+];
+const DOME_SX = [...DOME_S, 1];
+
+/** the dome's height at angle `deg`, a fraction `s` of the way out, over a margin of height `rim` there */
+export function domeHeight(deg: number, s: number, rim: number): number {
+  const at = DOME_H.map((row, k): V2 => [k * 15, spline(DOME_SX, [...row, rim], s)]);
+  return angular(at, deg);
 }
 
 const gauss = (d2: number) => Math.exp(-d2);
@@ -170,46 +245,45 @@ export function dorsalRelief(x: number, z: number): number {
   h += ridge(ax, z, [2.0, 19.4], [6.0, 18.8], 0.32, 0.6);               // frontal
   h += ridge(ax, z, [3.6, 15.4], [9.4, 14.2], 0.36, 0.65);              // protogastric
   if (ax < 3.8) h += 0.34 * gauss(((z - 11.6) * (z - 11.6)) / 0.45);    // mesogastric
-  // the long epibranchial line, from the spine's base forward and inward, convex forward (61: the pale band)
-  h += ridge(ax, z, [34.5, -3.6], [24.0, 1.2], 0.42, 0.7);
-  h += ridge(ax, z, [24.0, 1.2], [13.2, 5.6], 0.42, 0.7);
-  h += ridge(ax, z, [13.2, 5.6], [9.0, 6.0], 0.3, 0.6);
+  // the long epibranchial line, from the spine's base forward and inward, convex forward (61: the pale band; where
+  // the CC0 scan has it, reaching forward to the gastric region)
+  h += ridge(ax, z, [38.5, 0.0], [30.5, 5.4], 0.42, 0.7);
+  h += ridge(ax, z, [30.5, 5.4], [22.5, 8.6], 0.42, 0.7);
+  h += ridge(ax, z, [22.5, 8.6], [15.0, 10.4], 0.4, 0.7);
+  h += ridge(ax, z, [15.0, 10.4], [8.5, 11.0], 0.3, 0.6);
   if (ax < 5.5) h += 0.18 * gauss(((z + 15.6) * (z + 15.6)) / 0.5) * (1 - ax / 5.5);  // cardiac line, faint
   // the three tubercles
-  h += 0.95 * gauss((x * x + (z - 6.2) * (z - 6.2)) / 1.7);
+  h += 0.55 * gauss((x * x + (z - 6.2) * (z - 6.2)) / 1.7);
   h += 0.85 * gauss(((ax - 3.3) * (ax - 3.3) + (z + 12.2) * (z + 12.2)) / 1.5);
   return h;
 }
 
-/** the dome's fall from the centre (s = 0) to the margin (s = 1): flat on top, sloping to a thin edge */
-export const domeProfile = (s: number): number => {
-  const q = Math.min(1, Math.max(0, s));
-  return (1 - q * q) * (1 + 0.42 * q * q) * (1 - 0.18 * q);
-};
-
 // ------------------------------------------------------------------ eyes, antennae, mouthparts
 
 export const EYE = {
-  /** the eyestalk's base deep in the orbit, its rest direction (forward, out and up), length and radius */
-  base: [10.9, 13.6, 19.6] as V3,
-  dir: [0.34, 0.12, 0.93] as V3,
-  stalk: 2.8,
-  stalkR: 1.35,
-  /** the cornea: a dark, glossy, faceted globe at the tip (66: ≈ 0.14 of the eyes' spacing, 3.3 mm across at CW 100) */
-  r: 1.65,
+  /** the eyestalk's base deep in the orbit, its rest direction (forward, a little out and up), length and radius:
+   *  high on the front, just under the frontal margin (the CC0 scan: the corneas' centres 20.5 mm above the sternum,
+   *  21.5 apart, 23.5 forward of the centre) */
+  base: [10.1, 20.5, 20.1] as V3,
+  dir: [0.24, 0.1, 0.966] as V3,
+  stalk: 2.6,
+  stalkR: 1.2,
+  /** the cornea: a dark, glossy, faceted globe at the tip (66: ≈ 0.14 of the eyes' spacing; the scan 2.6–2.8 mm across) */
+  r: 1.45,
 };
 
 /** antennae: short flagella out of the inner orbital hiatus (61, 66); antennules folded in their fossae */
-export const ANTENNA = { base: [6.6, 11.6, 20.4] as V3, dir: [0.6, -0.15, 0.77] as V3, length: 6.0, r: 0.17 };
-export const ANTENNULE = { base: [2.4, 11.4, 21.0] as V3, length: 3.0, r: 0.4 };
+export const ANTENNA = { base: [6.6, 18.4, 21.2] as V3, dir: [0.6, -0.15, 0.77] as V3, length: 6.0, r: 0.17 };
+export const ANTENNULE = { base: [2.4, 18.0, 21.6] as V3, length: 3.0, r: 0.4 };
 
 /**
- * the third maxillipeds: two plates closing the buccal frame, hinged at their outer edges; on the front face they
- * fill the space from just under the antennules down and back to the sternum, sloping ≈ 77° (standing a little proud of the face) (66: white, purple-edged,
- * as wide as three quarters of the eyes' spacing). `y`, `z0`: the top of the hinge; `z1`: its foot (in z, along the
- * slope); `slope`: the tilt about x (negative: the foot lower than the top).
+ * the third maxillipeds: two plates closing the buccal frame, hinged at their outer edges; on the tall front face
+ * they reach from just under the antennules down and back to the sternum, sloping ≈ 54° and standing a little proud
+ * of the face (66: white, purple-edged; the CC0 scan: ≈ 19 mm wide together, their tops 14.5 mm above the sternum).
+ * `y`, `z0`: the top of the hinge; `z1`: z0 less the plate's length; `slope`: the tilt about x (negative: the foot
+ * lower than the top).
  */
-export const MXP3 = { z0: 22.2, z1: 14.6, halfWidth: 8.2, y: 10.6, slope: -1.35 };
+export const MXP3 = { z0: 21.9, z1: 7.0, halfWidth: 9.5, y: 14.3, slope: -0.94 };
 
 /**
  * The abdomen folded under the sternum: the male's narrow T (18, 63) and the female's broad, rounded flap (9, 70).
@@ -345,12 +419,15 @@ export function legSpecs(): LegSpec[] {
       },
     ],
   };
-  const P2 = walkingLeg('P2', [18.8, 5.0, 6.9], 0.42, 20.0, 7.6, 12.9, 15.0, 1.0, 1.0);
-  const P3 = walkingLeg('P3', [20.6, 5.0, 0.4], 0.04, 20.8, 7.9, 13.0, 15.2, 1.0, 1.08, 1.15);
-  const P4 = walkingLeg('P4', [20.2, 5.2, -6.1], -0.36, 18.0, 7.0, 11.6, 13.6, 0.96, 1.4, 1.6);
+  // the coxae on the sternum's edges between its sutures, low under the body and spread from the cheliped's back to
+  // the posterior corner (the CC0 scan's underside: further back than the photographs alone suggested), the legs
+  // turned a little more back from there
+  const P2 = walkingLeg('P2', [19.2, 4.8, 4.4], 0.3, 20.0, 7.6, 12.9, 15.0, 1.0, 1.0);
+  const P3 = walkingLeg('P3', [20.2, 4.8, -2.4], -0.08, 20.8, 7.9, 13.0, 15.2, 1.0, 1.08, 1.15);
+  const P4 = walkingLeg('P4', [19.2, 5.0, -9.0], -0.48, 18.0, 7.0, 11.6, 13.6, 0.96, 1.4, 1.6);
   // P5: the swimming leg — short, stout merus and carpus, the flat oval propodus and the dactylus paddle
   const P5: LegSpec = {
-    id: 'P5', coxa: [16.6, 6.2, -12.4], yaw: -0.86,
+    id: 'P5', coxa: [16.2, 5.8, -15.4], yaw: -0.95,
     articles: [
       { name: 'cx', length: 4.6, n: 2.4, sections: [S(0, 3.4, 3.2), S(0.5, 3.7, 3.4), S(1, 3.3, 3.0)] },
       { name: 'bi', length: 6.0, n: 2.5, neck: 0.12, sections: [S(0, 2.9, 2.7), S(0.3, 3.2, 3.0), S(1, 3.3, 3.1)] },

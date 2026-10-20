@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Group, Vector3, type Mesh } from 'three';
-import { CARAPACE, legSpecs, marginTeeth, MODEL_CW } from '../../src/creatures/species/gazami/anatomy';
+import { CARAPACE, domeHeight, legSpecs, marginHeight, marginTeeth, MODEL_CW } from '../../src/creatures/species/gazami/anatomy';
 import { LODS, outline, rigDefinition } from '../../src/creatures/species/gazami/geometry';
 import { gazamiGeometry, gazamiRig, buildModel, disposeModel } from '../../src/creatures/species/gazami/model';
 import { applyPose, bindLeg, createBones, legTip, planarOf, solveLeg } from '../../src/creatures/species/gazami/rig';
@@ -30,12 +30,13 @@ describe('ガザミ: the body plan measured on the photographs', () => {
     // CL / CW ≈ 0.47 (61: 0.46, 19: 0.48, 39: 0.47)
     expect(CL / 100).toBeGreaterThan(0.44);
     expect(CL / 100).toBeLessThan(0.5);
-    // the spines' tips are the widest point (CW = 100 at their tips), 57 % of the length back from the front
+    // the spines' tips are the widest point (CW = 100 at their tips), a little over half the length back from the
+    // front (52 % on the CC0 scan, 57 % on 61 and 39)
     expect(spine.tip[0]).toBeCloseTo(50, 0);
     const fromFront = (CARAPACE.front + 0.6 - spine.tip[1]) / CL;
     expect(fromFront).toBeGreaterThan(0.5);
     expect(fromFront).toBeLessThan(0.64);
-    // a long spine: ≈ 0.13 CW from its base
+    // a long spine: ≈ 0.11 CW from the middle of its base
     expect(spine.length / 100).toBeGreaterThan(0.1);
   });
 
@@ -43,8 +44,33 @@ describe('ガザミ: the body plan measured on the photographs', () => {
     const teeth = marginTeeth();
     expect(teeth.filter((t) => /^T\d$/.test(t.name)).length).toBe(9);
     expect(teeth.filter((t) => /^F/.test(t.name)).length).toBe(2);   // a side: four between the orbits
-    const al = teeth.filter((t) => /^T[2-8]$/.test(t.name));
-    for (const t of al) { expect(t.length).toBeGreaterThan(2.5); expect(t.length).toBeLessThan(4); }
+    // short, broad-based teeth hooked forward along the margin (the CC0 scan), T8 a small one at the spine's base
+    const al = teeth.filter((t) => /^T[2-7]$/.test(t.name));
+    for (const t of al) { expect(t.length).toBeGreaterThan(1.5); expect(t.length).toBeLessThan(2.5); }
+    expect(teeth.find((t) => t.name === 'T8')!.length).toBeLessThan(1.5);
+  });
+
+  it('is the deep, square-fronted body of the CC0 scan, not a thin-edged lens', () => {
+    // the frontal margin high over the sternum, the anterolateral margin falling to the spine, the posterolateral
+    // margin lowest and the posterior border high again over the rear wall
+    expect(marginHeight(0, 21.6)).toBeGreaterThan(19.5);
+    expect(marginHeight(42, -0.5)).toBeLessThan(15);
+    expect(marginHeight(28, -11)).toBeLessThan(marginHeight(42, -0.5));
+    expect(marginHeight(0, -23.8)).toBeGreaterThan(13.5);
+    expect(domeHeight(0, 0.2, 21)).toBeGreaterThan(23.5);
+    // the built body: the crown ≈ 0.25 CW over the sternum, the underside (sternum and abdomen) one plane on it
+    const rig = rigDefinition();
+    const g = gazamiGeometry(0).shell;
+    const pos = g.getAttribute('position'), si = g.getAttribute('skinIndex'), part = g.getAttribute('aPart');
+    let top = -Infinity, bottom = Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      if (si.getX(i) !== rig.byName.J_body) continue;
+      top = Math.max(top, pos.getY(i) * 1000);
+      if (Math.round(part.getX(i)) === PART.STERNUM && Math.abs(pos.getX(i)) < 0.012) bottom = Math.min(bottom, pos.getY(i) * 1000);
+    }
+    expect(top).toBeGreaterThan(23.5);
+    expect(top).toBeLessThan(27);
+    expect(bottom).toBeGreaterThan(-1);
   });
 
   it('has the long male cheliped and walking legs in the photographs’ proportions', () => {
