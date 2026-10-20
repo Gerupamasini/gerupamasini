@@ -36,11 +36,12 @@ import { vertexNormals, mergeParts, compactIndices } from '../../lib/gobyTiers.m
 import { HL, TL, SL, EYE_MM, toObject, dirToObject } from './anatomy.mjs';
 import { HEAD_SCULPT, headSDF } from './head.mjs';
 import { BODY_SCULPT, trunkProfile } from './body.mjs';
-import { morphNormals } from './headrig.mjs';
-import { bodyTierMesh, fishDense, tierField, morphAttrs, ready, BODY_LAYOUT, TIERS as MESH_TIERS, rectUVWH } from './fishmesh.mjs';
-import { finDefinitions, buildFinMesh, buildFinTargets, finCard, finTierParams } from './fins.mjs';
-import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, axialRow } from './rig.mjs';
-import { headMorphs, solveBindDelta, poseWorldFor, skinWith, MORPH_ORDER, MORPH_DRIVERS, MORPH_DRIVE } from './headmorphs.mjs';
+import { morphNormals, BLINK_DROP } from './headrig.mjs';
+import { bodyTierMesh, fishDense, tierField, morphAttrs, tierMorphAttrs, ready, BODY_LAYOUT, TIERS as MESH_TIERS, rectUVWH } from './fishmesh.mjs';
+import { vertexTangents, tangentCheck } from './tiers.mjs';
+import { finDefinitions, buildFinMesh, buildFinTargets, finCard, finCardTargets, finTierParams } from './fins.mjs';
+import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, poseWorldHero, skinPacked, statePose, contactsFor, contactGaps, poseForTier, mirrorErrors, limitExcess, AXES } from './rig.mjs';
+import { headMorphs, solveBindDelta, poseWorldFor, skinWith, wrapMorph, MORPH_ORDER, MORPH_EXTRA, MORPH_DRIVERS, MORPH_DRIVE } from './headmorphs.mjs';
 import { vertexGrid, tissueClass, transferRows } from './transfer.mjs';
 import { eyeMeshForTier, eyesAtRest, EYE_TIERS } from './eyemesh.mjs';
 import { teethMesh } from './teeth.mjs';
@@ -55,7 +56,7 @@ const logDefault = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).
 /** Per tier: the skin's mesh tier (fishmesh TIERS), the eye's rings, the fins' mesh options, the teeth, the blend
  * shapes and the mesh that carries them. */
 export const TIERS = {
-  hero: { mesh: 'hero', eye: EYE_TIERS.hero, fins: 'hero', teeth: true, morphs: MORPH_ORDER, morphMesh: 'Head' },
+  hero: { mesh: 'hero', eye: EYE_TIERS.hero, fins: 'hero', teeth: true, morphs: [...MORPH_ORDER, ...MORPH_EXTRA], morphMesh: 'Head' },
   lod1: { mesh: 'lod1', eye: EYE_TIERS.lod1, fins: 'lod1', teeth: false, morphs: ['blinkL', 'blinkR', 'throat', 'inflate', 'inflateMid'], morphMesh: 'Body' },
   lod2: { mesh: 'lod2', eye: EYE_TIERS.lod2, fins: 'card', teeth: false, morphs: [], merged: true },
 };
@@ -136,7 +137,11 @@ function clayMaterials(gb, tier) {
 
 const skinAttrs = (w) => ({ JOINTS_0: { array: w.joints, type: 'VEC4' }, WEIGHTS_0: { array: w.weights, type: 'VEC4', normalized: true } });
 
-/** A mesh's sub-mesh of the triangles `keep` accepts, every per-vertex array in `keys` (stride from the length) carried. */
+/** The per-vertex arrays' strides (round B1 inferred the stride from the length, which hid meshopt's per-corner tangent
+ * array: its fractional stride copied nothing, and the hero's TANGENT came out all zero). */
+const STRIDE = { position: 3, normal: 3, tangent: 4, uv: 2, joints: 4, weights: 4 };
+/** A mesh's sub-mesh of the triangles `keep` accepts, every per-vertex array in `keys` carried (STRIDE; an array whose
+ * length is not the vertex count × its stride is an error). */
 function subMesh(mesh, keep, keys) {
   const I = mesh.indices, nv = mesh.position.length / 3, remap = new Int32Array(nv).fill(-1), tris = [];
   let m = 0;
@@ -149,7 +154,10 @@ function subMesh(mesh, keep, keys) {
   const out = { indices: Uint32Array.from(tris), map };
   for (const k of keys) {
     const a = mesh[k]; if (!a) continue;
-    const c = a.length / nv, b = new a.constructor(m * c);
+    const c = STRIDE[k];
+    if (!c) throw new Error(`subMesh: no stride for ${k}`);
+    if (a.length !== nv * c) throw new Error(`subMesh: ${k} has ${a.length} values for ${nv} vertices (stride ${c})`);
+    const b = new a.constructor(m * c);
     for (let j = 0; j < m; j++) for (let q = 0; q < c; q++) b[j * c + q] = a[map[j] * c + q];
     out[k] = b;
   }
@@ -214,7 +222,7 @@ export async function heroData({ log = logDefault, cache = null, h = null } = {}
   const packed = packTop4(rig.rows);
   const ms = morphSkin(rig, packed);
   log('head blend shapes …');
-  const M = await headMorphs(rig.headSub, ms.skin, { K: HEAD_SCULPT, headSDF, headField: rig.headField, teeth: rig.teeth, inflateScale: ms.inflateScale, log });
+  const M = await headMorphs(rig.headSub, ms.skin, { K: HEAD_SCULPT, headSDF, headField: rig.headField, teeth: rig.teeth, inflateScale: ms.inflateScale, which: [...MORPH_ORDER, ...MORPH_EXTRA], log });
   // the blend shapes on the dense mesh (mm; normal deltas unitless), zero off the head's submesh
   const ids = rig.headSub.ids, D = {}, DN = {}, W = {};
   for (const k of M.names) {
@@ -245,7 +253,7 @@ export async function heroData({ log = logDefault, cache = null, h = null } = {}
     const json = {
       names: M.names, drivers: M.drivers, teeth: rig.teeth, denseStats: dense.stats,
       world: Object.fromEntries(Object.entries(W).map(([k, w]) => [k, { pose: w.pose, base: w.base }])),
-      charts: tier.charts.map((c) => ({ name: c.name, rect: c.rect })), tierStats: tier.stats,
+      charts: tier.charts.map((c) => ({ name: c.name, rect: c.rect, ...(c.rects ? { rects: c.rects } : {}), ...(c.hidden ? { hidden: true } : {}), ...(c.relay ? { relay: true } : {}) })), tierStats: tier.stats,
     };
     saveCache(cache, arrays, json);
     log(`hero data cached in ${path.relative(root, cache)}`);
@@ -276,7 +284,8 @@ export function lighterSkin(tierName, H, log = logDefault) {
     const k = LOD1_ATTR_MORPHS.length * 3, rows = new Float32Array((H.dense.position.length / 3) * k);
     LOD1_ATTR_MORPHS.forEach((nm, j) => { const d = H.D[nm]; for (let v = 0; v < d.length / 3; v++) for (let c = 0; c < 3; c++) rows[v * k + j * 3 + c] = d[v * 3 + c]; });
     const t = transferRows({ ...src, rows, J: k }, { position: dense.position, normal: dense.normal, cls: dcls }, { grid: H.grid, normal: true });
-    extraAttrs = morphAttrs(LOD1_ATTR_MORPHS.map((_, j) => { const d = new Float32Array(nD * 3); for (let v = 0; v < nD; v++) for (let c = 0; c < 3; c++) d[v * 3 + c] = t[v * k + j * 3 + c]; return d; }));
+    // (weighted per shape by the tier: fishmesh TIERS.lod1.morphWeights, the blinks 2 so the hood keeps its rings)
+    extraAttrs = tierMorphAttrs(TB.mesh, LOD1_ATTR_MORPHS, LOD1_ATTR_MORPHS.map((_, j) => { const d = new Float32Array(nD * 3); for (let v = 0; v < nD; v++) for (let c = 0; c < 3; c++) d[v * 3 + c] = t[v * k + j * 3 + c]; return d; }));
     log(`${tierName}: the hero's ${LOD1_ATTR_MORPHS.join(', ')} carried to the dense mesh`);
   }
   const tier = bodyTierMesh(TB.mesh, { dense, extraAttrs, log });
@@ -312,6 +321,15 @@ export function lighterSkin(tierName, H, log = logDefault) {
       }
       morphs.d[nm] = d;
     }
+    // the blink re-solved as a shrink-wrap (round B2: B1's carried and solved hood crumpled and let the globe through at
+    // lod1): each hood vertex near an eye laid on the hero's posed blink surface at its material point (the closest hero
+    // bind point carried through the hero's own pose: targetBind), relaxed over it, then solved against the tier's own
+    // skin (headmorphs.wrapMorph); both eyes at once, split across the midline as the hero's blink is
+    if (TB.morphs.includes('blinkL') && TB.morphs.includes('blinkR')) {
+      const wr = lod1Blink(tier, skin, morphs.d.blinkL, morphs.d.blinkR, H);
+      morphs.d.blinkL = wr.L; morphs.d.blinkR = wr.R; morphs.blinkWrap = wr.stats;
+      log(`${tierName}: blinkL/R shrink-wrapped onto the hero's posed hood (${JSON.stringify(wr.stats)})`);
+    }
     // the normals' deltas on the tier mesh welded by the dense vertex (HL positions and displacements)
     const weld = new Map(), wid = new Uint32Array(n);
     for (let v = 0; v < n; v++) { let j = weld.get(tier.source[v]); if (j === undefined) { j = weld.size; weld.set(tier.source[v], j); } wid[v] = j; }
@@ -329,6 +347,36 @@ export function lighterSkin(tierName, H, log = logDefault) {
   return { tier, skin, cls, morphs };
 }
 
+/**
+ * lod1's blinkL / blinkR as a shrink-wrap of its hood onto the hero's posed blink (rig round B2, t_blink: 0 globe
+ * pixels in view at gaze 0 and 45° with the kept lining): the pose both eyes dropped BLINK_DROP; the target the hero's
+ * dense skin with both blinks at 1, skinned by its packed weights; the start the carried-and-solved shapes; the wrapped
+ * set every vertex the start moves or within 0.3 HL of an eye; each vertex follows its material point (targetBind, the
+ * hero's dense bind positions, with the normals facing alike). The bind displacement (mm) is split across the midline
+ * as headmorphs splits the hero's (a sine over |z| < 0.03 HL).
+ */
+function lod1Blink(tier, skin, dL, dR, H) {
+  const names = TIER_JOINTS.lod1, n = tier.position.length / 3;
+  const pose = { J_eyeL: { t: [0, -BLINK_DROP, 0] }, J_eyeR: { t: [0, -BLINK_DROP, 0] } }, W = poseWorldHero(pose);
+  const PH0 = Float32Array.from(H.dense.position);
+  for (const k of ['blinkL', 'blinkR']) for (let i = 0; i < PH0.length; i++) PH0[i] += H.D[k][i];
+  const PH = skinPacked(PH0, H.packed, W);
+  const start = new Float32Array(n * 3); for (let i = 0; i < start.length; i++) start[i] = dL[i] + dR[i];
+  const ec = EYE_MM.center;
+  const nearEye = (p) => Math.min(Math.hypot(p[0] - ec[0], p[1] - ec[1], p[2] - ec[2]), Math.hypot(p[0] - ec[0], p[1] - ec[1], p[2] + ec[2])) < 0.3 * HL;
+  const mask = new Float32Array(n);
+  for (let v = 0; v < n; v++) mask[v] = Math.hypot(start[v * 3], start[v * 3 + 1], start[v * 3 + 2]) > 1e-6 || nearEye([tier.position[v * 3], tier.position[v * 3 + 1], tier.position[v * 3 + 2]]) ? 1 : 0;
+  const centres = [[ec[0], ec[1], ec[2]], [ec[0], ec[1], -ec[2]]].map((c, i) => { const T = W[i ? 'J_eyeR' : 'J_eyeL']; return [0, 1, 2].map((k) => T.R[k * 3] * c[0] + T.R[k * 3 + 1] * c[1] + T.R[k * 3 + 2] * c[2] + T.t[k]); });
+  const wr = wrapMorph({ position: tier.position, normal: tier.normal, indices: tier.indices, skin, names, source: tier.source }, { position: PH, indices: H.dense.indices },
+    { W, start, mask, globe: { centres, radius: EYE_MM.radius }, targetBind: H.dense.position, targetNormal: H.dense.normal });
+  const L = new Float32Array(n * 3), R = new Float32Array(n * 3);
+  for (let v = 0; v < n; v++) {
+    const z = tier.position[v * 3 + 2] / HL, tl = 0.5 + 0.5 * (Math.abs(z) < 0.03 ? Math.sin((z / 0.03) * Math.PI / 2) : Math.sign(z));
+    for (let k = 0; k < 3; k++) { L[v * 3 + k] = wr.d[v * 3 + k] * tl; R[v * 3 + k] = wr.d[v * 3 + k] * (1 - tl); }
+  }
+  return { L, R, stats: { ...wr.stats, masked: mask.reduce((a, b) => a + b, 0) } };
+}
+
 // ------------------------------------------------------------------------------------------------ extras
 /** Boxes for the viewer's framing (object frame) from fish-frame boxes in HL. */
 function regionBox(s0, s1, y0, y1, z0, z1) {
@@ -341,54 +389,129 @@ function boundsOf(list) {
   return [lo.map((v) => +v.toFixed(5)), hi.map((v) => +v.toFixed(5))];
 }
 
-/**
- * The ground contacts for the runtime (fish mm and object m; the bone each rides, the tier's kept joint): the chin
- * under the lower jaw, the pelvic fins' lowest point, the belly under each axial bone, the peduncle's and the caudal
- * fin's lowest points, and the pectoral feet (the wrist's underside and the blade's middle).
- */
-function contactsFor(skinMesh, finMeshes, keep) {
-  const prof = trunkProfile(BODY_SCULPT), Pm = skinMesh.position, out = [];
-  // (the lowest point of a point set among those `sel` (s, y, z in HL) admits)
-  const lowestOf = (A, sel) => {
-    let best = null;
-    for (let v = 0; v < A.length / 3; v++) { const s = A[v * 3] / HL, y = A[v * 3 + 1] / HL, z = A[v * 3 + 2] / HL; if (sel && !sel(s, y, z)) continue; if (!best || A[v * 3 + 1] < best[1]) best = [A[v * 3], A[v * 3 + 1], A[v * 3 + 2]]; }
-    return best;
-  };
-  const lowest = (sel) => lowestOf(Pm, sel);
-  const par = Object.fromEntries(JOINTS.map((j) => [j.name, j.parent]));
-  const kept = (name) => { let k = name; while (k && !keep.has(k)) k = par[k]; return k; };
-  const add = (name, bone, p, kind) => { if (!p) return; out.push({ name, kind, bone: kept(bone), heroBone: bone, mm: p.map((c) => +c.toFixed(3)), obj: toObject(p).map((c) => +c.toFixed(6)) }); };
-  add('chin', 'J_jaw', lowest((s, y, z) => s > 0.15 && s < 0.45 && Math.abs(z) < 0.08), 'skin');
-  add('throat', 'J_hyoid', lowest((s, y, z) => s > 0.6 && s < 0.9 && Math.abs(z) < 0.08), 'skin');
-  if (finMeshes.Fin_Pelvic) add('pelvic', 'J_pelvic', lowestOf(finMeshes.Fin_Pelvic), 'fin');
-  const row = new Float32Array(NJ);
-  for (const s0 of [1.5, 1.8, 2.1, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9]) {
-    row.fill(0); axialRow(s0, row, 1);
-    let jb = 0; for (let k = 1; k < NJ; k++) if (row[k] > row[jb]) jb = k;
-    add(`belly${s0.toFixed(1)}`, JOINTS[jb].name, lowest((s, y, z) => Math.abs(s - s0) < 0.04 && Math.abs(z) < 0.1) ?? [s0 * HL, prof.at(s0).yB * HL, 0], 'skin');
+/** The runtime axes for a tier (rig.axesForTier), with lod1's jaw clamped (lod1's sealed skin has no slit, so a wide
+ * gape stretches the closed lips: the integration design §10), the eye lift held to the bare joint's range where the
+ * tier has no eyesUp corrective (rig AXES liftBareM), and the head's reference poses cut to the tier's joints (the
+ * bone-only joints of the head rig, J_jawL … J_bstegR, listed apart as `boneOnly`). */
+function tierAxes(tierName, morphNames = []) {
+  const axes = structuredClone(axesForTier(tierName));
+  const keep = new Set(TIER_JOINTS[tierName]);
+  const jaw = axes.joints?.J_jaw?.channels?.angle;
+  if (tierName === 'lod1' && jaw) { jaw.range = [jaw.range[0], Math.min(jaw.range[1], 30)]; jaw.note = 'lod1: clamped to 30° (the sealed skin has no slit; the gape and gum shapes are hero only)'; }
+  // (round B2: lod1's blink is a shrink-wrap of its kept hood and lining onto the hero's closed hood, so the globe
+  // stays covered with the joint's own drop: B1's blinkGlobeExtraDropM is gone)
+  for (const S of ['L', 'R']) {
+    const j = axes.joints?.[`J_eye${S}`]?.translate;
+    if (j && !morphNames.includes(`eyesUp${S}`)) { j.rangeM = [j.rangeM[0], j.liftBareM]; j.note = `this tier has no eyesUp${S} corrective: the lift stays within liftBareM`; }
+    if (axes.eyes?.[S] && !morphNames.includes(`eyesUp${S}`)) { axes.eyes[S].liftM = j?.liftBareM ?? axes.eyes[S].liftM; axes.eyes[S].alertLiftM = Math.min(axes.eyes[S].alertLiftM, axes.eyes[S].liftM); }
   }
-  add('peduncle', 'J_caudal', lowest((s, y, z) => Math.abs(s - BODY_SCULPT.caudalBase) < 0.04 && Math.abs(z) < 0.1), 'skin');
-  if (finMeshes.Fin_Caudal) add('caudalFin', 'J_caudal2', lowestOf(finMeshes.Fin_Caudal), 'fin');
-  // the pectoral feet: the lowest skin round the wrist (the lobe's end the blade turns on) and the blade's pivot
-  const w = BODY_SCULPT.pectoral.wrist, r = BODY_SCULPT.pectoral.radius[2] + 0.04;
-  for (const [S, sd] of [['L', 1], ['R', -1]]) {
-    add(`foot${S}`, `J_pecWrist${S}`, lowest((s, y, z) => Math.hypot(s - w[0], y - w[1], z - sd * w[2]) < r), 'wrist');
-    add(`blade${S}`, `J_pecBlade${S}`, JOINTS[J[`J_pecBlade${S}`]].at, 'blade');
+  if (axes.head?.poses) {
+    const bone = new Set();
+    for (const [k, P] of Object.entries(axes.head.poses)) {
+      if (!P || typeof P !== 'object') continue;
+      axes.head.poses[k] = Object.fromEntries(Object.entries(P).filter(([j]) => { if (!/^J_/.test(j)) return true; if (keep.has(j)) return true; bone.add(j); return false; }));
+    }
+    axes.head.boneOnly = [...bone].sort();
+    axes.head.boneOnlyNote = 'joints of the head rig that this tier does not ship (their motion is in the blend shapes or rides a kept ancestor): dropped from the poses';
   }
+  return axes;
+}
+
+/** The hero tier's skin weights (packed rows at each tier vertex's dense source). */
+function heroTierSkin(H) {
+  const b = H.tier, n = b.position.length / 3, joints = new Uint8Array(n * 4), weights = new Uint8Array(n * 4);
+  for (let v = 0; v < n; v++) { const s = b.source[v]; joints.set(H.packed.joints.subarray(s * 4, s * 4 + 4), v * 4); weights.set(H.packed.weights.subarray(s * 4, s * 4 + 4), v * 4); }
+  return { joints, weights };
+}
+
+/** The fins of a tier, built once: { [name]: { def, mesh, targets: { names, deltas, normals }, w (hero-space packed
+ * weights) } } (hero / lod1: buildFinMesh with buildFinTargets; lod2: finCard with finCardTargets). */
+const FIN_CACHE = new Map();
+function tierFins(tierName, H) {
+  if (FIN_CACHE.has(tierName)) return FIN_CACHE.get(tierName);
+  const defs = finDefinitions(BODY_SCULPT), body0 = { position: H.dense.position, indices: H.dense.indices, rows: H.rig.rows, grid: H.grid };
+  const TP = tierName === 'lod2' ? null : finTierParams(TIERS[tierName].fins);
+  const out = {};
+  for (const def of defs) {
+    const mesh = TP ? buildFinMesh(def, TP[def.name]) : finCard(def);
+    const targets = TP ? buildFinTargets(def, mesh) : finCardTargets(def);
+    out[def.name] = { def, mesh, targets, w: finWeights(def, mesh, { body: body0 }) };
+  }
+  FIN_CACHE.set(tierName, out);
   return out;
 }
 
-/** The runtime axes for a tier (rig.axesForTier), with lod1's jaw clamped: lod1's sealed skin has no slit, so a wide
- * gape stretches the closed lips (the integration design §10: clamp the jaw at lod1, to 30°). */
-function tierAxes(tierName) {
-  const axes = structuredClone(axesForTier(tierName));
-  const jaw = axes.joints?.J_jaw?.channels?.angle;
-  if (tierName === 'lod1' && jaw) { jaw.range = [jaw.range[0], Math.min(jaw.range[1], 30)]; jaw.note = 'lod1: clamped to 30° (the sealed skin has no slit; the gape and gum shapes are hero only)'; }
-  // (lod1's sealed cup lies inside the globe, so its blink hood has no lining to close over the globe's top as the
-  // hero's does: the globe node dropped a further 0.03 HL at a full blink keeps it under the coarser hood; the window
-  // shows through the lower lid beyond 0.05)
-  if (tierName === 'lod1' && axes.eyes) for (const S of ['L', 'R']) if (axes.eyes[S]) { axes.eyes[S].blinkGlobeExtraDropM = +(0.03 * HL * 0.001).toFixed(6); axes.eyes[S].blinkGlobeExtraDropNote = 'lod1: translate the Eye node (not the joint) down by this × the blink weight'; }
-  return axes;
+/** The wrist's counter-turn in the REST state (deg, AXES J_pecWristL/R channels; the right's mirror themselves). */
+const REST_WRIST = { flexion: 1, bend: -5 };
+/** The paddles in the WATER state (deg, AXES channels, both sides). */
+const WATER_ARM = { shoulder: { swing: 25, abduction: 30, protraction: 20 }, elbow: { flexion: 20 } };
+/**
+ * The reference states every tier is posed in (rig.statePose, solved once on the hero): land (the front raised, the
+ * pectoral soles planted flat by solveArmPlant on the hero's tier skin, the pelvic cup pressed onto the same ground),
+ * rest (prone, the arms in fins.mjs's rest pose, every fin folded) and water (the swim wave, the paddles spread).
+ */
+export function heroStates(H) {
+  if (H.states) return H.states;
+  const fins = tierFins('hero', H), pel = fins.Fin_Pelvic;
+  const tierMesh = { position: H.tier.position, skin: heroTierSkin(H), names: TIER_JOINTS.hero };
+  const land = statePose('land', { tierMesh, pelvic: { position: pel.mesh.position, skin: pel.w, names: TIER_JOINTS.hero } });
+  // REST: the rig's (fins.mjs restPose, the shoulder abducted RIG.rest.abduction = 4° more so the arm's medial face
+  // clears the flank) with the wrist turned back in by REST_WRIST, so the furled blade the shoulder's 4° carried out
+  // lies on the flank again: its rayT > 0.3 vertices' distance to the posed hero skin p50 0.58 → 0.25 mm, p95 0.71 →
+  // 0.39, max 0.79 → 0.45, none inside (integrator's search, b2_build scripts/rest_search.mjs; bend −5.5° and more
+  // puts the blade's edge through the flank)
+  const rest = statePose('rest');
+  for (const S of ['L', 'R']) rest.pose[`J_pecWrist${S}`] = { ...(rest.pose[`J_pecWrist${S}`] ?? {}), ...REST_WRIST };
+  // WATER: the rig's swim wave and fin states with the paddles brought forward and in (REST_WATER_ARM): the rig's
+  // swing 51.5° / abduction 43.5° held the fan 1.4 mm behind the shoulder on a long arm 5.3 mm off the flank; these put
+  // it 3.5 mm ahead of the shoulder, 3.5 mm off the flank, its face 30° from the horizontal toward the side (A061), the
+  // arm root clean (rig harness, h 0.09: area p001 0.563, 0 new flips, 0 new self-penetration; inside AXES' ranges and
+  // coupled limits; b2_build rigscripts/t_water.mjs)
+  const water = statePose('water');
+  for (const S of ['L', 'R']) { water.pose[`J_pec${S}`] = { ...WATER_ARM.shoulder }; water.pose[`J_pecElbow${S}`] = { ...WATER_ARM.elbow }; }
+  H.states = { land, rest, water };
+  return H.states;
+}
+
+/** A state's pose for a tier: lod2's one-bone arms aimed (rig.poseForTier), the eye lift held within the bare joint's
+ * range where the tier has no eyesUp corrective, the eyesUp weights driven where it has. */
+function tierStatePose(pose, tierName, morphNames) {
+  const p = structuredClone(poseForTier(pose, tierName));
+  const bare = AXES.joints.J_eyeL?.translate?.liftBareM / (HL * 0.001);
+  for (const S of ['L', 'R']) {
+    const e = p[`J_eye${S}`];
+    if (!e?.t) continue;
+    if (!TIER_JOINTS[tierName].includes(`J_eye${S}`)) { delete p[`J_eye${S}`]; continue; }
+    if (morphNames.includes(`eyesUp${S}`)) { const d = MORPH_DRIVE[`eyesUp${S}`]; p.morph = { ...(p.morph ?? {}), Head: { ...(p.morph?.Head ?? {}), [`eyesUp${S}`]: +Math.min(1, Math.max(0, e.t[1] / d.per)).toFixed(4) } }; }
+    else if (Number.isFinite(bare)) e.t = [e.t[0], Math.min(e.t[1], +bare.toFixed(4)), e.t[2]];
+  }
+  return p;
+}
+
+/** The posed fish's footprint for the runtime's contacts between animals (src/creatures/physics/contacts.ts BodyBuild,
+ * in shares of TL): the body without its arms and fins. */
+function footprintOf(body, armShare) {
+  let zmax = 0, ylo = Infinity, yhi = -Infinity;
+  for (let v = 0; v < body.position.length / 3; v++) {
+    if (armShare(v) > 0.5) continue;
+    zmax = Math.max(zmax, Math.abs(body.position[v * 3 + 2])); ylo = Math.min(ylo, body.position[v * 3 + 1]); yhi = Math.max(yhi, body.position[v * 3 + 1]);
+  }
+  return { width: +((2 * zmax) / TL).toFixed(4), height: +((yhi - ylo) / TL).toFixed(4), core: +(SL / TL).toFixed(4), ahead: +(-(SL / 2) / TL).toFixed(4), note: 'BodyBuild shares of TL: the body without the arms and fins; core = SL (the fish without its caudal fin); ahead: the core\'s centre is SL/2 behind the model\'s origin (the snout tip)' };
+}
+
+/** The GPU memory of a mesh's morph targets as three.js (r16x–r18x WebGLMorphtargets) packs them: one RGBA32F texel
+ * per vertex and attribute (position, normal) per target, rows of the max texture size. */
+function morphTextureBytes(nVertices, nTargets, withNormals, maxTexture = 4096) {
+  if (!nTargets) return 0;
+  const width = nVertices * (withNormals ? 2 : 1), rows = Math.ceil(width / maxTexture);
+  return (rows > 1 ? maxTexture * rows : width) * 16 * nTargets;
+}
+
+/** Per-vertex tangents for an extra mesh (eyes are built with theirs; the teeth and the fins here): tiers.vertexTangents,
+ * every per-vertex array in `extra` carried to the split copies. */
+function withTangents(mesh, extra = {}) {
+  const vt = vertexTangents({ position: mesh.position, normal: mesh.normal, uv: mesh.uv, indices: mesh.indices, ...extra }, { keys: ['position', 'normal', 'uv', ...Object.keys(extra)] });
+  return { ...vt.mesh, tangent: vt.tangent, split: vt.stats.split };
 }
 
 // ------------------------------------------------------------------------------------------------ the tier
@@ -471,12 +594,14 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     morphMeshName = 'Body';
   }
 
-  // ---- the eyes
+  // ---- the eyes (each part with its own UVs and per-vertex tangents: eyemesh.eyeMeshForTier)
+  const tangentGate = {};
+  const gateTangent = (name, normal, tangent) => { if (!tangent) return; const c = tangentCheck(normal, tangent, { tol: 1e-3 }); tangentGate[name] = { n: c.n, bad: c.bad, maxDot: +c.maxDot.toExponential(2), maxLen: +(c.maxLen ?? 0).toExponential(2) }; };
   if (!lod2) {
     const e = eyeMeshForTier(TB.eye);
-    const prims = [[e.parts.skin, mats.body], [e.parts.pupil, mats.cornea], [e.parts.iris, mats.iris]]
+    const prims = [[e.parts.skin, mats.body, 'skin'], [e.parts.pupil, mats.cornea, 'pupil'], [e.parts.iris, mats.iris, 'iris']]
       .filter(([p]) => p.indices.length)
-      .map(([p, m]) => gb.primitive({ position: p.position, normal: p.normal, uv: p.uv, indices: compactIndices(p.indices, p.position.length / 3), material: m }));
+      .map(([p, m, k]) => { gateTangent(`Eye.${k}`, p.normal, p.tangent); return gb.primitive({ position: p.position, normal: p.normal, tangent: p.tangent ?? null, uv: p.uv, indices: compactIndices(p.indices, p.position.length / 3), material: m }); });
     const mesh = gb.addMesh('Eye', prims, { tobihaze: { part: 'eye' } });
     meshTris.Eye = e.triangles;
     for (const S of ['L', 'R']) {
@@ -486,20 +611,24 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     }
   }
 
-  // ---- the teeth (hero)
+  // ---- the teeth (hero; tangents: their constant swatch UV gives the fallback frame, so a normal map reads flat)
   if (TB.teeth) {
-    const tm = teethMesh(H.teeth);
+    const tm0 = teethMesh(H.teeth);
+    const tm = withTangents(tm0, { group: tm0.group });
     const n = tm.position.length / 3, joints = new Uint8Array(n * 4), weights = new Uint8Array(n * 4);
     const jP = teethWeights('premax', 1).joints[0], jD = teethWeights('dentary', 1).joints[0];
     for (let v = 0; v < n; v++) { joints[v * 4] = tm.group[v] === 0 ? jP : jD; weights[v * 4] = 255; }
-    addMeshNode('Mouth_Teeth', [gb.primitive({ position: posToObject(tm.position), normal: dirsToObject(tm.normal), uv: tm.uv, indices: compactIndices(tm.indices, n), material: mats.body, extraAttributes: skinAttrs(toTier({ joints, weights })) })], { tobihaze: { part: 'teeth' } }, { tobihaze: { part: 'teeth' } });
+    gateTangent('Mouth_Teeth', tm.normal, tm.tangent);
+    addMeshNode('Mouth_Teeth', [gb.primitive({ position: posToObject(tm.position), normal: dirsToObject(tm.normal), tangent: dirsToObject(tm.tangent, 4), uv: tm.uv, indices: compactIndices(tm.indices, n), material: mats.body, extraAttributes: skinAttrs(toTier({ joints, weights })) })], { tobihaze: { part: 'teeth' } }, { tobihaze: { part: 'teeth' } });
   }
 
   // ---- the fins
-  const defs = finDefinitions(BODY_SCULPT);
-  const body0 = { position: H.dense.position, indices: H.dense.indices, rows: H.rig.rows, grid: H.grid };
-  const finMorphs = {}, finBind = {};
-  const lod2Parts = [];
+  const fins = tierFins(tierName, H);
+  const defs = Object.values(fins).map((f) => f.def);
+  const finMorphs = {}, finBind = {}, finParts = {};
+  const gpu = { morphBytes4096: 0, morphBytes16384: 0, meshes: {} };
+  const countMorph = (name, nv, nt, withN) => { const a = morphTextureBytes(nv, nt, withN, 4096), b = morphTextureBytes(nv, nt, withN, 16384); gpu.meshes[name] = { vertices: nv, targets: nt, normals: withN, bytes4096: a, bytes16384: b }; gpu.morphBytes4096 += a; gpu.morphBytes16384 += b; };
+  let cardTargets = null;
   if (lod2) {
     // the eyes at rest, into the Body (its material; J_head)
     const eyes = eyesAtRest(TB.eye), jh = jIndex.J_head;
@@ -512,29 +641,73 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     const mg = mergeParts(parts);
     addMeshNode('Body', [gb.primitive({ position: mg.position, normal: mg.normal, uv: mg.uv, indices: mg.indices, material: mats.body, extraAttributes: skinAttrs(mg) })], { tobihaze: { part: 'body', eyes: 'merged' } }, { tobihaze: { part: 'body' } });
     meshTris.Body_skin = body.indices.length / 3; meshTris.Body_eyes = eyes.reduce((a, e) => a + e.indices.length / 3, 0);
+    // the fin cards merged into one mesh, with each card's own states as blend shapes (round B2: B1's cards stayed in
+    // the bind, so the planted pectoral cards hung under the hero's ground and D1 stood half raised at the LOD switch):
+    // `<state>_<fin>` (fold for every fin, plant for the pectorals), zero off the card's own vertices
+    const lod2Parts = [], offsets = {};
+    let at = 0;
     for (const def of defs) {
-      const c = finCard(def);
-      const w = toTier(finWeights(def, c, { body: body0 }));
+      const f = fins[def.name], c = f.mesh, w = toTier(f.w);
       finBind[def.name] = c.position;
+      offsets[def.name] = at; at += c.position.length / 3;
+      finParts[def.name] = { position: c.position, indices: c.indices, skin: w, targets: { names: f.targets.names, deltas: f.targets.deltas } };
       lod2Parts.push({ position: posToObject(c.position), normal: dirsToObject(c.normal ?? vertexNormals(c.position, c.indices)), uv: c.uv, indices: c.indices, joints: w.joints, weights: w.weights });
     }
     const mf = mergeParts(lod2Parts);
-    addMeshNode('Fins', [gb.primitive({ position: mf.position, normal: mf.normal, uv: mf.uv, indices: mf.indices, material: mats.fin, extraAttributes: skinAttrs(mf) })], { tobihaze: { part: 'fins', merged: true, fins: defs.map((d) => d.name) } }, { tobihaze: { fin: 'merged' } });
-  } else {
-    const TP = finTierParams(TB.fins);
+    if (mf.position.length / 3 !== at) throw new Error('lod2 fins: the merged cards do not keep their vertices in order');
+    const names = [], targets = [], normalTargets = [], drive = {};
     for (const def of defs) {
-      const m = buildFinMesh(def, TP[def.name]);
-      const tg = buildFinTargets(def, m);
-      const w = toTier(finWeights(def, m, { body: body0 }));
-      finBind[def.name] = m.position;
+      const t = fins[def.name].targets, o = offsets[def.name];
+      t.names.forEach((st, i) => {
+        const d = new Float32Array(at * 3), dn = new Float32Array(at * 3);
+        d.set(t.deltas[i], o * 3); dn.set(t.normals[i], o * 3);
+        const nm = `${st}_${def.name}`;
+        names.push(nm); targets.push(deltasToObject(d)); normalTargets.push(dirsToObject(dn));
+        drive[nm] = { fin: def.name, target: st, note: `the ${def.name} card's '${st}' state: weight = the hero's / lod1's ${def.name} '${st}' weight` };
+      });
+    }
+    cardTargets = { names, vertices: at };
+    countMorph('Fins', at, names.length, true);
+    addMeshNode('Fins', [gb.primitive({ position: mf.position, normal: mf.normal, uv: mf.uv, indices: mf.indices, material: mats.fin, extraAttributes: skinAttrs(mf), targets, normalTargets })],
+      { targetNames: names, drive, drivers: Object.fromEntries(names.map((k) => [k, drive[k].note])), tobihaze: { part: 'fins', merged: true, fins: defs.map((d) => d.name), offsets } }, { tobihaze: { fin: 'merged' } }, { weights: names.map(() => 0) });
+  } else {
+    for (const def of defs) {
+      const f = fins[def.name], m0 = f.mesh, tg = f.targets, w = toTier(f.w);
+      finBind[def.name] = m0.position;
+      finParts[def.name] = { position: m0.position, indices: m0.indices, skin: w, targets: { names: tg.names, deltas: tg.deltas } };
+      // (per-vertex tangents: the corners that disagree split their vertex, every target and the skin carried along)
+      const extra = { joints: w.joints, weights: w.weights };
+      tg.deltas.forEach((d, i) => { extra[`d${i}`] = d; });
+      tg.normals.forEach((d, i) => { extra[`n${i}`] = d; });
+      const m = withTangents(m0, extra);
+      gateTangent(def.name, m.normal, m.tangent);
       const prim = gb.primitive({
-        position: posToObject(m.position), normal: dirsToObject(m.normal), uv: m.uv, indices: compactIndices(m.indices, m.position.length / 3), material: mats.fin,
-        targets: tg.deltas.map(deltasToObject), normalTargets: tg.normals.map((d) => dirsToObject(d)), extraAttributes: skinAttrs(w),
+        position: posToObject(m.position), normal: dirsToObject(m.normal), tangent: dirsToObject(m.tangent, 4), uv: m.uv, indices: compactIndices(m.indices, m.position.length / 3), material: mats.fin,
+        targets: tg.deltas.map((_, i) => deltasToObject(m[`d${i}`])), normalTargets: tg.normals.map((_, i) => dirsToObject(m[`n${i}`])), extraAttributes: skinAttrs({ joints: m.joints, weights: m.weights }),
       });
       finMorphs[def.name] = tg.names;
+      countMorph(def.name, m.position.length / 3, tg.names.length, tg.normals.length > 0);
       addMeshNode(def.name, [prim], { targetNames: tg.names, drivers: Object.fromEntries(tg.names.map((k) => [k, FIN_DRIVERS[k] ?? ''])), tobihaze: { part: 'fin', fin: def.name } }, { tobihaze: { fin: def.name } }, { weights: tg.names.map(() => 0) });
     }
   }
+  if (morphMeshName) { const nv = morphMeshName === 'Head' ? gb.json.accessors[gb.json.meshes.find((x) => x.name === 'Head').primitives[0].attributes.POSITION].count : body.position.length / 3; countMorph(morphMeshName, nv, morph.names.length, true); }
+  if (tierName === 'hero') { const hm = H.tier; gateTangent('skin', hm.normal, hm.tangent); }
+  else if (!lod2) gateTangent('skin', body.normal, body.tangent);
+
+  // ---- the reference states and the ground contacts (rig.contactsFor on this tier's own posed skin and fins, in the
+  // hero's states so every tier stands in the same pose; each contact bone-local on the tier joint that carries it)
+  const states = heroStates(H);
+  const morphNamesOfTier = morph?.names ?? [];
+  const cparts = { skin: { position: body.position, indices: body.indices, skin: bodySkin }, fins: finParts };
+  const cres = contactsFor(tierName, cparts, { states });
+  const gaps = contactGaps(tierName, cparts, cres);
+  const contacts = {}, stateExtras = {};
+  for (const [st, R] of Object.entries(cres)) {
+    contacts[st] = R.contacts.map((c) => ({ ...c, gapMM: gaps[st][c.name] }));
+    const pose = tierStatePose(states[st].pose, tierName, morphNamesOfTier);
+    stateExtras[st] = { pose, groundMM: R.groundMM, groundM: +toObject([0, R.groundMM, 0])[1].toFixed(7), morphs: R.morphs };
+  }
+  const armShare = (v) => { const s = tierName === 'hero' ? body.source[v] : null; if (s !== null) return H.rig.m[s]; let a = 0; for (let q = 0; q < 4; q++) if (/^J_pec/.test(TIER_JOINTS[tierName][bodySkin.joints[v * 4 + q]])) a += bodySkin.weights[v * 4 + q] / 255; return a; };
 
   // ---- the root, its extras, the scene
   const allP = [body.position, ...Object.values(finBind)];
@@ -559,20 +732,28 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     tail: regionBox(3.4, TL / HL + 0.02, -0.1, 0.7, -0.2, 0.2),
     ...Object.fromEntries(Object.entries({ d1: 'Fin_Dorsal1', d2: 'Fin_Dorsal2', anal: 'Fin_Anal', caudal: 'Fin_Caudal', pelvic: 'Fin_Pelvic' }).filter(([, f]) => finBind[f]).map(([k, f]) => [k, pad(boundsOf([posToObject(finBind[f])]), 0.03 * HL * 0.001)])),
   };
-  const contacts = contactsFor(body, finBind, keep);
   const morphs = {};
   if (morphMeshName) morphs[morphMeshName] = { names: morph.names, drivers: Object.fromEntries(morph.names.map((k) => [k, MORPH_DRIVERS[k]])), drive: Object.fromEntries(morph.names.map((k) => [k, MORPH_DRIVE[k]])) };
   if (Object.keys(finMorphs).length) morphs.fins = { targets: finMorphs, drivers: FIN_DRIVERS };
+  if (cardTargets) morphs.Fins = { names: cardTargets.names, note: '<state>_<fin>: each card\'s state as the hero\'s fin of that name takes it (fold; the pectorals\' plant)' };
+  const footprint = footprintOf(body, armShare);
   const rootNode = gb.addNode({
     name: `${P}_Adult`, children: [rootJoint],
     extras: {
       species: 'periophthalmus_modestus', commonName: 'トビハゼ', totalLength_mm: TL, standardLength_mm: +SL.toFixed(3),
       units: 'metres (+X the fish\'s left, +Y dorsal, +Z anterior)',
       tobihaze: {
-        tier: tierName, round: 'B1 clay', hlMM: +HL.toFixed(4), tlMM: TL, slMM: +SL.toFixed(3),
+        tier: tierName, round: 'B2 clay', hlMM: +HL.toFixed(4), tlMM: TL, slMM: +SL.toFixed(3),
         joints: kept.map((j) => j.name), remapFromHero: Array.from(remap),
-        axes: tierAxes(tierName),
-        morphs, contacts, regions,
+        axes: tierAxes(tierName, morphNamesOfTier),
+        morphs, regions, footprint,
+        // per reference state: the pose (channel values by joint, AXES order; lod2's arms as quaternions), the ground
+        // under it (fish mm and object y in m: the posed fish's lowest point) and the blend-shape weights it assumes
+        states: stateExtras,
+        // per state: [{ name, kind, bone (this tier's joint), local (object m from the joint's pivot in its bind frame:
+        // bone · local is the point whatever the bone does), mm / obj (the posed point), groundGapMM, gapMM (the
+        // bone-carried point's distance to this tier's posed surface) }]
+        contacts,
         layout: BODY_LAYOUT,
         eyes: lod2 ? { merged: 'Body', note: 'lod2: both globes at rest in the Body, on J_head' } : { mesh: 'Eye', nodes: ['Eye_L', 'Eye_R'], mirrored: 'Eye_R (node scale [-1, 1, 1])' },
       },
@@ -583,8 +764,14 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   const buf = gb.toBuffer();
   if (outFile) { fs.mkdirSync(path.dirname(outFile), { recursive: true }); fs.writeFileSync(outFile, buf); }
   const tris = Object.entries(meshTris).filter(([k]) => !/^Body_(skin|eyes)$/.test(k)).reduce((a, [, t]) => a + t, 0);
-  const res = { tier: tierName, tris, joints: sk.length, materials: gb.json.materials.length, images: (gb.json.images ?? []).length, meshes: meshTris, headSplit, file: outFile, bytes: buf.length, morphs: morph?.names ?? [] };
+  const contactGate = Object.fromEntries(Object.entries(gaps).map(([st, g]) => { const w = Object.entries(g).sort((x, y) => y[1] - x[1])[0]; return [st, { maxGapMM: w?.[1] ?? null, worst: w?.[0] ?? null, n: Object.keys(g).length }]; }));
+  const res = {
+    tier: tierName, tris, joints: sk.length, materials: gb.json.materials.length, images: (gb.json.images ?? []).length, meshes: meshTris, headSplit, file: outFile, bytes: buf.length, morphs: morph?.names ?? [],
+    tangentGate, contactGate, gpu, footprint, states: stateExtras, blinkWrap: morph?.blinkWrap ?? null, residual: morph?.residual ?? null, cardTargets,
+    land: tierName === 'hero' ? { sides: states.land.solved.sides, ground: states.land.ground, pelvic: states.land.solved.pelvic ?? null } : undefined,
+  };
   log(`${tierName}: ${tris} triangles (${Object.entries(meshTris).map(([k, v]) => `${k} ${v}`).join(', ')}), ${sk.length} joints, ${res.materials} materials → ${outFile ? path.relative(root, outFile) : '(not written)'} (${(buf.length / 1e6).toFixed(2)} MB)`);
+  log(`${tierName}: tangents ${Object.entries(tangentGate).map(([k, g]) => `${k} ${g.bad}/${g.n}`).join(', ')}; contacts max gap ${Object.entries(contactGate).map(([k, g]) => `${k} ${g.maxGapMM} (${g.worst})`).join(', ')} mm; morph textures ${(gpu.morphBytes4096 / 1e6).toFixed(2)} MB (4096 rows)`);
   return res;
 }
 
@@ -592,11 +779,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const which = arg('--tier', 'all');
   const outDir = path.resolve(arg('--out', path.join(here, 'out', 'tiers')));
   const clay = args.includes('--clay');
-  if (!clay) logDefault('round B1 has no textures yet: writing clay materials (--clay)');
+  if (!clay) logDefault('round B2 has no textures yet: writing clay materials (--clay)');
   const cache = arg('--cache', null);
   const heroH = arg('--hero-h', null);
   const hero = await heroData({ cache: cache ? path.resolve(cache) : null, h: heroH ? Number(heroH) : null });
   const results = [];
   for (const t of which === 'all' ? Object.keys(TIERS) : which.split(',')) results.push(await buildTier(t, { outFile: path.join(outDir, `tobihaze.${t}.glb`), clay: true, hero }));
-  fs.writeFileSync(path.join(outDir, 'build-report.json'), JSON.stringify(results, null, 1));
+  // the reference states' poses per tier (the GLBs' extras tobihaze.states), for the render shots (shots-final.mjs)
+  const statesOut = Object.fromEntries(results.filter((r) => r.states).map((r) => [r.tier, r.states]));
+  for (const r of results) delete r.states;
+  const prev = fs.existsSync(path.join(outDir, 'states.json')) ? JSON.parse(fs.readFileSync(path.join(outDir, 'states.json'))) : {};
+  fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ ...prev, ...statesOut }, null, 1));
+  const prevReport = fs.existsSync(path.join(outDir, 'build-report.json')) && which !== 'all' ? JSON.parse(fs.readFileSync(path.join(outDir, 'build-report.json'))).filter((r) => !results.some((x) => x.tier === r.tier)) : [];
+  fs.writeFileSync(path.join(outDir, 'build-report.json'), JSON.stringify([...prevReport, ...results], null, 1));
 }

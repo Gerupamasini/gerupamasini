@@ -10,9 +10,15 @@
 //   j_*   the head–trunk junction behind the gill cover close up (side, above, below): rings or steps show here
 //   t_*   the peduncle's end (side, 3/4, above); v_low the anus and the urogenital papilla from below
 //   l_*   the pectoral lobe close up (side, front, 3/4, behind, below), framed on a box round the left arm
+//   p_*   the pelvic base under the chest (side, from below and in front) and the front views that show whether the trunk
+//         stays inside the head's outline (f_level: straight on; m_u5: the owner's u5, the fish's front raised ~12° so the
+//         camera sits that much below the bind fish's axis)
+//   e_*   the peduncle's end plate (from above and below, square on: the taper of its half-width, the plate's edge)
 // (round B1: the matched photos and the overlays are in the scratchpad's ref/cmp/b1_trunk_*.jpg; the photos' cameras
 // for A030 / A002 are near-lateral telephoto shots, u1 a low close shot from in front of the right side, B010 / A005 the
-// same fish from above its left side, B067 the left side from a little in front, B002 from about 30° above the snout)
+// same fish from above its left side, B067 the left side from a little in front, B002 from about 30° above the snout;
+// round B2's sheets ref/cmp/b2_trunk_*.jpg, with the lateral overlays computed from the field: scratchpad
+// ref/work/b2_trunk/scripts sil.mjs + ovl.py, matched at the snout tip and the caudal base, the head as the scale check)
 import { HL, toObject } from './anatomy.mjs';
 
 const box = (s0, s1, y0, y1, z0, z1) => {
@@ -29,6 +35,7 @@ const M = Object.fromEntries(Object.entries(MEASURE).map(([k, v]) => [k, box(...
 const lobeBox = box(0.80, 1.75, -0.40, 0.70, -0.05, 0.62), chest = box(0.70, 1.80, -0.40, 0.75, -0.62, 0.62);
 // the head–trunk junction behind the gill cover (for rings or steps in the highlights) and the tail's end
 const junction = box(0.85, 1.65, -0.15, 0.70, -0.40, 0.40), tail = box(3.40, 4.40, 0.0, 0.55, -0.15, 0.15), vent = box(2.20, 2.75, -0.15, 0.20, -0.15, 0.15);
+const plate = box(3.95, 4.30, 0.05, 0.42, -0.12, 0.12), pelvis = box(0.85, 1.55, -0.10, 0.35, -0.30, 0.30);
 const clay = (name, view) => ({ name, mode: 'clay', view: { fit: 'body', margin: 0.06, ...view } });
 const sil = (name, view) => ({ name, mode: 'silhouette', view: { margin: 0, ...view } });
 
@@ -77,4 +84,14 @@ export const SHOTS = [
   clay('l_q34', { azim: 50, elev: 25, fov: 20, fit: lobeBox, margin: 0.05 }),
   clay('l_back', { azim: 140, elev: 15, fov: 20, fit: lobeBox, margin: 0.05 }),
   clay('l_under', { azim: 60, elev: -35, fov: 20, fit: lobeBox, margin: 0.05 }),
+  // round B2: the pelvic base, the front views, the end plate
+  clay('p_side', { azim: 90, elev: -6, fov: 20, fit: pelvis, margin: 0.05 }),
+  clay('p_under', { azim: 30, elev: -55, fov: 20, fit: pelvis, margin: 0.05 }),
+  clay('f_level', { azim: 0, elev: 0, fov: 20, fit: chest, margin: 0.08 }),
+  clay('m_u5', { azim: 0, elev: -12, fov: 26, fit: chest, margin: 0.08 }),
+  sil('ms_frontLevel', { azim: 0, elev: 0, ortho: true, fit: M.front }),
+  { name: 'e_top', mode: 'clay', view: { azim: 0, elev: 90, topUp: 1, ortho: true, fit: plate, margin: 0.06 } },
+  { name: 'e_under', mode: 'clay', view: { azim: 0, elev: -90, topUp: 1, ortho: true, fit: plate, margin: 0.06 } },
+  { name: 'e_side', mode: 'clay', view: { azim: 90, elev: 0, ortho: true, fit: plate, margin: 0.06 } },
+  { name: 'e_q34', mode: 'clay', view: { azim: 140, elev: 20, fov: 22, fit: plate, margin: 0.06 } },
 ];

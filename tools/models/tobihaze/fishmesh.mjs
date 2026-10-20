@@ -5,8 +5,12 @@
 //
 // Tiers (TIERS): hero  the full sculpt at h 0.09 mm (the cell the head rig was validated at), head 45 000 + trunk
 //                      31 000 triangles, the slit's lips, the gill flap/wall split and the cup–globe junction locked
-//                lod1  the sealed sculpt (seal.mjs: no slit, no gill pocket) at h 0.16 mm, head 4 600 + trunk 3 900
-//                lod2  the far sculpt at h 0.40 mm, simplified first to 1 000 triangles, then charted
+//                lod1  the sealed sculpt (seal.mjs: no slit, no gill pocket, no nostril holes; the hero's eye cup and
+//                      lining under the window) at h 0.16 mm, head 5 000 + trunk 3 900, the lining's rings and the
+//                      junction locked, the blinks weighed 2 as simplifier attributes (tierMorphAttrs)
+//                lod2  the far sculpt at h 0.40 mm, simplified first to 1 000 triangles with the axial chain's hat
+//                      functions as attributes (a ring of vertices at every joint and knot: no edge spans more than
+//                      0.56 of a joint interval), the caps inside the globes refilled as one fan each, then charted
 // The head region is every triangle in front of s 1.32 HL but the pectoral lobes'; the trunk the rest. Their border is
 // locked, so they meet without a crack.
 //
@@ -21,30 +25,49 @@
 //                  their backs and medial lobes, the cup's outside, the collar down into the infraorbital crease:
 //                  all of which fold in the head's chart), azimuthal from the globe's centre about the up-and-out axis
 //   socketL, socketR  the cup's lining, facing the globe (it would overlap the cup's outside)
-//   lobeL, lobeR   each pectoral arm (the fish field's lobe part, past 6 % of its length), a tube about the smoothed
-//                  shoulder → elbow → wrist curve with a parallel-transported reference (seam on the medial side)
-//   tailCap        the peduncle's rounded end, azimuthal about +s
-//   mouthRoof, mouthFloor   (hero) the gape slit's walls, flat on the closed mouth's plane
+//   lobeL, lobeR   each pectoral arm (the fish field's lobe part, from the shoulder on, within 1.25× of the arm's
+//                  half-width of its axis), a tube about the smoothed shoulder → elbow → wrist curve (read from
+//                  BODY_SCULPT at build time: the bent arm) with a parallel-transported reference (seam medial),
+//                  running from just inside the shoulder to just past the wrist's end cap
+//   tailCap        the peduncle's end (its end plate), azimuthal about +s
+//   mouthRoof, mouthFloor   the gape slit's walls (hero) and the lips' margins facing down / up onto the slit's plane
+//                  (the upper lip's underside, the lower lip's top within LIP.band of the mouth's line), flat on the
+//                  closed mouth's plane
 //   gillRoofL/R, gillFloorL/R  (hero) each gill pocket's two walls, flat on the flank
 //   patch          what no projection maps without a fold or an overlap (a pad's underside behind the lip, a pocket's
-//                  rounded end, the pelvic base's front), laid flat region by region and packed (charts.repairFolds)
+//                  rounded end, the pelvic base's front), as few islands as it can (charts.repairFolds: bad triangles
+//                  first tried in a neighbour's chart, small groups — and small pieces of the patch — mended inside
+//                  the chart round them, the rest closed over 6 rings at hero (3 at lod1), each island grown to 48+
+//                  triangles at hero (4+ at lod1, 2+ at lod2: their whole skin is 8.9k and 1k triangles) where the
+//                  hidden walls let it, laid by a conformal map (cut open into a disc where it is none) or unfolded, 4 texels
+//                  apart at the body's density, in the patch rect and any rect the tier leaves empty: SPARE_CHARTS)
 //   iris, eyeSkin  the eye meshes' window and skin (eyeAtlasUV): the eye is a separate mesh on the same texture
 //   teeth          a swatch for the teeth's constant UV
 //   hidden         one texel for the cap that closes the skin inside each globe (never seen)
 // The charts are assigned per vertex, then a depth test in UV space from each projection's viewpoint moves what a
-// chart sees behind another of its own surfaces to its fallback chart (charts.chartResolve), and repairFolds lays flat
-// whatever still folds, before and after the simplification.
+// chart sees behind another of its own surfaces to its fallback chart (charts.chartResolve: the face's, the body's and
+// the tail's charts, projected from inside, keep their outermost skin and give up what lies under it), and repairFolds
+// lays flat whatever still folds, before and after the simplification. Tangents are per vertex (tiers.vertexTangents).
 import { HL, HEAD, EYE_MM } from './anatomy.mjs';
 import { HEAD_SCULPT, cupField } from './head.mjs';
 import { BODY_SCULPT, fishSDFmm, trunkProfile } from './body.mjs';
 import { azimuthal, halfCylinder, limbPath, planar, pointChart, vec } from './charts.mjs';
-import { tierMesh, ready, meshTopology } from './tiers.mjs';
+import { tierMesh, ready as tiersReady, meshTopology } from './tiers.mjs';
 import { surfaceNets } from './mesher.mjs';
 import { fixWinding, gapeSide, marginCurve } from './headrig.mjs';
 import { smoothstep } from './sdf.mjs';
 import { sealedFishSDFmm } from './seal.mjs';
 
-export { ready, meshTopology };
+export { meshTopology };
+
+/** The axial chain's stations (HL) from rig.mjs, loaded lazily (rig.mjs imports this module): the joints' pivots and
+ * the knots between them, where lod2 keeps a ring of vertices (axialRings). Callers await `ready` before meshing. */
+let AXIAL = null;
+const axialReady = import('./rig.mjs').then((R) => {
+  const chain = ['J_root', 'J_sp1', 'J_sp2', 'J_sp3', 'J_sp4', 'J_sp5', 'J_sp6', 'J_sp7', 'J_caudal'];
+  AXIAL = { pivots: chain.map((n) => R.JOINTS.find((j) => j.name === n).at[0] / HL), knots: R.AXIAL_KNOTS.map(([, k]) => k) };
+}).catch(() => { AXIAL = null; });
+export const ready = Promise.all([tiersReady, axialReady]);
 
 /** The meshing box (fish mm): snout to the peduncle's end, the pectoral lobes and the eye domes inside. */
 export const BODY_BOX = { min: [-0.08 * HL, -0.16 * HL, -0.62 * HL], max: [4.32 * HL, 0.85 * HL, 0.62 * HL] };
@@ -83,28 +106,36 @@ export const CHART_CROP = {
   socketR: [0.14, 0.0, 0.87, 0.58],
   domeL: [0.11, 0.20, 0.95, 0.97],
   domeR: [0.11, 0.03, 0.95, 0.80],
-  lobeL: [0.12, 0, 0.94, 1],
-  lobeR: [0.12, 0, 0.94, 1],
   tailCap: [0.10, 0.18, 0.90, 0.82],
-  mouthRoof: [0.17, 0.17, 0.74, 0.83],
-  mouthFloor: [0.17, 0.17, 0.74, 0.83],
+  // (the slit's walls and, since B2, the lips' margins: the upper lip's reaches further out and forward)
+  mouthRoof: [0.10, 0.03, 0.90, 0.97],
+  mouthFloor: [0.19, 0.21, 0.73, 0.79],
   gillRoofL: [0.24, 0.55, 0.76, 0.82],
   gillFloorL: [0.24, 0.55, 0.76, 0.82],
   gillRoofR: [0.24, 0.55, 0.76, 0.82],
   gillFloorR: [0.24, 0.55, 0.76, 0.82],
 };
 
+/** The rects the patch may also fill at a tier that leaves them empty (lod2 has no slit, pockets or lining, lod1 no
+ * slit or pockets): the atlas is baked per tier from the position under each texel, so any free rect serves. */
+export const SPARE_CHARTS = ['mouthRoof', 'mouthFloor', 'gillRoofL', 'gillFloorL', 'gillRoofR', 'gillFloorR', 'socketL', 'socketR'];
+
+/** The lips' margins (hero): the band about the closed mouth's line (HL) whose down / up-facing skin (|n_y| > ny)
+ * goes with the slit's walls (bodyCharts), in front of s. */
+export const LIP = { s: 0.36, band: 0.05, ny: 0.55 };
+
 /** The tiers' meshing and simplification. */
 export const TIERS = {
-  hero: { h: 0.09, field: 'full', regions: { head: 45000, trunk: 31000 }, locks: ['lips', 'gill', 'cup'], tex: 2048 },
-  lod1: { h: 0.16, field: 'sealed', regions: { head: 4600, trunk: 3900 }, locks: ['cupRing'], tex: 1024 },
-  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, tex: 256 },
+  hero: { h: 0.09, field: 'full', regions: { head: 45000, trunk: 31000 }, locks: ['lips', 'gill', 'cup'], tex: 2048, minIsland: 48 },
+  lod1: { h: 0.16, field: 'sealed', regions: { head: 5000, trunk: 3900 }, locks: ['cupRing', 'lining'], morphWeights: { blinkL: 2, blinkR: 2, inflate: 0.25 }, tex: 1024, repairClose: 3 },
+  lod2: { h: 0.40, field: 'far', target: 1000, simplifyFirst: true, axialAttrs: 1, tex: 256, pad: 1, repairClose: 1, minIsland: 2 },
 };
 
 /** The tier's field (fish mm, .hl in HL with .head / .parts / .cup). */
 export function tierField(name, K = BODY_SCULPT) {
-  const f = TIERS[name]?.field ?? name;
-  return f === 'full' ? fishSDFmm(HL, K) : sealedFishSDFmm(HL, { K, far: f === 'far' });
+  const T = typeof name === 'object' ? name : TIERS[name], f = T?.field ?? name;
+  // (T.seal: seal.mjs options for the sealed and far fields, e.g. { lining: null } for B1's lod1 cup)
+  return f === 'full' ? fishSDFmm(HL, K) : sealedFishSDFmm(HL, { K, far: f === 'far', ...(T?.seal ?? {}) });
 }
 
 const S_HEAD = 1.32, S_CHART = 0.45;
@@ -165,14 +196,16 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const lobePts = (s) => [mm(side3(P.shoulder, s)), mm(side3(P.elbow, s)), mm(side3(P.wrist, s))];
   const segL = (a, b) => Math.hypot(...vec.sub(b, a));
   const lobeLen = segL(P.shoulder, P.elbow) + segL(P.elbow, P.wrist);
-  const lobeT1 = 1 + (P.radius[2] + 0.05) / lobeLen, lobeT0 = 0.05;
+  // (the tube runs from just inside the shoulder (lobeT0) to just past the wrist's end cap, whose reach along the arm is
+  // capWrist × the end's thickness: B2's spatulate wrist ends 0.008 HL past the wrist point, B1's round one 0.03)
+  const lobeT1 = 1 + (P.radius[2] * (P.capWrist ?? 1) * (P.fl?.[2] ?? 1) + 0.04) / lobeLen, lobeT0 = 0.08, lobeTmin = -0.05;
   const margin = o.margin ?? 0.12;
   const cup = cupField(HEAD_SCULPT);
   const charts = [];
   const add = (name, c) => { charts.push({ name, rect: L[name], ...(CHART_CROP[name] && !o.noCrop ? { crop: CHART_CROP[name] } : {}), ...c }); return charts.length - 1; };
-  const cHead = add('head', { project: azimuthal([sC, yC, 0], [-1, 0, 0], [0, 1, 0], Math.PI * 0.56) });
-  const cBodyL = add('bodyL', { project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, 1, { margin, arc }) });
-  const cBodyR = add('bodyR', { project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, -1, { margin, arc }) });
+  const cHead = add('head', { keep: 'outer', project: azimuthal([sC, yC, 0], [-1, 0, 0], [0, 1, 0], Math.PI * 0.56) });
+  const cBodyL = add('bodyL', { keep: 'outer', project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, 1, { margin, arc }) });
+  const cBodyR = add('bodyR', { keep: 'outer', project: halfCylinder(0.43 * HL, 4.25 * HL, axisY, -1, { margin, arc }) });
   const ec = (s) => [E.s * HL, E.y * HL, E.z * HL * s];
   const cSockL = add('socketL', { project: azimuthal(ec(1), [-g[0], -g[1], -g[2]], [1, 0, 0], Math.PI * 0.75) });
   const cSockR = add('socketR', { project: azimuthal(ec(-1), [-g[0], -g[1], g[2]], [1, 0, 0], Math.PI * 0.75) });
@@ -182,7 +215,7 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
   const ls = o.lobeShare ?? 0.86;
   const cLobeL = add('lobeL', { wrapV: true, wrapShare: ls, project: limbPath(lobePts(1), [0, 0, 1], -lobeT0, lobeT1) });
   const cLobeR = add('lobeR', { wrapV: true, wrapShare: ls, project: limbPath(lobePts(-1), [0, 0, -1], -lobeT0, lobeT1) });
-  const cTail = add('tailCap', { project: azimuthal([4.10 * HL, axisY(4.10 * HL), 0], [1, 0, 0], [0, 1, 0], Math.PI * 0.55) });
+  const cTail = add('tailCap', { keep: 'outer', project: azimuthal([4.10 * HL, axisY(4.10 * HL), 0], [1, 0, 0], [0, 1, 0], Math.PI * 0.55) });
   // the slit's walls flat on the plane of the closed mouth (s, z): the roof (facing down) and the floor (facing up)
   const gY = HEAD_SCULPT.gape.yFront * HL;
   const mouthF = { o: [0.20 * HL, gY, 0], e0: [1, 0, 0], e1: [0, 0, 1], out: [0, 1, 0] };
@@ -205,17 +238,23 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
     if (c === cDomeL || c === cDomeR) return base(cm);
     if (c === cSockL) return cDomeL;
     if (c === cSockR) return cDomeR;
-    if (c === cLobeL) return cBodyL;
-    if (c === cLobeR) return cBodyR;
+    // (the arm's own skin hidden behind more of it in its tube — the wrist's end, seen edge-on — to the patch: on the
+    // body's chart, which keeps its outermost skin, it would stand over the flank and send the flank to the patch)
     if (c === cHidden) return cHidden;
     return cPatch;
   };
 
   const rIn = re + HEAD_SCULPT.cup.gap + HEAD_SCULPT.cup.thick * 0.6;
   const lobeR = Math.max(...P.radius) * 1.6;
+  // (the arm's half-width along it, shoulder → elbow → wrist: the tube holds the arm's own skin, within 1.25× of it, and
+  // not the flank round the shoulder, which the tube would see nearer than the arm's medial root and hide it)
+  const tElbow = segL(P.shoulder, P.elbow) / lobeLen;
+  const armHalf = (t) => (t <= tElbow ? P.radius[0] + (P.radius[1] - P.radius[0]) * Math.max(0, t) / tElbow : P.radius[1] + (P.radius[2] - P.radius[1]) * Math.min(1, (t - tElbow) / (1 - tElbow)));
   // the lobe's own surface: where the fish field's lobe part is nearer than the rest of the body (fishSDF parts: the
   // rig's share of the lobe, > 0.5), so the flank under the hanging lobe stays on the body
   const fishHL = o.field ?? fishSDFmm(HL, K).hl;
+  const isLowerLip = gapeSide(HEAD_SCULPT), GP = HEAD_SCULPT.gape;
+  const lipY = (x) => GP.yFront + (GP.yBack - GP.yFront) * smoothstep(0.03, GP.rictus, x);
   const lobeShareAt = (q) => {
     const pp = fishHL.parts(q[0], q[1], q[2]);
     return smoothstep(-P.blend, P.blend, pp.noLobe - pp.lobe);
@@ -248,10 +287,21 @@ export function bodyCharts(K = BODY_SCULPT, o = {}) {
     // (the slit's walls and the pockets' as they face each other; their rounded ends, edge-on in those projections,
     // stay with the outer skin's charts, or the patch where those cannot see them)
     if (o.interior?.mouth?.[v] && Math.abs(n[1]) > 0.45) return n[1] < 0 ? cMouthRoof : cMouthFloor;
+    // (hero: the lips' margins, the upper lip's underside and the lower lip's top within `lipBand` of the closed mouth's
+    // line, face down / up onto the slit's plane as its walls do: they go with the walls, whose planar projection sees
+    // them from below / above; from inside the head the face's chart sees each behind the other lip, and B1 laid them
+    // in the patch as a red line along both lips)
+    if (o.interior?.mouth && q[0] < LIP.s && Math.abs(n[1]) > LIP.ny && Math.abs(q[1] - lipY(q[0])) < LIP.band) {
+      const lower = isLowerLip(q[0], q[1], fishHL.head.parts(q[0], q[1], q[2]));
+      if (!lower && n[1] < 0) return cMouthRoof;
+      if (lower && n[1] > 0) return cMouthFloor;
+    }
     if (o.interior?.gill?.[v] && Math.abs(n[2]) > 0.45) return n[2] * s < 0 ? (s > 0 ? cGillRoofL : cGillRoofR) : (s > 0 ? cGillFloorL : cGillFloorR);
     if (q[0] > 0.95 && q[0] < 1.8 && q[1] < 0.5) {
       const a = along(q, s);
-      if (a.t >= 0.06 && a.r < lobeR && lobeShareAt(q) > 0.5) return s > 0 ? cLobeL : cLobeR;
+      // (from the shoulder on: the root's band, where the arm turns into the flank, is the arm's; B1 left t < 0.06 on the
+      // body, where the flank in front of it hid it, and its crop cut t < 0.10: a ring of patch round every root)
+      if (a.t >= lobeTmin && a.r < Math.min(lobeR, 1.25 * armHalf(a.t) + 0.01) && lobeShareAt(q) > 0.5) return s > 0 ? cLobeL : cLobeR;
     }
     if (q[0] > 4.15) return cTail;
     if (p[0] < sC) return cHead;
@@ -455,11 +505,16 @@ export function capHoles(mesh) {
  * @param o { h, field?: distance (mm; default the full sculpt), box?, cap?, log? }
  * @returns { position, normal, indices, source, field, stats: { turned, dropped, pruned, capped, capVertices } }
  */
-export function fishDense({ h, field, box = BODY_BOX, cap = true, partSheets = false, log = () => {} }) {
+export function fishDense({ h, field, box = BODY_BOX, cap = true, partSheets, log = () => {} }) {
   const f = field ?? fishSDFmm(HL);
+  // (the sheets two surfaces make where they touch within a cell parted by the field when the field asks for it: the
+  // lod1 field with the hero's lining, seal.mjs)
+  partSheets ??= !!f.partSheets;
   const raw = surfaceNets(f, box, h, { log });
   const turned = fixWinding(raw.indices);
-  const a = pruneInsideGlobes(raw);
+  // (the field may ask for a deeper margin: what lies within it under the globe's surface stays, e.g. the band the
+  // hero's blink lays over the dome's front)
+  const a = pruneInsideGlobes(raw, { margin: f.pruneMargin ?? 0.004 });
   const b = keepLargestComponent(a);
   let source = new Uint32Array(b.source.length);
   for (let i = 0; i < source.length; i++) source[i] = a.source[b.source[i]];
@@ -497,7 +552,7 @@ export function fishDense({ h, field, box = BODY_BOX, cap = true, partSheets = f
  *   cup    the cup–globe junction: re − 0.004 … re + 0.010 HL from a globe's centre, above the rim
  * @returns { mouth, gill, lock: Uint8Array per vertex, counts }
  */
-export function denseClasses(dense, { interior = false, locks = [], ringSpacing = 0.45, K = BODY_SCULPT, log = () => {} } = {}) {
+export function denseClasses(dense, { interior = false, locks = [], ringSpacing = 0.45, liningSpacing = 0.3, K = BODY_SCULPT, log = () => {} } = {}) {
   const P = dense.position, I = dense.indices, nv = P.length / 3;
   const mouth = new Uint8Array(nv), gill = new Uint8Array(nv), lock = new Uint8Array(nv);
   const counts = { mouth: 0, gill: 0, lips: 0, gillSplit: 0, cup: 0 };
@@ -562,6 +617,20 @@ export function denseClasses(dense, { interior = false, locks = [], ringSpacing 
       lock[v] = 1;
     }
   }
+  if (locks.includes('lining')) {
+    // (lod1 with the hero's lining, seal.mjs: the lid's rim, the lining inside it and the junction above, every vertex
+    // within [re − 0.004, re + 0.03] of a globe's centre and no higher than 0.03 over the rim, thinned to one vertex per
+    // `liningSpacing` mm cell, so the hood the blink swings over the lowered globe keeps its rings)
+    const cup = cupField(HEAD_SCULPT), E = HEAD.eye, re = E.d / 2, sp = liningSpacing;
+    const taken = new Set();
+    for (let v = 0; v < nv; v++) {
+      const x = P[v * 3] / HL - E.s, y = P[v * 3 + 1] / HL - E.y, z = Math.abs(P[v * 3 + 2] / HL) - E.z, r = Math.hypot(x, y, z);
+      if (r < re - 0.004 || r > re + 0.03 || y > cup.rimH(x, z) + 0.03) continue;
+      const k = `${Math.floor(P[v * 3] / sp)},${Math.floor(P[v * 3 + 1] / sp)},${Math.floor(P[v * 3 + 2] / sp)}`;
+      if (taken.has(k) || lock[v]) continue;
+      taken.add(k); lock[v] = 1; counts.lining = (counts.lining ?? 0) + 1;
+    }
+  }
   if (locks.includes('cupRing')) {
     // (the coarse tiers: only the junction line itself, where an edge crosses the globe's sphere above the rim, one
     // vertex per `ringSpacing` mm along it, so the low-poly globe still meets the skin all round)
@@ -578,8 +647,38 @@ export function denseClasses(dense, { interior = false, locks = [], ringSpacing 
       taken.add(k); lock[o] = 1; counts.cup++;
     });
   }
-  log(`classes: mouth ${counts.mouth}, gill ${counts.gill}; locked lips ${counts.lips}, gill split ${counts.gillSplit}, cup junction ${counts.cup}`);
+  log(`classes: mouth ${counts.mouth}, gill ${counts.gill}; locked lips ${counts.lips}, gill split ${counts.gillSplit}, cup junction ${counts.cup}${counts.lining ? `, lining ${counts.lining}` : ''}`);
   return { mouth, gill, lock, counts };
+}
+
+/**
+ * A ring of dense vertices kept at each station of the axial chain (rig.mjs: every joint's pivot and the knot half way
+ * to the next, from the rig's first trunk joint to the caudal base), so the far tier's long triangles cannot span a
+ * bending joint: per station, the vertex nearest the station's plane in each of `n` sectors round the body's axis
+ * (within `reach` mm of the plane; the arms excluded). Returns a Uint8Array lock per dense vertex.
+ */
+export function axialRings(dense, { n = 10, reach = null, stations = null, K = BODY_SCULPT, log = () => {} } = {}) {
+  const P = dense.position, nv = P.length / 3, lock = new Uint8Array(nv);
+  const st = stations ?? (AXIAL ? [...AXIAL.pivots, ...AXIAL.knots.filter((k) => k > AXIAL.pivots[0] && k < AXIAL.pivots[AXIAL.pivots.length - 1])].sort((a, b) => a - b) : null);
+  if (!st) { log('axialRings: no stations (rig.mjs not loaded: await fishmesh.ready)'); return lock; }
+  const prof = trunkProfile(K), Pc = K.pectoral, h = reach ?? 0.03 * HL;
+  const best = new Map();
+  for (let v = 0; v < nv; v++) {
+    const s = P[v * 3] / HL;
+    let k = -1, d = Infinity;
+    for (let i = 0; i < st.length; i++) { const e = Math.abs(s - st[i]); if (e < d) { d = e; k = i; } }
+    if (d * HL > h) continue;
+    // (not on the arms: their skin is not the trunk's section)
+    const z = Math.abs(P[v * 3 + 2] / HL), y = P[v * 3 + 1] / HL;
+    if (s > 0.95 && s < 1.8 && z > prof.at(Math.max(1.05, Math.min(s, 4.3))).w + 0.04) continue;
+    const yc = prof.at(Math.max(1.05, Math.min(st[k], 4.3))).yc, ph = Math.atan2(P[v * 3 + 2] / HL, -(y - yc));
+    const sec = Math.min(n - 1, Math.floor(((ph + Math.PI) / (2 * Math.PI)) * n)), key = k * 64 + sec;
+    const b = best.get(key);
+    if (!b || d < b[1]) best.set(key, [v, d]);
+  }
+  for (const [v] of best.values()) lock[v] = 1;
+  log(`axial rings: ${st.length} stations × ${n} sectors → ${best.size} vertices kept`);
+  return lock;
 }
 
 /**
@@ -597,11 +696,31 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
   const T = typeof tierName === 'string' ? TIERS[tierName] : tierName;
   if (!T) throw new Error(`bodyTierMesh: unknown tier ${tierName}`);
   const K = o.K ?? K0, log = o.log ?? (() => {});
-  const field = typeof T.field === 'function' ? T.field : tierField(T.field, K);
+  const field = typeof T.field === 'function' ? T.field : tierField(T, K);
   const dense = o.dense ?? fishDense({ h: T.h, field, log });
   const nD = dense.position.length / 3;
   if (o.extraAttrs && o.extraAttrs.data.length !== nD * o.extraAttrs.weights.length) throw new Error('bodyTierMesh: extraAttrs do not match the dense mesh');
   const classes = denseClasses(dense, { interior: T.field === 'full', locks: T.locks ?? [], K, log });
+  if (T.axialRings) {
+    const r = axialRings(dense, { ...T.axialRings, K, log });
+    for (let v = 0; v < nD; v++) if (r[v]) classes.lock[v] = 1;
+  }
+  // (the axial chain's hat functions, one per station, as simplifier attributes: a triangle across a station cannot
+  // carry its kink, so the far tier keeps vertices along every station instead of long triangles across them)
+  let extraAttrs = o.extraAttrs;
+  if (T.axialAttrs && AXIAL) {
+    const st = [...AXIAL.pivots, ...AXIAL.knots.filter((k) => k > AXIAL.pivots[0] && k < AXIAL.pivots[AXIAL.pivots.length - 1])].sort((a, b) => a - b);
+    const k0 = extraAttrs ? extraAttrs.weights.length : 0, k = k0 + st.length, data = new Float32Array(nD * k), Pd = dense.position;
+    for (let v = 0; v < nD; v++) {
+      if (k0) for (let j = 0; j < k0; j++) data[v * k + j] = extraAttrs.data[v * k0 + j];
+      const sv = Pd[v * 3] / HL;
+      for (let i = 0; i < st.length; i++) {
+        const a = i > 0 ? st[i - 1] : st[i] - 0.3, b = i + 1 < st.length ? st[i + 1] : st[i] + 0.3;
+        data[v * k + k0 + i] = sv <= st[i] ? Math.max(0, (sv - a) / (st[i] - a)) : Math.max(0, (b - sv) / (b - st[i]));
+      }
+    }
+    extraAttrs = { data, weights: [...(extraAttrs?.weights ?? []), ...new Array(st.length).fill(T.axialAttrs)] };
+  }
   const lockDense = new Uint8Array(nD);
   lockDense.set(classes.lock);
   if (o.lock) for (let v = 0; v < nD; v++) if (o.lock[v]) lockDense[v] = 1;
@@ -616,6 +735,15 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
     // (and their neighbours: a collapse next to such an edge can make another)
     if (nm) for (let t = 0; t < I.length; t += 3) if (ends.has(I[t]) || ends.has(I[t + 1]) || ends.has(I[t + 2])) { lockDense[I[t]] = 1; lockDense[I[t + 1]] = 1; lockDense[I[t + 2]] = 1; }
     if (nm) log(`locked the ends of ${nm} non-manifold edges and their neighbours`);
+    // (and the vertices fishDense split — a pinch, or two touching sheets parted (partSheets): copies at one place
+    // with one raw source — with their neighbours, so the simplification keeps the parting as it is)
+    if (dense.source && (dense.stats?.split || dense.stats?.nmSplit)) {
+      const seen = new Map(), dup = new Uint8Array(nD), capC = new Set(dense.stats.capVertices ?? []);
+      for (let v = 0; v < nD; v++) { if (capC.has(v)) continue; const s = dense.source[v], u = seen.get(s); if (u === undefined) seen.set(s, v); else { dup[u] = 1; dup[v] = 1; } }
+      let nd = 0;
+      for (let t = 0; t < I.length; t += 3) if (dup[I[t]] || dup[I[t + 1]] || dup[I[t + 2]]) { lockDense[I[t]] = 1; lockDense[I[t + 1]] = 1; lockDense[I[t + 2]] = 1; nd++; }
+      if (nd) log(`locked the split vertices and their ${nd} triangles`);
+    }
   }
   const B = bodyCharts(K, { layout: o.layout, interior: classes, margin: T.simplifyFirst ? 0.35 : 0.12 });
   const { charts, prefer, index, forceTri, fallback } = B;
@@ -626,12 +754,14 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
   const tex = T.tex ?? 2048;
   const res = tierMesh(field, BODY_BOX, {
     h: T.h, dense, charts, prefer: T.simplifyFirst ? (p, n) => prefer(p, n, -1) : prefer, forceTri, regions,
-    extraAttrs: o.extraAttrs, lockDense, simplifyFirst: !!T.simplifyFirst,
+    // (the far tier: what the simplification leaves inside the globes refilled as one fan per junction ring)
+    refill: T.simplifyFirst ? (c) => forceTri(c) >= 0 : undefined,
+    extraAttrs, lockDense, simplifyFirst: !!T.simplifyFirst, uvWeight: T.uvWeight, normalWeight: T.normalWeight,
     // (the depth test at the tier's texture size; a surface counts as behind another past a quarter of the cell)
     resolve: { size: tex, eps: 0.25 * T.h, share: 0.25, fallback },
-    denseRepair: T.denseRepair ?? { ring: 0 },
+    denseRepair: T.denseRepair ?? { close: 3, ring: 0, minIsland: 0 },
     // (the patch's islands at the charts' density, 0.0019 HL per texel at 2048; 2 texels apart at the tier's size)
-    repair: T.noRepair ? false : { density: 1 / (0.0019 * HL * 2048), pad: 2 / tex, ring: T.repairRing ?? 0, overlap: { size: tex, eps: 0.001 } }, log,
+    repair: T.noRepair ? false : { density: 1 / (0.0019 * HL * 2048), pad: (T.pad ?? 4) / tex, close: T.repairClose ?? 6, ring: T.repairRing ?? 0, minIsland: T.minIsland ?? 4, spare: SPARE_CHARTS, overlap: { size: tex, eps: T.overlapEps ?? 0.01, share: T.overlapShare ?? 0.1 } }, log,
   });
   return { ...res, charts, layout: o.layout ?? BODY_LAYOUT, tier: T, classes, chartIndex: index };
 }
@@ -645,7 +775,16 @@ export function bodyTierMesh(tierName, o = {}, K0 = BODY_SCULPT) {
 export function morphAttrs(deltas, { weight = 0.25, unit = 0.01 * HL } = {}) {
   const k = deltas.length * 3, n = deltas[0].length / 3, data = new Float32Array(n * k);
   deltas.forEach((d, j) => { for (let v = 0; v < n; v++) for (let q = 0; q < 3; q++) data[v * k + j * 3 + q] = d[v * 3 + q] / unit; });
-  return { data, weights: new Array(k).fill(weight) };
+  // (weight: one for all, or one per displacement)
+  return { data, weights: deltas.flatMap((_, j) => new Array(3).fill(Array.isArray(weight) ? weight[j] : weight)) };
+}
+
+/** morphAttrs with the tier's weights per shape (TIERS[tier].morphWeights; 0.25 for a shape it does not list):
+ * names[i] is the shape of deltas[i]. lod1 weighs its blinks 2 (the lid's hood keeps its rings: B1's 0.25 let it crumple
+ * when the carried blink closed it). */
+export function tierMorphAttrs(tierName, names, deltas, o = {}) {
+  const W = TIERS[tierName]?.morphWeights ?? {};
+  return morphAttrs(deltas, { ...o, weight: names.map((k) => W[k] ?? 0.25) });
 }
 
 /** A layout rect [x0, y0, x1, y1] as [u, v, w, h] (the goby consumers' irisRect form). */

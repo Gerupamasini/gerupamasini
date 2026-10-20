@@ -109,15 +109,18 @@ const D2R = Math.PI / 180;
 /** The fish frame's direction (s, y, z) in the object frame (anatomy.dirToObject). */
 const fishDir = (v) => new THREE.Vector3(v[2], v[1], -v[0]);
 /** A joint's rotation from a pose entry: [x, y, z, w] (a quaternion), { axis: [x, y, z], deg } (object frame), or
- * { channel: deg, … } by the rig's channels (tobihaze.axes.joints[name].channels[channel].axis, object frame; several
- * compose in their order, as rig.mjs's pose tests do: R = R₁ R₂ …). */
+ * { channel: deg, … } by the rig's channels (tobihaze.axes.joints[name].channels[channel].axis, object frame). Several
+ * channels compose in the joint's own order (tobihaze.axes.joints[name].order: R = R(order[0]) · R(order[1]) · …, as
+ * rig.mjs jointRotation does), whatever order the pose object lists them in (round B1 composed them in the pose's key
+ * order, so { abduction, swing } and { swing, abduction } gave different arms). */
 function jointRotation(name, e) {
   const q = new THREE.Quaternion();
   if (Array.isArray(e)) return e.length === 4 ? q.fromArray(e).normalize() : q;
   if (e.axis) return q.setFromAxisAngle(new THREE.Vector3(...e.axis).normalize(), (e.deg ?? 0) * D2R);
-  const ch = rig?.axes?.joints?.[name]?.channels ?? {};
-  for (const [c, deg] of Object.entries(e)) {
-    if (c === 't' || c === 'tM' || !ch[c]) continue;
+  const J = rig?.axes?.joints?.[name], ch = J?.channels ?? {};
+  for (const c of J?.order ?? Object.keys(e)) {
+    const deg = e[c];
+    if (typeof deg !== 'number' || !ch[c]) continue;
     q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...ch[c].axis).normalize(), deg * D2R));
   }
   return q;
@@ -168,10 +171,30 @@ function applyPose(pose = {}) {
   model.traverse((o) => {
     if (!o.morphTargetDictionary) return;
     const own = mo[o.name] ?? mo[o.parent?.name] ?? {};
+    const set = new Set();
     for (const [k, w] of Object.entries({ ...mo, ...own })) {
       if (typeof w !== 'number') continue;
       const i = o.morphTargetDictionary[k];
-      if (i !== undefined) o.morphTargetInfluences[i] = w;
+      if (i !== undefined) { o.morphTargetInfluences[i] = w; set.add(k); }
+    }
+    // (the far tier's merged fin cards: `<state>_<fin>` takes the weight pose.morph gives that fin's state, as the
+    // near tiers' Fin_* meshes take it)
+    for (const [k, i] of Object.entries(o.morphTargetDictionary)) {
+      const m = /^([A-Za-z]+)_(Fin_\w+)$/.exec(k);
+      if (!m) continue;
+      const w = mo[m[2]]?.[m[1]] ?? mo[m[1]];
+      if (typeof w === 'number') { o.morphTargetInfluences[i] = w; set.add(k); }
+    }
+    // (correctives driven by a joint (the mesh's extras `drive`: weight = clamp(value / per, 0, 1)), where the pose does
+    // not give their weight: the eyes-up web by the eye's lift, the blink by its drop, the gape by the jaw's angle)
+    const drive = (o.userData?.drive ?? o.parent?.userData?.drive) || {};
+    for (const [k, d] of Object.entries(drive)) {
+      const i = o.morphTargetDictionary[k];
+      if (i === undefined || set.has(k) || !d || typeof d.joint !== 'string' || !(d.per > 0)) continue;
+      const e = pose[d.joint];
+      if (!e || Array.isArray(e)) continue;
+      const v = d.channel === 'lift' ? e.t?.[1] ?? 0 : d.channel === 'drop' ? -(e.t?.[1] ?? 0) : e[d.channel] ?? 0;
+      o.morphTargetInfluences[i] = Math.min(1, Math.max(0, v / d.per));
     }
   });
   model.updateMatrixWorld(true);

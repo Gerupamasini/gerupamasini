@@ -5,15 +5,22 @@
 // peduncle's compressed end the caudal fin grows out of. The fins' membranes, the eyes and the rig are separate
 // (fins.mjs, eye.mjs, rig.mjs).
 //
-// Proportions (TL 4.96 HL, SL 4.17 HL; research: measurements §1, body_fins_colour §1–2, §6, behaviour §1.1, §5;
-// round B1 traced the lateral photos A030, A002, A070 station by station in the snout–caudal-base frame): the deepest
-// point at 0.30–0.40 TL, 0.150 TL (A030 0.145–0.150, A070 and A002 0.16–0.17 with full bellies: a relaxed fish between
-// them), the belly fullest between the pectorals and the vent and hanging 0.09 HL under the head's flat floor (A030
-// 0.085, A070 0.11 HL); the back level from the nape to the D1 origin (A030, A002: no higher there than at the nape),
-// then dropping to the peduncle as both lying fish show (0.068 TL from 0.30 to 0.80 TL above the snout–caudal-base
-// line), so the tail's axis sinks 0.05 HL toward the caudal base; the tail compressed (W/D ≈ 0.6) and tapering to a
-// peduncle 0.06 TL deep (CPD 0.074 SL); widths as A036 seen from above (0.12 TL at 0.30, 0.084 at 0.54, 0.044 at
-// 0.76). Round to egg-shaped in front, compressed behind, with no step.
+// Proportions (TL 4.96 HL, SL 4.17 HL; research: measurements §1, body_fins_colour §1–2, §6, behaviour §1.1, §5).
+// Round B2 settled the trunk's depth against the head by overlaying the whole fish's lateral outline on A030, A002 and
+// A070 matched at the snout tip and the caudal base, with the head as the scale check (scratchpad ref/work/b2_trunk:
+// in A030, the cleanest relaxed lateral, the model's head lies within 0.005 TL of the photo's, so the trunk's numbers
+// there are absolute; A002's head reads 25 % deeper than the model's at that matching, its head turned to the camera,
+// and A070's throat is inflated, so those two are compared head-scaled / by the back's line only): the trunk is as deep
+// as the head (body depth at the pectoral base / head depth 1.04 with the pelvic swelling, 1.03 without; A030 0.96,
+// A070 0.96, B067 0.97, Itoh: depth and width greatest at the head), the belly on the head's floor line (A030: chin and
+// belly on the same mud, B067 within 0.03 HL) so that seen from the front the trunk stays inside the head's outline
+// (B002, u5) but for the pelvic base's thin swelling; the deepest point 0.129 TL at 0.35 TL, the taper from 0.38 TL
+// (0.96 of it at 0.45, 0.78 at 0.60 TL); the back level from the nape (rising ≤ 0.01 HL) past the D1's middle and
+// 0.012 HL under the nape at its end, then dropping with the photos; per-station depth within 0.0085 TL of A030
+// (0.30–0.80 TL; the photo's bottom read as the mean of its lit edge and its contact line, ± 0.005–0.013 TL apart);
+// the tail compressed (W/D ≈ 0.6) and holding its depth (0.306 HL, CPD 0.073 SL) to a flat hypural end plate; widths
+// as A036 seen from above (0.12 TL at 0.30, 0.083 at 0.54, 0.046 at 0.76). Round to egg-shaped in front, compressed
+// behind, with no step.
 import { HEAD } from './anatomy.mjs';
 import { HEAD_SCULPT, headSDF, loftTables, loftSDF } from './head.mjs';
 import { smin, smax, ssub, clamp, smoothstep, ellipsoid, sphere, capsule, tube } from './sdf.mjs';
@@ -43,17 +50,22 @@ export function armJoints(A) {
   return { shoulder: r3(shoulder), elbow: r3(elbow), wrist: r3(wrist), u1, u2, n, w1 };
 }
 
-/** The bind pose of the left arm (the right is the mirror image): half way between folded back along the flank (the
- * arm pointing back ~15° down, against the flank, the elbow straight: A030, B067) and planted as a leg (the arm near
- * vertical, ~20° out, the elbow bent ~100° so the blade lies flat forward: u1, B010, A005; Pace & Gibb 2009 radial–ray
- * angle 76°→178°): the upper arm 50° below the horizontal and 31° out, the elbow bent 30° forward, so from the bind the
- * shoulder turns 42° to folded and 33° to planted, the elbow 30° to straight and 70° to planted; the arm stands off the
- * flank from a third of the way down (the skin of arm and flank never fuse past the root, so the weights can part
- * them), and its reach stays inside fishmesh's BODY_BOX (|z| ≤ 0.57 of 0.62 HL). */
+/** The bind pose of the left arm (the right is the mirror image), the pectoral system of round B2 (the three owners'
+ * shared design): a slim flattened two-segment leg, shoulder → wrist 0.45 HL (upper arm over the radials 0.28, forearm
+ * 0.17), widening into a spatulate wrist as wide as the blade's base; with the inner 0.16 HL of the blade continuing
+ * the forearm it reaches 9.3–9.7 mm below the shoulder in a leg posture (upper arm 10–25° behind vertical, forearm
+ * 10–20° ahead of it), the ≈ 9.5 mm a 15° prop needs (A070). The bind is half way between folded back along the flank
+ * (A030, B067) and planted (u1, B010, A005; Pace & Gibb 2009 radial–ray angle 76°→178°): the upper arm 52° below the
+ * horizontal and 26° out, the elbow bent 26° forward. The shoulder pivot sits on the flank's skin (z 0.33; B1's 0.35
+ * stood 0.03 outside it): turned rigidly as the rig turns it (scratchpad b2_trunk armpose.mjs), the arm folds back
+ * with its medial face flush on the flank (within −0.013 … +0.011 HL from 0.13 HL past the pivot: upper arm level,
+ * 6° out, the elbow straightened and the forearm bent 20° in) and paddles out and forward (protraction 20–40°,
+ * abduction 20–40°, swing 20–45°) without driving the arm past its root into the body wall; the arm stands off the
+ * flank past its root (so the weights can part them), and its reach stays inside fishmesh's BODY_BOX (|z| ≤ 0.51). */
 const ARM = {
-  shoulder: [1.14, 0.29, 0.35],       // the girdle's hinge at the flank (pre-P1 1.08–1.15 HL; 45–60 % of the depth down)
-  upper: { len: 0.27, down: 50, out: 31 },   // the four proximal radials 0.25–0.29 HL (OST §3.8)
-  fore: { len: 0.12, bend: 30 },             // the ray bases' fleshy pad to the wrist: the lobe 0.39 HL (0.30–0.45; B010 0.37 from the root)
+  shoulder: [1.14, 0.285, 0.33],      // the girdle's hinge at the flank (pre-P1 1.08–1.15 HL; 45–60 % of the depth down)
+  upper: { len: 0.28, down: 52, out: 26 },   // the four proximal radials 0.25–0.29 HL (OST §3.8; u1's upper arm ~0.3)
+  fore: { len: 0.17, bend: 26 },             // the ray bases' fleshy pad to the wrist: shoulder → wrist 0.45 HL (B010 0.47)
 };
 const ARMJ = armJoints(ARM);
 
@@ -61,31 +73,32 @@ const ARMJ = armJoints(ARM);
 export const BODY_SCULPT = {
   // the trunk loft: it starts inside the head behind the opercle with the head loft's own section there (w and nL at
   // s 1.05–1.30 as head.mjs's loft has them, yW and nU close to it, so the head's morph into the trunk adds no waist), and
-  // runs past the caudal base into the peduncle's compressed end; same columns as the head loft. Seen from above the
-  // body behind the gill margin is 0.92 W at 1.3 HL (B047) and tapers from there without a step (0.87 W at 1.5, 0.81 W at
-  // 1.75: A036, measurements.md §4.2). The belly (yB) hangs under the head's floor from the pelvic base to the vent, its
-  // lowest point at 1.6–1.8 HL (0.33–0.36 TL), 0.09 HL under the floor (A030 0.085, A070 0.11 HL); behind the vent the
-  // back drops and the belly rises less than before, the tail's mid-line sinking from 0.27 to 0.23 HL at the caudal base
-  // (the depth there as before: 0.066 TL at 0.80 TL; A030 0.057, A070 0.064, literature 0.065). The sections flatten a
-  // little toward the tail (nU, nL 2.15–2.2: flanks broad enough for the wet band of light behind the anus,
-  // body_fins_colour §1.2). From the caudal base (4.17) the peduncle thins to a blade (w 0.056 → 0.02) whose bowed end
-  // (tailEnd) the caudal fin's membrane grows out of, instead of a blunt cut
+  // runs past the caudal base into the peduncle's end plate; same columns as the head loft. Seen from above the body
+  // behind the gill margin is 0.92 W at 1.3 HL (B047) and tapers from there without a step (0.87 W at 1.5, 0.81 W at
+  // 1.75: A036, measurements.md §4.2). The belly (yB) runs on the head's floor line (−0.010 … −0.016, the lower
+  // section a little fuller, nL 2.35–2.45, so the belly rests broad on the mud as A030's and B067's do) to the vent,
+  // then rises; the back (yT) is level to the D1's middle and drops from its end with the three photos (A030, A002,
+  // A070 all 0.05 HL lower at 0.45 TL than at the nape), the tail's mid-line sinking to 0.233 HL at the caudal base.
+  // The sections flatten a little toward the tail (nU, nL 2.15–2.2: flanks broad enough for the wet band of light
+  // behind the anus, body_fins_colour §1.2). The peduncle holds its depth (0.306 HL) from 4.10 to its end plate and its
+  // half-width tapers over the last 0.2 HL, W/D 0.58 at 4.10 and 0.50 at the caudal base (body_fins_colour §1.2, §6.1:
+  // 0.55–0.65; A036), to 0.015 HL (0.24 mm) at the plate (tailEnd), whose edge the caudal rays spring from
   trunk: {
-    s:  [1.05, 1.15, 1.30, 1.50, 1.75, 2.00, 2.25, 2.50, 2.80, 3.10, 3.40, 3.70, 3.95, 4.10, 4.20, 4.30],
-    w:  [0.320, 0.322, 0.321, 0.305, 0.283, 0.256, 0.236, 0.218, 0.200, 0.172, 0.145, 0.114, 0.088, 0.074, 0.056, 0.020],
-    yT: [0.623, 0.626, 0.628, 0.631, 0.630, 0.624, 0.612, 0.592, 0.560, 0.522, 0.480, 0.436, 0.400, 0.388, 0.382, 0.372],
-    yB: [-0.045, -0.058, -0.080, -0.095, -0.100, -0.095, -0.080, -0.058, -0.030, 0.000, 0.025, 0.048, 0.068, 0.075, 0.078, 0.090],
-    yW: [0.235, 0.236, 0.232, 0.215, 0.205, 0.205, 0.208, 0.212, 0.218, 0.226, 0.232, 0.236, 0.236, 0.234, 0.232, 0.231],
-    nU: [2.10, 1.95, 1.95, 2.00, 2.05, 2.05, 2.05, 2.05, 2.10, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
-    nL: [2.60, 2.50, 2.40, 2.30, 2.25, 2.20, 2.15, 2.15, 2.15, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
+    s:  [1.05, 1.15, 1.30, 1.50, 1.75, 2.00, 2.25, 2.50, 2.80, 3.10, 3.40, 3.70, 3.95, 4.04, 4.10, 4.15, 4.17, 4.20, 4.22, 4.24, 4.30],
+    w:  [0.320, 0.322, 0.321, 0.305, 0.283, 0.256, 0.236, 0.218, 0.198, 0.172, 0.146, 0.121, 0.100, 0.090, 0.0896, 0.0838, 0.0768, 0.0597, 0.0415, 0.015, 0.004],
+    yT: [0.623, 0.626, 0.628, 0.630, 0.630, 0.626, 0.610, 0.562, 0.522, 0.485, 0.447, 0.413, 0.394, 0.390, 0.388, 0.386, 0.386, 0.386, 0.386, 0.386, 0.386],
+    yB: [-0.010, -0.010, -0.011, -0.014, -0.016, -0.015, -0.010, 0.006, 0.020, 0.036, 0.052, 0.065, 0.074, 0.077, 0.078, 0.079, 0.079, 0.080, 0.080, 0.080, 0.080],
+    yW: [0.235, 0.236, 0.232, 0.218, 0.210, 0.210, 0.212, 0.215, 0.220, 0.226, 0.232, 0.234, 0.234, 0.234, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233],
+    nU: [2.10, 1.95, 1.95, 2.00, 2.05, 2.05, 2.05, 2.05, 2.10, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
+    nL: [2.60, 2.50, 2.45, 2.40, 2.35, 2.30, 2.20, 2.15, 2.15, 2.15, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20, 2.20],
   },
   // behind the opercle the head's field morphs into the trunk's over this range (the head's own features end at the
   // opercle; a cut and a union would leave a ring where the two sections differ)
   join: { from: 1.05, to: 1.32 },
-  // the head's flat floor, faded out behind the gill opening so the belly can hang below it (the throat stays flat to
-  // the pelvic base, then the chest drops to the belly)
+  // the head's flat floor, faded out behind the gill opening by `fadeDepth` only (0.01: the throat and the chest stay on
+  // the head's floor line, where the head loft's own underside would hang 0.02–0.035 HL lower in the join)
   // (y, blend: the head's floorY and blend.floor unless given)
-  floor: { fadeFrom: 1.0, fadeTo: 1.55, fadeDepth: 0.25 },
+  floor: { fadeFrom: 1.0, fadeTo: 1.55, fadeDepth: 0.01 },
   // the pectoral arm (left; the right is the mirror image) in its bind pose (ARM above: shoulder, elbow, wrist), a
   // muscular flattened limb (Itoh 1999: the base "thick and strong"; Murdy: "a muscular, arm-like base"): the root
   // fanning onto the flank just behind the gill slit, the upper arm over the four elongate radials (a flattened oval,
@@ -95,24 +108,28 @@ export const BODY_SCULPT = {
     shoulder: ARMJ.shoulder,
     elbow: ARMJ.elbow,
     wrist: ARMJ.wrist,
-    // half-width across the limb at shoulder / elbow / wrist (the arm 0.13–0.16 HL wide: body_fins_colour §2.1, u1)
-    radius: [0.080, 0.068, 0.066],
-    // thickness through the limb as a fraction of its width (flat; fl: at the shoulder, the elbow and the wrist: the arm
-    // 0.09–0.10 HL thick, flattening to 0.06 at the wrist, where the blade's ray bases spread)
+    // half-width across the limb at shoulder / elbow / wrist: a slim leg (u1: the arm ~0.13 HL wide) narrowest at the
+    // elbow, widening along the forearm into the spatulate wrist as wide as the blade's base (B010, A042: the fleshy lobe
+    // flattens over the proximal rays, no knob and no neck where the fan starts)
+    radius: [0.068, 0.058, 0.078],
+    // thickness through the limb as a fraction of its width (flat; fl: at the shoulder, the elbow and the wrist: the upper
+    // arm ~0.08 HL thick, the forearm flattening to a 0.047 HL paddle at the wrist, where the blade's ray bases spread)
     flat: 0.60,
-    fl: [0.60, 0.56, 0.44],
+    fl: [0.60, 0.56, 0.30],
     // the upper arm's muscle belly: extra half-width `amp` at `at` (share of the upper arm), `w` wide
-    belly: { amp: 0.012, at: 0.35, w: 0.30 },
+    belly: { amp: 0.006, at: 0.35, w: 0.30 },
     // the elbow's knuckle (optional { off, r, blend }: an ellipsoid on the outside of the bend; off: a small pad there made
     // non-manifold edges at the far tier's 0.40 mm cell, and the two segments' union already rounds the elbow), and the
-    // wrist's end rounding (the cap's radius along the arm as a share of the end's thickness)
+    // wrist's end rounding (the cap's radius along the arm as a share of the end's thickness: 0.35, a flat paddle's edge
+    // the rays spring from, not a hemispherical knob)
     knuckle: null,
-    capWrist: 1.0,
-    capElbow: 1.0,
-    elbowBlend: 0.035,
+    capWrist: 0.35,
+    capElbow: 0.45,
+    elbowBlend: 0.04,
     // the fleshy root on the flank where the arm leaves it: a low ellipsoid pad (centre c, radii along s, y and z) the
-    // arm's muscles fan into, behind the gill slit's pocket (gate: the pocket's gap the head's own) and below the nape
-    root: { c: [1.165, 0.245, 0.295], r: [0.075, 0.125, 0.055] },
+    // arm's muscles fan into, butting against the gill margin behind the slit's pocket (gate: the pocket's gap the head's
+    // own; B010, B067, u1: only the axilla's crease between them) and below the nape
+    root: { c: [1.13, 0.245, 0.285], r: [0.085, 0.13, 0.055] },
     blend: 0.025,
     // the axes of the bind pose (for the rig and the charts): u1 along the upper arm, u2 along the forearm, n the broad
     // face's normal, w1 across the upper arm toward its leading edge
@@ -120,30 +137,37 @@ export const BODY_SCULPT = {
     bind: ARM,
   },
   // the pelvic fins' fleshy base on the ventral midline under the chest (prepelvic 26.7–29.1 % SL = 1.11–1.21 HL: Lee
-  // 1995, Itoh 1999), just behind the head's flat throat, standing 0.025 HL proud of the belly
-  pelvicBase: { c: [1.17, -0.055, 0.0], r: [0.085, 0.032, 0.062], blend: 0.03 },
+  // 1995, Itoh 1999), just behind the head's flat throat: c is where fins.mjs anchors the pelvic fins (their ray bases
+  // c − 0.045 … c − 0.020) and the rig its J_pelvic; the swelling itself is centred `shift` from c, over the ray bases
+  // (1.1375), a long low mound 0.011 HL under the head's floor line (the ventral midline's slope ≤ 9.5° from s 1.0 to
+  // 1.3: no knob, no front step), the only part of the trunk that shows under the head from the front
+  pelvicBase: { c: [1.17, 0.010, 0.0], r: [0.11, 0.022, 0.06], blend: 0.04, shift: -0.0325 },
   // the low ridges the median fins stand on (a fin's base line runs along the crest of its ridge), at the literature's
   // positions (behaviour §1.2, §5 C3): D1 from the predorsal 0.30 TL to 0.455 TL (base 0.155 TL; Murdy 0.18, A070
   // 0.17), D2 from 0.49 to 0.72 TL (pre-D2 59.2 % SL, Itoh; base 0.23 TL between Murdy's 0.19 and the photos' 0.25–0.28),
-  // anal from 0.52 TL (preanal 62 % SL) to 0.705 TL, opposite D2 and ending a little before it (base 0.185 TL; Murdy 0.166)
+  // anal from 0.52 TL (preanal 62 % SL) to 0.705 TL, opposite D2 and ending a little before it (base 0.185 TL; Murdy 0.166).
+  // The D1 stands in a shallow groove instead of on a ridge (body_fins_colour §2.3: it "folds into a groove"): its keel
+  // sunk under the skin and a furrow `groove.depth` deep along its base (0.005–0.006 HL below the lips at mid-fin),
+  // faded out at both ends
   keels: {
-    d1: { s: [1.48, 2.255], radius: 0.022, inset: 0.012 },
+    d1: { s: [1.48, 2.255], radius: 0.015, inset: 0.020, groove: { depth: 0.007, r: 0.02 } },
     d2: { s: [2.43, 3.57], radius: 0.020, inset: 0.012 },
     anal: { s: [2.58, 3.50], radius: 0.018, inset: 0.010 },
     blend: 0.03,
   },
   // the anus (pre-anus 56.7 % SL, Itoh 1999: 0.477 TL) a small pit on the ventral midline, and the urogenital papilla
-  // just behind it in front of the anal fin: a short cone pointing back and down (pointed in males, truncate in females:
-  // Lee 1995; one shared model, a blunt-tipped cone), slightly compressed
+  // just behind it in front of the anal fin: a short cone pointing back and a little down, lying flat (pointed in males,
+  // truncate in females: Lee 1995; one shared model, a blunt-tipped cone), slightly compressed; its tip 0.014 HL under
+  // the raised belly, level with the head's floor
   anus: { s: 2.365, r: 0.013, k: 0.006 },
-  papilla: { s: [2.42, 2.51], sink: 0.010, drop: 0.028, r: [0.024, 0.011], flat: 0.75, blend: 0.012 },
+  papilla: { s: [2.42, 2.51], sink: 0.010, drop: 0.014, r: [0.024, 0.011], flat: 0.75, blend: 0.012 },
   // the caudal peduncle's end: the fin's rays fan out from here
   caudalBase: 4.17,
-  // the peduncle's compressed end behind the caudal base: a thin rounded edge (the hypural plate under the fin's base)
-  // (bulge: the end's outline seen from the side is convex, `bulge` further back at mid-depth than at the edges, like the
-  // fleshy, scaled base of the caudal fin it continues into, so through the translucent membrane it reads as the fin's
-  // base and not as a cut)
-  tailEnd: { s: 4.235, blend: 0.03, bulge: 0.05 },
+  // the peduncle's end plate behind the caudal base (the hypural plate under the fin's base): flat and as deep as the
+  // peduncle (0.997 of its depth at 4.23), slightly bowed (the edges at s, mid-depth `bulge` further back), its corners
+  // rounded by `blend` only, its half-width 0.015 HL: the caudal rays spring from its edge and the outline runs straight
+  // on into the fin (no dome, no stump)
+  tailEnd: { s: 4.24, blend: 0.008, bulge: 0.01 },
 };
 
 /** The trunk loft's sampled tables (for fin placement and the rig: top, bottom, half-width per station). */
@@ -232,7 +256,9 @@ export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
   const trunk = loftSDF(loftTables(K.trunk, 4096));
   const P = K.pectoral;
   const lobe = armField(K);
-  const pelvic = ellipsoid(K.pelvicBase.c, K.pelvicBase.r);
+  // (the swelling's centre `shift` along s from c: c is where the fins and the rig anchor the pelvic fins, the swelling
+  // sits over the fins' ray bases, which fins.mjs lays out ahead of c)
+  const PBc = K.pelvicBase.c, pelvic = ellipsoid([PBc[0] + (K.pelvicBase.shift ?? 0), PBc[1], PBc[2]], K.pelvicBase.r);
   const prof = trunkProfile(K);
   const keel = (spec, top) => {
     const pts = [], radii = [];
@@ -246,6 +272,17 @@ export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
     return tube(pts, radii);
   };
   const kD1 = keel(K.keels.d1, true), kD2 = keel(K.keels.d2, true), kA = keel(K.keels.anal, false);
+  // the shallow groove along the D1's base the folded spines lie in (body_fins_colour §2.3: "folds into a groove"): a
+  // tube along the back whose bottom cuts `depth` into the midline, faded in and out at the fin's ends
+  const GR = K.keels.d1.groove;
+  const groove = GR ? (() => {
+    const pts = [], radii = [], n = 12, [s0, s1] = K.keels.d1.s;
+    for (let i = 0; i <= n; i++) {
+      const s = s0 - 0.02 + ((s1 - s0 + 0.06) * i) / n, a = Math.sin((Math.PI * i) / n) ** 0.5;
+      pts.push([s, prof.at(s).yT + GR.r - GR.depth * a, 0]); radii.push(GR.r);
+    }
+    return tube(pts, radii);
+  })() : null;
   // the anus and the urogenital papilla on the ventral midline (their heights from the belly's line there)
   const AN = K.anus, PA = K.papilla;
   const anus = AN ? sphere([AN.s, prof.at(AN.s).yB, 0], AN.r) : null;
@@ -277,6 +314,7 @@ export function fishSDF(K = BODY_SCULPT, H = HEAD_SCULPT) {
     d = smax(d, FY - fade - y, FB);
     if (x > 1.3) {
       d = smin(d, Math.min(kD1(x, y, z), kD2(x, y, z), kA(x, y, z)), K.keels.blend);
+      if (groove) d = ssub(d, groove(x, y, z), 0.006);
       if (papilla) d = smin(d, papilla(x, y, z), PA.blend);
       if (anus && Math.abs(x - AN.s) < 0.1) d = ssub(d, anus(x, y, z), AN.k);
     }

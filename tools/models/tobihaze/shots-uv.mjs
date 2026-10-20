@@ -6,8 +6,9 @@
 //                                                                the work dir and write a GLB with a UV checker
 //   node tools/models/tobihaze/shots-uv.mjs hausdorff            the hero against its dense mesh, per face region
 //   node tools/models/tobihaze/shots-uv.mjs sil                  lod1 / lod2 silhouettes against the hero's (pixel IoU)
-//   node tools/models/tobihaze/shots-uv.mjs render [--port 5324] the checker GLBs (textured) and the hero against the
-//                                                                dense mesh (clay macros), through render.mjs
+//   node tools/models/tobihaze/shots-uv.mjs render [--port 5324] [--which tex,clay,ncheck] the checker GLBs (textured),
+//                                                                the hero against the dense mesh (clay macros) and the
+//                                                                tangent-space checker normal maps, through render.mjs
 // As a shots module (render.mjs --shots shots-uv.mjs) it exports SHOTS: the textured views (side, top, front, under,
 // 3/4, the face macro), or with UV_SHOTS=clay the macros of the mouth, the eye, the gill slit and the nostril.
 // Work files go to $UV_WORK (default the session's scratch dir) and out/mesh/.
@@ -57,7 +58,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-  const WORK = process.env.UV_WORK ?? '/tmp/claude-0/-home-user-gerupamasini/2d93d55d-46eb-5657-8d95-9431085fe97d/scratchpad/ref/work/b1_mesh';
+  const WORK = process.env.UV_WORK ?? '/tmp/claude-0/-home-user-gerupamasini/2d93d55d-46eb-5657-8d95-9431085fe97d/scratchpad/ref/work/b2_mesh';
   const OUT = path.join(here, 'out', 'mesh');
   fs.mkdirSync(WORK, { recursive: true }); fs.mkdirSync(OUT, { recursive: true });
   const t0 = Date.now();
@@ -166,10 +167,10 @@ function edgeCensus(mesh, { box }) {
 }
 
 // ---- tiers
-const TIER_EYE = { hero: [40, 64], lod1: [12, 16], lod2: [7, 6] };
 async function tiersCmd(names, { WORK, OUT, log, report }) {
   const { bodyTierMesh, ready, meshTopology, TIERS } = await import('./fishmesh.mjs');
   const { uvStats } = await import('./charts.mjs');
+  const { tangentCheck } = await import('./tiers.mjs');
   await ready;
   const out = {};
   for (const name of names) {
@@ -198,11 +199,13 @@ async function tiersCmd(names, { WORK, OUT, log, report }) {
       const R = m.charts[m.chart[v]].rect, x = m.uv[v * 2], y = m.uv[v * 2 + 1];
       if (x < R[0] || x > R[2] || y < R[1] || y > R[3]) outside++;
     }
-    log(`UVs outside their rect: ${outside}; tangents finite: ${m.tangent.every(Number.isFinite)}`);
+    const tc = tangentCheck(m.normal, m.tangent);
+    log(`UVs outside their rect: ${outside}; tangents (per vertex: |t| = 1, t ⟂ n, w = ±1 within 1e-3): ${tc.bad} bad of ${tc.n} (max |n·t| ${tc.maxDot.toExponential(1)})`);
     saveTier(path.join(WORK, `tier_${name}.bin`), m);
     const glb = path.join(OUT, `${name}-uv.glb`);
     await writeTierGLB(m, name, glb);
-    log(`wrote ${glb}`);
+    await writeNormalCheckGLB(m, name, path.join(OUT, `${name}-ncheck.glb`));
+    log(`wrote ${glb} and ${name}-ncheck.glb`);
     if (name === 'hero') {
       const dglb = path.join(OUT, 'hero-dense.glb');
       await writePlainGLB(m.dense, 'Dense', dglb);
@@ -280,8 +283,7 @@ let checkerCache = null;
 
 export async function writeTierGLB(m, name, file, { layout } = {}) {
   const { GLBBuilder } = await import('../../lib/glb.mjs');
-  const { eyeGlobe } = await import('./eye.mjs');
-  const { eyeAtlasUV, BODY_LAYOUT } = await import('./fishmesh.mjs');
+  const { BODY_LAYOUT } = await import('./fishmesh.mjs');
   const L = layout ?? BODY_LAYOUT;
   checkerCache ??= await checkerPNG(L);
   const gb = new GLBBuilder('tobihaze-uv-check');
@@ -291,19 +293,50 @@ export async function writeTierGLB(m, name, file, { layout } = {}) {
   const mat = gb.addMaterial({ name: 'Body', pbrMetallicRoughness: { baseColorTexture: { index: texI }, metallicFactor: 0, roughnessFactor: 0.7 } });
   const body = objectMesh(m);
   const nodes = [gb.addNode({ name: 'Body', mesh: gb.addMesh('Body', [gb.primitive({ ...body, uv: m.uv, material: mat })]) })];
-  const [nt, np] = TIER_EYE[name] ?? [40, 64];
+  nodes.push(...await eyeNodes(gb, name, mat, L));
+  const root = gb.addNode({ name: `Tobihaze_${name}`, children: nodes, extras: { regions: regionsExtras(), HLmm: HL } });
+  gb.addScene(`Tobihaze_${name}`, [root]);
+  fs.writeFileSync(file, gb.toBuffer());
+}
+
+/** Both eyes at rest as nodes drawing `mat` (the tier's rings; eyemesh.mjs parts: the skin in eyeSkin, the window in
+ * the iris rect, each with its tangents). */
+async function eyeNodes(gb, name, mat, layout) {
+  const { eyeMeshForTier, EYE_TIERS } = await import('./eyemesh.mjs');
+  const nodes = [];
   for (const side of [1, -1]) {
-    const g = eyeGlobe(EYE_MM.radius * 0.001, { nt, np, side });
-    const n = g.position.length / 3, p = new Float32Array(n * 3), nn = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      p[i * 3] = g.position[i * 3 + 2]; p[i * 3 + 1] = g.position[i * 3 + 1]; p[i * 3 + 2] = -g.position[i * 3];
-      nn[i * 3] = g.normal[i * 3 + 2]; nn[i * 3 + 1] = g.normal[i * 3 + 1]; nn[i * 3 + 2] = -g.normal[i * 3];
-    }
-    const uv = eyeAtlasUV(g.uv, L);
-    const idx = new Uint32Array([...g.skin, ...g.cornea]);
-    const mesh = gb.addMesh(side > 0 ? 'Eye_L' : 'Eye_R', [gb.primitive({ position: p, normal: nn, uv, indices: idx, material: mat })]);
-    nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh, translation: toObject([EYE_MM.center[0], EYE_MM.center[1], EYE_MM.center[2] * side]) }));
+    const e = eyeMeshForTier({ ...(EYE_TIERS[name] ?? EYE_TIERS.hero), side, layout });
+    const prims = [e.parts.skin, e.parts.window].map((p) => gb.primitive({ position: p.position, normal: p.normal, tangent: p.tangent, uv: p.uv, indices: p.indices, material: mat }));
+    nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh: gb.addMesh(side > 0 ? 'Eye_L' : 'Eye_R', prims), translation: toObject([EYE_MM.center[0], EYE_MM.center[1], EYE_MM.center[2] * side]) }));
   }
+  return nodes;
+}
+
+/**
+ * The tier with a tangent-space normal map that is a checker of round bumps (each 1/64 of the atlas a dome, +z out of
+ * the skin; glTF convention: +y up the image) on a plain clay colour, and the mesh's TANGENT: where a tangent frame is
+ * wrong — reversed, swapped, or a vertex's corners averaged across a chart seam — the bumps there turn into dimples or
+ * light from the side, and a chart's border shows as a seam in the shading.
+ */
+export async function writeNormalCheckGLB(m, name, file, { layout, size = 1024 } = {}) {
+  const { GLBBuilder } = await import('../../lib/glb.mjs');
+  const { encodePNG } = await import('../../lib/png.mjs');
+  const { BODY_LAYOUT } = await import('./fishmesh.mjs');
+  const L = layout ?? BODY_LAYOUT, img = new Uint8Array(size * size * 3), cell = size / 64;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    // a dome per cell: height √(1 − r²); its normal (−∂h/∂x, −∂h/∂y, 1) with y up the image (−v)
+    const u = ((x + 0.5) % cell) / cell * 2 - 1, v = ((y + 0.5) % cell) / cell * 2 - 1, r2 = u * u + v * v;
+    let nx = 0, ny = 0, nz = 1;
+    if (r2 < 0.81) { const h = Math.sqrt(1 - r2) || 1; nx = u / h * 0.6; ny = -v / h * 0.6; }
+    const l = Math.hypot(nx, ny, nz);
+    img.set([Math.round((nx / l * 0.5 + 0.5) * 255), Math.round((ny / l * 0.5 + 0.5) * 255), Math.round((nz / l * 0.5 + 0.5) * 255)], (y * size + x) * 3);
+  }
+  const gb = new GLBBuilder('tobihaze-normal-check');
+  const tex = gb.addTexture(gb.addImage(encodePNG(size, size, 3, img), 'image/png', 'normal_check'), gb.addSampler({ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }), 'normal_check');
+  const mat = gb.addMaterial({ name: 'Body', normalTexture: { index: tex, scale: 1 }, pbrMetallicRoughness: { baseColorFactor: [0.72, 0.70, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.45 } });
+  const body = objectMesh(m);
+  const nodes = [gb.addNode({ name: 'Body', mesh: gb.addMesh('Body', [gb.primitive({ ...body, uv: m.uv, material: mat })]) })];
+  nodes.push(...await eyeNodes(gb, name, mat, L));
   const root = gb.addNode({ name: `Tobihaze_${name}`, children: nodes, extras: { regions: regionsExtras(), HLmm: HL } });
   gb.addScene(`Tobihaze_${name}`, [root]);
   fs.writeFileSync(file, gb.toBuffer());
@@ -503,7 +536,8 @@ async function renderCmd({ WORK, OUT, log, port, which }) {
     if (r.status) throw new Error(`render failed: ${model}`);
   };
   for (const w of which.split(',')) {
-    if (w === 'tex') for (const n of ['hero', 'lod1']) { log(`render ${n} textured`); render(path.join(OUT, `${n}-uv.glb`), 'tex', path.join(OUT, `render_${n}`)); }
+    if (w === 'tex') for (const n of ['hero', 'lod1', 'lod2']) { log(`render ${n} textured`); render(path.join(OUT, `${n}-uv.glb`), 'tex', path.join(OUT, `render_${n}`)); }
+    if (w === 'ncheck') for (const n of ['hero', 'lod1', 'lod2']) { log(`render ${n} normal-map check`); render(path.join(OUT, `${n}-ncheck.glb`), 'tex', path.join(OUT, `render_${n}_ncheck`)); }
     if (w === 'clay') for (const n of ['hero-clay', 'hero-dense']) { log(`render ${n} macros`); render(path.join(OUT, `${n}.glb`), 'clay', path.join(OUT, `render_${n}`)); }
   }
 }

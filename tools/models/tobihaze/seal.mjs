@@ -6,8 +6,12 @@
 //   sealSculpt(K)  lod1: the slit closed (the lower jaw's tissue overlaps the upper head by `overlap` instead of being
 //                  carved back from it), no mouth cavity or tongue, no gill pocket or chamber, the nostrils' holes and
 //                  the pore filled; the pads blended into the face over `soften` (the labial groove, 0.004 HL wide, goes
-//                  with it); the socket and the cup's bead moved in by `cupGap`, so the bead's thin ends (0.004 HL behind
-//                  and in front of the globe) and the socket's lining lie inside the globe, where the tier drops them
+//                  with it); `cupGap` moves the socket and the cup's bead in
+//   lining (lod1, sealedFishSDF): the hero's own cup — its bead, the lid's rim, and the lining inside it at re + gap,
+//                  which the blink tucks as the lid swings up — under the window (within 45° of the rim's low point),
+//                  the cup moved in by 0.008 HL past 65° (front, back, medial: where the hero's bead tapers to 0.004 HL,
+//                  under a cell, and the head runs onto the dome), the two fields mixed between; the 1–2 edges where the
+//                  lip's rounding touches itself within a cell are parted by fishDense (partSheets)
 //   farSculpt(K)   lod2: sealed, and what a 0.40 mm cell cannot hold smoothed away (headrig.smoothSculpt's rule: the
 //                  pads, the labial groove, the rictal fold and its crease, the gill cover's step; the nostril tube; the
 //                  infraorbital crease), the cup's bead 0.04 HL thick all round and moved in by 0.012 HL
@@ -18,15 +22,18 @@
 // (fishmesh.fishDense: the globes' insides dropped, the holes they leave capped):
 //   HEAD_SCULPT  0.16: 2 shells, 113 nm (52 in the gape box) → 68 nm      0.40: 41 nm (18) → 43 nm
 //   lod1 field   0.16: 1 shell, 40 nm (0) → 0 nm, χ 2 (genus 0)            0.40: 22 nm (0) → 7 nm (at the cups)
+//   (round B2, the lining: the dense skin at 0.16 with the hero's cup everywhere 18 nm, under the window only 2, parted:
+//    0 nm, 1 component, genus 0)
 //   lod2 field   0.16: 1 shell, 51 nm (0) → 0 nm, χ 2                      0.40: 16 nm (0) → 0 nm, χ 2
 // (the raw non-manifold edges of the sealed fields all lie inside the globes, where the skin is dropped)
+import { HEAD } from './anatomy.mjs';
 import { HEAD_SCULPT } from './head.mjs';
 import { BODY_SCULPT, fishSDF } from './body.mjs';
 import { smin, smoothstep } from './sdf.mjs';
 
 /** Defaults of the sealed (lod1) and far (lod2) sculpts (HL). */
 export const SEAL = {
-  seal: { overlap: 0.004, soften: 0.01, cupGap: -0.008, fuse: 0.025 },
+  seal: { overlap: 0.004, soften: 0.01, cupGap: -0.008, fuse: 0.025, lining: { sector: [45, 65], inward: -0.008 } },
   far: { overlap: 0.004, cupGap: -0.012, cupThick: 0.04, fuse: 0.025 },
 };
 
@@ -61,6 +68,8 @@ export function sealSculpt(K = HEAD_SCULPT, o = {}) {
   if (o.cupThick !== undefined) S.cup = { ...S.cup, thick: o.cupThick, ...(S.cup.taper ? { taper: { ...S.cup.taper, thickMin: 1, roundMax: S.cup.round } } : {}) };
   // (crease: false — the infraorbital crease under the collar off)
   if (o.crease === false) S.cup = { ...S.cup, crease: { ...S.cup.crease, back: [-1, -0.9] } };
+  // (cup: { key: value } — any of the cup's own tunables replaced, the nested ones merged one level deep)
+  if (o.cup) for (const [k, v] of Object.entries(o.cup)) S.cup = { ...S.cup, [k]: v && typeof v === 'object' && !Array.isArray(v) && S.cup[k] ? { ...S.cup[k], ...v } : v };
   return S;
 }
 
@@ -91,8 +100,30 @@ export function farSculpt(K = HEAD_SCULPT, o = {}) {
  */
 export function sealedFishSDF({ far = false, K = BODY_SCULPT, H = HEAD_SCULPT, ...o } = {}) {
   const fuse = o.minimal ? 0 : o.fuse ?? (far ? SEAL.far : SEAL.seal).fuse;
-  const S = far ? farSculpt(H, o) : sealSculpt(H, o);
-  const f = fishSDF(K, S), head = f.head, G = S.gape;
+  const lining = o.minimal || far ? null : o.lining === undefined ? SEAL.seal.lining : o.lining;
+  // (lining: the hero's cup under the window — its bead, the lid's rim, and the lining inside it at re + gap, which the
+  // blink tucks as the lid swings up over the lowered globe — and the cup moved in by `inward` everywhere else, where
+  // the hero's bead tapers to 0.004 HL, under a cell, and the head runs onto the dome: two fields, the hero cup's and the
+  // inward one, mixed by the azimuth from the rim's low point, the hero's within sector[0]° of it, the inward one past
+  // sector[1]° (front and back), both the same field away from the globes)
+  const S = far ? farSculpt(H, o) : sealSculpt(H, lining ? { ...o, cupGap: undefined } : o);
+  const f0 = fishSDF(K, S), head = f0.head, G = S.gape;
+  let f = f0;
+  if (lining) {
+    const fIn = fishSDF(K, sealSculpt(H, { ...o, cupGap: lining.inward }));
+    const E = HEAD.eye, re = E.d / 2, lo = (S.cup.low * Math.PI) / 180, [a0, a1] = lining.sector.map((d) => (d * Math.PI) / 180), reach = re + 0.1;
+    f = (x, y, z) => {
+      const px = x - E.s, py = y - E.y, pz = Math.abs(z) - E.z;
+      if (px * px + py * py + pz * pz > reach * reach) return f0(x, y, z);
+      // (the azimuth about the vertical through the globe's centre, as head.cupField: 0 lateral, + forward)
+      let D = Math.atan2(-px, pz) - lo;
+      D = Math.abs(Math.atan2(Math.sin(D), Math.cos(D)));
+      const w = 1 - smoothstep(a0, a1, D);
+      if (w >= 1) return f0(x, y, z);
+      const di = fIn(x, y, z);
+      return w <= 0 ? di : w * f0(x, y, z) + (1 - w) * di;
+    };
+  }
   const gY = (x) => G.yFront + (G.yBack - G.yFront) * smoothstep(0.03, G.rictus, x);
   const g = (x, y, z) => {
     const d = f(x, y, z);
@@ -102,7 +133,12 @@ export function sealedFishSDF({ far = false, K = BODY_SCULPT, H = HEAD_SCULPT, .
     const p = head.parts(x, y, z);
     return Math.min(d, smin(p.f, p.j, fuse * w));
   };
-  g.head = f.head; g.cup = f.cup; g.parts = f.parts; g.sculpt = S;
+  g.head = f0.head; g.cup = f0.cup; g.parts = f0.parts; g.sculpt = S;
+  // (the lining's lip, where the bead rounds into the socket just under the rim, touches itself within a 0.16 mm cell
+  // in front of the window: 1–2 edges shared by four triangles; fishmesh.fishDense parts such sheets by the field when
+  // the field asks for it)
+  g.partSheets = !!lining;
+  g.lining = lining;
   return g;
 }
 
@@ -111,5 +147,7 @@ export function sealedFishSDFmm(HLmm, o = {}) {
   const f = sealedFishSDF(o), k = 1 / HLmm;
   const g = (x, y, z) => f(x * k, y * k, z * k) * HLmm;
   g.hl = f;
+  g.partSheets = f.partSheets;
+  if (o.pruneMargin !== undefined) g.pruneMargin = o.pruneMargin;
   return g;
 }
