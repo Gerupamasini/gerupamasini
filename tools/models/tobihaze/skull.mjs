@@ -14,6 +14,9 @@
 //   J_chL/R     each hyoid bar (hypohyal, ceratohyal, interhyal) splayed out about its hypohyal, so the interhyals
 //               follow the abducted suspensoria (the cheeks' inflation)
 //   J_bstegL/R  the branchiostegal rays fanned down and out on the ceratohyal (the gill chambers' floor ballooning)
+//   J_opercRollL/R  the opercular series rolled out about the fore-aft line through its facet (the cheeks' inflation)
+//   J_jawL/R, J_imjL/R  the lower jaw's halves (anguloarticular; dentary with its teeth) splayed at the symphysis, so the
+//               articulars stay on the abducted quadrates (the cheeks' inflation)
 //   J_eyeL/R    the eye globes
 //
 // Positions are the landmark table of research/anat_osteo.md: Michel et al. 2014 Fig. 2A (micro-CT of P. barbarus,
@@ -97,7 +100,10 @@ export const DENT_FIT = { drop: [0.028, 0.028, 0.028, 0.035, 0.05, 0], depth: [0
 // caninoid teeth): `canine` their gum-recession and radius factors from the symphysis back. The premaxilla carries its row
 // on an alveolar flange down to them (the upper lip's pads hang below the bone, so its own edge lies 0.03-0.08 HL over
 // the mouth's roof).
-export const TOOTH_FIT = { tipIn: 0.003, maxLen: { dentary: 0.024, premax: 0.05 }, canine: [[1.35, 1.35], [1.2, 1.2], [1.08, 1.08]], flange: 0.007 };
+// (round n17: each tooth caniniform, recurved: its upper `curve` of the length bends toward the mouth's inside (back and
+// toward the midline, across the row) by `bend` of its length, so the crowns hook inward as a goby's do; the front
+// canines `canine` [gum, radius] times the row's, the first pair the stoutest)
+export const TOOTH_FIT = { tipIn: 0.003, maxLen: { dentary: 0.024, premax: 0.05 }, canine: [[1.35, 1.6], [1.2, 1.35], [1.08, 1.12]], flange: 0.007, curve: 0.45, bend: 0.3 };
 const QMJ_CT = [LM.quadCondyle[0], LM.quadCondyle[1], 0];
 const jawFitPoint = (p) => {
   const a = (JAW_FIT * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), x = p[0] - QMJ_CT[0], y = p[1] - QMJ_CT[1];
@@ -112,6 +118,8 @@ const fieldToModel = (f) => (x, y, z) => f((x - CT_S.shift) / CT_S.scale, y, z) 
 const JAW_LM = new Set(['dentSymTop', 'dentSymBottom', 'dentVentral', 'coronoid', 'jawSocket', 'retroart', 'imj']);
 export const lm = (name) => toModel(JAW_LM.has(name) ? jawFitPoint(LM[name]) : LM[name]);
 
+/** The lower jaw's splay axis (left side; the right one mirrored), J_jawL/R and J_imjL/R. */
+export const JAW_SPLAY_AXIS = n3([0, -1, 0]);
 // Joint pivots in the CT's frame and axes; parents first. Ranges (degrees or HL) are the measured ones (Michel 2014).
 const JOINTS_CT = [
   // the head pitches on the first vertebra only a little (≤ 5°); the body does the rest
@@ -147,6 +155,19 @@ const JOINTS_CT = [
   // line of their heads, tilted so that a positive angle swings the rays' tips ventrally and laterally
   { name: 'J_bstegL', parent: 'J_chL', pivot: [0.52, 0.13, 0.155], axis: n3([0.30, -0.30, -0.90]), range: [0, 35] },
   { name: 'J_bstegR', parent: 'J_chR', pivot: [0.52, 0.13, -0.155], axis: n3([-0.30, 0.30, -0.90]), range: [0, 35] },
+  // the lower jaw's halves splay at the symphysis (the intermandibular ligament), so each ramus follows its abducted
+  // suspensorium and the articular stays on the quadrate (the cheeks' inflation): about the line through the symphysis
+  // tilted so that a positive angle swings the ramus's hind end out and a little up, as the quadrate goes; J_jawL/R carry
+  // the anguloarticulars (on J_jaw), J_imjL/R the dentaries with their teeth (on J_imj), turned together
+  // the opercular series rolls out about the fore-aft line through its facet on the hyomandibula (the ball joint's third
+  // freedom): a positive angle carries the opercle's ventral half, the subopercle and the interopercle laterally, so its
+  // front edge follows the inflated cheek although the suspensorium, tied to the lower jaw, abducts no further
+  { name: 'J_opercRollL', parent: 'J_opercL', pivot: L.hyoOpProc, axis: [-1, 0, 0], range: [0, 20] },
+  { name: 'J_opercRollR', parent: 'J_opercR', pivot: [L.hyoOpProc[0], L.hyoOpProc[1], -L.hyoOpProc[2]], axis: [1, 0, 0], range: [0, 20] },
+  { name: 'J_jawL', parent: 'J_jaw', pivot: jawFitPoint([L.dentSymTop[0], L.dentSymTop[1], 0]), axis: JAW_SPLAY_AXIS, range: [0, 15] },
+  { name: 'J_jawR', parent: 'J_jaw', pivot: jawFitPoint([L.dentSymTop[0], L.dentSymTop[1], 0]), axis: [-JAW_SPLAY_AXIS[0], -JAW_SPLAY_AXIS[1], JAW_SPLAY_AXIS[2]], range: [0, 15] },
+  { name: 'J_imjL', parent: 'J_imj', pivot: jawFitPoint([L.dentSymTop[0], L.dentSymTop[1], 0]), axis: JAW_SPLAY_AXIS, range: [0, 15] },
+  { name: 'J_imjR', parent: 'J_imj', pivot: jawFitPoint([L.dentSymTop[0], L.dentSymTop[1], 0]), axis: [-JAW_SPLAY_AXIS[0], -JAW_SPLAY_AXIS[1], JAW_SPLAY_AXIS[2]], range: [0, 15] },
 ];
 /** Joint pivots (HL, the head's frame) and axes; parents first. */
 export const HEAD_JOINTS = JOINTS_CT.map((j) => (j.name.startsWith('J_eye') ? j : { ...j, pivot: toModel(j.pivot) }));
@@ -193,10 +214,27 @@ export function fitTeeth(head, o = {}) {
       // (a canine is longer by the gum drawn back further round it: `canine` [gum, radius] factors)
       const cf = F.canine[k] ?? [1, 1];
       const len = exit === null ? t.len : exit - F.tipIn;
-      return { root: t.root, tip: v3.add(t.root, v3.mul(t.dir, len)), r: t.r * cf[1], exit, gum: cf[0] };
+      // (the bend: across the row toward its inside, the row's inward normal in (s, z) from its neighbours, made square to
+      // the tooth's axis)
+      const a = teeth[Math.max(0, k - 1)].root, c = teeth[Math.min(teeth.length - 1, k + 1)].root, ds = c[0] - a[0], dz = c[2] - a[2];
+      let b = [dz, 0, -ds]; const bd = v3.dot(b, t.dir); b = v3.sub(b, v3.mul(t.dir, bd)); const bl = Math.hypot(...b) || 1; b = b.map((x) => x / bl);
+      return { root: t.root, tip: v3.add(t.root, v3.mul(t.dir, len)), r: t.r * cf[1], exit, gum: cf[0], bend: b };
     });
   }
   return out;
+}
+
+/** One fitted tooth's field (model frame): a cone from its root, its upper `curve` of the length bent by `bend` of it. */
+export function toothField(t, o = {}) {
+  const F = { ...TOOTH_FIT, ...o }, len = Math.hypot(...v3.sub(t.tip, t.root));
+  if (!t.bend || !(F.bend > 0)) return rod(t.root, t.tip, t.r, t.r * 0.18);
+  const dir = v3.norm(v3.sub(t.tip, t.root)), mid = v3.add(t.root, v3.mul(dir, len * (1 - F.curve)));
+  // (the crown's arc as two segments: half way up it bent a quarter, at the tip the whole `bend`)
+  const q1 = v3.add(v3.add(mid, v3.mul(dir, len * F.curve * 0.5)), v3.mul(t.bend, len * F.bend * 0.25));
+  const tip = v3.add(t.tip, v3.mul(t.bend, len * F.bend));
+  const r1 = t.r * (0.18 + 0.82 * F.curve), r2 = t.r * (0.18 + 0.82 * F.curve * 0.5);
+  const A = rod(t.root, mid, t.r, r1), B = rod(mid, q1, r1, r2), C = rod(q1, tip, r2, t.r * 0.18);
+  return (x, y, z) => Math.min(A(x, y, z), B(x, y, z), C(x, y, z));
 }
 
 /**
@@ -208,11 +246,14 @@ export function skullBones(o = {}) {
   const bones = [];
   const add = (name, joint, side, field, cart = false) => bones.push({ name, joint, side, field, cart, tooth: name.startsWith('Teeth_') });
   // the right side is the left one mirrored (z → −z), so every frame, bend and winding stays consistent
-  const sided = (name, joint, make, cart = false) => {
-    const fL = make();
+  // (skin: the bone's former outline, kept for the skin's weights (headrig.mjs headWeights) where a bone was drawn in
+  // under the rest skin, so no pose's skinning changes with it)
+  const sided = (name, joint, make, cart = false, skin = null) => {
+    const fL = make(), sL = skin ? skin() : null;
     const jR = joint.endsWith('L') ? `${joint.slice(0, -1)}R` : joint;
     add(`${name}_L`, joint, 'L', fL, cart);
     add(`${name}_R`, jR, 'R', (x, y, z) => fL(x, y, -z), cart);
+    if (sL) { bones[bones.length - 2].skinField = sL; bones[bones.length - 1].skinField = (x, y, z) => sL(x, y, -z); }
   };
 
   // ------------------------------------------------------------------ neurocranium (J_head)
@@ -253,7 +294,7 @@ export function skullBones(o = {}) {
   // (with fitted teeth (o.teeth) the arm's alveolar flange reaches down to their roots: model frame, see TOOTH_FIT)
   const fT = o.teeth, toCT = (p) => [(p[0] - CT_S.shift) / CT_S.scale, p[1], p[2]];
   const modelField = (fm) => (x, y, z) => fm(CT_S.shift + CT_S.scale * x, y, z) / CT_S.scale;
-  const fitRow = (row) => modelField((x, y, z) => { let d = Infinity; for (const t of row) d = Math.min(d, rod(t.root, t.tip, t.r, t.r * 0.18)(x, y, z)); return d; });
+  const fitRow = (row) => { const fs = row.map((t) => toothField(t)); return modelField((x, y, z) => { let d = Infinity; for (const f of fs) d = Math.min(d, f(x, y, z)); return d; }); };
   sided('Premaxilla', 'J_premax', () => unionOf([
     strap([L.pmxAscBase, mid(L.pmxAscBase, L.pmxAscTip), L.pmxAscTip].map((p) => off(p, [0, 0, 0.008])), [0.028, 0.025, 0.018], 0.008, [0, 0, 1]),
     strap([L.pmxFront, [0.012, 0.19, 0.004], off(L.pmxAscBase, [0, 0, 0.006])], 0.03, 0.012, [1, 0, 0]),  // the body at the symphysis
@@ -304,30 +345,34 @@ export function skullBones(o = {}) {
   // (refitted to the sculpt's lower jaw: DENT_FIT)
   const dentTop = DENT_TOP;
   const dentBot = [L.dentSymBottom, [0.040, 0.088, 0.040], [0.085, 0.066, 0.075], [0.150, 0.048, 0.103], L.dentVentral, [0.275, 0.045, 0.150]].map((p, i) => v3.lerp(dentTop[i], p, DENT_FIT.depth[i]));
-  sided('Dentary', 'J_imj', () => jawFitField(unionOf([
+  sided('Dentary', 'J_imjL', () => jawFitField(unionOf([
     sheet(dentTop, dentBot, 0.016),
     plateFromPoints([[0.245, 0.135, 0.155], [0.285, 0.13, 0.165], L.coronoid, [0.30, 0.25, 0.168], [0.25, 0.16, 0.157]], 0.012),   // coronoid process
   ], 0.006)));
   // the lower teeth stand on the dentary's inner (lingual) edge, behind the lower lip, their tips at the gape
-  sided('Teeth_Dentary', 'J_imj', () => fT ? fitRow(fT.dentary) : jawFitField(teeth(dentTop.slice(0, 5).map((p, i) => off(p, [0.010 - 0.0015 * i, -0.007 + 0.001 * Math.min(4, i), -0.006 * Math.min(1, i)])), 12, DENT_FIT.toothH, 0.0034, [-0.05, 1, -0.05], 0.55)));
+  sided('Teeth_Dentary', 'J_imjL', () => fT ? fitRow(fT.dentary) : jawFitField(teeth(dentTop.slice(0, 5).map((p, i) => off(p, [0.010 - 0.0015 * i, -0.007 + 0.001 * Math.min(4, i), -0.006 * Math.min(1, i)])), 12, DENT_FIT.toothH, 0.0034, [-0.05, 1, -0.05], 0.55)));
   // the anguloarticular: a triangular block with the C-shaped socket behind and the retroarticular knob below (the
   // knob drawn 0.022 higher and a little medial of the landmark, a little smaller, inside the sculpt's narrow jaw corner:
   // it stood up to 0.036 HL out of the skin under the rictus)
   const RA = off(L.retroart, [0.004, 0.022, -0.008]);
-  sided('Anguloarticular', 'J_jaw', () => jawFitField(unionOf([
+  sided('Anguloarticular', 'J_jawL', () => jawFitField(unionOf([
     plateFromPoints([[0.26, 0.06, 0.155], [0.31, 0.04, 0.168], L.jawSocket, [0.33, 0.135, 0.172], [0.27, 0.15, 0.158]], 0.022),
     ellipsoidF(F(RA, [1, 0, 0], [0, 1, 0]), [0.022, 0.014, 0.013]),
     rod(RA, [0.325, 0.07, 0.168], 0.011, 0.015),
   ], 0.008)));
   // Meckel's cartilage inside the dentary
-  sided('Cart_Meckel', 'J_jaw', () => jawFitField(polyRod([[0.06, 0.10, 0.07], [0.15, 0.09, 0.115], [0.29, 0.09, 0.165]], [0.006, 0.007, 0.008])), true);
+  sided('Cart_Meckel', 'J_jawL', () => jawFitField(polyRod([[0.06, 0.10, 0.07], [0.15, 0.09, 0.115], [0.29, 0.09, 0.165]], [0.006, 0.007, 0.008])), true);
 
   // ------------------------------------------------------------------ opercular series (J_opercL/R)
   // the opercle: a thin, laterally convex inverted triangle hinged on the opercular process
-  sided('Opercle', 'J_opercL', () => plateFromPoints([L.opFacet, L.opPeak, L.opPostDorsal, L.opPostMid, L.opPostVentral, [0.93, 0.20, 0.315], [0.86, 0.13, 0.305], L.opApex, [0.77, 0.25, 0.27]], 0.01, 0.005, 0.6, [0, 1, 7]));
+  sided('Opercle', 'J_opercRollL', () => plateFromPoints([L.opFacet, L.opPeak, L.opPostDorsal, L.opPostMid, L.opPostVentral, [0.93, 0.20, 0.315], [0.86, 0.13, 0.300], off(L.opApex, [0, 0, -0.008]), [0.77, 0.25, 0.27]], 0.01, 0.005, 0.6, [0, 1, 7]),
+    false, () => plateFromPoints([L.opFacet, L.opPeak, L.opPostDorsal, L.opPostMid, L.opPostVentral, [0.93, 0.20, 0.315], [0.86, 0.13, 0.305], L.opApex, [0.77, 0.25, 0.27]], 0.01, 0.005, 0.6, [0, 1, 7]));
   // the subopercle: a sickle along the opercle's posteroventral edge, with an anterior ascending process
-  sided('Subopercle', 'J_opercL', () => strap([L.sopTop, [0.97, 0.21, 0.318], [0.92, 0.12, 0.312], L.sopCurve, [0.785, 0.105, 0.292], L.sopProc], [0.02, 0.035, 0.045, 0.045, 0.03, 0.015], 0.008));
-  sided('Interopercle', 'J_opercL', () => strap([L.iopFront, mid(L.iopFront, L.iopBack), L.iopBack], [0.022, 0.034, 0.03], 0.008));
+  // (its ventral curve 0.018 HL in from the landmark, and the opercle's apex 0.008, so both stay under the rest skin of
+  // the head's lower flank: they stood 0.011-0.017 HL out of it at s 0.80-0.85, y 0.05)
+  sided('Subopercle', 'J_opercRollL', () => strap([L.sopTop, [0.97, 0.21, 0.318], [0.92, 0.12, 0.304], off(L.sopCurve, [0, 0, -0.018]), [0.785, 0.105, 0.287], L.sopProc], [0.02, 0.035, 0.045, 0.045, 0.03, 0.015], 0.008),
+    false, () => strap([L.sopTop, [0.97, 0.21, 0.318], [0.92, 0.12, 0.312], L.sopCurve, [0.785, 0.105, 0.292], L.sopProc], [0.02, 0.035, 0.045, 0.045, 0.03, 0.015], 0.008));
+  sided('Interopercle', 'J_opercRollL', () => strap([L.iopFront, mid(L.iopFront, L.iopBack), L.iopBack], [0.022, 0.034, 0.03], 0.008));
 
   // ------------------------------------------------------------------ hyoid arch and branchiostegals (J_hyoid)
   add('Basihyal', 'J_hyoid', 'M', rod(L.basihyal, [0.29, 0.115, 0], 0.012, 0.014), true);
@@ -341,9 +386,11 @@ export function skullBones(o = {}) {
   // five rays fanning back and up along the floor and side of the opercular chamber; the 5th a broad blade
   for (let k = 0; k < 5; k++) {
     const t = k / 4;
-    const root = [0.40 + 0.24 * t, 0.10 + 0.06 * t, 0.10 + 0.11 * t], tip = [0.85 + 0.14 * t, 0.03 + 0.06 * t, 0.25 + 0.07 * t];
-    const m1 = off(mid(root, tip, 0.45), [0, -0.035 + 0.01 * t, 0.045]);
-    sided(`Branchiostegal${k + 1}`, 'J_bstegL', () => strap([root, m1, tip], [0.012, 0.014 + 0.03 * (k === 4), 0.008], 0.005));
+    const root = [0.40 + 0.24 * t, 0.10 + 0.06 * t, 0.10 + 0.11 * t], tip0 = [0.85 + 0.14 * t, 0.03 + 0.06 * t, 0.25 + 0.07 * t], tip = off(tip0, [0, 0, -0.022 * (k === 4)]);
+    // (the fifth ray's middle and tip 0.01 and 0.02 HL nearer the midline: they stood out of the rest skin's lower flank)
+    const m1 = off(mid(root, tip, 0.45), [0, -0.035 + 0.01 * t, 0.045 - 0.01 * (k === 4)]);
+    const m0 = off(mid(root, tip0, 0.45), [0, -0.035 + 0.01 * t, 0.045]);
+    sided(`Branchiostegal${k + 1}`, 'J_bstegL', () => strap([root, m1, tip], [0.012, 0.014 + 0.03 * (k === 4), 0.008], 0.005), false, k === 4 ? () => strap([root, m0, tip0], [0.012, 0.044, 0.008], 0.005) : null);
   }
 
   // ------------------------------------------------------------------ gill arches (the branchial basket, envelope level)
@@ -358,7 +405,7 @@ export function skullBones(o = {}) {
   sided('Cleithrum', 'J_head', () => strap([L.clTop, [1.012, 0.40, 0.27], L.clPostMid, L.clBend, [0.96, 0.15, 0.24], L.clLimb, [0.87, 0.075, 0.11], off(L.clSym, [0, 0, 0.012])], [0.03, 0.05, 0.06, 0.055, 0.045, 0.035, 0.025, 0.02], 0.012));
   sided('Scapula', 'J_head', () => plateFromPoints([[1.04, 0.33, 0.25], [1.085, 0.335, 0.26], [1.08, 0.41, 0.255], [1.045, 0.40, 0.25]], 0.01));
   sided('Coracoid', 'J_head', () => plateFromPoints([[1.035, 0.27, 0.245], [1.08, 0.25, 0.25], [1.04, 0.15, 0.235], [0.96, 0.13, 0.22], [1.0, 0.18, 0.24]], 0.01));
-  return bones.map((b) => ({ ...b, field: fieldToModel(b.field) }));
+  return bones.map((b) => ({ ...b, field: fieldToModel(b.field), ...(b.skinField ? { skinField: fieldToModel(b.skinField) } : {}) }));
 }
 
 /** The skeleton grouped by joint (bind pose). */

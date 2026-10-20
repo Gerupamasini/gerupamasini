@@ -50,6 +50,10 @@ export const INFLATE = {
   crease: { path: [[0.630, 0.460, 0.0070], [0.590, 0.380, 0.0160], [0.566, 0.300, 0.0135], [0.555, 0.220, 0.0075], [0.553, 0.150, 0.0018], [0.560, 0.090, 0.0005], [0.575, 0.040, 0.0000]], width: 0.042, z: [0.26, 0.36] },
   // the loft's tables smoothed along s by a Gaussian of this width (HL)
   smooth: 0.035,
+  // each section's exponents eased to 2 over this share of its half-height round its widest point (balloonLoftSDF):
+  // the upper section's nU under 2 and the lower's nL over 2 met there in a horizontal crease along the whole balloon
+  // (round n16: the second derivative of the section's half-width jumped from -8.4 to -1.9 across it at s 0.7)
+  ease: 0.35,
 };
 
 /** The opercle's margin as s at height y (the path of HEAD_SCULPT.opercle, as head.mjs draws it: a cubic Hermite
@@ -83,9 +87,43 @@ export function balloonEnd(K = HEAD_SCULPT, I = INFLATE) {
   return (y) => avg(y) + M.back - (M.lean ?? 0) * soft((M.y0 ?? -9) - y);
 }
 
+/**
+ * The balloon's loft (head.mjs loftSDF's sections), but with each section's exponent eased to 2 within `ease` (of the
+ * half-height) of its widest point: a superellipse whose exponent is under 2 bends infinitely sharply there (the
+ * cheek's narrowing upper section, nU 1.65) and one over 2 not at all (the lower, nL 2.45), so the two met in a
+ * horizontal crease along the whole balloon at its widest height; eased, the section is round across it.
+ */
+export function balloonLoftSDF(T, ease = 0) {
+  if (!ease) return loftSDF(T);
+  const { n, sMax, s0 } = T;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  return (x, y, z) => {
+    const sc = clamp(x, s0 + 2e-3, sMax);
+    const f = (sc / sMax) * n, i = Math.min(n - 1, Math.floor(f)), t = f - i;
+    const L = (a) => a[i] + (a[i + 1] - a[i]) * t;
+    const w = Math.max(1e-4, L(T.w)), yT = L(T.yT), yB = L(T.yB), yW = L(T.yW);
+    const up = y >= yW;
+    const hh = Math.max(1e-4, up ? yT - yW : yW - yB);
+    const u = Math.abs(z) / w, v = Math.abs(y - yW) / hh;
+    let nn = up ? L(T.nU) : L(T.nL);
+    if (up && nn < 2.2) nn += (2.2 - nn) * (1 - smoothstep(0, 0.45, u));
+    nn = 2 + (nn - 2) * smoothstep(0, ease, v);
+    const r = Math.pow(Math.pow(u, nn) + Math.pow(v, nn), 1 / nn);
+    let d;
+    if (r < 1e-9) d = -Math.min(w, hh);
+    else {
+      const k = Math.pow(r, 1 - nn);
+      const gz = (k * Math.pow(u, nn - 1)) / w, gy = (k * Math.pow(v, nn - 1)) / hh;
+      d = (r - 1) / Math.max(1e-6, Math.hypot(gz, gy));
+    }
+    if (x < s0 + 2e-3) d = Math.hypot(Math.max(d, 0), s0 + 2e-3 - x);
+    return d;
+  };
+}
+
 /** The balloon alone (its distance, HL), with the preopercular crease on its sides (INFLATE.crease). */
 export function balloonSDF(K = HEAD_SCULPT, I = INFLATE) {
-  const loft = loftSDF(smoothTables(loftTables(I.loft, 1024), I.smooth)), end = balloonEnd(K, I);
+  const loft = balloonLoftSDF(smoothTables(loftTables(I.loft, 1024), I.smooth), I.ease ?? 0), end = balloonEnd(K, I);
   const C = I.crease, cs = C ? pathAt(C.path) : null;
   return (x, y, z) => {
     let d = smax(loft(x, y, z), (x - end(y)) * 0.9, I.margin.blend);

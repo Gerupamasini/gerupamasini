@@ -13,32 +13,38 @@
 // cameras are 15–18° above the fish, and the lobe stands forward of the near dome by the 0.2 ED that the inter-ocular
 // distance gives at that yaw, as the renders at the same cameras show.)
 //
-// The window, measured on the photos at their cameras: the dark pupil a horizontal bean (u1 h/w ≈0.55, B009, B010 with
-// a notch in its top edge; 0.6–0.68 ED wide, 0.34 tall face-on, anat_soft) in a thin gold iris ring, wider under it
-// (B010), the clear window round both 0.56–0.72 ED wide and 0.33–0.61 tall face-on (u1 0.73×0.41, B009 0.80 h/w,
-// B010 0.71×0.49, B064 0.68×0.49, B007 0.72×0.61); its centre 0.53–0.6 ED under the near dome's top in side view (u1,
-// B009 with the camera 15–18° up: the axis 5–11° above the equator; B007 −10°; u5 +8°); from the front (u5, the cheeks
-// blown) only a tall crescent on the outer edge of each dome, reaching its outline, narrow at the top where the hood's
-// pale margin comes down over the window's upper front and wide at the bottom: it faces about 27° forward of lateral.
-// The mesh splits the window into the pupil and the iris (eyeGlobe), so the clay and the textured eye show the iris ring
-// light and only the pupil dark.
+// The window, measured on the photos at their cameras: a flat-topped bean (u1 mirrored to the model's side view: h/w
+// 0.55, the top quarter 1.6 × the bottom's width, the top edge level (slope −0.03) and straight (sagitta 0.015 of the
+// width), the bottom rising toward the back (0.15), both ends round; B010 the same tilted 0.14 from above), the dark
+// pupil a bean with a notch in its top edge (B009, B010) in a thin gold iris ring, wider under it (B010); its middle
+// level with the near dome's centre in u1; from the front (u5, the cheeks blown) a tall crescent on the outer edge
+// of each dome, reaching its outline, narrow at the top. The mesh splits the window into the pupil and the iris
+// (eyeGlobe), so the clay and the textured eye show the iris ring light and only the pupil dark.
 
 import { HEAD } from './anatomy.mjs';
 
 /** Eye-mesh tunables (angles in degrees, heights as fractions of the globe's radius). */
 export const EYE_SCULPT = {
-  // the clear window (cornea over the iris and pupil): its half-angles about its axis [behind it, above it, below it,
-  // in front of it] (seen face-on 0.59 ED wide and 0.49 tall past the lid margin, about n15's; it reaches back over
-  // the dome's outline from the front, u5, and keeps in front within the blink's closing hood and the ±30° turn),
-  // its upper front clipped by `clip` (`depth` of the bound at `at` degrees round from the back edge through the top,
-  // `width` the spread): the hood's skin coming down over it, so from the front (u5) the window is a crescent reaching
-  // the dome's outline over 0.68 of its height, its top quarter 0.46 of its bottom quarter's width (u5 0.47), and
-  // from the side its top edge runs level (u1, B010)
-  windowHalf: [46, 33, 32, 41],
-  clip: { at: 145, width: 45, depth: 0.5 },
-  // the window's axis in the eye's rest frame (fish frame: forward is −s, up +y, lateral +z for the left eye): 27°
-  // forward of lateral, 4° above the equator
-  axis: [-0.4529, 0.0698, 0.8889],
+  // the clear window (cornea over the iris and pupil), a flat-topped bean as in the lateral photos (u1, at its camera
+  // h/w 0.55, the top quarter 1.6 × the bottom's width, both ends round, the top edge level and straight, the bottom
+  // edge's low point in front of the middle; B010 the same from above), its outline convex from every camera (n16
+  // cut a notch into its upper front for u5, which every side and 3/4 view showed as a bite): the smooth intersection
+  // of spherical caps (windowCaps: each { at: [u, v] its centre in degrees from the axis, u toward the back edge, v
+  // up; r its angular radius }, corners rounded over k radians) — a round main cap whose centre sits high (the
+  // rounded bottom and ends), a wide cap centred far below the axis (the flat top), a cap centred below and behind
+  // (the front's upper corner set back, so from the front (u5) the window is a crescent narrowing upward); turned
+  // `windowRoll` degrees about the axis (back end up). Each cap
+  // is convex in any view within 90° of its centre, so the outline stays convex (concavity ≤ 0.012 ED at the photo
+  // cameras, n16 0.023–0.043). Seen face-on its half-angles are about 49° behind the axis, 21° above it, 32° below and
+  // 43° in front (windowHalf, which also sizes the pupil when it does not follow the window); it reaches 35° behind
+  // lateral and 65° forward of it, so turned ±30° (the runtime clamp) it keeps clear of the head's lobes
+  windowHalf: [49, 21, 32, 43],
+  windowCaps: { k: 0.0356, caps: [{ at: [2.5, 20.5], r: 53 }, { at: [-2, -53.25], r: 74.31 }, { at: [33.75, -55], r: 94.75 }] },
+  windowRoll: 9,
+  // the window's axis in the eye's rest frame (fish frame: forward is −s, up +y, lateral +z for the left eye): 19°
+  // forward of lateral, 13° above the equator (the window's mass lies under its flat top, so with the axis there its
+  // middle is level with the dome's centre at the u1 camera, as in the photo)
+  axis: [-0.3192, 0.225, 0.9206],
   // the skin's thickness: the cornea's edge lies this far under the skin round it
   skin: 0.055,
   // the cornea's apex above its edge
@@ -52,14 +58,17 @@ export const EYE_SCULPT = {
   // the fold outlining the lid: a soft groove `at` degrees out from the window's edge, `width` wide, `depth` deep,
   // along the hood only (`hood`: weighted by the lid's crescent), an arch over the window in side view (B064, B009,
   // u1), none under it (no porthole ring)
-  fold: { at: 11, width: 2.6, depth: 0.020, hood: true, hoodPow: 1.0 },
-  // the pupil inside the window (the rest of the window is the iris, gold-brown under the clear cornea): an oval of
-  // `half` [horizontal, vertical] fractions of the window's half-angles (behind and above the axis), centred `lift` of
-  // the same above the axis (a thin ring over it, a wider one under it: B010), with a notch `dent` deep and
-  // `dentWidth` degrees wide in its top edge, and kept `ring` of the window's radius inside its edge (under the clip
-  // it follows the window's edge down, so its upper front is cut too): a bean 0.56 ED wide and 0.34 tall face-on
-  // (h/w 0.61; anat_soft 0.6–0.68 × 0.34), h/w 0.56 at the u1 camera (u1 0.55); a ring of the mesh runs along it
-  pupil: { half: [0.88, 0.66], lift: 0.14, dent: 0.12, dentWidth: 28, ring: 0.06 },
+  // (centre, spread: the fold's own crescent, over the window's top rather than the hood's upper front, and 0.016 deep,
+  // was 0.020 along the hood: with the eye turned 30° forward the deeper groove over the upper front let the head's
+  // lobe show through it)
+  fold: { at: 11, width: 2.6, depth: 0.016, hood: true, hoodPow: 1.0, centre: 105, spread: 2 },
+  // the pupil inside the window (the rest of the window is the iris, gold-brown under the clear cornea): the
+  // window's own outline drawn in toward its axis (follow [top, side, bottom] fractions of its bound), so the iris is
+  // a thin even ring round it, a little wider under it (B010, u1), with a notch `dent` deep and `dentWidth` degrees
+  // wide in its top edge at `dentAt` degrees round from the back edge (the kidney of B010, its notch over the front
+  // third), kept `ring` of the window's radius inside its edge; at the u1 camera 0.55 ED wide, h/w 0.56 (u1's dark
+  // area 0.55); a ring of the mesh runs along it (`half`, `lift`: the oval used without `follow`)
+  pupil: { follow: [0.90, 0.86, 0.74], dent: 0.10, dentAt: 110, dentWidth: 22, ring: 0.04, half: [0.88, 0.66], lift: 0.14 },
 };
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -74,14 +83,61 @@ const wrapPi = (x) => ((((x + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Ma
  * with the upper front clipped (`clip`: the hood's skin coming down over the window's upper front, u5, B010).
  */
 export function windowBound(K = EYE_SCULPT) {
+  if (K.windowCaps) return capsBound(K.windowCaps, K.windowRoll ?? 0);
   const WH = Array.isArray(K.windowHalf) ? K.windowHalf : [K.windowHalf, K.windowHalf];
   const hh = WH[0] * D2R, hv = WH[1] * D2R, hb = (WH[2] ?? WH[1]) * D2R, hf = (WH[3] ?? WH[0]) * D2R, CL = K.clip;
-  return (ph) => {
-    const sn = Math.sin(ph), cs = Math.cos(ph);
-    let b = 1 / Math.hypot(cs / (cs < 0 ? hf : hh), sn / (sn < 0 ? hb : hv));
+  // (windowPow: the superellipse exponent per quadrant [back-top, front-top, front-bottom, back-bottom], 2 an oval's;
+  // windowRoll: degrees the outline turns about the axis, back end up and front end down)
+  const PW = K.windowPow ?? [2, 2, 2, 2], roll = (K.windowRoll ?? 0) * D2R;
+  return (ph0) => {
+    const ph = ph0 - roll, sn = Math.sin(ph), cs = Math.cos(ph);
+    const n = PW[sn >= 0 ? (cs >= 0 ? 0 : 1) : cs < 0 ? 2 : 3];
+    const x = Math.abs(cs / (cs < 0 ? hf : hh)), y = Math.abs(sn / (sn < 0 ? hb : hv));
+    let b = n === 2 ? 1 / Math.hypot(x, y) : Math.pow(Math.pow(x, n) + Math.pow(y, n), -1 / n);
     if (CL && CL.depth) b *= 1 - CL.depth * Math.exp(-((wrapPi(ph - CL.at * D2R) / (CL.width * D2R)) ** 2));
     return b;
   };
+}
+
+/**
+ * The window as the smooth intersection of spherical caps (windowCaps: { caps: [{ at: [u, v], r }], k }): each cap a
+ * circle on the globe of angular radius r (degrees) centred `at` [u, v] degrees from the window's axis (u toward its
+ * back edge, v up; turned `roll` degrees about the axis, back end up), the intersection's corners rounded over k (in
+ * radians of angle). Seen from any camera within 90° of every cap's centre such a window's outline is convex (each
+ * cap is the superlevel set of a concave function of the image coordinates, and a smooth minimum keeps it concave),
+ * so a flat top made by a wide cap centred under the window never reads as a bite. Returns θb(φ) (a table, 2048 steps).
+ */
+const capsCache = new Map();
+function capsBound(WC, rollDeg) {
+  const key = JSON.stringify([WC, rollDeg]);
+  if (capsCache.has(key)) return capsCache.get(key);
+  const roll = rollDeg * D2R, k = WC.k ?? 0.02;
+  // cap centres in the (u, v, a) frame
+  const C = WC.caps.map((c) => {
+    const du = c.at[0] * D2R, dv = c.at[1] * D2R, t = Math.hypot(du, dv), ph = Math.atan2(dv, du) + roll;
+    return { n: [Math.sin(t) * Math.cos(ph), Math.sin(t) * Math.sin(ph), Math.cos(t)], cr: Math.cos(c.r * D2R), sr: Math.sin(c.r * D2R) };
+  });
+  const F = (th, ph) => {
+    const d = [Math.sin(th) * Math.cos(ph), Math.sin(th) * Math.sin(ph), Math.cos(th)];
+    let s = 0;
+    for (const c of C) s += Math.exp(-((d[0] * c.n[0] + d[1] * c.n[1] + d[2] * c.n[2] - c.cr) / c.sr) / k);
+    return -k * Math.log(s);
+  };
+  const M = 2048, T = new Float64Array(M + 1);
+  for (let i = 0; i <= M; i++) {
+    const ph = (i / M) * 2 * Math.PI;
+    let lo = 0, hi = Math.PI * 0.9;
+    // the first crossing out from the axis
+    for (let t = 0.01; t < hi; t += 0.01) if (F(t, ph) < 0) { hi = t; lo = t - 0.01; break; }
+    for (let j = 0; j < 40; j++) { const m = (lo + hi) / 2; if (F(m, ph) >= 0) lo = m; else hi = m; }
+    T[i] = (lo + hi) / 2;
+  }
+  const fn = (ph) => {
+    const x = ((((ph / (2 * Math.PI)) % 1) + 1) % 1) * M, i = Math.floor(x), f = x - i;
+    return T[i] + (T[Math.min(M, i + 1)] - T[i]) * f;
+  };
+  capsCache.set(key, fn);
+  return fn;
 }
 
 /**
@@ -93,13 +149,22 @@ export function windowBound(K = EYE_SCULPT) {
  */
 export function pupilEdge(ph, K = EYE_SCULPT) {
   const PU = K.pupil ?? { half: [0.7, 0.7], dent: 0, dentWidth: 30 };
+  if (PU.follow) {
+    // (follow [top, side, bottom]: the pupil as the window's own outline scaled toward its axis by these fractions
+    // (by the window's frame, so it keeps the window's flat top and rounded ends with an even ring), with the notch
+    // `dent` deep and `dentWidth` wide at `dentAt` degrees round from the back edge in its top edge)
+    const phr = ph - (K.windowRoll ?? 0) * D2R, sn = Math.sin(phr), [ft, fs, fb] = PU.follow;
+    const f = sn >= 0 ? fs + (ft - fs) * sn * sn : fs + (fb - fs) * sn * sn;
+    const dphi = wrapPi(phr - (PU.dentAt ?? 90) * D2R);
+    return Math.min(1 - (PU.ring ?? 0.06), f * (1 - (PU.dent ?? 0) * Math.exp(-((dphi / ((PU.dentWidth ?? 30) * D2R)) ** 2))));
+  }
   const WH = Array.isArray(K.windowHalf) ? K.windowHalf : [K.windowHalf, K.windowHalf];
   const A = PU.half[0] * WH[0] * D2R, B = PU.half[1] * WH[1] * D2R, c = (PU.lift ?? 0) * WH[1] * D2R;
-  const cs = Math.cos(ph), sn = Math.sin(ph);
+  const phr = ph - (K.windowRoll ?? 0) * D2R, cs = Math.cos(phr), sn = Math.sin(phr);
   // the distance t from the axis along φ to the oval (|t cos φ / A|² + |(t sin φ − c) / B|² = 1)
   const qa = (cs * cs) / (A * A) + (sn * sn) / (B * B), qb = (sn * c) / (B * B), qc = (c * c) / (B * B) - 1;
   const t = (qb + Math.sqrt(Math.max(0, qb * qb - qa * qc))) / qa;
-  const dphi = wrapPi(ph - Math.PI / 2);
+  const dphi = wrapPi(phr - Math.PI / 2);
   const e = (t * (1 - (PU.dent ?? 0) * Math.exp(-((dphi / ((PU.dentWidth ?? 30) * D2R)) ** 2)))) / windowBound(K)(ph);
   return Math.min(1 - (PU.ring ?? 0.06), e);
 }
@@ -140,7 +205,10 @@ export function eyeSurface({ side = 1, K = EYE_SCULPT } = {}) {
     let Rs = 1 - K.skin + (K.skin + swell) * roll;
     if (F) {
       // the fold: a groove outlining the lid, deepest over the top, steeper on its outer side
-      const wq = F.hood ? Math.pow(hw, F.hoodPow ?? 1) : sp >= 0 ? F.weight[1] + (F.weight[0] - F.weight[1]) * sp : F.weight[1] + (F.weight[2] - F.weight[1]) * -sp;
+      // (centre: the fold's own crescent, centred `centre` degrees round from the window's back edge, `spread` its
+      // power, instead of the lid's hood)
+      const hwF = F.centre !== undefined ? Math.pow(0.5 * (1 + Math.cos(ph - F.centre * D2R)), F.spread ?? 1.5) : hw;
+      const wq = F.hood ? Math.pow(hwF, F.hoodPow ?? 1) : sp >= 0 ? F.weight[1] + (F.weight[0] - F.weight[1]) * sp : F.weight[1] + (F.weight[2] - F.weight[1]) * -sp;
       const q = (dd - F.at) / F.width;
       Rs -= wq * F.depth * (q < 0 ? Math.exp(-q * q) : Math.exp(-q * q * 2.2));
     }
@@ -164,11 +232,12 @@ export function eyeSurface({ side = 1, K = EYE_SCULPT } = {}) {
  * normal, uv, skin, cornea, pupil, iris } with skin and cornea index arrays (cornea: the whole window; pupil and iris:
  * its two parts, for a clay or a material that shows the iris ring); uv: (azimuth about the axis, ρ / 2 inside the
  * window and 0.5 … 1 beyond), for the
- * iris texture (the pupil at the centre) and the skin's speckle. (nt 56 rings: over the dome's top the facets keep
- * within 0.00022 HL of the sphere, under the head's band that meets the eye's skin there, 0.0004 HL under it:
- * head.mjs cup.neck; 48 rings left 0.00028 and the band showed through in specks)
+ * iris texture (the pupil at the centre) and the skin's speckle. (straddle: the vertices stand out by half their
+ * facets' sag, so the facets straddle the sphere: where the head's lobe (head.mjs cup.neck) crosses the eye's skin
+ * nearly tangent, it emerges from the mesh at the crossing itself, not up to a sag lateral of it where its curl under
+ * the skin has tilted it; the seam's columns and the poles move together)
  */
-export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = EYE_SCULPT } = {}) {
+export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = EYE_SCULPT, straddle = true } = {}) {
   const S = eyeSurface({ side, K });
   const { a, u, v, thB } = S;
   const nw = Math.round(nt * 0.3), no = nt - nw;
@@ -238,6 +307,29 @@ export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = E
       (j + 1 <= nw ? cornea : skin).push(...tri);
       if (j + 1 <= nw) (j + 1 <= nwp ? pupil : iris).push(...tri);
     }
+  // (straddle: each vertex pushed out by half the deepest sag of its facets under the sphere through their corners,
+  // so the facets straddle the true surface instead of lying inside it: over the dome's top the head's surface
+  // emerges from the eye's mesh where it crosses the skin, not up to 0.0002 HL lateral of it (0.0006 for a lod1 ring
+  // count) where its curl under the skin has already tilted it; the globe grows by ≈0.1%)
+  if (straddle) {
+    const sag = new Float64Array(pos.length / 3);
+    const all0 = skin.concat(cornea);
+    const U = (k) => { const x = pos[k * 3], y = pos[k * 3 + 1], z = pos[k * 3 + 2], l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l, l]; };
+    for (let k = 0; k < all0.length; k += 3) {
+      const A = U(all0[k]), B = U(all0[k + 1]), Cc = U(all0[k + 2]);
+      // the centroid of the facet against the sphere through its corners (radii taken as equal: their mean)
+      const rm = (A[3] + B[3] + Cc[3]) / 3, cx = (A[0] * A[3] + B[0] * B[3] + Cc[0] * Cc[3]) / 3, cy = (A[1] * A[3] + B[1] * B[3] + Cc[1] * Cc[3]) / 3, cz = (A[2] * A[3] + B[2] * B[3] + Cc[2] * Cc[3]) / 3;
+      const sg = Math.max(0, 1 - Math.hypot(cx, cy, cz) / rm);
+      for (const v of [all0[k], all0[k + 1], all0[k + 2]]) sag[v] = Math.max(sag[v], sg);
+    }
+    // (the seam's two columns and each pole's ring are the same points: they move together, or the mesh cracks)
+    for (let j = 0; j < nr; j++) {
+      const i0 = j * (np + 1), i1 = i0 + np;
+      if (j === 0 || j === nr - 1) { let m = 0; for (let i = i0; i <= i1; i++) m = Math.max(m, sag[i]); for (let i = i0; i <= i1; i++) sag[i] = m; }
+      else { const m = Math.max(sag[i0], sag[i1]); sag[i0] = m; sag[i1] = m; }
+    }
+    for (let v = 0; v < sag.length; v++) { const f = 1 + sag[v] / 2; pos[v * 3] *= f; pos[v * 3 + 1] *= f; pos[v * 3 + 2] *= f; }
+  }
   // smooth normals from the geometry (the bulge, the lid margin and the fold tilt them); the seam at φ = 0 / 2π is
   // welded by summing its two columns
   const N = new Float64Array(nrm.length);

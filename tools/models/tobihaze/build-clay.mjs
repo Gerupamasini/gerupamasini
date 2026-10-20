@@ -12,6 +12,7 @@ import { GLBBuilder } from '../../lib/glb.mjs';
 import { HL, HEAD, EYE_MM, toObject } from './anatomy.mjs';
 import { surfaceNets } from './mesher.mjs';
 import { eyeGlobe } from './eye.mjs';
+import { fixWinding } from './headrig.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -30,6 +31,9 @@ const box = whole
   ? { min: [-0.08 * HL, -0.16 * HL, -0.62 * HL], max: [4.32 * HL, 0.85 * HL, 0.62 * HL] }
   : { min: [-0.08 * HL, -0.08 * HL, -0.5 * HL], max: [(HEAD_SCULPT.cutS + 0.05) * HL, 0.85 * HL, 0.5 * HL] };
 const mesh = surfaceNets(f, box, h, { log });
+// (the few triangles the surface nets wind against all their neighbours at thin features turned over, as in
+// build-pose.mjs: they render as dark or missing specks)
+log(`${fixWinding(mesh.indices)} triangles rewound`);
 
 // to the object frame (metres)
 function toObj(m) {

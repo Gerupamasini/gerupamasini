@@ -4,7 +4,8 @@
 // per pose for the x-ray and clay renders (render.mjs). Nothing here ships: the output goes to out/.
 // Blend shapes before the skinning: the blink, the throat's pouch, the cheeks' inflation (solved per vertex for the
 // `inflated` pose, so the posed skin lands on the balloon whatever the joints do) and the gape's correctives (the lower
-// lip everted, the upper lip's stretch relaxed, the gum drawn back from the teeth). Each blend shape carries its normal
+// lip everted, the upper lip's stretch relaxed, the gum and the mouth's floor drawn back from the teeth) and the vent's (the
+// gill slit's ends rounded as the covers swing out). Each blend shape carries its normal
 // deltas (headrig.mjs morphNormals; the inflation's from its own rule, bindNormalDeltas), and the poses are shaded with
 // them exactly as the game's morph targets will be: n = normalize(n0 + Σ w ΔN), then skinned. morphs.glb holds the
 // bind head with every blend shape as a glTF morph target (POSITION and NORMAL) and their drivers in the mesh's extras.
@@ -21,7 +22,7 @@ import { surfaceNets } from './mesher.mjs';
 import { skullBones, fitTeeth } from './skull.mjs';
 import { boundedUnion, movePoint } from './skel.mjs';
 import { eyeGlobe } from './eye.mjs';
-import { headWeights, HEAD_POSES, poseWorld, skinVertices, blinkTargets, throatTargets, gapeTargets, inflateTargets, inflateMorph, inflateMidMorph, smoothSculpt, morphNormals, bindNormalDeltas, faceNormals, smoothField, rotateTo, BLINK_DROP, JOINT_NAMES } from './headrig.mjs';
+import { headWeights, HEAD_POSES, poseWorld, skinVertices, blinkTargets, throatTargets, gapeTargets, inflateTargets, inflateMorph, inflateMidMorph, smoothSculpt, morphNormals, bindNormalDeltas, faceNormals, smoothField, rotateTo, fixWinding, ventTargets, BLINK_DROP, JOINT_NAMES } from './headrig.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -38,7 +39,10 @@ const poses = (arg('--poses') ?? Object.keys(HEAD_POSES).join(',')).split(',');
 const f = headSDF(HEAD_SCULPT, { cut: true });
 const box = { min: [-0.08, -0.08, -0.5], max: [HEAD_SCULPT.cutS + 0.05, 0.85, 0.5] };
 const head = surfaceNets(f, box, h, { log });
-log(`head ${head.position.length / 3} verts`);
+// (the few triangles the surface nets wind against their neighbours at the eyes' thin features turned over: the blink
+// carries them out onto the closed dome, where they showed as black triangles)
+const turned = fixWinding(head.indices);
+log(`head ${head.position.length / 3} verts (${turned} triangles rewound)`);
 // the teeth fitted to the sculpt (their tips just under the oral surface round them), the weights with them
 const teeth = fitTeeth(f);
 const skin = headWeights(head.position, head.indices, f, { K: HEAD_SCULPT, teeth });
@@ -52,18 +56,20 @@ const throat = needs('throat') ? throatTargets(head.position, head.normal, HEAD_
 if (throat) log('throat targets');
 const gapeC = needs('gape') || needs('gum') ? gapeTargets(head.position, head.normal, head.indices, f, HEAD_SCULPT, skin, { teeth }) : null;
 if (gapeC) log('gape correctives');
+const vent = needs('vent') ? ventTargets(head.position, head.normal, head.indices, skin, { K: HEAD_SCULPT }) : null;
+if (vent) log('vent corrective');
 // the inflation's blend shapes: onto the inflated head (head-inflated.mjs), solved for the full `inflated` pose, and
 // its in-between corrective (exact at `inflatedHalf`; driven by 4w(1 − w) from the inflate weight w)
-let inflate = null, inflateMid = null, inflateMask = null, inflateProjS = null, inflateField = null, inflateD = null;
+let inflate = null, inflateMid = null, inflateMask = null, inflateProjS = null, inflateField = null, inflateD = null, inflateLaid = null;
 if (needs('inflate')) {
   const IM = await import(pathToFileURL(path.resolve(arg('--inflated', path.join(here, 'head-inflated.mjs')))).href);
   inflateField = IM.inflatedSDF(HEAD_SCULPT, { cut: true, headSDF });
-  const inf = inflateTargets(head.position, head.indices, f, headSDF(smoothSculpt(HEAD_SCULPT), { cut: true }), inflateField, { K: HEAD_SCULPT });
+  const inf = inflateTargets(head.position, head.indices, f, headSDF(smoothSculpt(HEAD_SCULPT), { cut: true }), inflateField, { K: HEAD_SCULPT, jawSplay: poseWorld(HEAD_POSES.inflated) });
   inflate = inflateMorph(head.position, skin, poseWorld(HEAD_POSES.inflated), inf);
   const HP = HEAD_POSES.inflatedHalf;
   inflateMid = inflateMidMorph(head.position, skin, poseWorld(HP), inf, inflate, HP.morph.inflate);
   // (the displacement at full weight: inflateTargets applies the mask)
-  inflateMask = inf.mask; inflateD = inf.d;
+  inflateMask = inf.mask; inflateD = inf.d; inflateLaid = inf.laid ?? null;
   // the projected skin (1) against the features riding on it (0), smoothed so the normals' two rules blend
   inflateProjS = smoothField(Float32Array.from(inf.projected), head.indices, 3);
   log(`inflate targets (${inf.stats.projected} projected, ${inf.stats.filled} filled)`);
@@ -128,6 +134,7 @@ if (blink) {
 }
 if (throat) shapes.throat = { d: throat, n: morphNormals(P0, N0, I0, throat) };
 if (gapeC) { shapes.gape = { d: gapeC.gape, n: morphNormals(P0, N0, I0, gapeC.gape) }; shapes.gum = { d: gapeC.gum, n: morphNormals(P0, N0, I0, gapeC.gum) }; }
+if (vent) shapes.vent = { d: vent, n: morphNormals(P0, N0, I0, vent) };
 // the inflation's normals. The skin lands at the bind position moved by the inflation's displacement (the joints swing
 // only the bones inside it): on the projected skin the normal is the bind's turned toward the balloon's own at the
 // displaced point (its field's gradient), in the mask's share; the features riding on the skin (the gill margin, the pads)
@@ -136,6 +143,9 @@ if (gapeC) { shapes.gape = { d: gapeC.gape, n: morphNormals(P0, N0, I0, gapeC.ga
 const inflationNormals = (posed, wInf) => {
   const P = posed.position, N = Float32Array.from(posed.normal), e = 2e-4, g = inflateField, B = P0, D = inflateD;
   const fb = smoothField(faceNormals(B, I0), I0, 4), fp = smoothField(faceNormals(P, I0), I0, 4);
+  // (the pads' laid ends (inflateTargets' laid share) take the posed skin's own normals, lightly smoothed: carried from
+  // the bind's round end, the rule above combed their relief with stripes)
+  const pv = inflateLaid ? smoothField(faceNormals(P, I0), I0, 3) : null;
   for (let v = 0; v < nV; v++) {
     const w = Math.min(1, wInf * inflateMask[v]);
     if (w < 1e-3) continue;
@@ -152,6 +162,10 @@ const inflationNormals = (posed, wInf) => {
       const t = [n0[0] * (1 - w) + (w * gx) / gl, n0[1] * (1 - w) + (w * gy) / gl, n0[2] * (1 - w) + (w * gz) / gl];
       const tl = Math.hypot(...t) || 1;
       r = [0, 1, 2].map((k) => r[k] * (1 - pj) + (t[k] / tl) * pj);
+    }
+    if (pv && inflateLaid[v] > 0) {
+      const lw = Math.min(1, inflateLaid[v]), rl = Math.hypot(...r) || 1, q = [pv[v * 3], pv[v * 3 + 1], pv[v * 3 + 2]], ql = Math.hypot(...q) || 1;
+      r = [0, 1, 2].map((k) => (r[k] / rl) * (1 - lw) + (q[k] / ql) * lw);
     }
     const l = Math.hypot(...r) || 1;
     N[v * 3] = r[0] / l; N[v * 3 + 1] = r[1] / l; N[v * 3 + 2] = r[2] / l;
@@ -177,7 +191,8 @@ if (writeMorphs && Object.keys(shapes).length) {
   const DRIVERS = {
     blinkL: 'J_eyeL drop / BLINK_DROP (the eye pulled down 0.10 HL)', blinkR: 'J_eyeR drop / BLINK_DROP',
     throat: 'buccal pumping (gulp 1, inflate 1)', inflate: 'cheek inflation w (inflated 1, inflatedHalf 0.5)', inflateMid: '4 w (1 − w) of the inflation w',
-    gape: 'J_jaw angle / 70°, clamped 0…1', gum: 'J_jaw angle / 25°, clamped 0…1',
+    gape: 'J_jaw angle / 70°, clamped 0…1', gum: 'J_jaw angle / 40°, clamped 0…1',
+    vent: 'J_opercL/R angle / 18° (vent 1, gulp 4/18), clamped 0…1; 0 in the cheek inflation (its own blend shape carries the covers)',
   };
   const gm = new GLBBuilder('tobihaze-head-morphs');
   const clay = gm.addMaterial({ name: 'Clay', pbrMetallicRoughness: { baseColorFactor: [0.72, 0.7, 0.66, 1], metallicFactor: 0, roughnessFactor: 0.6 } });
@@ -216,13 +231,25 @@ for (const name of poses) {
     const nm = `${b.kind}_${b.joint}`;
     nodes.push(gb.addNode({ name: nm, mesh: gb.addMesh(nm, [gb.primitive({ ...toObjMesh(P, N, b.m.indices), material: b.kind === 'Teeth' ? enamel : red })]) }));
   }
+  // (the pose's `gaze` { pitch, yaw } (degrees): the globes turned in their sockets as the game's eye gaze turns them,
+  // the eye's skin cap and window with them (they are the globe's own); pitch about the fore-aft axis, + = the window
+  // up, then yaw about the vertical, + = the window forward; the head's skin does not move)
+  const GZ = HEAD_POSES[name]?.gaze;
+  const gazeR = (sd) => {
+    if (!GZ) return null;
+    const p = ((GZ.pitch ?? 0) * Math.PI) / 180, y = ((GZ.yaw ?? 0) * Math.PI) / 180, cp = Math.cos(p), sp = Math.sin(p), cy = Math.cos(y), sy = Math.sin(y);
+    const P = [1, 0, 0, 0, cp, sd * sp, 0, -sd * sp, cp], Y = [cy, 0, -sd * sy, 0, 1, 0, sd * sy, 0, cy];
+    return [0, 1, 2].flatMap((i) => [0, 1, 2].map((k) => Y[i * 3] * P[k] + Y[i * 3 + 1] * P[3 + k] + Y[i * 3 + 2] * P[6 + k]));
+  };
   for (const side of [1, -1]) {
     const g = eyeGlobe(HEAD.eye.d / 2, { side });
     const T = W[side > 0 ? 'J_eyeL' : 'J_eyeR'];
     const c = [HEAD.eye.s, HEAD.eye.y, HEAD.eye.z * side];
-    const n = g.position.length / 3, P = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) P.set(movePoint([c[0] + g.position[i * 3], c[1] + g.position[i * 3 + 1], c[2] + g.position[i * 3 + 2]], T), i * 3);
-    const { N } = rigid({ position: P, normal: g.normal }, { R: T.R, t: [0, 0, 0] });
+    const n = g.position.length / 3, P = new Float32Array(n * 3), RG = gazeR(side);
+    const turn = (a, i) => (RG ? [0, 1, 2].map((k) => RG[k * 3] * a[i * 3] + RG[k * 3 + 1] * a[i * 3 + 1] + RG[k * 3 + 2] * a[i * 3 + 2]) : [a[i * 3], a[i * 3 + 1], a[i * 3 + 2]]);
+    for (let i = 0; i < n; i++) { const q = turn(g.position, i); P.set(movePoint([c[0] + q[0], c[1] + q[1], c[2] + q[2]], T), i * 3); }
+    const gn = RG ? Float32Array.from({ length: n * 3 }, (_, j) => turn(g.normal, (j / 3) | 0)[j % 3]) : g.normal;
+    const { N } = rigid({ position: P, normal: gn }, { R: T.R, t: [0, 0, 0] });
     // (the window as the pupil (cornea) and the iris ring round it, when the eye has them; else the whole window dark)
     const obj = toObjMesh(P, N, g.skin), win = g.pupil && g.iris ? [[g.pupil, cornea], [g.iris, iris]] : [[g.cornea, cornea]];
     nodes.push(gb.addNode({ name: side > 0 ? 'Eye_L' : 'Eye_R', mesh: gb.addMesh(side > 0 ? 'Eye_L' : 'Eye_R', [gb.primitive({ ...obj, material: clay }), ...win.map(([I, mat]) => gb.primitive({ ...toObjMesh(P, N, I), material: mat }))]) }));

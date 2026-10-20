@@ -5,7 +5,8 @@
 // win, with a soft falloff (sigma) so the skin stretches between two bone groups instead of tearing. The tissue a
 // vertex belongs to limits which joints may move it (head.mjs parts):
 //   - the lower jaw's tissue (below the gape slit, in front of the rictus, told by the slit's own carve) moves only
-//     with the lower jaw, the hyoid and the suspensoria; everything above the slit never with the lower jaw
+//     with the lower jaw, the hyoid and the suspensoria; everything above the slit never with the lower jaw; in front of
+//     the intramandibular joint it is the dentary's (the articular's Meckel's cartilage runs on inside it)
 //   - in front of the hyoid the intermandibular skin swings with the rami; over and behind it the floor and the
 //     throat follow the hyoid; the roof of the mouth (and, in front of the rictus, all upper tissue) never does
 //   - the premaxillae and maxillae move the upper-lip pads, and the snout's sheath over the labial groove in a band
@@ -21,24 +22,27 @@
 // the mouth's roof inside the mouth), the throat's membrane more than the rest.
 // Blend shapes: the blink (the dermal cup drawn up over the lowered globe as a lid, closing to one seam near the top),
 // the throat's pouch (buccal pumping), the cheeks' inflation (u5: the skin carried onto the balloon of head-inflated.mjs,
-// inflateTargets / inflateMorph) and the gape's correctives (gapeTargets: the lower lip everted, the upper lip's stretch
-// spread, the gum drawn back from the teeth). Each carries normal deltas (morphNormals, bindNormalDeltas), so the game's
-// morph targets shade the moved skin as the shape it is.
+// inflateTargets / inflateMorph), the gape's correctives (gapeTargets: the lower lip everted, the upper lip's stretch
+// spread, the gum and the mouth's floor drawn back from the teeth) and the vent's (ventTargets: the gill slit's ends
+// rounded). Each carries normal deltas (morphNormals, bindNormalDeltas), so the game's morph targets shade the moved skin
+// as the shape it is. The mesh's triangles are wound consistently first (fixWinding).
 import { HEAD } from './anatomy.mjs';
 import { HEAD_JOINTS, skullBones } from './skull.mjs';
 import { worldTransforms, axisAngle, boundedUnion, v3 } from './skel.mjs';
 import { neckLobe } from './head.mjs';
 
 export const JOINT_NAMES = HEAD_JOINTS.map((j) => j.name);
-/** Joints whose bones count toward another joint's skin weights (headWeights): the hyoid's splay and fan joints. */
-const HYOID_SKIN = { J_chL: 'J_hyoid', J_chR: 'J_hyoid', J_bstegL: 'J_hyoid', J_bstegR: 'J_hyoid' };
+/** Joints whose bones count toward another joint's skin weights (headWeights): the hyoid's splay and fan joints, the
+ * opercular series' roll and the lower jaw's splayed halves, all bone-only (the inflation's blend shape carries the skin). */
+const HYOID_SKIN = { J_chL: 'J_hyoid', J_chR: 'J_hyoid', J_bstegL: 'J_hyoid', J_bstegR: 'J_hyoid', J_jawL: 'J_jaw', J_jawR: 'J_jaw', J_imjL: 'J_imj', J_imjR: 'J_imj', J_opercRollL: 'J_opercL', J_opercRollR: 'J_opercR' };
 
-// the opercle's skin margin and the gill slit of the n15 sculpt (head.mjs HEAD_SCULPT.opercle, .gillSlit), used when
+// the opercle's skin margin and the gill slit of the sculpt (head.mjs HEAD_SCULPT.opercle, .gillSlit; the slit's reach
+// as round 5's), used when
 // the caller does not pass the sculpt (o.K); the slit is a thin pocket under the cover's free edge, `reach` in front
 // of the margin, and `depth` (negative: over the mass's skin, between the pocket's floor and roof) the split between
 // the body wall under it (the trunk's) and the flap over it (the opercle's)
 const OPERCLE_PATH = [[0.996, 0.50, 0.25], [1.014, 0.44, 0.29], [1.032, 0.36, 0.325], [1.032, 0.26, 0.34], [1.007, 0.15, 0.33], [0.962, 0.06, 0.29], [0.912, 0.02, 0.24]];
-const GILL_SLIT = { y0: 0.175, y1: 0.375, depth: -0.002, reach: 0.035 };
+const GILL_SLIT = { y0: 0.175, y1: 0.375, depth: -0.002, reach: 0.025 };
 
 /** The opercle's skin margin as s at height y: a cubic Hermite through its path's (s, y) points, as head.mjs draws it
  * (the gill cover's rim, the cheek's clip and the gill slit follow the same curve). */
@@ -116,7 +120,7 @@ export function headWeights(pos, index, head, o = {}) {
   // HYOID_SKIN, so every pose but the inflation's skins exactly as before; the inflation's blend shape carries the
   // throat onto the balloon whatever the bones do)
   const groups = JOINT_NAMES.map((name) => {
-    const fs = skullBones(o.teeth ? { teeth: o.teeth } : {}).filter((b) => (HYOID_SKIN[b.joint] ?? b.joint) === name).map((b) => b.field);
+    const fs = skullBones(o.teeth ? { teeth: o.teeth } : {}).filter((b) => (HYOID_SKIN[b.joint] ?? b.joint) === name).map((b) => b.skinField ?? b.field);
     return fs.length ? boundedUnion(fs, box) : null;
   });
   const idx = Object.fromEntries(JOINT_NAMES.map((nm, i) => [nm, i]));
@@ -125,6 +129,7 @@ export function headWeights(pos, index, head, o = {}) {
   const lipJ = new Set(['J_premax', 'J_maxL', 'J_maxR'].map((k) => idx[k]));
   const suspJ = new Set(['J_suspL', 'J_suspR'].map((k) => idx[k]));
   const headOnly = new Set([idx.J_head]);
+  const imjS = (HEAD_JOINTS.find((j) => j.name === 'J_imj')?.pivot[0] ?? 0.32) - (o.imjBack ?? 0.07);
   // vertex normals (area-weighted), to tell the roof of the mouth (facing down) from its floor
   const vn = new Float32Array(n * 3);
   for (let t = 0; t < index.length; t += 3) {
@@ -155,7 +160,10 @@ export function headWeights(pos, index, head, o = {}) {
     const fusePen = behind > 0.012 ? 0.02 + (behind - 0.012) * 1.5 : 0;
     // the gill slit's flap (the cover's free edge over the slot, in front of the margin): the cleithrum lies close
     // under it, but the flap is the opercle's: the trunk's bones let go of it, so it swings out whole and the slot opens
-    const flapPen = !trunk && inSlit && behind < 0.012 ? (o.flapPen ?? 0.02) * smooth(-GS.reach, -0.01, behind) : 0;
+    // (0.04: with head.mjs's thinner, shorter pocket (round 5) 0.02 opened the flap's lip only 0.006 HL off the wall at
+    // vent and left a lump at the slit's lower end at gulp (16 levels over the 9-px median); 0.04 opens it 0.008 with
+    // the lower end clean (13); 0.08–0.15 open it 0.011–0.012 but stretch 2–4× more triangles at the pocket's hinge)
+    const flapPen = !trunk && inSlit && behind < 0.012 ? (o.flapPen ?? 0.04) * smooth(-GS.reach, -0.01, behind) : 0;
     for (let k = 0; k < J; k++) {
       if (!groups[k]) continue;
       if (trunk && !headOnly.has(k)) continue;
@@ -164,13 +172,24 @@ export function headWeights(pos, index, head, o = {}) {
       if (k === idx.J_hyoid && (roof || (!lower && x < rictus))) continue;
       if (lower && !lowerOnly.has(k)) continue;
       // above the slit, and on the cheek behind the rictus, the lower jaw moves only the skin under its hinge
-      if (!lower && jawJ.has(k) && (x < rictus || y > 0.11 || x > 0.46)) continue;
+      // (round n17, `web`: the cheek's skin beside the lower jaw under the pads' rear ends, below the slit (y under
+      // web.y [full, none]) from web.s [none, full] back to the rictus, takes the jaw's share at a cost (`pen`, more
+      // higher up), so the rictal web's stretch at the full gape is spread over the cheek instead of a few rows at the
+      // jaw's side: the venetian-blind curtain)
+      const WB = o.web, inWeb = WB && !lower && !roof && jawJ.has(k) && x < rictus && y < WB.y[1] && x > WB.s[0];
+      if (!lower && jawJ.has(k) && (x < rictus || y > 0.11 || x > 0.46) && !inWeb) continue;
       if (lipJ.has(k) && !onPad) continue;
       d[k] = Math.max(0, groups[k](x, y, z));
+      if (inWeb) d[k] += WB.pen + (1 - smooth(WB.s[0], WB.s[1], x) * (1 - smooth(WB.y[0], WB.y[1], y))) * 0.2;
       if (lipJ.has(k)) d[k] += padPen;
       // the palatines reach forward under the snout, but the snout's skin sheath is fixed to the skull: the
       // suspensoria move only the cheeks (behind the pads' front ends)
       if (suspJ.has(k)) d[k] += Math.max(0, 0.26 - x) * 2;
+      // (round n17) in front of the intramandibular joint the lower jaw's flesh (the lip, the gum round the teeth, the
+      // chin) is the dentary's: Meckel's cartilage, the articular's, runs forward inside the dentary under the tooth row
+      // and took half the gum's weight, so the dentary's further 15° at the full gape sank the teeth into the gum (outside
+      // the skin 276/726 at the half gape, 89 at the full)
+      if (k === idx.J_jaw) d[k] += Math.max(0, imjS - x) * (o.imjPen ?? 1.5);
       // the mouth's floor (the lower tissue's upper face): its rim along the dentaries (the lower lip's inner face and
       // the teeth's gum) rides on the jaw, so the lips stay sealed in buccal pumping; its middle is the mucosa over
       // the tongue and the hyoid, which the gape stretches into a slope from the lower lip back to the tongue,
@@ -364,11 +383,13 @@ export const HEAD_POSES = {
   rest: {},
   // a strike on land at full gape: the lower jaw down 70°, the premaxillae protruded, the maxillae swung forward, the
   // hyoid depressed, the suspensoria and gill covers abducted
-  // (morph: the gape's correctives, gapeTargets: `gape` driven by J_jaw / 70°, `gum` by J_jaw / 25°)
-  gapeFull: { J_jaw: { angle: 70 }, J_imj: { angle: 15 }, J_premax: { angle: 12, slide: 0.07 }, J_maxL: { angle: 25 }, J_maxR: { angle: 25 }, J_hyoid: { angle: 14 }, J_suspL: { angle: 6 }, J_suspR: { angle: 6 }, J_opercL: { angle: 8 }, J_opercR: { angle: 8 }, morph: { gape: 1, gum: 1 } },
-  gapeHalf: { J_jaw: { angle: 32 }, J_premax: { angle: 6, slide: 0.035 }, J_maxL: { angle: 12 }, J_maxR: { angle: 12 }, J_hyoid: { angle: 6 }, morph: { gape: 32 / 70, gum: 1 } },
+  // (morph: the gape's correctives, gapeTargets: `gape` driven by J_jaw / 70°, `gum` by J_jaw / 40° (round n17: the teeth
+  // bared as the jaw drops, more at the full gape than at the half); the premaxillae tilted 8° (12° swung the pads' rear
+  // ends 0.09 HL and stretched the rictal web, corner stretch>3 369 → 224))
+  gapeFull: { J_jaw: { angle: 70 }, J_imj: { angle: 15 }, J_premax: { angle: 8, slide: 0.07 }, J_maxL: { angle: 25 }, J_maxR: { angle: 25 }, J_hyoid: { angle: 14 }, J_suspL: { angle: 6 }, J_suspR: { angle: 6 }, J_opercL: { angle: 8 }, J_opercR: { angle: 8 }, morph: { gape: 1, gum: 1 } },
+  gapeHalf: { J_jaw: { angle: 32 }, J_premax: { angle: 4, slide: 0.035 }, J_maxL: { angle: 12 }, J_maxR: { angle: 12 }, J_hyoid: { angle: 6 }, morph: { gape: 32 / 70, gum: 32 / 40 } },
   // buccal pumping: the hyoid down, the cheeks out, the mouth shut
-  gulp: { J_hyoid: { angle: 4 }, J_suspL: { angle: 6 }, J_suspR: { angle: 6 }, J_opercL: { angle: 4 }, J_opercR: { angle: 4 }, morph: { throat: 1 } },
+  gulp: { J_hyoid: { angle: 4 }, J_suspL: { angle: 6 }, J_suspR: { angle: 6 }, J_opercL: { angle: 4 }, J_opercR: { angle: 4 }, morph: { throat: 1, vent: 4 / 18 } },
   // the cheeks blown up (u5; a mouthful of water or air held on land, and the males' display): the suspensoria and
   // the gill covers abducted, the hyoid down and the throat's pouch full, the mouth and the slits shut (the cheeks'
   // own swelling is the soft tissue's blend shape)
@@ -377,20 +398,25 @@ export const HEAD_POSES = {
   // the cheeks and gill covers inflated with a mouthful of water or air (u5; research/anat_soft.md §3.4): the
   // suspensoria and the gill covers swing out, the hyoid drops its full 18°, the mouth and the gill slits stay shut;
   // the skin is carried onto the balloon by the `inflate` blend shape (head-inflated.mjs, inflateTargets). The bones
-  // fill the balloon: the suspensoria abduct 21° and the gill covers a further 26° about their front edge, tilted down
-  // 22° (`lift`) so that their hind margins swing out under the widest part while their upper edges stay under u5's
-  // narrowing shoulders (the opercle's front 0.075 HL under the skin at most, s 0.65–0.85; its dorsal edge in but for
-  // 0.006). The hyoid bars splay 12° on their hypohyals (J_chL/R), so the interhyals stay with the abducted suspensoria
-  // (0.048 HL apart, not 0.09), and the branchiostegal rays fan 14° down and out (J_bstegL/R) under the ballooned floor
-  // of the gill chambers instead of rising behind the dropped hyoid (their tips 0.014 HL under the skin).
-  // inflatedHalf: the game's drive at weight 0.5: the suspensoria, the hyoid and its splay at w of the full, the gill
-  // covers and the rays at w² (they open last, Michel 2014), the inflate morph at 0.5 with its in-between shape
-  // (inflateMidMorph) at 1, so the skin is exactly half-way and every bone under it; driven by w, w² and 4w(1 − w) the
-  // skin misses the ideal (bind + w × the inflation) by 0.004–0.005 HL at most at w 0.25 and 0.75
-  inflated: { J_suspL: { angle: 21 }, J_suspR: { angle: 21 }, J_opercL: { angle: 26, lift: -22 }, J_opercR: { angle: 26, lift: -22 }, J_hyoid: { angle: 18 }, J_chL: { angle: 12 }, J_chR: { angle: 12 }, J_bstegL: { angle: 14 }, J_bstegR: { angle: 14 }, morph: { inflate: 1 } },
-  inflatedHalf: { J_suspL: { angle: 10.5 }, J_suspR: { angle: 10.5 }, J_opercL: { angle: 6.5, lift: -5.5 }, J_opercR: { angle: 6.5, lift: -5.5 }, J_hyoid: { angle: 9 }, J_chL: { angle: 6 }, J_chR: { angle: 6 }, J_bstegL: { angle: 3.5 }, J_bstegR: { angle: 3.5 }, morph: { inflate: 0.5, inflateMid: 1 } },
+  // fill the balloon as far as the joints allow: the suspensoria abduct 10° (further, the quadrates would leave the
+  // lower jaw: at 21° the condyle stood 0.066 HL off any rigid splay of the ramus and the joint opened 0.09) and the
+  // lower jaw's halves splay 4.9° at the symphysis (J_jawL/R with J_imjL/R), so the articulars stay on the quadrates
+  // (0.009 HL apart); the gill covers swing a further 26° about their front edge, tilted down 22° (`lift`), and roll 24°
+  // out about the fore-aft line through their facet (J_opercRollL/R), so their front edges follow the cheek (0.04–0.08
+  // HL under the skin at s 0.70) and their hind margins swing out under the widest part while their upper edges stay
+  // under u5's narrowing shoulders. The hyoid bars splay 5° on their hypohyals (J_chL/R), so the interhyals stay with
+  // the abducted suspensoria (0.020 HL apart), and the branchiostegal rays fan 14° down and out (J_bstegL/R) under the
+  // ballooned floor of the gill chambers. The eyes look up and back (`gaze`, the globes only, build-pose.mjs: pitch 10°,
+  // yaw −8°), as in u5, where each window shows as a tall crescent narrowing at its top (rt3 at the u5 camera: its
+  // top/bottom width 0.70 → 0.59, reach 0.84 → 0.89; the rest gaze keeps the lateral photos' flat-topped window).
+  // inflatedHalf: the game's drive at weight 0.5: the suspensoria, the jaw's splay, the hyoid and its splay at w of the
+  // full, the gill covers (angle, lift and roll) and the rays at w² (they open last, Michel 2014), the inflate morph at
+  // 0.5 with its in-between shape (inflateMidMorph) at 1, so the skin is exactly half-way and every bone under it
+  inflated: { J_suspL: { angle: 10 }, J_suspR: { angle: 10 }, J_jawL: { angle: 4.9 }, J_jawR: { angle: 4.9 }, J_imjL: { angle: 4.9 }, J_imjR: { angle: 4.9 }, J_opercL: { angle: 26, lift: -22 }, J_opercR: { angle: 26, lift: -22 }, J_opercRollL: { angle: 24 }, J_opercRollR: { angle: 24 }, J_hyoid: { angle: 18 }, J_chL: { angle: 5 }, J_chR: { angle: 5 }, J_bstegL: { angle: 14 }, J_bstegR: { angle: 14 }, morph: { inflate: 1 }, gaze: { pitch: 10, yaw: -8 } },
+  inflatedHalf: { J_suspL: { angle: 5 }, J_suspR: { angle: 5 }, J_jawL: { angle: 2.45 }, J_jawR: { angle: 2.45 }, J_imjL: { angle: 2.45 }, J_imjR: { angle: 2.45 }, J_opercL: { angle: 6.5, lift: -5.5 }, J_opercR: { angle: 6.5, lift: -5.5 }, J_opercRollL: { angle: 6 }, J_opercRollR: { angle: 6 }, J_hyoid: { angle: 9 }, J_chL: { angle: 2.5 }, J_chR: { angle: 2.5 }, J_bstegL: { angle: 3.5 }, J_bstegR: { angle: 3.5 }, morph: { inflate: 0.5, inflateMid: 1 } },
   // venting through the gill slits: the gill covers swing out
-  vent: { J_opercL: { angle: 18 }, J_opercR: { angle: 18 }, J_suspL: { angle: 4 }, J_suspR: { angle: 4 } },
+  // (morph: the vent's corrective, ventTargets, driven by J_opercL/R / 18°)
+  vent: { J_opercL: { angle: 18 }, J_opercR: { angle: 18 }, J_suspL: { angle: 4 }, J_suspR: { angle: 4 }, morph: { vent: 1 } },
   // the eyes raised (alert) and pulled down into the orbits (blink)
   eyesUp: { J_eyeL: { t: [0, 0.03, 0] }, J_eyeR: { t: [0, 0.03, 0] } },
   blink: { J_eyeL: { t: [0, -BLINK_DROP, 0] }, J_eyeR: { t: [0, -BLINK_DROP, 0] }, morph: { blinkL: 1, blinkR: 1 } },
@@ -454,21 +480,37 @@ export function skinVertices(pos, nrm, skin, W) {
  *   - elsewhere (the lobes, the fillets, the web between the domes, the ridge before them, the nape) the skin rides down
  *     with the globe by rho, 1 on and in it and falling off with the distance from it (`fall`)
  *   - all of it laid onto the closed head's surface, a field: the head without its domes (the collar and the mass under
- *     them, the web between them lowered by `mu` of the drop) smoothly united (`k`, round the domes' foot only) with the
- *     lowered domes and their medial lobes, so each dome sinks into the head with fillets and no clefts in front of it,
- *     behind it or between the two; then relaxed over that surface (`iters` passes of `lambda`, laid again each pass),
- *     so the swing's folds and the pleats even out
+ *     them, the web between them lowered by `mu` of the drop over `muS`) smoothly united (`k`, round the domes' foot
+ *     only) with the lowered domes (`convex`: one convex surface `off` proud of both globes, united across the midline
+ *     over `kMid`; without it, the globes and their medial lobes), so each dome sinks into the head with fillets and no
+ *     clefts in front of it, behind it or between the two; then relaxed over that surface (`iters` passes of `lambda`,
+ *     laid again each pass), so the swing's folds and the pleats even out; at the dome's front end (`endsFree`) nothing
+ *     is tucked and the head's band just under the eye's skin is laid too, so the front is skin, not a pit
+ *   - the seam zipped (`zipSeam`): the lid's rim and the medial skin's edge, where they face each other across the tucked
+ *     lining, drawn to their midpoints, smoothed along the seam and relaxed round it, so the closed dome carries one fine
+ *     seam
  *   - what lay inside the rest globe, and the faces that looked into the socket, stay inside the lowered globe
  * Displacements are in the bind frame, applied before the skinning; the globe itself is moved by J_eyeL/R (BLINK_DROP),
  * and so is the eye joints' share of each vertex (o.weights, headWeights), which is taken out of the displacement. The
  * both-eyes shape is split between the two blend shapes across the midline as the eye joints' weights are, so blinkL +
  * blinkR is the both-closed shape and either alone leaves no step there.
- * @param o { weights, index (the mesh's triangles: the relaxation needs them), drop, close: { the closed shape's
- *            tunables, BLINK_CLOSE }, and the lid's: base, cover, lamMin, azimuths, lipAz, reach, thick, rimThick, tuck, hugT, thin }
+ * @param o { weights, index (the mesh's triangles: the relaxation needs them; wound consistently, fixWinding), drop,
+ *            close: { the closed shape's tunables, BLINK_CLOSE }, and the lid's: base, cover, lamMin, azimuths, lipAz,
+ *            reach, thick, rimThick, tuck, hugT, thin }
  * @returns { L, R: Float32Array displacements (HL); normal, normalShare: the closed surface's normals where the skin was
  *   laid on it (bind frame) and their share, for the blend shapes' normal deltas }
  */
-export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.5, iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.92, 0.99], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] } };
+// (round n17: one convex closed surface over both lowered globes (`convex`: the globes `off` proud, smoothly united over
+// `kMid` across the midline) in place of the sculpt's medial lobes laid on them (the lobes' junction at lobeK 0.003 tore
+// open as a crack with shards on each dome's medial face); the dome's front end skin, not a pit (`endsFree` [front,
+// back, band]: in front of 0.85 of the radius nothing is tucked and the head's band within 0.02 under the eye's skin is
+// laid too; `hinge.ends` [0.96, 0.995], so the lid reaches further round the front); the seam zipped (`zipSeam`); the web
+// between the domes lowered by 0.6 of the drop over a softer ramp (`mu`, `muS` [s from, to, back from, to]), so no strap
+// stands between them. With the mesh's winding repaired (fixWinding) the closed lid's back-facing px fell from
+// 134/58/93/59 to 4/1/0/2 (efront/eq34/eside/etop, CPU raster of the posed build's mesh), the cornea stays hidden and the
+// dip between the domes is 0.027 HL)
+export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.96, 0.995], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
+  convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 } };
 export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const CO = { ...BLINK_CLOSE, ...(o.close ?? {}) };
   if (o.close && o.close.hinge !== undefined && o.close.hinge !== false) CO.hinge = { ...BLINK_CLOSE.hinge, ...o.close.hinge };
@@ -494,7 +536,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   delete Kc.cup.fillet; delete Kc.cup.neck;
   const M0 = headSDF(Kc, { cut: true });
   // the web between the domes (the septum and the turret's top, over the frontals) lowered by mu of the drop
-  const muAt = (x, z) => CO.mu * (1 - smooth(0.02, 0.10, Math.abs(z))) * smooth(0.17, 0.25, x) * (1 - smooth(0.36, 0.46, x));
+  const muS = CO.muS ?? [0.17, 0.25, 0.36, 0.46], muZ = CO.muZ ?? [0, 0.10], muAt = (x, z) => CO.mu * (1 - smooth(muZ[0], muZ[1], Math.abs(z))) * smooth(muS[0], muS[1], x) * (1 - smooth(muS[2], muS[3], x));
   const Mw = (x, y, z) => M0(x, y + drop * muAt(x, z), z);
   const cyL = E.y - drop, NK = C.neck ?? { shift: 0 };
   // (the sculpt's radial-profile lobes, cup.neck with `rise` (head.mjs neckLobe), laid on the lowered globes like their
@@ -518,7 +560,12 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
     return CO.th[1] + (CO.th[0] - CO.th[1]) * (1 - smooth(thT - (CO.el[0] * Math.PI) / 180, thT - (CO.el[1] * Math.PI) / 180, th)) * (1 - smooth(re * 0.86, re * 0.98, Math.abs(dx)));
   };
   const thBl = (dx, dy, dz) => (HG ? thAtH(dx, dy, dz) : thAt(dx, dy, dz));
+  const CV = CO.convex;
   const dome = (x, y, z) => {
+    if (CV) {
+      const ex = x - E.s, ey = y - cyL, Rc = re + CV.off;
+      return smin1(Math.hypot(ex, ey, z - E.z) - Rc, Math.hypot(ex, ey, z + E.z) - Rc, CV.kMid);
+    }
     const za = Math.abs(z), dx = x - E.s, dy = y - cyL, dz = za - E.z;
     const g = Math.hypot(dx, dy, dz) - (re + thBl(dx, dy, dz));
     if (NKL) {
@@ -583,7 +630,10 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
     Q[v * 3] = pos[v * 3]; Q[v * 3 + 1] = pos[v * 3 + 1]; Q[v * 3 + 2] = pos[v * 3 + 2];
     wReg[v] = 1 - smooth(re + CO.region[0], re + CO.region[1], r);
     if (wReg[v] <= 0 && rhoS[v] < 1e-4) continue;
-    if (r < re - 0.0003) { Q[v * 3 + 1] -= drop; cls[v] = HID; continue; }
+    // (at the dome's front end, `endsFree`, the head's band just under the eye's skin (within endsFree[2] of it) is laid
+    // on the closed surface too, so the skin in front of the lowered globe closes over it instead of opening a pocket)
+    const EF0 = CO.endsFree, endBand = EF0 && EF0[2] && dx < 0 && -dx > EF0[0] * re && r > re - EF0[2];
+    if (r < re - 0.0003 && !endBand) { Q[v * 3 + 1] -= drop; cls[v] = HID; continue; }
     const rr = rhoS[v];
     let tx = dx, ty = dy - drop * rr, tz = dz;
     const e = Math.asin(Math.max(-1, Math.min(1, dy / r)));
@@ -647,10 +697,13 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       if (tk > 0.5 && t > 0.05) tuckW += wl;
     }
     tx += acc[0]; ty += acc[1]; tz += acc[2];
-    let tucked = tuckW > 0.5;
+    // (`endsFree` [front, back]: past these fractions of the radius in front of / behind the centre nothing is tucked: the
+    // lining there is laid on the closed surface with the rest, so the dome's ends are skin, not a pit)
+    const EF = CO.endsFree, endFree = EF ? (dx < 0 ? -dx > EF[0] * re : dx > EF[1] * re) : false;
+    let tucked = tuckW > 0.5 && !endFree;
     Q[v * 3] = E.s + tx; Q[v * 3 + 1] = E.y + ty; Q[v * 3 + 2] = side * (E.z + tz);
     // the socket's lining off the lip (faces looking into the globe, just outside it) goes inside the lowered globe
-    if (!tucked && facing < -0.3 && r < re + gap + 0.004) {
+    if (!tucked && !endFree && facing < -0.3 && r < re + gap + 0.004) {
       const qx = Q[v * 3] - E.s, qy = Q[v * 3 + 1] - cyL, qz = Math.abs(Q[v * 3 + 2]) - E.z, qr = Math.hypot(qx, qy, qz) || 1, k = (re - tuck) / qr;
       if (k < 1) { Q[v * 3] = E.s + qx * k; Q[v * 3 + 1] = cyL + qy * k; Q[v * 3 + 2] = side * (E.z + qz * k); }
       tucked = true;
@@ -664,7 +717,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   // the lowered globe, is pushed out round it before it is laid)
   for (const v of free) {
     const side = pos[v * 3 + 2] >= 0 ? 1 : -1, qx = Q[v * 3] - E.s, qy = Q[v * 3 + 1] - cyL, qz = side * Q[v * 3 + 2] - E.z, qr = Math.hypot(qx, qy, qz) || 1e-9;
-    const Rd = re + thBl(qx, qy, qz);
+    const Rd = re + (CV ? CV.off : thBl(qx, qy, qz));
     if (qr < Rd) { const k = Rd / qr; Q[v * 3] = E.s + qx * k; Q[v * 3 + 1] = cyL + qy * k; Q[v * 3 + 2] = side * (E.z + qz * k); }
   }
   const lay = (v, steps) => {
@@ -697,6 +750,64 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       for (let i = 0; i < free.length; i++) { const v = free[i]; Q[v * 3] = nx[i * 3]; Q[v * 3 + 1] = nx[i * 3 + 1]; Q[v * 3 + 2] = nx[i * 3 + 2]; lay(v, 2); }
     }
   }
+  // ---- the seam zipped (round n17, `zipSeam`: { gap, near, w, smooth, hops }): the lid's rim (the free skin next to the
+  // tucked lining) and the medial skin's edge (next to the hidden head) are drawn together where they face each other
+  // within `gap` on the dome (within `near` of the lowered globe): each edge vertex moves `w` of the way to the midpoint
+  // with its nearest partner across the seam and is laid again; then the skin within `hops` rings of the seam is relaxed
+  // (`smooth` passes, the seam held), so the closed dome has one fine seam instead of a crack with torn edges
+  const ZS = CO.zipSeam;
+  const stats = { zipped: 0 };
+  if (o.index && ZS) {
+    const I = o.index, nbAll = new Map();
+    const isF = new Uint8Array(n); for (const v of free) isF[v] = 1;
+    for (let t = 0; t < I.length; t += 3) for (const [a, b] of [[I[t], I[t + 1]], [I[t + 1], I[t + 2]], [I[t + 2], I[t]]]) {
+      if (!nbAll.has(a)) nbAll.set(a, new Set()); if (!nbAll.has(b)) nbAll.set(b, new Set()); nbAll.get(a).add(b); nbAll.get(b).add(a);
+    }
+    const off = (v) => { const sd = Q[v * 3 + 2] >= 0 ? 1 : -1; return Math.hypot(Q[v * 3] - E.s, Q[v * 3 + 1] - cyL, Q[v * 3 + 2] - sd * E.z) - re; };
+    const Bh = [], Bm = [];
+    for (const v of free) {
+      if (!(wReg[v] > 0) || off(v) > ZS.near) continue;
+      let t = false, h = false; for (const u of nbAll.get(v) ?? []) { if (cls[u] === TUCK) t = true; if (cls[u] === HID) h = true; }
+      if (t) Bh.push(v); else if (h) Bm.push(v);
+    }
+    const target = new Map();
+    const pair = (A, B) => {
+      for (const v of A) {
+        let best = ZS.gap, bu = -1;
+        for (const u of B) { if (Q[u * 3 + 2] * Q[v * 3 + 2] < 0) continue; const d = Math.hypot(Q[u * 3] - Q[v * 3], Q[u * 3 + 1] - Q[v * 3 + 1], Q[u * 3 + 2] - Q[v * 3 + 2]); if (d < best) { best = d; bu = u; } }
+        if (bu >= 0) target.set(v, [0, 1, 2].map((k) => (Q[v * 3 + k] + Q[bu * 3 + k]) / 2));
+      }
+    };
+    pair(Bh, Bm); pair(Bm, Bh);
+    for (const [v, tg] of target) { for (let k = 0; k < 3; k++) Q[v * 3 + k] += (tg[k] - Q[v * 3 + k]) * ZS.w; lay(v, 6); }
+    stats.zipped = target.size;
+    // (the zipped edges smoothed along themselves, `along` passes, so the seam runs as one fair line, not a sawtooth of
+    // the two rows' alternating vertices)
+    for (let it = 0; it < (ZS.along ?? 0); it++) {
+      const upd = [];
+      for (const v of target.keys()) {
+        let x = 0, y = 0, z = 0, c = 0;
+        for (const u of nbAll.get(v)) if (target.has(u)) { x += Q[u * 3]; y += Q[u * 3 + 1]; z += Q[u * 3 + 2]; c++; }
+        if (c >= 2) upd.push([v, Q[v * 3] + 0.5 * (x / c - Q[v * 3]), Q[v * 3 + 1] + 0.5 * (y / c - Q[v * 3 + 1]), Q[v * 3 + 2] + 0.5 * (z / c - Q[v * 3 + 2])]);
+      }
+      for (const [v, x, y, z] of upd) { Q[v * 3] = x; Q[v * 3 + 1] = y; Q[v * 3 + 2] = z; lay(v, 4); }
+    }
+    // relax round the seam, the zipped edge held
+    const hop = new Int16Array(n).fill(-1);
+    let front = [...target.keys()]; for (const v of front) hop[v] = 0;
+    for (let h = 1; h <= ZS.hops; h++) { const nf = []; for (const v of front) for (const u of nbAll.get(v) ?? []) if (isF[u] && hop[u] < 0) { hop[u] = h; nf.push(u); } front = nf; }
+    const act = []; for (const v of free) if (hop[v] > 0) act.push(v);
+    const nx = new Float64Array(act.length * 3);
+    for (let it = 0; it < ZS.smooth; it++) {
+      for (let i = 0; i < act.length; i++) {
+        const v = act[i]; let x = 0, y = 0, z = 0, c = 0;
+        for (const u of nbAll.get(v)) { if (!isF[u]) continue; x += Q[u * 3]; y += Q[u * 3 + 1]; z += Q[u * 3 + 2]; c++; }
+        const lam = 0.5 * (1 - smooth(ZS.hops * 0.5, ZS.hops + 0.5, hop[v]));
+        nx[i * 3] = Q[v * 3] + (c ? lam * (x / c - Q[v * 3]) : 0); nx[i * 3 + 1] = Q[v * 3 + 1] + (c ? lam * (y / c - Q[v * 3 + 1]) : 0); nx[i * 3 + 2] = Q[v * 3 + 2] + (c ? lam * (z / c - Q[v * 3 + 2]) : 0);
+      }
+      for (let i = 0; i < act.length; i++) { const v = act[i]; Q[v * 3] = nx[i * 3]; Q[v * 3 + 1] = nx[i * 3 + 1]; Q[v * 3 + 2] = nx[i * 3 + 2]; lay(v, 2); }
+    }
+  }
   // ---- the closed surface's own normals where the skin was laid on it (its field's gradient, smooth: the laid mesh
   // carries the relaxation's small facets, which its rotated normals would show as a hammered sheen), with the share
   // `wReg` (build-pose.mjs blends them into the blink's normal deltas)
@@ -714,7 +825,33 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
     if (Math.abs(d[0]) + Math.abs(d[1]) + Math.abs(d[2]) < 1e-7) continue;
     for (let k = 0; k < 3; k++) { L[v * 3 + k] = d[k] * tl; R[v * 3 + k] = d[k] * (1 - tl); }
   }
-  return o.debug ? { L, R, normal: NT, normalShare: NW, cls, rho: rhoS, wReg } : { L, R, normal: NT, normalShare: NW };
+  return o.debug ? { L, R, normal: NT, normalShare: NW, cls, rho: rhoS, wReg, stats, T, Mw, dome } : { L, R, normal: NT, normalShare: NW, stats };
+}
+
+/**
+ * The mesh's triangles wound consistently with their neighbours (round n17): where the sculpt's features are thinner than
+ * two cells (the infraorbital crease, the socket's carve, the medial lobes' band under the eye's skin) the surface nets
+ * leave a few triangles wound against every neighbour (29 in the posed build's 0.09 mm head, all round the eyes). At rest
+ * they lie hidden in the crease or inside the globe, but the blink carries them out onto the closed dome, where they
+ * render as black (back-facing) triangles. A triangle more of whose edges run the same way as a neighbour's than
+ * against it is turned over (a few passes, until none is left). In place; returns the number turned.
+ */
+export function fixWinding(index, passes = 4) {
+  let total = 0;
+  for (let pass = 0; pass < passes; pass++) {
+    const E = new Map();
+    const key = (a, b) => a * 4294967296 + b;
+    for (let t = 0; t < index.length; t += 3) for (let k = 0; k < 3; k++) { const a = index[t + k], b = index[t + (k + 1) % 3], q = key(a, b); E.set(q, (E.get(q) ?? 0) + 1); }
+    let turned = 0;
+    for (let t = 0; t < index.length; t += 3) {
+      let same = 0, against = 0;
+      for (let k = 0; k < 3; k++) { const a = index[t + k], b = index[t + (k + 1) % 3]; same += (E.get(key(a, b)) ?? 0) - 1; against += E.get(key(b, a)) ?? 0; }
+      if (same > against) { const b = index[t + 1]; index[t + 1] = index[t + 2]; index[t + 2] = b; turned++; }
+    }
+    total += turned;
+    if (!turned) break;
+  }
+  return total;
 }
 
 /** Jacobi smoothing of a scalar per-vertex field over the mesh's edges (k passes). */
@@ -739,10 +876,14 @@ function smoothOnMesh(A, index, k) {
  *         the lip's rear toward the maxilla folded it, 54 → 689 flips: the corner needs the slit's end taller, head.mjs
  *         gape.back), and
  *         (2) the lower lip everted into a raised labial rim: the lip's rim (its sculpted path, K.jaw.lip) rolled out
- *         `evert` from the jaw's U and raised `rim`, fading back toward the rictus and in to the floor, so the hanging
- *         jaw's tip is a broad U framed by its lip (the strike's round aperture) instead of a pointed spade
- *   gum   (driven by J_jaw / 25°): the oral surface round each tooth's exit (skull.mjs fitTeeth) drawn back `depth` along
- *         the tooth's axis, so the teeth, hidden under it when the mouth is shut, stand proud of the gum once it opens
+ *         `evert` from the jaw's U and raised `rim`, fading back toward the rictus, only labial of the dentary's tooth row
+ *         (`labial`) and over a wide band (`lipBand`), so the hanging jaw's tip is a broad U framed by its lip (the
+ *         strike's round aperture) instead of a pointed spade, and the teeth stay clear of it at every weight; (3) the
+ *         mouth's floor beside the row drawn down from the teeth (`floor`), the deeper of it and the gum's trough; then the
+ *         lower jaw's displacements relaxed (`lowRelax`), the tooth row held
+ *   gum   (driven by J_jaw / 40°): the oral surface round each tooth's exit (skull.mjs fitTeeth) drawn back `depth` along
+ *         the tooth's axis (no deeper than `frac` of the tooth's length below its tip), so the teeth, hidden under it when
+ *         the mouth is shut, stand proud of the gum as it opens, never to their roots
  * @param o { teeth: fitTeeth(head), W: poseWorld(HEAD_POSES.gapeFull) and the overrides of GAPE_CORR }
  * @returns { gape: Float32Array, gum: Float32Array } (HL, bind frame)
  */
@@ -750,11 +891,14 @@ export const GAPE_CORR = {
   relax: [
     { box: [0.05, 0.36, 0.12, 0.30, 0.0, 1.0], soft: 0.02, lambda: 0.4 },
   ],
-  iters: 40, evert: 0.03, rim: 0.006, lipBand: [0.006, 0.03], lipS: [0.13, 0.24], centre: [0.14, 0.3],
-  gum: { depth: 0.013, r: [0.005, 0.014], below: 0.006, labial: [0.0, 0.004], keep: 1 },
+  iters: 40, evert: 0.04, rim: 0.002, lipBand: [0.006, 0.05], lipS: [0.10, 0.24], centre: [0.14, 0.3], labial: [0.002, 0.012],
+  lowRelax: { iters: 20, box: [0.03, 0.30, 0.02, 0.12], lambda: 0.5, hold: 1 },
+  gum: { depth: 0.018, frac: 0.75, r: [0.005, 0.014], below: 0.006, labial: [0.0, 0.004], keep: 1 },
+  floor: { depth: 0.018, frac: 0.75, lingual: [-0.004, 0.002, 0.02, 0.04] },
 };
 export function gapeTargets(pos, nrm, index, head, K, skin, o = {}) {
   const G = { ...GAPE_CORR, ...o, gum: { ...GAPE_CORR.gum, ...(o.gum ?? {}) } };
+  if (o.floor === false) G.floor = null;
   const n = pos.length / 3, W = o.W ?? poseWorld(HEAD_POSES.gapeFull);
   const isLower = gapeSide(K, 0.33);
   const lower = new Uint8Array(n);
@@ -814,7 +958,10 @@ export function gapeTargets(pos, nrm, index, head, K, skin, o = {}) {
       for (const t of TF[row] ?? []) {
         if (t.exit === null || t.exit === undefined) continue;
         const dl = Math.hypot(t.tip[0] - t.root[0], t.tip[1] - t.root[1], t.tip[2] - t.root[2]) || 1, dir = [0, 1, 2].map((k) => (t.tip[k] - t.root[k]) / dl);
-        pts.push({ g: [t.root[0] + dir[0] * t.exit, t.root[1] + dir[1] * t.exit, (t.root[2] + dir[2] * t.exit) * sd], dir: [dir[0], dir[1], dir[2] * sd], f: t.gum ?? 1 });
+        // (round n17: no deeper than `frac` of the tooth's length below its tip, so the crown stands clear and never its
+        // root: the trough's 0.013, 0.0175 round the first canine, had bared the short front teeth to their roots)
+        const dep = Math.min(GU.depth * (t.gum ?? 1), GU.frac !== undefined ? GU.frac * dl + (t.exit - dl) : Infinity);
+        pts.push({ g: [t.root[0] + dir[0] * t.exit, t.root[1] + dir[1] * t.exit, (t.root[2] + dir[2] * t.exit) * sd], dir: [dir[0], dir[1], dir[2] * sd], f: dep / GU.depth });
       }
       if (pts.length > 1) rows.push(pts);
     }
@@ -837,24 +984,156 @@ export function gapeTargets(pos, nrm, index, head, K, skin, o = {}) {
       if (best > 0) { gumW[v] = Math.min(1, best); for (let k = 0; k < 3; k++) gum[v * 3 + k] = -bd[k] * GU.depth * best; }
     }
   }
-  // (2) the lower lip everted (bind frame: the lip rides on the jaw, so the displacement turns with it); not the gum
-  // drawn back round the teeth (its share `gum.keep`): with the lower lip set back over the dentary's front (head.mjs
-  // jaw.lip), the rim's band reached the tongue side of the row and rolled the gum out over the tips at the full gape
+  // (2) the lower lip everted (bind frame: the lip rides on the jaw, so the displacement turns with it). Round n17: only
+  // the tissue labial of the dentary's tooth row everts (`labial` [from, to]: its outward distance from the row through
+  // the teeth's exits, so the gum and the tongue's side stay put at every weight and the teeth stand clear of the lip at
+  // the full gape as at the half), over a wide band round the lip's rim (`lipBand`), so the rim rolls out as one smooth
+  // U instead of a narrow band folding radially; `flare` spreads the front of the U sideways (the hanging jaw's tip a broad
+  // U, not a square or pointed spade); then the gape's displacements on the lower jaw are relaxed (`lowRelax`: passes of
+  // a Jacobi smoothing over the lower jaw's tissue, never across the gape; the tooth row held), so no fold or crumple is
+  // left where the everted rim meets the jaw's side
   const LP = K.jaw?.lip?.path;
   if (LP && G.evert > 0) {
-    const seg = (q) => { let best = Infinity, bt = 0, bs = 0; for (let i = 0; i + 1 < LP.length; i++) { const a = LP[i], c = LP[i + 1], ab = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1; const tt = Math.min(1, Math.max(0, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / L2)); const d = Math.hypot(q[0] - a[0] - ab[0] * tt, q[1] - a[1] - ab[1] * tt, q[2] - a[2] - ab[2] * tt); if (d < best) { best = d; bs = a[0] + ab[0] * tt; } } return [best, bs]; };
+    const seg = (q) => { let best = Infinity, bs = 0; for (let i = 0; i + 1 < LP.length; i++) { const a = LP[i], c = LP[i + 1], ab = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1; const tt = Math.min(1, Math.max(0, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / L2)); const d = Math.hypot(q[0] - a[0] - ab[0] * tt, q[1] - a[1] - ab[1] * tt, q[2] - a[2] - ab[2] * tt); if (d < best) { best = d; bs = a[0] + ab[0] * tt; } } return [best, bs]; };
+    // the dentary's row through the exits, (s, z) on the left side, with the first tooth's mirror across the midline
+    const row = (TF?.dentary ?? []).filter((t) => t.exit !== null && t.exit !== undefined).map((t) => { const dl = Math.hypot(t.tip[0] - t.root[0], t.tip[1] - t.root[1], t.tip[2] - t.root[2]) || 1; return [t.root[0] + ((t.tip[0] - t.root[0]) / dl) * t.exit, t.root[2] + ((t.tip[2] - t.root[2]) / dl) * t.exit]; });
+    if (row.length) row.unshift([row[0][0], -row[0][1]]);
+    const labOf = (x, za) => {
+      let best = Infinity, lab = 0;
+      for (let i = 0; i + 1 < row.length; i++) {
+        const a = row[i], c = row[i + 1], ab = [c[0] - a[0], c[1] - a[1]], L2 = ab[0] ** 2 + ab[1] ** 2 || 1;
+        const tt = Math.min(1, Math.max(0, ((x - a[0]) * ab[0] + (za - a[1]) * ab[1]) / L2)), q = [x - a[0] - ab[0] * tt, za - a[1] - ab[1] * tt], d = Math.hypot(q[0], q[1]);
+        // (the outward normal of the row, (dz, −ds) along it from the midline back, points away from the U's inside)
+        if (d < best) { best = d; const nx = -ab[1], nz = ab[0], nl = Math.hypot(nx, nz) || 1; lab = (q[0] * nx + q[1] * nz) / nl; }
+      }
+      return lab;
+    };
+    const LB = G.labial ?? [0.002, 0.012];
     for (let v = 0; v < n; v++) {
       if (!lower[v]) continue;
       const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2], za = Math.abs(z);
       const [d, sOn] = seg([x, y, za]);
-      const w = (1 - smooth(G.lipBand[0], G.lipBand[1], d)) * (1 - smooth(G.lipS[0], G.lipS[1], sOn)) * (1 - (GU.keep ?? 0) * gumW[v]);
+      const wl = row.length > 1 ? smooth(LB[0], LB[1], labOf(x, za)) : 1 - (GU.keep ?? 0) * gumW[v];
+      const w = (1 - smooth(G.lipBand[0], G.lipBand[1], d)) * (1 - smooth(G.lipS[0], G.lipS[1], sOn)) * wl;
       if (w <= 0) continue;
-      // outward from the jaw's U (an ellipse's normal about `centre`: mostly lateral on the sides, forward at the front)
+      // outward from the jaw's U (an ellipse's normal about `centre`: mostly lateral on the sides, forward at the front),
+      // and sideways at the front (`flare`, fading back over flareS)
       let ox = (x - G.centre[0]) * G.centre[1], oz = za; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
-      gape[v * 3] += G.evert * w * ox; gape[v * 3 + 1] += G.rim * w; gape[v * 3 + 2] += G.evert * w * oz * Math.sign(z || 1);
+      const fl = (G.flare ?? 0) * (1 - smooth(G.flareS?.[0] ?? 0.1, G.flareS?.[1] ?? 0.2, x)) * Math.min(1, za / 0.03);
+      gape[v * 3] += G.evert * w * ox; gape[v * 3 + 1] += G.rim * w; gape[v * 3 + 2] += (G.evert * w * oz + fl * w) * Math.sign(z || 1);
+    }
+  }
+  // (3) round n17: at the full gape the mouth's floor beside the dentary's row (its tongue side, which the hyoid and the
+  // dentary's further bend stand up against the teeth) drawn down from them too (`floor`: { depth, lingual [from, to] of
+  // its distance from the row, r: the trough's radius as the gum's }), so more of each tooth shows at the full gape than
+  // at the half, never its root
+  const FL = G.floor;
+  if (FL && TF?.dentary) {
+    // (each tooth's share no deeper than `frac` of its length below its tip, as the gum's; from `s` [from, to] back: the
+    // front teeth, short and close to the midline's floor, stand clear at the gum's trough alone)
+    const pts = TF.dentary.filter((t) => t.exit !== null && t.exit !== undefined).map((t) => { const dl = Math.hypot(t.tip[0] - t.root[0], t.tip[1] - t.root[1], t.tip[2] - t.root[2]) || 1, dir = [0, 1, 2].map((k) => (t.tip[k] - t.root[k]) / dl); return { g: [0, 1, 2].map((k) => t.root[k] + dir[k] * t.exit), dir, dep: Math.min(FL.depth, (FL.frac ?? 9) * dl + (t.exit - dl)) }; });
+    for (let v = 0; v < n; v++) {
+      if (!lower[v] || pts.length < 2) continue;
+      const p = [pos[v * 3], pos[v * 3 + 1], Math.abs(pos[v * 3 + 2])];
+      let best = 0, bd = null;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const A = pts[i], B = pts[i + 1], ab = [B.g[0] - A.g[0], B.g[1] - A.g[1], B.g[2] - A.g[2]], L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1;
+        const u = Math.min(1, Math.max(0, ((p[0] - A.g[0]) * ab[0] + (p[1] - A.g[1]) * ab[1] + (p[2] - A.g[2]) * ab[2]) / L2));
+        const c = [0, 1, 2].map((k) => A.g[k] + ab[k] * u), dir = [0, 1, 2].map((k) => A.dir[k] * (1 - u) + B.dir[k] * u);
+        const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]], along = q[0] * dir[0] + q[1] * dir[1] + q[2] * dir[2];
+        if (along < -GU.below || along > 0.006) continue;
+        // the tongue's side: inward of the row in (s, z) (the row's inward normal, (dz, −ds) along it from the midline back)
+        const nx = ab[2], nz = -ab[0], nl = Math.hypot(nx, nz) || 1, lin = (q[0] * nx + q[2] * nz) / nl;
+        const w = smooth(FL.lingual[0], FL.lingual[1], lin) * (1 - smooth(FL.lingual[2], FL.lingual[3], lin)) * (FL.s ? smooth(FL.s[0], FL.s[1], p[0]) : 1) * (A.dep * (1 - u) + B.dep * u) / FL.depth;
+        if (w > best) { best = w; bd = dir; }
+      }
+      // (not added to the gum's own trough there: the deeper of the two, so no tooth is bared below `frac`)
+      const dd = Math.max(0, FL.depth * best - Math.hypot(gum[v * 3], gum[v * 3 + 1], gum[v * 3 + 2]));
+      if (dd > 0) { const sd = Math.sign(pos[v * 3 + 2] || 1); gape[v * 3] -= bd[0] * dd; gape[v * 3 + 1] -= bd[1] * dd; gape[v * 3 + 2] -= bd[2] * sd * dd; }
+    }
+  }
+  if ((G.lowRelax?.iters ?? 0) > 0) {
+    const LR = G.lowRelax, [s0, s1, y0, y1] = LR.box, act2 = [], wt = new Float32Array(n);
+    for (let v = 0; v < n; v++) {
+      if (!lower[v]) continue;
+      const x = pos[v * 3], y = pos[v * 3 + 1];
+      const w = smooth(s0 - 0.02, s0, x) * (1 - smooth(s1, s1 + 0.02, x)) * smooth(y0 - 0.02, y0, y) * (1 - smooth(y1, y1 + 0.02, y)) * (1 - (LR.hold ?? 1) * gumW[v]);
+      if (w > 0) { wt[v] = w * (LR.lambda ?? 0.5); act2.push(v); }
+    }
+    const nbL = new Map();
+    for (let t = 0; t < index.length; t += 3) for (const [a, b] of [[index[t], index[t + 1]], [index[t + 1], index[t + 2]], [index[t + 2], index[t]]]) {
+      if (!lower[a] || !lower[b]) continue;
+      if (wt[a] > 0) { if (!nbL.has(a)) nbL.set(a, []); nbL.get(a).push(b); }
+      if (wt[b] > 0) { if (!nbL.has(b)) nbL.set(b, []); nbL.get(b).push(a); }
+    }
+    const nx2 = new Float64Array(act2.length * 3);
+    for (let it = 0; it < LR.iters; it++) {
+      for (let i = 0; i < act2.length; i++) {
+        const v = act2[i], N = nbL.get(v) ?? [];
+        for (let c = 0; c < 3; c++) { let a = 0; for (const u of N) a += gape[u * 3 + c]; nx2[i * 3 + c] = N.length ? gape[v * 3 + c] + wt[v] * (a / N.length - gape[v * 3 + c]) : gape[v * 3 + c]; }
+      }
+      for (let i = 0; i < act2.length; i++) for (let c = 0; c < 3; c++) gape[act2[i] * 3 + c] = nx2[i * 3 + c];
     }
   }
   return { gape, gum };
+}
+
+/**
+ * The vent's corrective (round n17; a blend shape in the bind frame, driven by the gill covers' angle: J_opercL/R / 18°, so
+ * 1 at `vent` and 0.22 at `gulp`, outside the cheeks' inflation, whose own blend shape carries the covers): the skinned skin
+ * of the vent pose with its displacements relaxed over the gill cover and the wall behind it (`box` [s0, s1, y0, y1, |z|0,
+ * |z|1], `soft`; `iters` Jacobi passes of `lambda`; round the slit's ends `endLambda` within `endR`), never across the slit
+ * at the slit (the opercle's share of the weights above 0.5 on one side, below on the other), so the cover swings out as one smooth
+ * shell, without the washboard of the bone-distance weights' ripples, and the slit's lower end, where the flap's share fades
+ * into the fused membrane, opens as a rounded pocket instead of a crumple.
+ * @returns Float32Array (HL, bind frame)
+ */
+// (round n17: relaxing the whole cover's displacements (lambda 0.3–0.5) raised its stretch>3 from 30 to 41–443 and its
+// roughness; only the slit's ends are relaxed, by place: the lump at the lower end shrinks to a rounded pocket, the
+// cover's mean normal roughness 2.18° → 1.88° (rest 1.71°), the mid-slit gap 0.027 HL kept)
+export const VENT_CORR = { box: [0.70, 1.12, 0.02, 0.50, 0.10, 1.0], soft: 0.03, lambda: 0, iters: 30, ends: [0.03, 0], endR: 0, endLambda: 0.7, endPos: 1 };
+export function ventTargets(pos, nrm, index, skin, o = {}) {
+  const V = { ...VENT_CORR, ...o }, n = pos.length / 3, W = o.W ?? poseWorld(HEAD_POSES.vent);
+  const sOp = marginCurve(o.K?.opercle?.path ?? OPERCLE_PATH), GS = { ...GILL_SLIT, ...(o.K?.gillSlit ?? {}) };
+  // (the slit kept open between its ends, `ends` in from them: there the two sides are relaxed together, `endLambda`
+  // within `endR` of the lower end (and the upper, `endHi`), so the flap's end eases into the fused membrane as a rounded
+  // pocket, not a lump)
+  const [eLo, eHi] = V.ends ?? [0, 0];
+  const inSlit = (v) => { const x = pos[v * 3], y = pos[v * 3 + 1], b = x - sOp(y); return y > GS.y0 + eLo && y < GS.y1 - eHi && b > -GS.reach - 0.02 && b < 0.02; };
+  const endW = (x, y) => { if (!V.endR) return 0; let w = 0; for (const ye of V.endHi === false ? [GS.y0] : [GS.y0, GS.y1]) w = Math.max(w, 1 - smooth(V.endR * 0.5, V.endR, Math.hypot(x - sOp(ye), y - ye))); return w; };
+  const posed = skinVertices(pos, nrm, skin, W).position, D = new Float64Array(n * 3);
+  for (let i = 0; i < n * 3; i++) D[i] = posed[i] - pos[i];
+  const iL = JOINT_NAMES.indexOf('J_opercL'), iR = JOINT_NAMES.indexOf('J_opercR'), side = new Uint8Array(n), lam = new Float32Array(n), posW = new Float32Array(n);
+  const [s0, s1, y0, y1, z0, z1] = V.box, e = V.soft;
+  for (let v = 0; v < n; v++) {
+    let w = 0; for (let q = 0; q < 4; q++) { const j = skin.joints[v * 4 + q]; if (j === iL || j === iR) w += skin.weights[v * 4 + q]; }
+    side[v] = w > 0.5 ? 1 : 0;
+    const x = pos[v * 3], y = pos[v * 3 + 1], za = Math.abs(pos[v * 3 + 2]);
+    lam[v] = V.lambda * smooth(s0 - e, s0, x) * (1 - smooth(s1, s1 + e, x)) * smooth(y0 - e, y0, y) * (1 - smooth(y1, y1 + e, y)) * smooth(z0 - e, z0, za) * (1 - smooth(z1, z1 + e, za));
+    const ew = endW(x, y); if (ew > 0) { lam[v] = Math.max(lam[v], (V.endLambda ?? 0.6) * ew); posW[v] = (V.endPos ?? 0) * ew; }
+  }
+  const nb = new Map();
+  for (let t = 0; t < index.length; t += 3) for (const [a, b] of [[index[t], index[t + 1]], [index[t + 1], index[t + 2]], [index[t + 2], index[t]]]) {
+    if (side[a] !== side[b] && inSlit(a) && inSlit(b)) continue;
+    if (lam[a] > 0) { if (!nb.has(a)) nb.set(a, []); nb.get(a).push(b); }
+    if (lam[b] > 0) { if (!nb.has(b)) nb.set(b, []); nb.get(b).push(a); }
+  }
+  const act = [...nb.keys()], nx = new Float64Array(act.length * 3);
+  for (let it = 0; it < V.iters; it++) {
+    // (`endPos`: round the ends the places are relaxed, not only the displacements, so the pocket's sculpted end, swung
+    // open, is smoothed into a round instead of standing as a lump)
+    for (let i = 0; i < act.length; i++) { const v = act[i], N = nb.get(v); for (let c = 0; c < 3; c++) { let a = 0, ap = 0; for (const u of N) { a += D[u * 3 + c]; ap += pos[u * 3 + c]; } const tg = a / N.length + posW[v] * (ap / N.length - pos[v * 3 + c]); nx[i * 3 + c] = D[v * 3 + c] + lam[v] * (tg - D[v * 3 + c]); } }
+    for (let i = 0; i < act.length; i++) for (let c = 0; c < 3; c++) D[act[i] * 3 + c] = nx[i * 3 + c];
+  }
+  // the bind-frame displacement that lands the skinned skin on pos + D (as the gape's)
+  const T = JOINT_NAMES.map((nm) => W[nm] ?? { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] }), out = new Float32Array(n * 3);
+  for (const v of act) {
+    const A = [0, 0, 0, 0, 0, 0, 0, 0, 0], b = [0, 0, 0];
+    for (let i = 0; i < 4; i++) { const w = skin.weights[v * 4 + i]; if (!w) continue; const { R, t } = T[skin.joints[v * 4 + i]]; for (let k = 0; k < 9; k++) A[k] += w * R[k]; for (let k = 0; k < 3; k++) b[k] += w * t[k]; }
+    const p = [pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]], x = solve3(A, [0, 1, 2].map((k) => p[k] + D[v * 3 + k] - b[k]));
+    for (let k = 0; k < 3; k++) out[v * 3 + k] = x[k] - p[k];
+  }
+  return out;
 }
 
 /**
@@ -1022,9 +1301,11 @@ const adjacency = (index, n) => {
  * that changes linearly across the skin (on the uneven mesh a plain ring mean shifts such a field and drew the steep
  * drop under the chin into striations). */
 export const INFLATE_TISSUE = {
-  lowerY: [0.035, 0.075], lowerBack: [0.30, 0.40], underRamp: true,
-  pad: { iso: [0.002, 0.06], follow: 0.25, flatten: 0.4, engulf: [0, 0.08], lay: 30, layFade: 1 },
+  lowerY: [0.035, 0.075], lowerBack: [0.30, 0.40], underRamp: true, lowerYBack: { s: [0.22, 0.30], y: [0.075, 0.09] },
+  pad: { iso: [0.002, 0.06], follow: 0.25, flatten: 0.4, engulf: [0, 0.08], lay: 30, layFade: 1, squash: 0.25 },
   relax: { c: [0.29, 0.075, 0.19], r: [0.09, 0.075, 0.11], iters: 80 },
+  repair: { box: [0.18, 0.35, 0.01, 0.20], soft: 0.02, z: [0.06, 0.10], cos: -0.45, ring: 2, iters: 300 },
+  splayBlend: 0.08,
   linSmooth: true,
 };
 
@@ -1057,7 +1338,7 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
   // the lower lip and chin (below the gape, told by the slit's own carve when the sculpt is given)
   const lowerOf = o.K ? gapeSide(o.K, 0.36) : (x, y, p) => x < 0.36 && p.j < p.f - 0.002;
   const n = pos.length / 3, nb = adjacency(index, n), cup = head.cup.field;
-  const mask = new Float32Array(n), padU = new Float32Array(n);
+  const mask = new Float32Array(n), padU = new Float32Array(n), lowF = new Float32Array(n);
   const balloon = target.balloon, EG = new Float32Array(n);
   for (let v = 0; v < n; v++) {
     const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2], za = Math.abs(z);
@@ -1066,12 +1347,16 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
     // the lower lip and the chin stay, the throat behind them balloons; the pads ride on the skin under them (their
     // fronts stay with the snout, their hind ends go out with the cheeks)
     const lower = lowerOf(x, y, p);
+    lowF[v] = lower ? 1 : 0;
     // (behind the rictus the jaw's corner flesh eases into the cheek's rule over TI.lowerBack, so the mask does not
     // step where the lower jaw's tissue ends: that step crumpled the jaw's corner into a fold)
     const up = sm(0.17, 0.27, x), lb = TI.lowerBack ? sm(TI.lowerBack[0], TI.lowerBack[1], x) : 0;
     // (and the throat's skin under the chin takes the lower jaw's ramp along s, easing into the cheek's rule above
     // lowerY: the two rules met in a jagged step along the chin's edge, which the inflation drew out into striations)
-    const ramp = sm(0.14, 0.34, x), yr = sm(TI.lowerY[0], TI.lowerY[1], y);
+    // (lowerYBack: toward the rictus the band rises to { y }, so the jaw's rounded corner under the lip's end goes out
+    // with the cheek instead of standing half-way as a knob under the pad's end)
+    const LYB = TI.lowerYBack, lyw = LYB ? sm(LYB.s[0], LYB.s[1], x) : 0;
+    const ramp = sm(0.14, 0.34, x), yr = sm(TI.lowerY[0] + ((LYB?.y[0] ?? 0) - TI.lowerY[0]) * lyw, TI.lowerY[1] + ((LYB?.y[1] ?? 0) - TI.lowerY[1]) * lyw, y);
     const face = lower ? ramp * (1 - yr) * (1 - lb) + up * lb
       : TI.underRamp && y < TI.lowerY[1] ? (ramp * (1 - yr) + up * yr) * (1 - lb) + up * lb : up;
     mask[v] = sm(0.004, 0.05, cup(x, y, za)) * face * (1 - sm(1.08, 1.20, x));
@@ -1195,6 +1480,23 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
   // moves a vertex toward its neighbours' mean by the zone's weight there, the rest of the skin holding
   const E = new Float32Array(n * 3);
   for (let v = 0; v < n; v++) for (let k = 0; k < 3; k++) E[v * 3 + k] = M[v] * Ds[v * 3 + k];
+  // the lower jaw's own tissue, where the mask keeps it, follows its splayed halves (o.jawSplay: the pose's world
+  // transforms of J_jawL/R, skull.mjs), so the rami stay inside the lips and the chin and the lower lip's corners go
+  // out with the abducted jaw joints (the two halves' turns blended across the symphysis); `lowerSmooth` passes soften
+  // the tissue's edge
+  const wsp = new Float32Array(n);
+  if (o.jawSplay) {
+    const L = lap(lowF, TI.lowerSmooth ?? 6), TL = o.jawSplay.J_jawL, TR = o.jawSplay.J_jawR;
+    const mv = (T, p) => [T.R[0] * p[0] + T.R[1] * p[1] + T.R[2] * p[2] + T.t[0], T.R[3] * p[0] + T.R[4] * p[1] + T.R[5] * p[2] + T.t[1], T.R[6] * p[0] + T.R[7] * p[1] + T.R[8] * p[2] + T.t[2]];
+    for (let v = 0; v < n; v++) {
+      const w = (1 - M[v]) * L[v];
+      if (w < 1e-4) continue;
+      wsp[v] = w;
+      const p = [pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]], a = mv(TL, p), b = mv(TR, p);
+      const z = p[2], zb = TI.splayBlend ?? 0.03, tl = 0.5 + 0.5 * (Math.abs(z) < zb ? Math.sin((z / zb) * Math.PI / 2) : Math.sign(z));
+      for (let k = 0; k < 3; k++) E[v * 3 + k] += w * (tl * a[k] + (1 - tl) * b[k] - p[k]);
+    }
+  }
   const RZ = TI.relax, zw = new Float32Array(n), zone = [];
   if (RZ) {
     for (let v = 0; v < n; v++) {
@@ -1217,6 +1519,7 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
   // vertex moves to its neighbours' mean, then onto the surface, by its share), so its rim, groove and overhanging hind
   // face spread out over the ball instead of folding where they are pressed onto it
   let nLay = 0, layW = null;
+  const projPre = Uint8Array.from(proj);
   if (TI.pad.engulf && balloon && TI.pad.lay) {
     const R = [], wR = new Float32Array(n);
     for (let v = 0; v < n; v++) { wR[v] = Math.min(1, EG[v] * M[v]); if (wR[v] > 0.01) R.push(v); }
@@ -1240,13 +1543,101 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
         for (let k = 0; k < 3; k++) Q[v * 3 + k] = Q0[v * 3 + k] * (1 - w) + q[k] * w;
       }
     }
-    for (const v of R) { for (let k = 0; k < 3; k++) E[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k]; if (wR[v] > 0.5) proj[v] = 1; }
+    // (squash: the laid patch given back a share of its relief over the smooth skin (its stand-off, the smooth bind
+    // head's distance) along the inflated head's normal: the pad's end a low crescent on the ball with its rim and groove
+    // kept in miniature, not pressed flat, whose facets folded over where the round end was flattened onto the ball)
+    if (TI.pad.squash) {
+      const c = TI.pad.squash;
+      for (const v of R) {
+        const w = wR[v];
+        q[0] = Q[v * 3]; q[1] = Q[v * 3 + 1]; q[2] = Q[v * 3 + 2];
+        for (let k = 0; k < 2; k++) onto();
+        const gx = target(q[0] + e, q[1], q[2]) - target(q[0] - e, q[1], q[2]), gy = target(q[0], q[1] + e, q[2]) - target(q[0], q[1] - e, q[2]), gz = target(q[0], q[1], q[2] + e) - target(q[0], q[1], q[2] - e);
+        const gl = Math.hypot(gx, gy, gz) || 1, h = c * smooth(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
+        const nw = [q[0] + (h * gx) / gl, q[1] + (h * gy) / gl, q[2] + (h * gz) / gl];
+        for (let k = 0; k < 3; k++) Q[v * 3 + k] = Q0[v * 3 + k] * (1 - w) + nw[k] * w;
+      }
+    }
+    // (the laid skin counts as projected, its normals the inflated head's, only where it lies on that surface: the
+    // squashed pad's relief stands off it, and its normals turn with its facets)
+    for (const v of R) { for (let k = 0; k < 3; k++) E[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k]; if (wR[v] > 0.5) proj[v] = TI.pad.squash ? (Math.abs(target(Q[v * 3], Q[v * 3 + 1], Q[v * 3 + 2])) < 0.0015 ? 1 : 0) : 1; }
     nLay = R.length; layW = wR;
+  }
+  // the pads' hind ends and the lips' corner cleaned up (TI.repair): wherever the moved skin turned a facet over (`cos`:
+  // its normal against the bind's; the labial groove's walls and the pad's rim where the laid end meets the skin that
+  // kept its place, the slit's end under it), the displacement there and `ring` rings round it is smoothed over the
+  // mesh, pass by pass, until none is left or `iters` passes are done; the cheek's skin that lay on the balloon (the
+  // projected skin, not the laid pad) is put back onto the inflated head after each pass. Within `box` (rest s0, s1,
+  // y0, y1, fading over `soft`) and beyond |z| z[0]…z[1].
+  let nRep = 0, repIt = 0, nRepLeft = 0, zrep = null;
+  const RP = TI.repair;
+  if (RP) {
+    const [s0, s1, y0, y1] = RP.box, so = RP.soft, zr = new Float32Array(n), Z = [];
+    for (let v = 0; v < n; v++) {
+      const x = pos[v * 3], y = pos[v * 3 + 1], za = Math.abs(pos[v * 3 + 2]);
+      zr[v] = sm(s0 - so, s0, x) * (1 - sm(s1, s1 + so, x)) * sm(y0 - so, y0, y) * (1 - sm(y1, y1 + so, y)) * sm(RP.z[0], RP.z[1], za);
+      if (zr[v] > 0) Z.push(v);
+    }
+    const inZ = new Uint8Array(n); for (const v of Z) inZ[v] = 1;
+    // the zone's faces and their bind normals
+    const FZ = [];
+    for (let t = 0; t < index.length; t += 3) if (inZ[index[t]] || inZ[index[t + 1]] || inZ[index[t + 2]]) FZ.push(t);
+    const fnrm = (P, t) => { const a = index[t] * 3, b = index[t + 1] * 3, c = index[t + 2] * 3; const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2]; return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx]; };
+    const N0 = FZ.map((t) => fnrm(pos, t));
+    // the skin lying on the inflated head (kept on it)
+    const Q = new Float32Array(n * 3); for (let i = 0; i < n * 3; i++) Q[i] = pos[i] + E[i];
+    // (only where the inflated head's surface is the balloon's: put back onto the head's own folds there, the labial
+    // groove's rear end, the skin was drawn into the crease and turned over)
+    const onS = new Uint8Array(n);
+    for (const v of Z) { const x = Q[v * 3], y = Q[v * 3 + 1], z = Q[v * 3 + 2], g = target(x, y, z); onS[v] = projPre[v] && Math.abs(g) < 0.0015 && (!balloon || Math.abs(balloon(x, y, z) - g) < 0.002) ? 1 : 0; }
+    const e = 1e-4, onto = (v, w) => {
+      let x = Q[v * 3], y = Q[v * 3 + 1], z = Q[v * 3 + 2];
+      for (let k = 0; k < 2; k++) {
+        const g0 = target(x, y, z); if (Math.abs(g0) < 1e-5) break;
+        const gx = (target(x + e, y, z) - target(x - e, y, z)) / (2 * e), gy = (target(x, y + e, z) - target(x, y - e, z)) / (2 * e), gz = (target(x, y, z + e) - target(x, y, z - e)) / (2 * e);
+        const gg = gx * gx + gy * gy + gz * gz || 1; x -= (g0 * gx) / gg; y -= (g0 * gy) / gg; z -= (g0 * gz) / gg;
+      }
+      Q[v * 3] += (x - Q[v * 3]) * w; Q[v * 3 + 1] += (y - Q[v * 3 + 1]) * w; Q[v * 3 + 2] += (z - Q[v * 3 + 2]) * w;
+    };
+    // one pass of displacement smoothing over the vertices `V` (each toward its ring's mean by its zone weight × w)
+    const pass = (V, w) => {
+      const nx = new Float32Array(V.length * 3);
+      V.forEach((v, i) => {
+        const nv = nb[v]; let a0 = 0, a1 = 0, a2 = 0;
+        for (const u of nv) { a0 += Q[u * 3] - pos[u * 3]; a1 += Q[u * 3 + 1] - pos[u * 3 + 1]; a2 += Q[u * 3 + 2] - pos[u * 3 + 2]; }
+        const m = nv.length || 1, ww = zr[v] * w;
+        nx[i * 3] = (Q[v * 3] - pos[v * 3]) * (1 - ww) + (a0 / m) * ww; nx[i * 3 + 1] = (Q[v * 3 + 1] - pos[v * 3 + 1]) * (1 - ww) + (a1 / m) * ww; nx[i * 3 + 2] = (Q[v * 3 + 2] - pos[v * 3 + 2]) * (1 - ww) + (a2 / m) * ww;
+      });
+      V.forEach((v, i) => { for (let k = 0; k < 3; k++) Q[v * 3 + k] = pos[v * 3 + k] + nx[i * 3 + k]; if (onS[v]) onto(v, zr[v]); });
+    };
+    const cosF = RP.cos ?? 0;
+    for (; repIt < RP.iters; repIt++) {
+      const mark = new Uint8Array(n); let nf = 0;
+      FZ.forEach((t, i) => {
+        const a = N0[i], b = fnrm(Q, t), d = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b) + 1e-30);
+        if (d < cosF) { nf++; for (let k = 0; k < 3; k++) if (inZ[index[t + k]]) mark[index[t + k]] = 1; }
+      });
+      if (!nf) break;
+      if (repIt === 0) nRep = nf;
+      // the turned facets' vertices and `ring` rings round them
+      for (let r = 0; r < RP.ring; r++) { const add = []; for (const v of Z) if (mark[v]) for (const u of nb[v]) if (inZ[u] && !mark[u]) add.push(u); for (const u of add) mark[u] = 1; }
+      pass(Z.filter((v) => mark[v]), RP.w ?? 1);
+    }
+    FZ.forEach((t, i) => { const a = N0[i], b = fnrm(Q, t); if ((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b) + 1e-30) < cosF) nRepLeft++; });
+    for (const v of Z) for (let k = 0; k < 3; k++) E[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k];
+    zrep = zr;
+    // (and the skin the passes moved off the inflated head no longer counts as projected)
+    for (const v of Z) if (proj[v] && Math.abs(target(Q[v * 3], Q[v * 3 + 1], Q[v * 3 + 2])) > 0.0015) proj[v] = 0;
   }
   // the share for the normals: the mask, raised where the relaxation moved skin the mask had kept
   const Mo = Float32Array.from(M);
   for (const v of zone) Mo[v] = Math.max(M[v], zw[v] * sm(0, 0.004, Math.hypot(E[v * 3], E[v * 3 + 1], E[v * 3 + 2])));
-  return { d: E, mask: Mo, premultiplied: true, projected: proj, stats: { projected: nFix, filled: nFeat, flattened: nFlat, relaxed: zone.length, laid: nLay }, ...(o.debug ? { dbg: { M, D, Ds, fixed, proj, zw, EG, layW } } : {}) };
+  // (and where the jaw's splay or the repair moved skin the mask had kept: its normals turn as its facets do)
+  for (let v = 0; v < n; v++) {
+    const ml = Math.max(wsp[v], zrep ? zrep[v] : 0) * sm(0, 0.004, Math.hypot(E[v * 3], E[v * 3 + 1], E[v * 3 + 2]));
+    if (ml > Mo[v]) Mo[v] = ml;
+  }
+  return { d: E, mask: Mo, premultiplied: true, projected: proj, laid: layW, stats: { projected: nFix, filled: nFeat, flattened: nFlat, relaxed: zone.length, laid: nLay, turned: nRep, repairPasses: repIt, turnedLeft: nRepLeft }, ...(o.debug ? { dbg: { M, D, Ds, fixed, proj, zw, EG, layW } } : {}) };
 }
 
 /**
