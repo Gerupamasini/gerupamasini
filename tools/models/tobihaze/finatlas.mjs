@@ -47,6 +47,33 @@
 //                (from above, D2's line C* 9.5 → 13.8, a* 1.8 → 3.7)
 //   lod2         the cards composited over the lit mud as seen (#aaa69e, T1 its albedo #8e8a82: far fins too dark)
 //
+// Round T3 (key eyefin; the T2 fin review, ref/work/t2_findings/fins.txt; scratch ref/work/t3_eyefin), calibrated under the
+// photo rig against the photos' fins (each independent photo once), checked under the game's noon light:
+//   the blade    two looks in one atlas: the planted blade on land amber and fairly opaque with its rays (B010, A070:
+//                FIN_PALETTE / FIN_ALPHA, in the pectoral's own rect — the static GLB's, the land fish's) and the clear,
+//                darker water blade (A061, B067: T2's, FIN_BLADE.water) painted again in the free quadrant at the
+//                pectoral's UVs + FIN_BLADE.copy.offset; a runtime uniform `bladeWater` mixes the two
+//                (FIN_MATERIAL.extras.tobihaze.runtime.blade). T2 had the water blade alone: a dark see-through rake on
+//                land (B010 dE 14.1, the fin-order error 479 px from its pleats)
+//   the pelvic   warmer and denser, its shade under the belly deeper and longer (B014: the pelvic L* 29 in the belly's
+//                shadow; the bake carries what the static light cannot: FIN_LOOK.occlusion.pelvic)
+//   the caudal   no dark crescent at its base: the roots' shade off the caudal (its sheath is the peduncle's own colour
+//                and meets the membrane directly) and the basal blotch narrowed to the middle rays (A067, A017: one blotch)
+//   D1 / D2      warmer (A001's chroma: the membranes' C* ×~1.4 at the same L*), the rust line on the folded edge
+//                wider and stronger (from above it is the line along the back: B004, A070)
+//   the stipple  laid out stretched along the rays (FIN_LOOK.stipple.along), so it reads round on the spread fans (the
+//                caudal's rays 1.48× further apart at full spread than at the bind)
+//   lod2         the cards' A carries the membrane's opacity as well as the cutoff (0.55 + 0.45 · opacity where the card
+//                covers), so the far fins' translucency stops at the sheath and the roots and scales with the membrane;
+//                the paired fins' cards opacity 1 (lod2 casts no shadow: no glow under the body) and the shade of the
+//                hero's geometry baked into the sheath, the pectoral's root, the blade and the pelvic (FIN_LOOK.lod2)
+//   the light    the translucency rule reads the sun's shadow (FIN_TRANSLUCENCY.shadow): no glow inside the body's shadow
+//   measured     (the photo rig, the final build) B010's planted blade dE 7.2 (T2 14.0), A061's water blade 2.3, the
+//                planted blade's solidity 0.89–0.91 (T2 0.60–0.66), the fin order 181 px (T2 458); backlit at A065 D1
+//                back/front 1.75, the near pectoral / pelvic in the body's shadow L* 46 / 63 (the rule unshadowed 63 /
+//                69); A001's D1 C* 8.1 (T2 6.1); the folded D1 from above C* 23 at hue 59 (T2 15 at 69); lod2 backlit:
+//                the sheath dE 1.0 to the hero (T2 25.9), the pectoral 2.7 (T2 9.3)
+//
 // Alpha (A) is the membrane's opacity times its coverage (1 inside the fin's outline, 0 past the margin, a soft edge);
 // lod2 (the alpha-tested cards, MASK at 0.5): A is the coverage only where the fin is at least ~15 % opaque, and the
 // colour is the translucent fin as seen over a mid background (the BLEND look composited), so the far fin keeps the near
@@ -73,14 +100,18 @@ const ATLAS = 2048, INSET_DEFAULT = 6;
  * against B067 / B014 under the reference viewer's light (ref/work/t1_eyefin/gates.json).
  */
 export const FIN_PALETTE = {
-  d1Membrane: '#3e2f21', d1Distal: '#2a1e14', d1Base: '#453322', d1Spine: '#b2a68c', d1Margin: '#a3987f',
-  finAccent: '#a0602c',
-  d2Margin: '#b7ae9e', d2Band: '#3d332a', d2Mid: '#917f62', d2Base: '#806c50', d2Spot: '#342920', d2Ray: '#988c79', d2Orange: '#b0804e',
+  // (round T3: D1 / D2 warmer — A001's C* 9.7 against T2's 6.1, the same L*)
+  d1Membrane: '#4a3119', d1Distal: '#331f0e', d1Base: '#50351f', d1Spine: '#b2a68c', d1Margin: '#a3987f',
+  finAccent: '#a2561f',    // (round T3: the rust line's, B004 #744420 as photographed; T2 #a0602c)
+  d2Margin: '#b7ae9e', d2Band: '#45311d', d2Mid: '#987e55', d2Base: '#88704a', d2Spot: '#342920', d2Ray: '#988c79', d2Orange: '#b0723e',
   anal: '#c2bcb0', analRay: '#918a7d',
   caudal: '#67594a', caudalDistal: '#5c4f40', caudalSpot: '#33271f', caudalRay: '#5f5140', caudalEdge: '#746755',
   sheath: '#a89a86', sheathPale: '#cfc3b2', sheathDark: '#3a2c20',
-  pectBlade: '#877458', pectRay: '#644f37', pectDot: '#3e2e21', pectMargin: '#9e937c', pectLobe: '#8a7559',
-  pelvic: '#b6a58e', pelvicRay: '#c7bcab', pelvicSpot: '#463529',
+  // the pectoral blade on land (round T3: the planted blade amber, fairly opaque, its rays darker lines — B010, A070;
+  // the water blade, T2's, is FIN_BLADE.water)
+  pectBlade: '#ad9670', pectRay: '#8f7552', pectDot: '#4a3622', pectMargin: '#b5a689', pectLobe: '#8a7559',
+  // (round T3: warmer, B010 / B067's pelvic C* 17–18 against T2's 7.5)
+  pelvic: '#b89a72', pelvicRay: '#c2a982', pelvicSpot: '#463529',
   stipple: '#3c3026',
   lod2Back: '#aaa69e',     // the background a far fin is seen against: the lit mud as seen, not its albedo (T1 #8e8a82)
 };
@@ -92,8 +123,25 @@ export const FIN_ALPHA = {
   d2Band: 0.93, d2Mid: 0.6, d2Margin: 0.65, d2Spot: 0.9, d2Ray: 0.75,
   anal: 0.35, analRay: 0.5,
   caudal: [0.68, 0.8], caudalSpot: 0.9, caudalRay: 0.8,
-  pect: [0.32, 0.45], pectDot: 0.88, pectRay: 0.78, pectMargin: 0.3,
-  pelvic: 0.55, pelvicRay: 0.65, pelvicSpot: 0.9,
+  pect: [0.82, 0.9], pectDot: 0.92, pectRay: 0.92, pectMargin: 0.8,  // (round T3: the land blade; the water blade FIN_BLADE.water)
+  pelvic: 0.74, pelvicRay: 0.8, pelvicSpot: 0.92,
+};
+
+/**
+ * The pectoral blade's two looks (round T3, the T2 fin review's P1): the land blade in the pectoral's rect (FIN_PALETTE /
+ * FIN_ALPHA: the static GLB, the land fish: B010 #b3a481, A070) and the water blade (`water`: T2's clear, darker blade —
+ * A061 dE 2.3, B067 1.1 in T2) painted again at the pectoral's UVs + `copy.offset` (FIN_ATLAS's free quadrant
+ * [1024, 1280, 1024, 512] of 2048: build.mjs leaves it to this blade, the caudal's sheath island lies below it). The
+ * runtime mixes the two by the uniform `bladeWater` (FIN_MATERIAL.extras.tobihaze.runtime.blade): no new map, one more
+ * texture read on the fin material. `copy.of` the fin meshes whose UVs the copy follows (textures.mjs finAtlas counts the
+ * copy as covered so its gutter fill and clearing leave it).
+ */
+export const FIN_BLADE = {
+  water: {
+    palette: { pectBlade: '#877458', pectRay: '#644f37', pectDot: '#3e2e21', pectMargin: '#9e937c' },
+    alpha: { pect: [0.32, 0.45], pectDot: 0.88, pectRay: 0.78, pectMargin: 0.3 },
+  },
+  copy: { of: ['Fin_Pectoral_L', 'Fin_Pectoral_R'], offset: [0.5, 0.25], rect: [1024, 1280, 1024, 512] },
 };
 
 /**
@@ -113,10 +161,32 @@ export const FIN_ALPHA = {
 export const FIN_LOOK = {
   caudalSpot: { w: 0.24, h: 0.016 },
   pelvicSpot: { cell: 0.045, r: 0.015, p: 0.6, k: 0.9 },
-  occlusion: { root: 0.75, pelvic: 0.55 },
+  // (round T3: `caudal` the caudal's own root shade — 0.95, T2 used `root`'s 0.75 and drew a dark crescent across every
+  // ray next to the sheath; the pelvic's under the belly deeper and over more of it, `pelvic` at its root easing to 1
+  // by `pelvicTo` of its height; `basal` the caudal's blotch past the sheath: its strength and its rays' share u)
+  occlusion: { root: 0.75, caudal: 0.95, pelvic: 0.22, pelvicTo: 1.0 },
+  basal: { k: 0.3, u: [0.28, 0.42, 0.58, 0.72] },
+  // (round T3) the share of the sheath's run (l0 … l0 + len) its colour stays the body's (1: to its end), and its shade: the
+  // body's colour as the pattern gives it × `sheathShade`, the bake's crease and granule shade the body's texels carry
+  // there (textures.mjs × surface ALBEDO_AO) and the fin atlas does not (the sheath 1.2× the body beside it without it)
+  sheathEnd: 1, sheathShade: 0.84,
   tips: 0.6,
-  foldLine: { k: 0.6, edge: [0.94, 0.99], d2: 0.75 },
+  // (round T3: wider and stronger — from above the folded fin's edge is the line along the back; T2 C* 10–14 against
+  // B004 34.6 / A070 26.9)
+  foldLine: { k: 0.95, edge: [0.88, 0.97], d2: 1.0 },
   pectMargin: [0.93, 0.98],
+  // (round T3) the membrane's melanophore stipple laid out stretched along the rays by `along` per fin (the fans spread
+  // across the rays: the caudal's slots 1.48× wider at full spread than at the bind, the pectoral and D1 1.2×), so the
+  // dots read round on the spread fin, not as scratches across the rays
+  stipple: { along: { caudal: 1.45, pectoral: 1.2, d1: 1.2, d2: 1.1, anal: 1.1, pelvic: 1.1 } },
+  // (round T3) lod2's cards: `shade` the light the hero's geometry takes and a flat card does not, baked into the colour
+  // as the body's lod2 bakes its own (×, linear): the caudal's sheath and the pectoral's fleshy root (`root`: the hero's
+  // sleeve turns from the light; the far sheath +3.3…+6.0 L* over the hero at the four tier cameras), the pectoral blade
+  // and the pelvic (their folds and pleats), the median fins lighter (`median`: D2's flat card −1.9…−8.2 L* under the
+  // hero's pleated fan at every tier camera, D1's −1.2…−7.2); `opaque` the paired fins' cards carry opacity 1 in A
+  // (CARD_OPACITY: no transmission) — lod2 casts no shadow, so the rule's shadow cannot stop their glow under the body
+  // (A065b, backlit: the far pectoral +18.7 L* over the hero's, which the body shades)
+  lod2: { shade: { root: 0.82, pectoral: 0.86, pelvic: 0.86, median: 1.18 }, opaque: ['pectoral', 'pelvic'] },
 };
 
 /**
@@ -136,7 +206,10 @@ export const FIN_LOOK = {
  * moved behind the fish at A065's camera): D1 1.58× as bright as lit from the front (T1 0.75×), D2 1.41×; the backlit
  * A070's caudal dE2000 2.7 (front-lit render 13.6), its D1 6.1.
  */
-export const FIN_TRANSLUCENCY = { diffuse: 0.8, tintPower: 0.8, forward: 2, forwardPower: 4, environment: 0, stopAlpha: [0.93, 0.99] };
+export const FIN_TRANSLUCENCY = { diffuse: 0.38, tintPower: 0.4, forward: 2, forwardPower: 4, environment: 0, stopAlpha: [0.93, 0.99], shadow: { offsetMM: 1.5 } };
+/** lod2's cards (round T3): A = coverage gate × (0.55 + 0.45 · opacity) where a card covers its fin, so the MASK cutoff at
+ * 0.5 keeps the T2 outline and the translucency reads the opacity back: opacity = saturate((A − 0.55) / 0.45). */
+export const CARD_OPACITY = [0.55, 0.45];
 
 /**
  * The Fin material per tier (glTF core + KHR extensions; three.js r186 MeshPhysicalMaterial, the runtime's loader keeps
@@ -149,23 +222,33 @@ export const FIN_TRANSLUCENCY = { diffuse: 0.8, tintPower: 0.8, forward: 2, forw
  * FIN_SOLID). lod2: the cards alpha-tested.
  */
 const TRANSLUCENCY_RULE = (cards) => ({
-  ...FIN_TRANSLUCENCY, ...(cards ? { stopAlpha: null } : {}),
-  rule: `the fin material's shader adds, after three's lights (#include <lights_fragment_end>), to reflectedLight.directDiffuse: diffuse × ${cards ? '' : '(1 − smoothstep(stopAlpha[0], stopAlpha[1], diffuseColor.a)) × '}pow(material.diffuseColor, tintPower) × Σ over the directional lights of color × (saturate(dot(−normal, direction)) + forward × pow(saturate(dot(viewDir, −direction)), forwardPower) × step(0, dot(−normal, direction))) / π; environment × getIBLIrradiance(−normal) is off (0): the atlas was calibrated under a sky from both sides`,
-  ...(cards ? { note: 'lod2: the cards\' A is the coverage, so no stop' } : {}),
+  ...FIN_TRANSLUCENCY, ...(cards ? { opacityDecode: CARD_OPACITY } : {}),
+  rule: `the fin material's shader adds, after three's lights (#include <lights_fragment_end>), to reflectedLight.directDiffuse: diffuse × (1 − smoothstep(stopAlpha[0], stopAlpha[1], a)) × ${cards ? 'a × ' : ''}pow(material.diffuseColor, tintPower) × Σ over the directional lights of S_i × color_i × (saturate(dot(−normal, direction_i)) + forward × pow(saturate(dot(viewDir, −direction_i)), forwardPower) × step(0, dot(−normal, direction_i))) / π, with a = ${cards ? 'saturate((diffuseColor.a − opacityDecode[0]) / opacityDecode[1]) (lod2\'s cards: A carries the opacity above the cutoff)' : 'diffuseColor.a (the atlas\'s A: the membrane\'s opacity)'} and S_i the light's shadow at the fragment moved toward the light by shadow.offsetMM — three r186, in an unrolled loop: S_i = getShadow(directionalShadowMap[i], directionalLightShadows[i].shadowMapSize, directionalLightShadows[i].shadowIntensity, directionalLightShadows[i].shadowBias − offset, directionalLightShadows[i].shadowRadius, vDirectionalShadowCoord[i]) with offset = shadow.offsetMM × 0.001 / (the light's shadow.camera.far − near) (the model is in metres; 1 where the light casts no shadow), read whether or not the fin receives shadows on its front (the offset clears the membrane's own and the neighbouring rays' depth, so the fin does not shadow its own glow, and the body between the sun and the fin does); environment × getIBLIrradiance(−normal) is off (0): the atlas was calibrated under a sky from both sides`,
+  ...(cards ? { note: 'lod2: decode the opacity from A (opacityDecode) before the stop; MASK keeps A ≥ 0.5 where the card draws' } : {}),
 });
+/** The blade's runtime rule (round T3; FIN_BLADE): shares of the atlas, glTF UV (v down). */
+const ATLAS_SHARE = (r) => [r[0] / 2048, r[1] / 2048, r[2] / 2048, r[3] / 2048];
+const BLADE_RULE = {
+  uniform: 'bladeWater', range: [0, 1], default: 0,
+  rect: ATLAS_SHARE([0, 768, 1024, 512]), offset: FIN_BLADE.copy.offset,
+  rule: 'for UVs inside rect ([u, v, w, h]: the pectoral blade\'s), the map\'s texel (colour and A) = mix(texture(map, uv), texture(map, uv + offset), bladeWater) — read both unconditionally and mix by the inside test, so the derivatives stay defined; at 0 (the default) the static material. The shadow\'s depth material may apply the same mix to A (optional: the water blade casts less)',
+  drive: 'per fish from its state: 1 under water (water, swim), 0 on land (land, rest, reach, prop, crawl); eased over the state transition (the membrane spreads and clears as the fish enters the water, collapses onto its rays as it leaves)',
+  note: 'the static GLB is the land blade (B010, A070); the water blade is T2\'s clear, darker one (A061, B067)',
+};
 export const FIN_MATERIAL = {
   hero: {
     name: 'Tobihaze_Fin', alphaMode: 'BLEND', doubleSided: true,
     pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.38, maps: { baseColorTexture: 'fin colour (RGB sRGB, A opacity)' } },
     extensions: { KHR_materials_ior: { ior: 1.36 } },
-    extras: { tobihaze: { role: 'fin', wetness: 'roughness 0.38 wet → 0.5 damp → 0.7 muddy (×, as the skin\'s)', sheath: 'A = 1 over the caudal\'s fleshy base and the pectoral\'s root', runtime: { translucency: TRANSLUCENCY_RULE(false) } } },
+    extras: { tobihaze: { role: 'fin', wetness: 'roughness 0.38 wet → 0.5 damp → 0.7 muddy (×, as the skin\'s)', sheath: 'A = 1 over the caudal\'s fleshy base and the pectoral\'s root', runtime: { translucency: TRANSLUCENCY_RULE(false), blade: BLADE_RULE } } },
   },
   lod1: 'as hero (the same features: BLEND, double-sided, the atlas at 512, the translucency)',
   lod2: {
     name: 'Tobihaze_Fins', alphaMode: 'MASK', alphaCutoff: 0.5, doubleSided: true,
-    pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.5, maps: { baseColorTexture: 'fin colour (lod2: composited over lod2Back, A coverage)' } },
-    extensions: { KHR_materials_ior: { ior: 1.36 } },
-    extras: { tobihaze: { role: 'fin', merged: true, runtime: { translucency: TRANSLUCENCY_RULE(true) } } },
+    // (round T3: as the GLB writes it — the fin rule's roughness at the master wetness, the hero's 0.38, and no ior: the
+    // tech's build, its finding P3(f); T2 here said 0.5)
+    pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.38, maps: { baseColorTexture: 'fin colour (lod2: composited over lod2Back × FIN_LOOK.lod2.shade; A the cutoff\'s gate × (0.55 + 0.45 · opacity), the paired fins\' opacity 1)' } },
+    extras: { tobihaze: { role: 'fin', merged: true, runtime: { translucency: TRANSLUCENCY_RULE(true), blade: BLADE_RULE } } },
   },
 };
 
@@ -362,7 +445,11 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
     const ap = a - NP; // principal-ray units (0 the dorsal-most)
     const sh = def.sheath?.rays ?? [];
     const kk = Math.max(0, Math.min(P1, Math.round(ap)));
-    const sEnd = sh.length ? lerp(sh[Math.max(0, Math.min(P1, Math.floor(ap)))].l0 + 0.55 * sh[Math.max(0, Math.min(P1, Math.floor(ap)))].len, sh[Math.max(0, Math.min(P1, Math.floor(ap) + 1))].l0 + 0.55 * sh[Math.max(0, Math.min(P1, Math.floor(ap) + 1))].len, sat(ap - Math.floor(ap))) : 0.12;
+    const shAt = (f) => (sh.length ? lerp(sh[Math.max(0, Math.min(P1, Math.floor(ap)))].l0 + f * sh[Math.max(0, Math.min(P1, Math.floor(ap)))].len, sh[Math.max(0, Math.min(P1, Math.floor(ap) + 1))].l0 + f * sh[Math.max(0, Math.min(P1, Math.floor(ap) + 1))].len, sat(ap - Math.floor(ap))) : 0.12 + (f - 0.55) * 0.2);
+    // (sEnd: the sheath's opacity ramp, as T2; sEndC (round T3): where the sheath's geometry ends — its rows run l0 … l0 +
+    // len, fins.mjs — so its colour stays the body's to there: T2 turned to the membrane's dark colour at 0.55 of the run,
+    // on the still opaque sheath, and drew a dark crescent across the caudal's base)
+    const sEnd = shAt(0.55), sEndC = shAt(LK.sheathEnd ?? 0.55);
     const u = sat(ap / P1);
     c.splice(0, 3, ...P.caudal);
     mixTo(c, P.caudalDistal, sstep(0.45, 1.0, tm) * 0.6);
@@ -391,10 +478,10 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
     // the sheath zone (opaque): the body's tone (o.skin at the sheath's point: the pattern's colour runs on from the
     // body over the seam) and its dark blotch on the middle rays, easing into the fin
     if (ap > -1.5 && ap < P1 + 1.5) {
-      const shz = sstep(sEnd + 0.06, sEnd - 0.04, l);
+      const shz = sstep(sEnd + 0.06, sEnd - 0.04, l), shzC = sstep(sEndC + 0.07, sEndC - 0.01, l);
       sheathK = shz;
       let bodyC;
-      if (o.skin && shz > 0) {
+      if (o.skin && Math.max(shz, shzC) > 0) {
         // (the sheath's point: the principal rays' lines, extrapolated past the outermost by their spacing; on the
         // fish's left face, the sheath's half-thickness out)
         const k1 = Math.max(0, Math.min(P1 - 1, Math.floor(ap))), ff = ap - k1;
@@ -408,12 +495,15 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
       }
       const blot = sstep(0.15, 0.35, u) * sstep(0.85, 0.65, u) * (0.75 + 0.25 * N1);
       if (!o.skin) mixTo(bodyC, P.sheathDark, blot * 0.85);
-      // (past the sheath the dark basal blotch runs on a little into the membrane)
-      const after = sstep(sEnd + 0.1, sEnd, l) * (1 - shz) * blot;
-      mixTo(c, P.sheathDark, after * 0.6); al = lerp(al, 0.92, after * 0.6);
+      // (past the sheath the dark basal blotch runs on a little into the membrane — round T3: on the middle rays only and
+      // fainter, one blotch as A067 / A017, not a crescent across every ray)
+      const BU = LK.basal.u, bb = sstep(BU[0], BU[1], u) * sstep(BU[3], BU[2], u) * (0.75 + 0.25 * N1);
+      const after = sstep(sEndC + 0.1, sEndC, l) * (1 - shzC) * bb;
+      mixTo(c, P.sheathDark, after * LK.basal.k); al = lerp(al, 0.92, after * LK.basal.k);
       // (round T2: the flesh opaque before its colour shows — A ≥ 0.95 wherever the skin's colour is — so the
       // membrane's light transmission, which stops at A 0.95, never lights the pale skin through: FIN_MATERIAL)
-      mixTo(c, bodyC, sstep(0.3, 1, shz)); al = lerp(al, 1, sstep(0, 0.3, shz));
+      if (o.skin) bodyC = bodyC.map((v) => v * (LK.sheathShade ?? 1));
+      mixTo(c, bodyC, sstep(0.3, 1, Math.max(shz, shzC))); al = lerp(al, 1, sstep(0, 0.3, shz));
     }
     rayC = P.caudalRay; rayA = A.caudalRay;
     if (r.thick) rayA = Math.min(1, rayA + 0.1);
@@ -465,18 +555,20 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
       const s = dots2(X, Y, PS.cell, PS.r, PS.p, 75, fp) * inner * sstep(0.15, 0.25, tm) * sstep(0.75, 0.6, tm);
       mixTo(c, P.pelvicSpot, s * PS.k); al = lerp(al, A.pelvicSpot, s);
     }
-    // the shade under the belly (B014: the pelvic lies in the belly's shadow): darker toward its root
-    const sh = lerp(LK.occlusion.pelvic, 1, sstep(0, 0.5, tm));
+    // the shade under the belly (B014: the pelvic lies in the belly's shadow): darker toward its root (round T3: deeper,
+    // and over three quarters of its height)
+    const sh = lerp(LK.occlusion.pelvic, 1, sstep(0, LK.occlusion.pelvicTo ?? 0.5, tm));
     c[0] *= sh; c[1] *= sh; c[2] *= sh;
   }
   // (round T2) every fin's root a little shaded (the fin atlas has no occlusion map), not the fleshy parts
   if (type !== 'pelvic') {
-    const ro = lerp(1, lerp(LK.occlusion.root, 1, sstep(0, 0.15, tm)), 1 - sheathK);
+    const ro = lerp(1, lerp(type === 'caudal' ? LK.occlusion.caudal ?? LK.occlusion.root : LK.occlusion.root, 1, sstep(0, 0.15, tm)), 1 - sheathK);
     c[0] *= ro; c[1] *= ro; c[2] *= ro;
   }
   // the membrane's melanophore stipple (sparse, finer on the pale fins), faded to its mean under ~1.5 texels
   const stD = { d1: 0.55, d2: 0.35, anal: 0.12, caudal: 0.4, pectoral: 0.35, pelvic: 0.12 }[type === 'median' ? (name === 'Fin_Dorsal1' ? 'd1' : name === 'Fin_Dorsal2' ? 'd2' : 'anal') : type] ?? 0.3;
-  const st = dots2(X, Y, 0.016, 0.0028, stD, 77, fp);
+  const sk = type === 'median' ? (name === 'Fin_Dorsal1' ? 'd1' : name === 'Fin_Dorsal2' ? 'd2' : 'anal') : type;
+  const st = dots2(X, Y / (LK.stipple?.along?.[sk] ?? 1), 0.016, 0.0028, stD, 77, fp);
   mixTo(c, P.stipple, (st * 0.55 * fineK + (1 - fineK) * stD * 0.04) * (1 - sheathK));
   // the ray on top: its colour (the segment joints a little paler), its opacity
   if (rayC && R.d > 0) {
@@ -502,7 +594,7 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
   // tool; the palette holds the result)
   const gk = o.gain?.[name === 'Fin_Dorsal1' ? 'D1' : name === 'Fin_Dorsal2' ? 'D2' : name === 'Fin_Anal' ? 'anal' : type];
   if (gk !== undefined) { const g = gk + (1 - gk) * sheathK; c[0] *= g; c[1] *= g; c[2] *= g; }
-  return { c, a: sat(al), cov, label: o.labels ? finLabel(type, def.name, tm, sheathK, al, cov) : 0 };
+  return { c, a: sat(al), cov, sheath: sheathK, label: o.labels ? finLabel(type, def.name, tm, sheathK, al, cov) : 0 };
 }
 
 /**
@@ -527,11 +619,20 @@ export function paintFinAtlas(size, defs, o = {}) {
   const ss = o.ss ?? (S >= 1024 ? 2 : S >= 512 ? 3 : 4);
   const far = o.tier === 'lod2';
   const done = new Set();
+  // (round T3: the pectoral blade painted twice — its own rect the land blade, the copy the water blade, FIN_BLADE)
+  const jobs = [];
   defs.forEach((def, di) => {
     const key = def.rect.join(',');
     if (done.has(key)) return;
     done.add(key);
-    const F = finFrame(def), [rx, ry, rw, rh] = def.rect, I = F.inset;
+    jobs.push({ def, di, P, A, rect: def.rect });
+    if (def.type === 'pectoral' && o.blade !== false && FIN_BLADE.copy) {
+      const W = FIN_BLADE.water, off = FIN_BLADE.copy.offset;
+      jobs.push({ def, di, P: { ...P, ...Object.fromEntries(Object.entries(W.palette).map(([k, h]) => [k, hexLinear(h)])) }, A: { ...A, ...W.alpha }, rect: [def.rect[0] + off[0] * ATLAS, def.rect[1] + off[1] * ATLAS, def.rect[2], def.rect[3]], copy: true });
+    }
+  });
+  for (const { def, di, P, A, rect, copy } of jobs) {
+    const F = finFrame(def), [rx, ry, rw, rh] = rect, I = F.inset;
     const type = def.type === 'median' ? 'median' : def.type;
     o.log?.(`fin atlas: ${def.name} (${F.n} rays, Lmax ${(F.Lmax * HL).toFixed(2)} mm, inset ${I})`);
     const x0 = Math.floor(rx * sc), x1 = Math.ceil((rx + rw) * sc), y0 = Math.floor(ry * sc), y1 = Math.ceil((ry + rh) * sc);
@@ -549,14 +650,20 @@ export function paintFinAtlas(size, defs, o = {}) {
             const du = (F.src._uv.rays[k + 1] - F.src._uv.rays[k]) * (rw - 2 * I) * sc; // texels per slot here
             const fpA = 1 / Math.max(1e-3, du), fpL = F.Lmax / ((rh - 2 * I) * sc);
             const q = finTexel(F, type, F.src, a, l, fpA, fpL, P, A, o, LK);
-            if (o.labels && sy === ss >> 1 && sx === ss >> 1) out.label[py * S + px] = q.label;
+            if (o.labels && !copy && sy === ss >> 1 && sx === ss >> 1) out.label[py * S + px] = q.label;
             let c = q.c, al = q.a * q.cov;
             if (far) {
               // the BLEND look over the mid background, alpha the coverage where the fin is ≥ ~15 % opaque (round T2
               // tested leaving the clear membranes — the blade, the anal, under 50 % — out of the cards: the far pectoral
               // then read worse against the hero, dE 6.1 → 8.0 at the 3/4 camera; kept)
-              c = [0, 1, 2].map((i) => P.lod2Back[i] + (q.c[i] - P.lod2Back[i]) * q.a);
-              al = q.cov * sstep(0.1, 0.2, q.a);
+              // (round T3: × the geometry's shade the card lost, FIN_LOOK.lod2.shade — the sheath and the pectoral's root by
+              // `root`, the blade and the pelvic by their own)
+              const SH = LK.lod2?.shade ?? {}, g = lerp(SH[type] ?? 1, SH.root ?? 1, q.sheath ?? 0);
+              c = [0, 1, 2].map((i) => Math.min(1, (P.lod2Back[i] + (q.c[i] - P.lod2Back[i]) * q.a) * g));
+              // (round T3: A the cutoff's gate × (0.55 + 0.45 · opacity) — the outline as T2's at MASK 0.5, and the
+              // opacity for the translucency rule, CARD_OPACITY; the paired fins' opacity 1, FIN_LOOK.lod2.opaque)
+              const op = (LK.lod2?.opaque ?? []).includes(type) ? 1 : q.a;
+              al = q.cov * sstep(0.1, 0.2, q.a) * (CARD_OPACITY[0] + CARD_OPACITY[1] * op);
             }
             acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]; acc[3] += al; cv += q.cov;
           }
@@ -564,7 +671,7 @@ export function paintFinAtlas(size, defs, o = {}) {
         out.rgba[i * 4] = acc[0] * kk; out.rgba[i * 4 + 1] = acc[1] * kk; out.rgba[i * 4 + 2] = acc[2] * kk; out.rgba[i * 4 + 3] = acc[3] * kk;
         out.coverage[i] = cv * kk; out.mask[i] = 1 + di;
       }
-  });
+  }
   // (texels no rect covers — the old iris corner, the gutters' last pixels: the mean fin colour, A 0)
   let m = [0, 0, 0], cnt = 0;
   for (let i = 0; i < N; i++) if (out.mask[i]) { m[0] += out.rgba[i * 4]; m[1] += out.rgba[i * 4 + 1]; m[2] += out.rgba[i * 4 + 2]; cnt++; }

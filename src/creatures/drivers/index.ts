@@ -21,6 +21,7 @@ import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
 import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 import { MimiikaDriver } from '../species/mimiika/MimiikaDriver';
 import { GazamiDriver } from '../species/gazami/GazamiDriver';
+import { TobihazeDriver } from '../species/tobihaze/TobihazeDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -82,6 +83,9 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // contact body is the carapace with the legs spread (CW is its length)
   gazami: { create: () => new GazamiDriver(), placeholder: () => GazamiDriver.makeModel(), preview: (seed) => GazamiDriver.makePreview(seed), nearDistance: 4, keep: (parent) => GazamiDriver.keep(parent), body: { width: 1.2, height: 0.3, core: 0.9 } },
   akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent), body: { width: 0.41, height: 0.07, core: 0.38 } },
+  // トビハゼ: the mudskipper of the upper flat (GLB tiers posed by its pose module; its contact body is the trunk without
+  // the arms and fins, as the GLB's extras footprint measures it: TL shares, the core SL, its centre 0.08 TL ahead)
+  tobihaze: { create: () => new TobihazeDriver(), body: { width: 0.141, height: 0.16, core: 0.84, ahead: 0.08 } },
   // コメツキガニ: the procedural crab of the Kasai flat, placed and driven by its colony (ScopimeraColony)
   kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview(), body: { width: 1.3, height: 0.5, core: 0.9 } },
 };

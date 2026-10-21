@@ -68,7 +68,10 @@ const stateOf = (S, state, tier = 'hero') => {
 };
 export const LAND = stateOf(STATES, 'land'), REST = stateOf(STATES, 'rest'), WATER = stateOf(STATES, 'water'), REACH = stateOf(STATES, 'reach'), SWIM = stateOf(STATES, 'swim');
 
-const shot = (name, model, view, pose) => ({ name, mode: 'clay', model, view: { margin: 0.06, ...view, ...(pose ? { pose } : {}) } });
+// (round T3 integrator: the water states' shots carry bladeWater 1 — the pectoral blade's water look, RUNTIME_CONTRACT §9.4
+// — which the viewer's textured mode reads; clay ignores it)
+const shot = (name, model, view, pose, extra = {}) => ({ name, mode: 'clay', model, view: { margin: 0.06, ...view, ...(pose ? { pose } : {}) }, ...extra });
+const WET = { bladeWater: 1 };
 const CAM = {
   front_B002: { azim: 0, elev: 28, fov: 30, fit: chest, margin: 0.05 },
   side_A030: { azim: -90, elev: 4, fov: 8, fit: 'all' },
@@ -101,11 +104,11 @@ const POSES = LAND ? [
   shot('p_land_u1', glb('hero'), CAM.side_u1, LAND),
   shot('p_land_B010', glb('hero'), CAM.q34_B010, LAND),
   shot('p_rest_A030', glb('hero'), CAM.side_A030, REST),
-  shot('p_water_A061', glb('hero'), CAM.water_A061, WATER),
-  shot('p_water_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, WATER),
+  shot('p_water_A061', glb('hero'), CAM.water_A061, WATER, WET),
+  shot('p_water_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, WATER, WET),
   ...(REACH ? [shot('p_reach_A023', glb('hero'), CAM.reach_A023, REACH)] : []),
   // (round B4: the swimming fish, B3's water: the swim wave, the caudal spread)
-  ...(SWIM ? [shot('p_swim_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, SWIM)] : []),
+  ...(SWIM ? [shot('p_swim_side', glb('hero'), { azim: 90, elev: 8, fov: 14, fit: 'all' }, SWIM, WET)] : []),
 ] : [];
 const TIER_VIEWS = [
   ['land_side', 'land', { azim: 90, elev: 3, ortho: true, fit: 'all' }],
@@ -114,7 +117,7 @@ const TIER_VIEWS = [
   ['rest_top', 'rest', { azim: 0, elev: 90, ortho: true, topUp: -1, fit: 'all' }],
   ['water_A061', 'water', CAM.water_A061],
 ];
-const TIERS = ['hero', 'lod1', 'lod2'].flatMap((t) => TIER_VIEWS.filter(([, st]) => STATES[t]?.[st]).map(([k, st, v]) => shot(`t_${t}_${k}`, glb(t), v, stateOf(STATES, st, t))));
+const TIERS = ['hero', 'lod1', 'lod2'].flatMap((t) => TIER_VIEWS.filter(([, st]) => STATES[t]?.[st]).map(([k, st, v]) => shot(`t_${t}_${k}`, glb(t), v, stateOf(STATES, st, t), st === 'water' || st === 'swim' ? WET : {})));
 // the crawl's frames from one fixed camera each (the fish moves through it over the welded tips)
 export const CRAWL_BOX = box(-1.0, 2.4, -0.45, 0.75, -0.9, 0.9);
 export const CRAWL_VIEWS = { side: { azim: 90, elev: 3, ortho: true, fit: CRAWL_BOX, margin: 0.04 }, q34: { azim: 55, elev: 18, fov: 24, fit: CRAWL_BOX, margin: 0.04 }, top: { azim: 0, elev: 90, topUp: -1, ortho: true, fit: CRAWL_BOX, margin: 0.04 } };

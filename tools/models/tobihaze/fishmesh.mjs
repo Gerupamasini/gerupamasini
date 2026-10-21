@@ -44,7 +44,8 @@
 //                  triangles at hero (4+ at lod1, 2+ at lod2: their whole skin is 8.9k and 1k triangles) where the
 //                  hidden walls let it, laid by a conformal map (cut open into a disc where it is none) or unfolded, 4 texels
 //                  apart at the body's density, in the patch rect and any rect the tier leaves empty: SPARE_CHARTS)
-//   iris, eyeSkin  the eye meshes' window and skin (eyeAtlasUV): the eye is a separate mesh on the same texture
+//   iris, eyeSkin  the eye meshes' window and skin (eyeAtlasUV): the eye is a separate mesh on the same texture; round T3
+//                  the skin of each globe in its own rect, eyeSkinL / eyeSkinR (eyemesh eyePartUV by side)
 //   teeth          a swatch for the teeth's constant UV
 //   hidden         one texel for the cap that closes the skin inside each globe (never seen)
 // The charts are assigned per vertex, then a depth test in UV space from each projection's viewpoint moves what a
@@ -98,8 +99,16 @@ export const BODY_LAYOUT = {
   lobeR: [0.53, 0.70, 0.64, 0.819],
   mouthRoof: [0.65, 0.70, 0.786, 0.777],
   mouthFloor: [0.65, 0.787, 0.786, 0.864],
-  iris: [0.796, 0.746, 0.946, 0.866],
-  eyeSkin: [0.796, 0.876, 0.946, 0.996],
+  // (round T3: the eye's block re-cut — the window's rect 0.08 tall (T2 0.12: 0.0055 mm a texel over the window's radius
+  // at 2048, still far under a screen pixel) and each eye's skin cap its own rect, eyeSkinL and eyeSkinR (eyemesh by the
+  // globe's side; T2's caps shared one, the right the left's mirror clone), 0.075 tall: the cap's polar run from the
+  // window's edge to the back pole, 3.7–4.6 mm of skin over 154 texels at 2048, ≤ 0.030 mm a texel along it (T2 0.019)
+  // and 0.034 round it at the globe's equator, the head's 0.024–0.032; `eyeSkin` the two caps' union, the Eye
+  // material's skinRect; the gutters 0.01)
+  iris: [0.796, 0.746, 0.946, 0.826],
+  eyeSkin: [0.796, 0.836, 0.946, 0.996],
+  eyeSkinL: [0.796, 0.836, 0.946, 0.911],
+  eyeSkinR: [0.796, 0.921, 0.946, 0.996],
   patch: [0.41, 0.874, 0.786, 0.99],
 };
 
@@ -115,8 +124,10 @@ export const BODY_LAYOUT_LOD2 = {
   head: [0, 0.58, 0.42, 1],
   lobeL: [0.43, 0.70, 0.54, 0.819],
   lobeR: [0.55, 0.70, 0.66, 0.819],
-  iris: [0.796, 0.746, 0.946, 0.866],
-  eyeSkin: [0.796, 0.876, 0.946, 0.996],
+  iris: [0.796, 0.746, 0.946, 0.826],
+  eyeSkin: [0.796, 0.836, 0.946, 0.996],
+  eyeSkinL: [0.796, 0.836, 0.946, 0.911],
+  eyeSkinR: [0.796, 0.921, 0.946, 0.996],
   hidden: [0.914, 0.643, 0.919, 0.648],
   patch: [0.43, 0.874, 0.786, 0.99],
 };

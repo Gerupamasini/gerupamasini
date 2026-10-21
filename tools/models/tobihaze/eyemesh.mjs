@@ -30,9 +30,12 @@ import { vertexTangents } from './tiers.mjs';
 export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 16 }, lod2: { nt: 7, np: 8 } };
 
 /** eyeGlobe's uv (u = azimuth / 2π, v = ρ / 2: the window v ≤ 0.5, the skin 0.5 … 1) on the atlas: `part` 'window' maps
- * v ∈ [0, 0.5] onto the iris rect, 'skin' maps v ∈ [0.5, 1] onto the eyeSkin rect (v clamped into the part's range). */
-export function eyePartUV(uv, part, layout = BODY_LAYOUT) {
-  const out = new Float32Array(uv.length), R = part === 'skin' ? layout.eyeSkin : layout.iris;
+ * v ∈ [0, 0.5] onto the iris rect, 'skin' maps v ∈ [0.5, 1] onto the eyeSkin rect (v clamped into the part's range).
+ * Round T3: the skin onto its own globe's rect, eyeSkinL (side +1) or eyeSkinR (side −1), where the layout has them (the
+ * two caps no mirror clones: textures.mjs bakes each at its own globe); the window's rect stays shared. */
+export function eyePartUV(uv, part, layout = BODY_LAYOUT, side = 1) {
+  const cap = (side < 0 ? layout.eyeSkinR : layout.eyeSkinL) ?? layout.eyeSkin;
+  const out = new Float32Array(uv.length), R = part === 'skin' ? cap : layout.iris;
   for (let i = 0; i < uv.length / 2; i++) {
     const v = uv[i * 2 + 1], t = part === 'skin' ? Math.max(0, Math.min(1, (v - 0.5) / 0.5)) : Math.max(0, Math.min(1, v / 0.5));
     out[i * 2] = R[0] + uv[i * 2] * (R[2] - R[0]);
@@ -86,7 +89,7 @@ export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangent
     position.set(dirToObject([g.position[i * 3], g.position[i * 3 + 1], g.position[i * 3 + 2]]), i * 3);
     normal.set(dirToObject([g.normal[i * 3], g.normal[i * 3 + 1], g.normal[i * 3 + 2]]), i * 3);
   }
-  const uvSkin = eyePartUV(g.uv, 'skin', layout), uvWin = eyePartUV(g.uv, 'window', layout);
+  const uvSkin = eyePartUV(g.uv, 'skin', layout, side), uvWin = eyePartUV(g.uv, 'window', layout, side);
   const uv = Float32Array.from(g.uv, (_, i) => (g.uv[(i | 1)] <= 0.5 ? uvWin[i] : uvSkin[i]));
   const o = { tangents };
   const parts = {

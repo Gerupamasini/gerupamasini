@@ -54,8 +54,14 @@ export default defineConfig({
         // surf-lab.html: the surf on a beach made to show it (sea, tide, hour and camera in hand)
         surfLab: fileURLToPath(new URL('./surf-lab.html', import.meta.url)),
       },
-      // (the model loaders, with the meshopt and Zstandard decoders they carry, go with three)
-      output: { manualChunks: { three: ['three', 'three/addons/loaders/GLTFLoader.js', 'three/addons/loaders/KTX2Loader.js', 'three/addons/libs/meshopt_decoder.module.js'] } },
+      // (the model loaders, with the meshopt and Zstandard decoders they carry, go with three; the トビハゼ's runtime — its
+      // behaviour, pose module, materials and driver — in a chunk of its own beside the main one)
+      output: {
+        manualChunks: {
+          three: ['three', 'three/addons/loaders/GLTFLoader.js', 'three/addons/loaders/KTX2Loader.js', 'three/addons/libs/meshopt_decoder.module.js'],
+          tobihaze: ['TobihazeDriver.ts', 'material.ts'].map((f) => fileURLToPath(new URL(`./src/creatures/species/tobihaze/${f}`, import.meta.url))),
+        },
+      },
     },
   },
   server: { port: 5173, host: true },

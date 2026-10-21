@@ -43,6 +43,21 @@
 // textured shot — the fins' depth writes (above), the membranes' translucency (shot.finTranslucency false: off) — and
 // shot.material.pupil ('teal' | 'red' | 'black' | [r, g, b]) previews the pupil variant (patchRuntime); view.keyBehind
 // { up } puts the sun behind the fish (the backlit fins).
+// Round T3 (key tech; ref/work/t3_tech/RUNTIME_CONTRACT.md): the DEFAULT textured render is what three's GLTFLoader draws
+// plus the documented runtime contract — the fins' depth writes, translucency and shadow by coverage (a MeshDepthMaterial
+// with the atlas and alphaHash), the pupil variant at its default, the uniforms at theirs — and nothing the game lacks:
+// the sun's lobe widening is a viewer-only diagnostic now (shot.sunLobe true; T2 drew it by default). shot.runtime 'gltf'
+// draws the plain loader's GLB (no contract: the game today). The occlusion is the GLB's own occlusionTexture (no patch).
+// The rigs: 'photo' (the canonical calibration light), 'game', 'zukan' as T2; 'u1' the owner's photo's light (a bright
+// overcast over a band of sunlit vegetation, the mud below: the wet head mirrors the sky as a broad sheet), 'tank' the
+// game's tank room (src/app/TankScene.ts without its water passes). shot.material.tint { hueDeg, sat, val, contrast, lift:
+// { colour, amount } } (the body's extras runtime.tint, contrast about its valueMean); the eye's tint and dark only on its
+// skin caps (skinRect), never on the window.
+// Round T3 integrator (RUNTIME_CONTRACT §9.2–9.4, §10): the fins' translucency reads the sun's shadow at the fragment
+// moved toward the light by extras shadow.offsetMM (shot.transShadow false: T2's unshadowed rule, a diagnostic); lod2's
+// cards decode their opacity from A (opacityDecode); shot.bladeWater (or shot.material.bladeWater) mixes the pectoral
+// blade toward its water copy (extras runtime.blade; shots-final's water and swim shots carry 1); the fins' fleshy parts
+// (A over the stop) dry with the body's albedo rule (extras runtime.wetness.flesh).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
@@ -143,8 +158,26 @@ export const LIGHT = {
   // the substrate bounce 0.8, ACES at exposure 1 straight to the canvas — t2_tech/LIGHT.md: its grey card against 'photo')
   t1photo: { pipeline: 'direct', tone: 'aces', exposure: 1, room: 0.25, hemi: 0, hemiSky: 0xdfe6ee, hemiGround: 0x4a4540, key: 1.9, keyColor: 0xfff3e2, fill: 0.2, rim: 0.5, bounce: 0.8, background: 0x6f6f6f },
   zukan: { pipeline: 'direct', tone: 'game', exposure: 0.9, room: 0.45, hemi: 0.8, hemiSky: 0xdfe9ec, hemiGround: 0x6b5e4e, key: 1.6, keyColor: 0xfff4e8, keyFixed: [0.4, 1.0, 0.6], fill: 0, rim: 0, background: [0.05, 0.06, 0.07] },
+  // (round T3, the surface and eye findings' P2: u1's own light — the owner's photo, the primary reference: a hazy overcast
+  // with the sun a faint disc and glow, the sky as bright at the horizon as at the zenith, the horizon a bright band of
+  // sunlit reed and grass (u1's out-of-focus green-gold background, which a wet head facing the camera mirrors at grazing
+  // angles), the mud below. Its level by the exposure test at the u1 camera: grey card 0.18 → sRGB 118 (t3_tech
+  // cards.sh; 'photo' 118 there too). Measured: it does not by itself give u1's broad sheet of sky on the head (sheen 0.07 %
+  // against the photo's 8 %) — the head's albedo is far paler than u1's (L50 66 against the photo's mottled 64 with dark
+  // olive marks) and the tone curve compresses the film's highlights: RUNTIME_CONTRACT.md §6)
+  u1: {
+    pipeline: 'hdr', tone: 'game', exposure: 0.58, background: [0.2, 0.24, 0.12],
+    sun: { irradiance: 0.32, color: [1.0, 0.98, 0.94], radiusDeg: SUN_RADIUS_DEG, shadows: true },
+    glow: { radiance: 3.2, sigmaDeg: 25, color: [1.0, 0.98, 0.94] },
+    sky: { zenith: 1.28, zenithTint: [0.96, 0.99, 1.04], horizonTint: [1.0, 1.0, 0.98], horizon: 1.6, band: { colour: [1.76, 2.0, 1.04], from: 0.0, to: 0.2 } }, ground: { albedo: [0.2, 0.19, 0.17] }, env: 1,
+  },
+  // (round T3, the tech finding's P1: the tank — src/app/TankScene.ts, approximated without its water passes:
+  // RoomEnvironment at 0.22, hemisphere 0.3 0x5a6a72 / 0x1a1715, the lamp (a SpotLight 1.8 with distance 2.5 and decay
+  // 1.2 there) as a fixed directional key 2.0 from straight above, the warm fill and the cool rim 0.3, the game's tone
+  // curve at its day exposure, the room's near-black background)
+  tank: { pipeline: 'hdr', tone: 'game', exposure: 0.58, room: 0.22, hemi: 0.3, hemiSky: 0x5a6a72, hemiGround: 0x1a1715, key: 2.0, keyColor: 0xdff4ff, keyFixed: [0.05, 0.95, 0.08], fill: 0.3, fillColor: 0xffe9d6, fillFixed: [0.9, 0.5, 0.8], rim: 0.3, rimColor: 0x9fc8e8, rimFixed: [-0.8, 0.4, -0.7], background: [0.028, 0.032, 0.036] },
 };
-let lightRig = 'studio', L = LIGHT.studio, envCache = new Map(), roomEnv = null;
+let lightRig = 'studio', L = LIGHT.studio, envCache = new Map(), roomEnv = null, sunLobe = false;
 
 /**
  * The sky dome, the soft sun's glow and the mud, for PMREM (round T2): radiance by direction, linear, HDR.
@@ -166,14 +199,17 @@ function skyScene(S, G, sun, glow) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false,
     uniforms: { uZ: { value: z }, uHA: { value: ha }, uZT: { value: new THREE.Vector3(...S.zenithTint) }, uHT: { value: new THREE.Vector3(...S.horizonTint) }, uG: { value: new THREE.Vector3(...gr) }, uClear: { value: S.clear ? 1 : 0 },
+      uBandOn: { value: S.band ? 1 : 0 }, uBand: { value: new THREE.Vector3(...(S.band?.colour ?? [0, 0, 0])) }, uBandH: { value: new THREE.Vector2(S.band?.from ?? 0, S.band?.to ?? 0.2) },
       uSun: { value: new THREE.Vector3(...sun.dir) }, uGlow: { value: lg }, uSig: { value: sig }, uGC: { value: new THREE.Vector3(...(glow?.color ?? [1, 1, 1])) } },
     vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float uZ; uniform float uHA; uniform vec3 uZT; uniform vec3 uHT; uniform vec3 uG; uniform float uClear; uniform vec3 uSun; uniform float uGlow; uniform float uSig; uniform vec3 uGC; varying vec3 vDir;
+    fragmentShader: `uniform float uZ; uniform float uHA; uniform vec3 uZT; uniform vec3 uHT; uniform vec3 uG; uniform float uClear; uniform vec3 uSun; uniform float uGlow; uniform float uSig; uniform vec3 uGC; uniform float uBandOn; uniform vec3 uBand; uniform vec2 uBandH; varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
   float s = clamp(d.y, 0.0, 1.0);
   float l = uClear > 0.5 ? uZ * (1.0 + 1.5 * pow(1.0 - s, 4.0)) : uZ * (uHA + (1.0 - uHA) * s);
   vec3 sky = l * mix(uHT, uZT, sqrt(s));
+  // (round T3: the 'u1' rig's band of vegetation along the horizon, sin h from uBandH.x to .y — radiance)
+  if (uBandOn > 0.5) sky = mix(uBand, sky, smoothstep(uBandH.x, uBandH.y, s));
   float psi = acos(clamp(dot(d, uSun), -1.0, 1.0));
   sky += uGlow * exp(-(psi * psi) / (uSig * uSig)) * uGC;
   // (the mud below the horizon; a degree's blend at the horizon)
@@ -216,10 +252,13 @@ function setLight(name, over = {}) {
   if (name === 'studio' || !base.sun && !base.room) {
     hemi.color.setHex(0xdfe6ee); hemi.groundColor.setHex(0x4a4540);
     hemi.intensity = L.hemi; bounce.intensity = L.bounce ?? 0; key.intensity = L.key; key.color.setHex(L.keyColor); fill.intensity = L.fill; rim.intensity = L.rim;
+    fill.color.setHex(0xe8eef8); rim.color.setHex(0xffffff);
   } else if (base.room) {
     scene.environment = roomEnvironment(); scene.environmentIntensity = L.room;
     hemi.color.setHex(L.hemiSky); hemi.groundColor.setHex(L.hemiGround); hemi.intensity = L.hemi;
     key.intensity = L.key; key.color.setHex(L.keyColor); fill.intensity = L.fill ?? 0; rim.intensity = L.rim ?? 0; bounce.intensity = L.bounce ?? 0;
+    fill.color.setHex(L.fillColor ?? 0xe8eef8); rim.color.setHex(L.rimColor ?? 0xffffff);
+    key.castShadow = !!L.keyFixed && mode === 'textured' && name === 'tank';
   } else {
     updateEnv();
     key.intensity = L.sun.irradiance; key.color.copy(linColor(L.sun.color));
@@ -230,8 +269,9 @@ function setLight(name, over = {}) {
   renderer.toneMapping = L.pipeline === 'hdr' ? THREE.NoToneMapping : L.tone === 'game' ? THREE.CustomToneMapping : THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = L.exposure ?? 1;
   outMat.uniforms.uExposure.value = L.exposure ?? 0.5;
-  // the sun's size on every lit material
-  const sunA = L.sun?.radiusDeg ? Math.tan(((L.sun.radiusDeg / 2) * Math.PI) / 180) : 0;
+  // the sun's size on every lit material (round T3: a viewer-only diagnostic, shot.sunLobe true — the game's renderer has
+  // no such patch, so the default render does not widen the lobes either)
+  const sunA = sunLobe && L.sun?.radiusDeg ? Math.tan(((L.sun.radiusDeg / 2) * Math.PI) / 180) : 0;
   const touch = (m) => {
     if (!m || !m.isMeshStandardMaterial) return;
     const had = m.defines?.TB_SUN_ALPHA;
@@ -293,51 +333,68 @@ const cardMat = (a) => new THREE.MeshPhysicalMaterial({ color: new THREE.Color()
 const extraMaterials = [groundMat, matteMat];
 
 /**
- * The runtime's uniforms on the textured materials (a preview for the behaviour round: the materials' extras
- * tobihaze.runtime): wetness and mud on the body's maps, bars (baseColor A), dark, tint. Only a shot that gives
- * shot.material patches the materials; the plain GLB material is the master (round T2: the master wetness, extras
- * runtime.wetness.default).
- * Round T2's channels (build.mjs runtimeParams, the map `body_film_rough_retain_ao`): R the film (the clearcoat's
- * coverage at the master wetness), G the roughness at the master wetness, B the wet retention, A the occlusion. The rule
- * (extras runtime.wetness.rule, a line-for-line port): the master's local wetness wl0 = clamp(w0·(1 + γ) − γ·(1 − B)) and
- * the shot's wl likewise from the uniform; the wet-state roughness recovered from G at wl0, the roughness, the film and
- * its roughness at wl; the albedo × mix(1/Wa, 1, wl) / mix(1/Wa, 1, wl0) (the map holds the master's albedo).
+ * The runtime contract on the textured materials (round T3; ref/work/t3_tech/RUNTIME_CONTRACT.md; the materials' extras
+ * tobihaze.runtime, build.mjs runtimeParams): what the game's loader adds to the GLB's own materials, drawn by default in
+ * every textured shot so the viewer shows what the game draws once its loader follows the contract —
+ *   fins     the blended fin materials write depth (extras blend.depthWrite), transmit the sun through the membranes
+ *            (runtime.translucency: finatlas.mjs FIN_TRANSLUCENCY; shot.finTranslucency false: off) and cast their shadow
+ *            by coverage (extras shadow: a MeshDepthMaterial with the atlas and alphaHash as the mesh's customDepthMaterial)
+ *   eye      the pupil's variant (runtime.pupil; default the map's teal: no change)
+ *   uniforms wetness, mud, bars, dark, tint (hue, sat, val, contrast, lift) only with shot.material (each at its default
+ *            the static material: the master)
+ * shot.runtime 'gltf': none of it — a plain three GLTFLoader, as the game draws the GLB today (no depth writes on the
+ * fins, a solid fin shadow, no translucency). The occlusion needs no rule since round T3: it is the GLB's own
+ * occlusionTexture (the ORM's R), which GLTFLoader reads.
+ * Round T3's channels (build.mjs runtimeParams, the map `body_occlusion_roughness_metal_retain`): R the occlusion, G the
+ * roughness at the master wetness, B 0, A the wet retention. The wetness rule (extras runtime.wetness.rule, line for
+ * line): the master's local wetness wl0 = clamp(w0·(1 + γ) − γ·(1 − A)) and the shot's wl likewise from the uniform; the
+ * wet-state roughness recovered from G at wl0, the roughness, the film (the clearcoat factor) and its roughness (the
+ * roughness × the film's share) at wl; the skin's own specular rising as the film leaves; the albedo × mix(1/Wa, 1, wl) /
+ * mix(1/Wa, 1, wl0) (the map holds the master's albedo).
  */
-const RT = { uOn: { value: 0 }, uWetness: { value: 1 }, uMud: { value: 0 }, uBars: { value: 0 }, uDark: { value: 0 }, uTint: { value: new THREE.Vector3(0, 1, 1) }, uTrans: { value: 1 }, uPupilOn: { value: 0 }, uPupil: { value: new THREE.Vector3() } };
+const RT = {
+  uOn: { value: 0 }, uWetness: { value: 1 }, uMud: { value: 0 }, uBars: { value: 0 }, uDark: { value: 0 },
+  uTint: { value: new THREE.Vector3(0, 1, 1) }, uTint2: { value: new THREE.Vector3(1, 0, 0.35) }, uLift: { value: new THREE.Vector3(0.27, 0.27, 0.27) },
+  uTrans: { value: 1 }, uPupilOn: { value: 0 }, uPupil: { value: new THREE.Vector3() },
+  // (round T3 integrator, RUNTIME_CONTRACT §9.2–9.4: the shadow map's depth per metre for the translucency's lookup offset,
+  // the shadowed rule's switch (shot.transShadow false: T2's unshadowed rule, a diagnostic) and the blade's land / water mix)
+  uTbDepthK: { value: 0 }, uTbShadowOn: { value: 1 }, uBladeWater: { value: 0 },
+};
 const GLSL_HSV = `
 vec3 tbHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); float e = 1.0e-10; return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x); }
 vec3 tbRgb(vec3 c) { vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0); vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www); return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y); }
-uniform float uOn; uniform float uWetness; uniform float uMud; uniform float uBars; uniform float uDark; uniform vec3 uTint; uniform float uTrans; uniform float uPupilOn; uniform vec3 uPupil;
+uniform float uOn; uniform float uWetness; uniform float uMud; uniform float uBars; uniform float uDark; uniform vec3 uTint; uniform vec3 uTint2; uniform vec3 uLift; uniform float uTrans; uniform float uPupilOn; uniform vec3 uPupil; uniform float uTbDepthK; uniform float uTbShadowOn; uniform float uBladeWater;
 `;
 const glNum = (v) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 /**
- * (round T2 integrator) Two runtime rules are drawn in every textured shot, not only with shot.material, because the
- * game draws them once its loader reads the extras (as the fins' depthWrite flag, which the viewer applies by default):
- *   the fins' translucency (finatlas.mjs FIN_TRANSLUCENCY, extras runtime.translucency; the eyefin key's request): the
- *     membranes' diffuse transmission of the directional lights (the sun) from behind, after three's lights — what the
- *     eyefin key calibrated the fin atlas with (t2_eyefin/js/reye.mjs finTrans); shot.finTranslucency false turns it off
- *   the pupil's variant (iris.mjs EYE_MATERIAL extras runtime.pupil): albedo += A × (variant − teal) on the Eye (A the
- *     glow mask in the iris rect, 0 on the cap); shot.material.pupil 'teal' | 'red' | 'black' | [r, g, b] (default the
- *     map's teal: no change)
- * The rest (wetness, mud, bars, dark, tint) only with shot.material (uOn). The eye skips the bars (its A is the glow's).
- * Patched once per material (a WeakSet: Material.clone copies userData but not onBeforeCompile, so the fins'
- * depth-writing copies are patched on their own); the depth-peel reference's copies run the same hook (rtHooks).
+ * The contract's shader terms on one material (patched once per material: a WeakSet — Material.clone copies userData but
+ * not onBeforeCompile, so the fins' depth-writing copies are patched on their own; the depth-peel reference's copies run
+ * the same hook, rtHooks). Every term is gated by its uniform, so at the uniforms' defaults (uOn 0, uPupilOn 0) the shader
+ * draws the plain material, and shot.runtime 'gltf' turns the rest (uTrans) off as well.
  */
 const rtPatched = new WeakSet(), rtHooks = new WeakMap();
 function patchRuntime(mat) {
   const X = mat?.userData?.tobihaze;
-  const R = X?.runtime?.ref && !X.runtime.wetness ? { ...(X.runtime.translucency ? { translucency: X.runtime.translucency } : {}) } : X?.runtime;
+  const R = X?.runtime;
   if (!R || !mat.isMeshStandardMaterial || rtPatched.has(mat)) return;
   rtPatched.add(mat);
   const role = X.role, W = R.wetness?.WET, M = R.wetness?.master;
   const wetModel = role === 'body' && !!(W?.wet && W?.dry && W?.damp && M);
   const finModel = role === 'fin' && !!R.wetness?.fin;
   const TR = role === 'fin' ? R.translucency ?? null : null, PU = role === 'eye' ? R.pupil ?? null : null;
+  // (round T3 integrator, §9.4: the pectoral blade's water copy — runtime.blade { rect [u, v, w, h], offset [du, dv] })
+  const BL = role === 'fin' && Array.isArray(R.blade?.rect) && Array.isArray(R.blade?.offset) ? R.blade : null;
+  // (round T3 integrator, the eyefin key's request: the fleshy parts dry with the body's albedo rule — runtime.wetness.flesh)
+  const FL = role === 'fin' ? R.wetness?.flesh ?? null : null;
+  // (the eye: tint and dark only on the skin caps — skinRect [u, v, w, h], the glTF UV the map reads)
+  const SR = role === 'eye' && Array.isArray(X.skinRect) ? X.skinRect : null;
   const mud = W?.mud?.colour ? new THREE.Color(W.mud.colour).convertSRGBToLinear() : new THREE.Color(0.27, 0.25, 0.22);
+  const kcc = W?.wet ? W.wet.clearcoatRoughness / W.wet.roughness : 0.2, S0 = mat.specularIntensity ?? 1, sS = W?.wet?.skinSpecular ?? 0.2;
   const hook = (sh) => {
     Object.assign(sh.uniforms, RT);
     sh.fragmentShader = GLSL_HSV + sh.fragmentShader;
     const skin = role === 'body';
+    const tintGate = SR ? `#ifdef USE_MAP\n  float tbCap = step(${glNum(SR[0])}, vMapUv.x) * step(vMapUv.x, ${glNum(SR[0] + SR[2])}) * step(${glNum(SR[1])}, vMapUv.y) * step(vMapUv.y, ${glNum(SR[1] + SR[3])});\n#else\n  float tbCap = 0.0;\n#endif` : role === 'eye' ? 'float tbCap = 0.0;' : 'float tbCap = 1.0;';
     sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
 #ifdef USE_MAP
 ${skin ? '  if (uOn > 0.5) diffuseColor.rgb *= 1.0 - 0.6 * uBars * sampledDiffuseColor.a;\n  diffuseColor.a = 1.0;' : ''}
@@ -345,7 +402,26 @@ ${PU ? `  // (the pupil's variant: the map's A in the iris rect is the glow's we
   if (uPupilOn > 0.5) diffuseColor.rgb = max(diffuseColor.rgb + sampledDiffuseColor.a * (uPupil - vec3(${PU.teal.map(glNum).join(', ')})), vec3(0.0));
   diffuseColor.a = 1.0;` : ''}
 #endif
-  if (uOn > 0.5) { vec3 h = tbHsv(max(diffuseColor.rgb, vec3(0.0))); h.x = fract(h.x + uTint.x / 360.0); h.y = clamp(h.y * uTint.y, 0.0, 1.0); h.z *= uTint.z * mix(1.0, 0.45, uDark); diffuseColor.rgb = tbRgb(h); }`);
+  ${tintGate}
+  if (uOn > 0.5 && tbCap > 0.5) {
+    vec3 h = tbHsv(max(diffuseColor.rgb, vec3(0.0)));
+    h.x = fract(h.x + uTint.x / 360.0); h.y = clamp(h.y * uTint.y, 0.0, 1.0);
+    h.z = max(0.0, uTint2.z + (h.z - uTint2.z) * uTint2.x) * uTint.z * mix(1.0, 0.45, uDark);
+    diffuseColor.rgb = mix(tbRgb(h), uLift, clamp(uTint2.y, 0.0, 1.0));
+  }`);
+    if (BL) {
+      // (§9.4: inside the blade's rect the texel — colour and A — mixed toward the water copy at uv + offset; both read
+      // unconditionally so the derivatives stay defined; uBladeWater 0, the default, is the static land blade)
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#ifdef USE_MAP
+  vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+  {
+    vec4 tbW = texture2D(map, vMapUv + vec2(${glNum(BL.offset[0])}, ${glNum(BL.offset[1])}));
+    float tbIn = step(${glNum(BL.rect[0])}, vMapUv.x) * step(vMapUv.x, ${glNum(BL.rect[0] + BL.rect[2])}) * step(${glNum(BL.rect[1])}, vMapUv.y) * step(vMapUv.y, ${glNum(BL.rect[1] + BL.rect[3])});
+    sampledDiffuseColor = mix(sampledDiffuseColor, tbW, uBladeWater * tbIn);
+  }
+  diffuseColor *= sampledDiffuseColor;
+#endif`);
+    }
     if (finModel) {
       const F = R.wetness.fin;
       sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -353,35 +429,59 @@ ${PU ? `  // (the pupil's variant: the map's A in the iris rect is the glow's we
     float tbW = clamp(uWetness, 0.0, 1.0), tbW0 = ${glNum(F.master)};
     roughnessFactor = mix(${glNum(F.dry)}, ${glNum(F.wet)}, tbW);
     float am = mix(1.0 / ${glNum(F.albedo)}, 1.0, tbW) / mix(1.0 / ${glNum(F.albedo)}, 1.0, tbW0);
-    diffuseColor.rgb = mix(diffuseColor.rgb * am, vec3(${glNum(mud.r)}, ${glNum(mud.g)}, ${glNum(mud.b)}), clamp(uMud, 0.0, 1.0) * 0.6);
+    vec3 tbC = diffuseColor.rgb * am;
+${FL ? `    // (the fleshy parts: the body's albedo and saturation rule at the flank's retention, weighted by the atlas's A)
+    {
+      float fg = ${glNum(FL.gamma)}, fr = ${glNum(FL.retain)};
+      float fwl = clamp(tbW * (1.0 + fg) - fg * (1.0 - fr), 0.0, 1.0), fwl0 = clamp(tbW0 * (1.0 + fg) - fg * (1.0 - fr), 0.0, 1.0);
+      float fam = mix(1.0 / ${glNum(FL.albedo)}, 1.0, fwl) / mix(1.0 / ${glNum(FL.albedo)}, 1.0, fwl0);
+      float fsat = mix(1.0 / ${glNum(FL.saturation)}, 1.0, fwl) / mix(1.0 / ${glNum(FL.saturation)}, 1.0, fwl0);
+      vec3 fc = diffuseColor.rgb; float fl = dot(fc, vec3(0.2126, 0.7152, 0.0722));
+      tbC = mix(tbC, mix(vec3(fl), fc, fsat) * fam, smoothstep(${glNum(FL.stopAlpha[0])}, ${glNum(FL.stopAlpha[1])}, diffuseColor.a));
+    }
+` : ''}    diffuseColor.rgb = mix(tbC, vec3(${glNum(mud.r)}, ${glNum(mud.g)}, ${glNum(mud.b)}), clamp(uMud, 0.0, 1.0) * 0.6);
   }`);
     }
     if (TR) {
-      // (the fins' diffuse transmission, FIN_TRANSLUCENCY's rule: the far face's direct light scattered through the thin
-      // membrane, tinted by it; a forward lobe for the sun just behind it; the opaque parts — A over stopAlpha — none)
-      const st = TR.stopAlpha ? `(1.0 - smoothstep(${glNum(TR.stopAlpha[0])}, ${glNum(TR.stopAlpha[1])}, diffuseColor.a))` : '1.0';
+      // (the fins' diffuse transmission, FIN_TRANSLUCENCY's rule — RUNTIME_CONTRACT §9.2: the far face's direct light
+      // scattered through the thin membrane, tinted by it; a forward lobe for the sun just behind it; the opaque parts — A
+      // over stopAlpha — none; each directional light × its shadow at the fragment, the lookup moved toward the light by
+      // shadow.offsetMM (so the fin does not shadow its own glow, and the body between the sun and a paired fin does);
+      // §9.3: lod2's cards decode their opacity from A (opacityDecode) before the stop, and the term is × the opacity)
+      const card = Array.isArray(TR.opacityDecode);
+      const dec = card ? `clamp((diffuseColor.a - ${glNum(TR.opacityDecode[0])}) / ${glNum(TR.opacityDecode[1])}, 0.0, 1.0)` : 'diffuseColor.a';
+      const st = TR.stopAlpha ? `(1.0 - smoothstep(${glNum(TR.stopAlpha[0])}, ${glNum(TR.stopAlpha[1])}, tbA))` : '1.0';
+      const off = Number.isFinite(TR.shadow?.offsetMM) ? glNum(TR.shadow.offsetMM) : null;
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
   if (uTrans > 0.5) {
-    vec3 tbTint = ${glNum(TR.diffuse)} * ${st} * pow(max(material.diffuseColor, vec3(1e-4)), vec3(${glNum(TR.tintPower)}));
+    float tbA = ${dec};
+    vec3 tbTint = ${glNum(TR.diffuse)} * ${st} * ${card ? 'tbA * ' : ''}pow(max(material.diffuseColor, vec3(1e-4)), vec3(${glNum(TR.tintPower)}));
     vec3 tbE = vec3(0.0);
     #if NUM_DIR_LIGHTS > 0
-    for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
-      float tb = saturate(dot(-normal, directionalLights[i].direction));
+    #pragma unroll_loop_start
+    for (int i = 0; i < NUM_DIR_LIGHTS; i++) { {
+      float tbS = 1.0;
+${off ? `      #if defined(USE_SHADOWMAP) && (UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS)
+      if (uTbShadowOn > 0.5) tbS = getShadow(directionalShadowMap[i], directionalLightShadows[i].shadowMapSize, directionalLightShadows[i].shadowIntensity, directionalLightShadows[i].shadowBias - ${off} * uTbDepthK, directionalLightShadows[i].shadowRadius, vDirectionalShadowCoord[i]);
+      #endif
+` : ''}      float tb = saturate(dot(-normal, directionalLights[i].direction));
       float fw = pow(saturate(dot(geometryViewDir, -directionalLights[i].direction)), ${glNum(TR.forwardPower)});
-      tbE += directionalLights[i].color * (tb + ${glNum(TR.forward)} * fw * step(0.0, -dot(normal, directionalLights[i].direction)));
-    }
+      tbE += tbS * directionalLights[i].color * (tb + ${glNum(TR.forward)} * fw * step(0.0, -dot(normal, directionalLights[i].direction)));
+    } }
+    #pragma unroll_loop_end
     #endif
     ${TR.environment ? `#if defined(USE_ENVMAP) && defined(STANDARD)\n    tbE += ${glNum(TR.environment)} * getIBLIrradiance(-normal);\n    #endif` : ''}
     reflectedLight.directDiffuse += tbTint * tbE * RECIPROCAL_PI;
   }`);
     }
     if (!wetModel) return;
-    // (the body: the film, the roughness and the albedo from ORM R/G/B at the shot's wetness; the mud by the downward normal)
+    // (the body: the roughness, the film and its roughness, the skin's specular and the albedo from the ORM's G and A at
+    // the shot's wetness; the mud by the downward normal)
     sh.fragmentShader = sh.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-  float tbClearcoat = -1.0, tbCcRough = 0.0;
+  float tbClearcoat = -1.0, tbCcRough = 0.0, tbSpecK = -1.0;
 #ifdef USE_ROUGHNESSMAP
   if (uOn > 0.5) {
-    float g = ${glNum(W.gamma ?? 1.2)}, w0 = ${glNum(M.wetness)}, B = texelRoughness.b;
+    float g = ${glNum(W.gamma ?? 1.2)}, w0 = ${glNum(M.wetness)}, B = texelRoughness.a;
     float wl0 = clamp(w0 * (1.0 + g) - g * (1.0 - B), 0.0, 1.0);
     float wl = clamp(uWetness * (1.0 + g) - g * (1.0 - B), 0.0, 1.0);
     float dK = ${glNum(W.dry.roughness)} - ${glNum(W.wet.roughness)} * ${glNum(W.carry ?? 0.5)};
@@ -389,14 +489,12 @@ ${PU ? `  // (the pupil's variant: the map's A in the iris rect is the glow's we
     float wetR = (texelRoughness.g - (1.0 - wl0) * dK) / (wl0 + (1.0 - wl0) * ${glNum(W.carry ?? 0.5)});
     float rr = mix(dK + wetR * ${glNum(W.carry ?? 0.5)}, wetR, wl);
     float cw = smoothstep(0.35, 1.0, wl);
-    float cc = ${glNum(W.wet.clearcoat)} * cw + ${glNum(W.damp.clearcoat)} * (1.0 - cw) * smoothstep(0.15, 0.5, wl);${R.wetness.specularOcclusion ? `
-    // (round T2 integrator: the film's specular occlusion from the film map's A, as the master's R has it — surface.mjs
-    // specularOcclusion, extras runtime.wetness.specularOcclusion)
-    cc *= mix(${glNum(R.wetness.specularOcclusion.min)}, 1.0, smoothstep(${glNum(R.wetness.specularOcclusion.ao[0])}, ${glNum(R.wetness.specularOcclusion.ao[1])}, texelRoughness.a));` : ''}
+    float cc = ${glNum(W.wet.clearcoat)} * cw + ${glNum(W.damp.clearcoat)} * (1.0 - cw) * smoothstep(0.15, 0.5, wl);
     vec3 tbN = normalize((inverse(viewMatrix) * vec4(vNormal, 0.0)).xyz);
     float mw = clamp(uMud * (0.45 + 0.55 * smoothstep(${glNum(W.mud?.ventral?.[0] ?? 0.15)}, ${glNum(W.mud?.ventral?.[1] ?? 0.75)}, -tbN.y)), 0.0, 1.0);
     roughnessFactor = mix(rr, ${glNum(W.mud?.roughness ?? 0.7)}, mw);
-    tbClearcoat = cc * (1.0 - mw); tbCcRough = mix(${glNum(W.damp.clearcoatRoughness)}, ${glNum(W.wet.clearcoatRoughness)}, cw);
+    tbClearcoat = cc * (1.0 - mw); tbCcRough = rr * ${glNum(+kcc.toFixed(5))};
+    tbSpecK = min(${glNum(+(1 / Math.max(1e-3, S0)).toFixed(4))}, mix(1.0, ${glNum(sS)}, wl * (1.0 - mw)) / mix(1.0, ${glNum(sS)}, wl0));
     float Wa = ${glNum(W.wet.albedo ?? 1)}, Ws = ${glNum(W.wet.saturation ?? 1)};
     float am = mix(1.0 / Wa, 1.0, wl * (1.0 - mw)) / mix(1.0 / Wa, 1.0, wl0), sat = mix(1.0 / Ws, 1.0, wl * (1.0 - mw)) / mix(1.0 / Ws, 1.0, wl0);
     vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -406,25 +504,43 @@ ${PU ? `  // (the pupil's variant: the map's A in the iris rect is the glow's we
     sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_CLEARCOAT
   if (tbClearcoat >= 0.0) { material.clearcoat = saturate(tbClearcoat); material.clearcoatRoughness = min(max(tbCcRough, 0.0525) + geometryRoughness, 1.0); }
-#endif`);
+#endif
+  if (tbSpecK >= 0.0) { material.specularColor *= tbSpecK; material.specularColorBlended *= tbSpecK; material.specularF90 = min(material.specularF90 * tbSpecK, 1.0); }`);
   };
   rtHooks.set(mat, hook);
   mat.onBeforeCompile = hook;
-  mat.customProgramCacheKey = () => `tobihaze-rt-${role}-${wetModel}-${finModel}-${TR ? 'tr' + (TR.stopAlpha ? 's' : '') : ''}-${PU ? 'pu' : ''}`;
+  mat.customProgramCacheKey = () => `tobihaze-rt3b-${role}-${wetModel}-${finModel}-${TR ? 'tr' + (TR.stopAlpha ? 's' : '') + (TR.opacityDecode ? 'd' : '') + (TR.shadow ? 'h' : '') : ''}-${PU ? 'pu' : ''}-${SR ? 'sr' : ''}-${BL ? 'bl' : ''}-${FL ? 'fl' : ''}`;
   mat.needsUpdate = true;
+}
+/** The fins' shadow by coverage (the contract: extras shadow — a depth material with the atlas and alphaHash), cached per
+ * fin material. */
+const finDepth = new Map();
+function finDepthMaterial(m) {
+  if (!finDepth.has(m)) finDepth.set(m, new THREE.MeshDepthMaterial({ map: m.map, alphaHash: !!m.userData?.tobihaze?.shadow?.alphaHash, alphaTest: m.userData?.tobihaze?.shadow?.alphaHash ? 0 : 0.5 }));
+  return finDepth.get(m);
 }
 /** The pupil variants by name: iris.mjs EYE_MATERIAL extras runtime.pupil.variants (linear), read from a loaded Eye. */
 let pupilVariants = null;
 function setRuntime(m = null, shot = {}) {
-  RT.uOn.value = m ? 1 : 0;
-  RT.uTrans.value = shot.finTranslucency === false ? 0 : 1;
+  const plain = shot.runtime === 'gltf';
+  RT.uOn.value = m && !plain ? 1 : 0;
+  RT.uTrans.value = shot.finTranslucency === false || plain ? 0 : 1;
+  // (round T3 integrator: §9.2's shadow on the translucency — shot.transShadow false: T2's unshadowed rule, a diagnostic —
+  // and §9.4's blade, shot.bladeWater or shot.material.bladeWater (0 the static land blade; the water states' shots 1))
+  RT.uTbShadowOn.value = shot.transShadow === false ? 0 : 1;
+  RT.uBladeWater.value = plain ? 0 : Math.min(1, Math.max(0, shot.bladeWater ?? m?.bladeWater ?? 0));
   const pv = m?.pupil, rgb = Array.isArray(pv) ? pv : typeof pv === 'string' ? pupilVariants?.[pv] : null;
-  RT.uPupilOn.value = rgb ? 1 : 0;
+  RT.uPupilOn.value = rgb && !plain ? 1 : 0;
   if (rgb) RT.uPupil.value.set(rgb[0], rgb[1], rgb[2]);
   m = m ?? {};
   RT.uWetness.value = m.wetness ?? 1; RT.uMud.value = m.mud ?? 0; RT.uBars.value = m.bars ?? 0; RT.uDark.value = m.dark ?? 0;
   RT.uTint.value.set(m.tint?.hueDeg ?? 0, m.tint?.sat ?? 1, m.tint?.val ?? 1);
+  // (contrast about the map's mean value — extras runtime.tint.valueMean — and the lift toward a colour)
+  RT.uTint2.value.set(m.tint?.contrast ?? 1, m.tint?.lift?.amount ?? 0, valueMean);
+  const lc = m.tint?.lift?.colour;
+  if (lc) { const c = Array.isArray(lc) ? lc : new THREE.Color(lc).convertSRGBToLinear().toArray(); RT.uLift.value.set(c[0], c[1], c[2]); }
 }
+let valueMean = 0.35;
 const silMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 // x-ray: the skeleton opaque (alizarin red, as a cleared and stained specimen) inside a faint skin
 const boneMat = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5, metalness: 0 });
@@ -713,6 +829,9 @@ function setView(v) {
   // key stays where ModelPreview puts it (the turntable turns the fish under it)
   if (L.keyFixed) {
     key.position.set(...L.keyFixed).add(look); key.target.position.copy(look);
+    // (round T3: the tank's fill and rim fixed too)
+    if (L.fillFixed) fill.position.set(...L.fillFixed);
+    if (L.rimFixed) rim.position.set(...L.rimFixed);
   } else if (v.light !== 'fixed') {
     key.position.copy(dir).multiplyScalar(0.7).addScaledVector(camUp, 0.9).addScaledVector(right, -0.5);
     fill.position.copy(dir).multiplyScalar(0.5).addScaledVector(right, 0.9);
@@ -827,6 +946,8 @@ function resize() {
 
 let finRender = null;
 function render() {
+  // (§9.2: the translucency's shadow lookup offset is shadow.offsetMM × 0.001 / (far − near) in the shadow map's depth)
+  { const sc = key.shadow.camera; RT.uTbDepthK.value = 0.001 / Math.max(1e-6, sc.far - sc.near); }
   if (finRender === 'peel' && model) return renderPeel();
   if (L.pipeline === 'hdr') {
     const t = hdrTarget();
@@ -853,19 +974,26 @@ window.__tobi = {
       scene.add(cards);
     }
     if (model) model.visible = !(shot.cards?.only);
-    // (round T1: the light rig — the mode's own unless the shot names one — and the runtime uniforms' preview)
+    // (round T1: the light rig — the mode's own unless the shot names one — and the runtime uniforms' preview; round T3:
+    // the sun's lobe widening only on request, shot.sunLobe — a viewer-only diagnostic)
+    sunLobe = !!shot.sunLobe;
     setLight(shot.light ?? (mode === 'textured' ? 'photo' : 'studio'), shot.lightOver ?? {});
     msaa = shot.msaa ?? 4;
     // (the fins' blending: 'peel' the reference, 'depthWrite' the blended fins writing depth, 'gltf' as three's GLTFLoader
     // leaves them (no depth writes); by default the material's own runtime contract — extras tobihaze.blend.depthWrite,
     // round T2: what the game draws once ModelLoader reads it — else as loaded)
-    finRender = shot.finRender ?? null;
+    // (round T3: shot.runtime 'gltf' — the GLB as a plain GLTFLoader draws it, none of the runtime contract; default the
+    // contract, RUNTIME_CONTRACT.md)
+    const plain = shot.runtime === 'gltf';
+    finRender = shot.finRender ?? (plain ? 'gltf' : null);
     if (model) model.traverse((o) => {
       if (!o.isMesh) return;
       const m = original.get(o);
-      if (mode !== 'textured' || !m?.userData?.tobihaze || m.userData.tobihaze.role !== 'fin' || !m.transparent) return;
+      if (mode !== 'textured' || !m?.userData?.tobihaze || m.userData.tobihaze.role !== 'fin' || !m.transparent) { if (o.customDepthMaterial && finDepth.has(m)) delete o.customDepthMaterial; return; }
       const dw = finRender === 'depthWrite' || (finRender !== 'gltf' && finRender !== 'peel' && !!m.userData.tobihaze.blend?.depthWrite);
       if (dw) { if (!dwCopies.has(m)) { const c = m.clone(); c.depthWrite = true; dwCopies.set(m, c); } o.material = dwCopies.get(m); } else o.material = m;
+      // (the contract's fin shadow: by the atlas's coverage — extras shadow; three casts a BLEND material solid)
+      if (!plain && m.userData.tobihaze.shadow) o.customDepthMaterial = finDepthMaterial(m); else delete o.customDepthMaterial;
     });
     // (round T2 integrator: the runtime rules on every textured material — the fins' translucency and the pupil's variant
     // always, the rest with shot.material — the depth-writing copies included; patchRuntime's header)
@@ -873,8 +1001,9 @@ window.__tobi = {
       if (!o.isMesh) return;
       for (const m of [original.get(o)].flat()) patchRuntime(m);
       for (const m of [o.material].flat()) patchRuntime(m);
-      const pu = original.get(o)?.userData?.tobihaze?.runtime?.pupil?.variants;
-      if (pu) pupilVariants = pu;
+      const X = original.get(o)?.userData?.tobihaze;
+      if (X?.runtime?.pupil?.variants) pupilVariants = X.runtime.pupil.variants;
+      if (X?.role === 'body' && Number.isFinite(X.runtime?.tint?.valueMean)) valueMean = X.runtime.tint.valueMean;
     });
     setRuntime(shot.material ?? null, shot);
     // (shot.matOver { property: value }: set on every material of the model for this shot, restored at the next — the

@@ -1,0 +1,64 @@
+{
+  "id": "periophthalmus_modestus",
+  "names": { "ja": "トビハゼ", "sci": "Periophthalmus modestus", "en": "Shuttles hoppfish" },
+  "taxon": { "group": "fish", "family": "Gobiidae" },
+  "locomotion": "walk",
+  "aquatic": false,
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "hero": "tobihaze/tobihaze.hero.glb",
+    "lod1": "tobihaze/tobihaze.lod1.glb",
+    "lod2": "tobihaze/tobihaze.lod2.glb",
+    "modelLength_mm": 80,
+    "driver": "tobihaze",
+    "clips": { "idle": "Idle", "move": "Crawl", "special": ["Swim", "Display"] }
+  },
+  "size": {
+    "length_mm": { "min": 20, "max": 100, "mean": 62, "sd": 13 },
+    "weightCoef": { "a": 8.47e-6, "b": 3.031 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "幼魚", "maxLength_mm": 40 },
+    { "id": "adult", "ja": "成魚" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_mm>=85" },
+    { "id": "small", "ja": "小型個体", "when": "length_mm<=25" }
+  ],
+  "variation": { "scaleFromLength": true, "tint": { "hueDeg": [-6, 6], "sat": [0.85, 1.1], "val": [0.85, 1.05] } },
+  "spawn": [
+    { "tags": ["exposed_mud"], "substrate": ["mud", "muddy_sand", "channel"], "depth_m": [-2.2, -0.55], "time": ["dawn", "day", "dusk"], "season": ["summer"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 4, "group": [1, 4], "maxPopulation": 20 },
+    { "tags": ["exposed_mud"], "substrate": ["mud", "muddy_sand", "channel"], "depth_m": [-2.2, 0.02], "time": ["dawn", "day", "dusk"], "season": ["summer"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 0.8, "group": [1, 2], "maxPopulation": 20 },
+    { "tags": ["exposed_mud"], "substrate": ["mud", "muddy_sand", "channel"], "depth_m": [-2.2, -0.55], "time": ["day"], "season": ["spring", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 2, "group": [1, 3], "maxPopulation": 12 },
+    { "tags": ["exposed_mud"], "substrate": ["mud", "muddy_sand", "channel"], "depth_m": [-2.2, 0.02], "time": ["day"], "season": ["spring", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 0.4, "group": [1, 2], "maxPopulation": 12 },
+    { "tags": ["waterline"], "substrate": ["rock", "gravel"], "depth_m": [-0.4, 0.02], "time": ["day"], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 1.5, "group": [1, 2], "maxPopulation": 12 },
+    { "tags": ["waterline"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [-0.35, 0.02], "time": ["day"], "season": ["spring", "summer", "autumn"], "tide": "high", "maps": ["kasai_west"], "density_per_100m2": 2, "group": [1, 2], "maxPopulation": 12 },
+    { "tags": ["small_pool"], "substrate": ["mud", "muddy_sand", "channel"], "depth_m": [-0.3, 0.15], "time": ["day"], "season": ["summer", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 3, "group": [1, 3], "maxPopulation": 12, "length_mm": [20, 40] }
+  ],
+  "brain": {
+    "tree": "mudskipper_flat",
+    "params": { "fleeDistance_m": 2.0, "fleeLengthRef_mm": 65, "fleeLengthExp": 0.5, "fleeRun_m": 1.6, "restMean_s": 16, "crawlDistance_m": [0.08, 0.45], "hopDistance_m": [0.4, 1.4], "nightBurrow_s": [600, 1800] }
+  },
+  "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.7, "alertPenalty": 0.6 },
+  "encyclopedia": {
+    "description": "内湾や河口の干潟の上のほう、ヨシ原や護岸に近いやわらかい泥にすむ、全長 10 cm ほどまでのハゼ（ハゼ科トビハゼ亜科）。東京湾が分布の北の端。潮が引くと泥の上に出てきて、付け根の太い胸びれを腕のようについて体を持ち上げ、左右そろえて這い進む。体を曲げて尾で地面を押すと、体長の 1〜2 倍も跳ぶ。頭の上に突き出た眼は左右別々に動き、眼を頭の中へ沈めてまばたきをする。陸の上では皮膚と口の中で空気を呼吸し、口と鰓の中にはいつも水を含んでいる。乾くと泥の上で体を転がしたり水に入ったりして体を濡らす。ゴカイやヨコエビ、小さなカニや虫に跳びかかって食べ、食べたあとはよく水へ行って口の水を入れ替える。泥に Y 字形の巣穴を掘り、夜と冬（12〜2 月ごろ）は巣穴にこもる。満ち潮では水際を這い上がって石の上などで潮が引くのを待つか、巣穴に入る。繁殖期（5 月末〜8 月）には、雄が鰓蓋をふくらませ背びれを立てて跳ね、雌を巣穴へ誘う。環境省のレッドリストで準絶滅危惧。",
+    "habitatHint": "春〜秋の干潮、土手寄りの泥や砂泥の干潟の上のほう（潮が引いて水から出た泥の上）。澪筋や潮だまりの縁にも。夏がいちばん多く、春と秋は日中だけ。夜と冬は巣穴にこもって出てこない。満ち潮では水際の石（護岸の捨て石）の上で待つ。近づくと跳ねて逃げるので、しゃがんでゆっくり寄る。",
+    "behaviors": [
+      { "id": "rest", "ja": "泥の上で休む", "hint": "胸びれで体を支えて頭を上げ、じっとしている", "clip": "Idle" },
+      { "id": "crawl", "ja": "胸びれで這う", "hint": "左右の胸びれを同時についてから、体を前へ運ぶ", "clip": "Crawl" },
+      { "id": "hop", "ja": "跳ねる", "hint": "体を曲げて尾で地面を押し、体長の 1〜2 倍跳ぶ" },
+      { "id": "forage", "ja": "えものを捕る", "hint": "頭を下げ、泥の上の虫やカニに口を押し当てて捕る" },
+      { "id": "shallow", "ja": "水際で眼を出す", "hint": "浅い水に浸かって、眼だけを水面の上に出している" },
+      { "id": "swim", "ja": "泳ぐ", "hint": "水の中では体をくねらせて泳ぐ（あまり泳がない）", "clip": "Swim" },
+      { "id": "water_entry", "ja": "水に入る", "hint": "跳ぶか這うかして水へ。食べたあとに口の水を入れ替えに行く" },
+      { "id": "water_exit", "ja": "水から上がる", "hint": "満ち潮や水の中から、胸びれをついて泥の上へ上がる" },
+      { "id": "burrow", "ja": "巣穴に入る", "hint": "泥の巣穴に頭から入る。夜や満ち潮の前にも" },
+      { "id": "escape", "ja": "跳ねて逃げる", "hint": "近づくと何度も跳ねて、水や巣穴へ逃げる" },
+      { "id": "display", "ja": "頬をふくらませる", "hint": "鰓蓋をふくらませて背びれを立てる（繁殖期の雄のディスプレイ）", "clip": "Display" },
+      { "id": "blink", "ja": "まばたき", "hint": "眼を頭の中へ沈めて閉じる。陸の上でときどき" }
+    ],
+    "placeholderModel": false
+  }
+}

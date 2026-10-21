@@ -1645,6 +1645,8 @@ export function propFrames(o = {}) {
     let seed = ref.pose;
     for (const r of raises.filter((x) => (x - r0) * dir > 0).sort((a, b) => dir * (a - b))) {
       const p = propPose(r, { ...o, ref, seedPose: seed });
+      // (round T3: every key with the land state's eyes' gaze, statePose's default)
+      if (ref.pose.gaze && !p.pose.gaze) p.pose.gaze = structuredClone(ref.pose.gaze);
       out.push({ raise: r, pose: p.pose, ground: p.ground, weldErrMM: p.weldErrMM, pelvic: p.solved.pelvic });
       seed = p.pose;
     }
@@ -1956,9 +1958,24 @@ export function shippedState(state, tier = 'hero', file = null) {
  *          the water, the caudal spread, D1 folded, D2 and the anal fin half raised
  * Called bare (no tier mesh, ground, hero result or pose) for a state solved on a mesh, or for a lighter tier, the build's
  * shipped pose (shippedState), so every caller reads the same poses (round B4).
- * @returns { pose (with `morph`), ground? (land, reach: from solveArmPlant), solved? }
+ * Round T3 (key tech; the eye findings' P7): every state's pose carries the eyes' default gaze, `gaze: { L, R }` (AXES
+ * eyes.*.gaze.default: behaviour §3.9's rest window 55° out and 15° up, from the bind window's B2/B4 rest — yaw 16.7°,
+ * pitch 2.8°), so the GLBs' states, states.json and the sheets look where the fish looks without a hand-applied gaze; the
+ * near tiers' Eye nodes take it (the viewer's applyPose, the runtime), lod2 (no eye nodes) none.
+ * @returns { pose (with `morph` and `gaze`), ground? (land, reach: from solveArmPlant), solved? }
  */
 export function statePose(state, tier = 'hero', o = {}) {
+  const r = statePoseOf(state, tier, o);
+  const t = tier && typeof tier === 'object' ? 'hero' : tier;
+  if (r?.pose && t !== 'lod2' && !r.pose.gaze) r.pose.gaze = defaultGaze();
+  return r;
+}
+/** The eyes' default gaze per side (AXES eyes.*.gaze.default, yaw and pitch in degrees: the Eye nodes' own channels). */
+export function defaultGaze() {
+  const g = (S) => { const d = AXES.eyes?.[S]?.gaze?.default ?? {}; return { yaw: d.yaw ?? 0, pitch: d.pitch ?? 0 }; };
+  return { L: g('L'), R: g('R') };
+}
+function statePoseOf(state, tier = 'hero', o = {}) {
   // (round B3: statePose(state, tier, o); statePose(state, o) is the hero's. A lighter tier's is the hero's carried over:
   // o.hero, the hero's result, or solved here)
   if (tier && typeof tier === 'object') { o = tier; tier = 'hero'; }
@@ -2158,6 +2175,8 @@ function pressFamily(pose, pelvic, g, fam) {
 export function stateForTier(S, tier, o = {}) {
   const keep = new Set(TIER_JOINTS[tier]), p = structuredClone(poseForTier(S.pose, tier));
   for (const k of Object.keys(p)) if (/^J_/.test(k) && !keep.has(k)) delete p[k];
+  // (round T3: lod2 merges its globes into the Body at rest: no Eye node to take the gaze)
+  if (tier === 'lod2') delete p.gaze;
   const hasUp = o.morphNames ? (S2) => o.morphNames.includes(`eyesUp${S2}`) : () => tier !== 'lod2';
   const bare = RIG.eyeLiftBare;
   for (const S2 of ['L', 'R']) { const e = p[`J_eye${S2}`]; if (e?.t && !hasUp(S2)) e.t = [e.t[0], Math.min(e.t[1], bare), e.t[2]]; }
@@ -2190,6 +2209,8 @@ const lerpChannels = (a = {}, b = {}, t) => {
   for (const k of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
     const x = a?.[k], y = b?.[k];
     if (Array.isArray(x) || Array.isArray(y)) { const X = x ?? [0, 0, 0], Y = y ?? [0, 0, 0]; o[k] = X.map((v, i) => +(v + (Y[i] - v) * t).toFixed(6)); }
+    // (round T3: a nested entry — the gaze's { L: { yaw, pitch }, R } — lerped member by member)
+    else if ((x && typeof x === 'object') || (y && typeof y === 'object')) o[k] = lerpChannels(x ?? {}, y ?? {}, t);
     else o[k] = +((x ?? 0) + ((y ?? 0) - (x ?? 0)) * t).toFixed(4);
   }
   return o;

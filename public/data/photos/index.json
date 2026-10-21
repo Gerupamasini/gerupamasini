@@ -97,6 +97,11 @@
       "id": "portunus_trituberculatus",
       "name": "ガザミ",
       "file": "portunus_trituberculatus.jpg"
+    },
+    {
+      "id": "periophthalmus_modestus",
+      "name": "トビハゼ",
+      "file": "periophthalmus_modestus.jpg"
     }
   ]
 }
