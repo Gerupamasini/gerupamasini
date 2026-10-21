@@ -13,7 +13,7 @@
 // A030 (caudal), A061, A070, B067 (pectoral), B014, B067 (pelvic); ref/work/t1_eyefin):
 //   D1       a dark grey-brown membrane, darker in its distal half, a narrow pale margin, no band and no spots; the spines
 //            pale cream along their whole length (A001, A070: white lines on the dark fan); a rust wash between the first
-//            spines (A070, B004: finAccent); membrane 72–88 % opaque (behaviour §2.3 gives 40–60 %, but A001, A070 and
+//            spines (A070, B004: finAccent); membrane 82–88 % opaque (T1 72–88) (behaviour §2.3 gives 40–60 %, but A001, A070 and
 //            B014 photograph the fin at L* 43–49 over a background at L* 71–77, which no membrane under ~75 % reaches)
 //   D2       top to bottom: the pale cream-white margin, the broad dark submarginal band (25–35 % of the height, nearly
 //            opaque), the pale mid-zone, 1–2 rows of small dark dashes between the rays near the base (A001); a faint
@@ -23,11 +23,29 @@
 //            the rays (oblique bars across the spear: A067, A017), the fleshy base (the sheath, opaque) carrying the
 //            peduncle's colour (o.skin: the pattern's own, so the body runs on over the seam) and the dark caudal-base
 //            blotch just past it
-//   pectoral the blade amber, 50–62 % opaque, dark dots in lines along the rays (A061), a pale margin; its fleshy root
-//            the lobe's warm ochre (opaque), easing into the blade
+//   pectoral the blade amber-grey, 32–45 % opaque (T2; T1 50–62), dark dots in lines along the rays (A061), a pale margin; its fleshy root
+//            the lobe's own colour where the arm ends (opaque), easing into the blade
 //   pelvic   pale cream-pink and translucent (55 %), faint pale rays, a few dark spots on the inner half (B067, B014)
 // Soft rays are slightly darker, more opaque lines with faint segment joints, split in two past their branching point
 // (on the hero's lens the two ridges, on lod1's sheet two lines); the membranes carry a sparse melanophore stipple.
+//
+// Round T2 (key eyefin; the T1 fin review; ref/work/t2_eyefin), calibrated under the viewer's canonical photo rig (the
+// game's HDR pipeline: the fins blend in linear light; the tone curve AgX) with each fin drawn over its photo's own
+// background, against the photos' fin colours, each independent photo once (A070 matched backlit, as it was taken):
+//   the colours  T1's palette rendered 8–12 L* too light under the canonical rig (the fins brighter than the body beside
+//                them, the photos' darker): the membranes darker by their measured gain (D1 0.45, the caudal 0.42, D2
+//                0.7, the blade 0.62, the pelvic and the anal 0.75), D1's base warmer and darker, the caudal less golden
+//                (A067, A017 sampled on the fin) — dE2000 to the photos' median: D1 6.1 (T1 10.0), the caudal 3.9
+//                (11.4), D2 2.5 (4.4), its band 5.8, the blade in water (A061) 2.3 (7.4)
+//   the light    the membranes transmit the sun from behind (FIN_TRANSLUCENCY: FIN_MATERIAL's runtime rule)
+//   the caudal   its spots on the rays at every spread (FIN_LOOK.caudalSpot: across in ray slots, T1 in the bind's HL)
+//   the blade    nearly clear in water (A061): 32–45 % opaque, dark ray lines with their dot rows, a narrow pale margin;
+//                its fleshy root the lobe's own colour where the arm ends (o.skin at the rays' roots; T1 a flat ochre)
+//   the pelvic   B014's dark spots visible (~0.5 mm), the shade under the belly baked in toward its root
+//   the roots    every fin a little shaded at its base; the bare ray tips past the membrane thinner (the rake look)
+//   the fold     a rust line on D1's and D2's very edge (FIN_LOOK.foldLine): the line along the back when they fold
+//                (from above, D2's line C* 9.5 → 13.8, a* 1.8 → 3.7)
+//   lod2         the cards composited over the lit mud as seen (#aaa69e, T1 its albedo #8e8a82: far fins too dark)
 //
 // Alpha (A) is the membrane's opacity times its coverage (1 inside the fin's outline, 0 past the margin, a soft edge);
 // lod2 (the alpha-tested cards, MASK at 0.5): A is the coverage only where the fin is at least ~15 % opaque, and the
@@ -55,52 +73,99 @@ const ATLAS = 2048, INSET_DEFAULT = 6;
  * against B067 / B014 under the reference viewer's light (ref/work/t1_eyefin/gates.json).
  */
 export const FIN_PALETTE = {
-  d1Membrane: '#56483a', d1Distal: '#3b3027', d1Base: '#6f6253', d1Spine: '#d8c9aa', d1Margin: '#cdbfa1',
+  d1Membrane: '#3e2f21', d1Distal: '#2a1e14', d1Base: '#453322', d1Spine: '#b2a68c', d1Margin: '#a3987f',
   finAccent: '#a0602c',
-  d2Margin: '#d6ccb9', d2Band: '#3a3028', d2Mid: '#a39581', d2Base: '#8e806c', d2Spot: '#3e3227', d2Ray: '#b3a58f', d2Orange: '#c8925a',
-  anal: '#ddd6c8', analRay: '#a59d8f',
-  caudal: '#a68c69', caudalDistal: '#937a5a', caudalSpot: '#43342a', caudalRay: '#98805e', caudalEdge: '#b29a78',
+  d2Margin: '#b7ae9e', d2Band: '#3d332a', d2Mid: '#917f62', d2Base: '#806c50', d2Spot: '#342920', d2Ray: '#988c79', d2Orange: '#b0804e',
+  anal: '#c2bcb0', analRay: '#918a7d',
+  caudal: '#67594a', caudalDistal: '#5c4f40', caudalSpot: '#33271f', caudalRay: '#5f5140', caudalEdge: '#746755',
   sheath: '#a89a86', sheathPale: '#cfc3b2', sheathDark: '#3a2c20',
-  pectBlade: '#b8996f', pectRay: '#a0825a', pectDot: '#4a3828', pectMargin: '#dccfb2', pectLobe: '#d3b78d',
-  pelvic: '#cfbca2', pelvicRay: '#e2d6c2', pelvicSpot: '#5a4636',
+  pectBlade: '#877458', pectRay: '#644f37', pectDot: '#3e2e21', pectMargin: '#9e937c', pectLobe: '#8a7559',
+  pelvic: '#b6a58e', pelvicRay: '#c7bcab', pelvicSpot: '#463529',
   stipple: '#3c3026',
-  lod2Back: '#8e8a82',     // the mid background a far fin is seen against (mudFilm)
+  lod2Back: '#aaa69e',     // the background a far fin is seen against: the lit mud as seen, not its albedo (T1 #8e8a82)
 };
 
 /** Membrane opacities (behaviour §2.3; BFC §2.7). */
 export const FIN_ALPHA = {
-  d1: [0.72, 0.88],        // proximal → distal (darker distally: more pigment; A001, A070, B014 read it near opaque)
+  d1: [0.82, 0.88],        // proximal → distal (darker distally: more pigment; A001, A070, B014 read it near opaque)
   d1Spine: 0.92, d1Margin: 0.7,
   d2Band: 0.93, d2Mid: 0.6, d2Margin: 0.65, d2Spot: 0.9, d2Ray: 0.75,
   anal: 0.35, analRay: 0.5,
   caudal: [0.68, 0.8], caudalSpot: 0.9, caudalRay: 0.8,
-  pect: [0.5, 0.62], pectDot: 0.88, pectRay: 0.72, pectMargin: 0.5,
-  pelvic: 0.55, pelvicRay: 0.65, pelvicSpot: 0.85,
+  pect: [0.32, 0.45], pectDot: 0.88, pectRay: 0.78, pectMargin: 0.3,
+  pelvic: 0.55, pelvicRay: 0.65, pelvicSpot: 0.9,
 };
+
+/**
+ * The fins' looks that are not colours (round T2; ref/work/t2_eyefin):
+ *   caudalSpot  the spots on the caudal's rays: `w` their half-width across, a share of the ray slot (so they stay on the
+ *               rays at every spread — T1 sized them from the bind spacing in HL and the spread fin showed blotches
+ *               across the panels), `h` their half-length along the ray (HL)
+ *   pelvicSpot  the pelvic's dark spots on its inner half (B014: ~0.5 mm): cell, radius (HL), keep probability, strength
+ *   occlusion   the fins' own shade baked into the colour (the fin atlas has no occlusion map): `root` the darkening at
+ *               every fin's base (tm < 0.15) and `pelvic` the pelvic's under the belly (tm < 0.5, B014)
+ *   tips        the bare ray tips past the membrane: their opacity × tips (the furled blade and D1 read as a rake)
+ *   foldLine    the rust line along the folded D1 / D2 (behaviour §2.3): the margin's very edge (the share `edge` of the
+ *               fin's height) finAccent at `k` on D1, d2Orange at `d2` on D2 — folded, the fins stand edge-up in their
+ *               groove and from above their edge is the line
+ *   pectMargin  the blade's pale margin band (share of the height)
+ */
+export const FIN_LOOK = {
+  caudalSpot: { w: 0.24, h: 0.016 },
+  pelvicSpot: { cell: 0.045, r: 0.015, p: 0.6, k: 0.9 },
+  occlusion: { root: 0.75, pelvic: 0.55 },
+  tips: 0.6,
+  foldLine: { k: 0.6, edge: [0.94, 0.99], d2: 0.75 },
+  pectMargin: [0.93, 0.98],
+};
+
+/**
+ * The membranes' light from behind (round T2; the T1 fin review's P1, A065: the dorsal fins glow against the
+ * silhouetted body): a thin-surface diffuse transmission term in the fin material's shader — no extra pass, no map, the
+ * same at hero, lod1 and lod2 (a few instructions per directional light) — added to the direct diffuse of the face the
+ * camera sees:
+ *   L_t = diffuse · (1 − smoothstep(stopAlpha)) · albedo^tintPower · Σ_dir E_i · (saturate(dot(−n, l_i))
+ *         + forward · pow(saturate(dot(v, −l_i)), forwardPower) · step(0, dot(−n, l_i))) / π
+ * n the shaded normal (the face toward the camera: three flips it on the back face), l_i the light's direction, v the
+ * view direction, E_i its irradiance; the sun only (the directional lights): the sky's share from both sides is in the
+ * atlas's colours, calibrated under the canonical rig's sky (environment 0: transmitting the environment as well
+ * brightened every fin lit from the front by 5–10 L*). `stopAlpha`: the fleshy, opaque parts — the caudal's sheath and
+ * the pectoral's root, A ≥ 0.95 in the atlas (finTexel makes them opaque before their skin colour shows) — transmit
+ * nothing; the far cards (lod2: A the coverage) have no stop. `forward`: a membrane scatters forward — the glow when the
+ * sun stands behind the fin near the line of sight (A065, A070). Measured (ref/work/t2_eyefin, the canonical rig's sun
+ * moved behind the fish at A065's camera): D1 1.58× as bright as lit from the front (T1 0.75×), D2 1.41×; the backlit
+ * A070's caudal dE2000 2.7 (front-lit render 13.6), its D1 6.1.
+ */
+export const FIN_TRANSLUCENCY = { diffuse: 0.8, tintPower: 0.8, forward: 2, forwardPower: 4, environment: 0, stopAlpha: [0.93, 0.99] };
 
 /**
  * The Fin material per tier (glTF core + KHR extensions; three.js r186 MeshPhysicalMaterial, the runtime's loader keeps
  * these: src/creatures/models/ModelLoader.ts drops transmission below the hero and clearcoat at lod2 only). The near
  * tiers blend (the membrane's opacity in the atlas's A), both faces; the wet membrane a little glossy, ior of the
- * tissue in water; no transmission (an extra scene pass; the alpha carries the translucency) and no normal map (the
- * rays' relief is the hero's geometry); no sheen (KHR_materials_sheen 0.35 tested: the fins 1–2 L* lighter, ΔE2000
- * to the photos 14.8 → 16.8 under the room environment). The caudal's sheath (the fleshy base: the fin mesh's extras `sheath` triangle
- * ranges) is opaque in the atlas (A 1): drawn in the same material it reads solid; a renderer may draw those ranges with
- * the Body material's depth write for exact sorting (the viewer's geometry groups). lod2: the cards alpha-tested.
+ * tissue in water; no KHR transmission (an extra scene pass, hero only in the runtime) but the shader's diffuse
+ * transmission (FIN_TRANSLUCENCY, extras.tobihaze.runtime.translucency: every tier) and no normal map (the rays' relief
+ * is the hero's geometry); no sheen (KHR_materials_sheen 0.35 tested in T1: the fins 1–2 L* lighter). The caudal's
+ * sheath and the pectoral's fleshy root are opaque in the atlas (A 1): the GLB draws them opaque (build.mjs
+ * FIN_SOLID). lod2: the cards alpha-tested.
  */
+const TRANSLUCENCY_RULE = (cards) => ({
+  ...FIN_TRANSLUCENCY, ...(cards ? { stopAlpha: null } : {}),
+  rule: `the fin material's shader adds, after three's lights (#include <lights_fragment_end>), to reflectedLight.directDiffuse: diffuse × ${cards ? '' : '(1 − smoothstep(stopAlpha[0], stopAlpha[1], diffuseColor.a)) × '}pow(material.diffuseColor, tintPower) × Σ over the directional lights of color × (saturate(dot(−normal, direction)) + forward × pow(saturate(dot(viewDir, −direction)), forwardPower) × step(0, dot(−normal, direction))) / π; environment × getIBLIrradiance(−normal) is off (0): the atlas was calibrated under a sky from both sides`,
+  ...(cards ? { note: 'lod2: the cards\' A is the coverage, so no stop' } : {}),
+});
 export const FIN_MATERIAL = {
   hero: {
     name: 'Tobihaze_Fin', alphaMode: 'BLEND', doubleSided: true,
     pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.38, maps: { baseColorTexture: 'fin colour (RGB sRGB, A opacity)' } },
     extensions: { KHR_materials_ior: { ior: 1.36 } },
-    extras: { tobihaze: { role: 'fin', wetness: 'roughness 0.38 wet → 0.5 damp → 0.7 muddy (×, as the skin\'s)', sheath: 'A = 1 over the caudal\'s fleshy base' } },
+    extras: { tobihaze: { role: 'fin', wetness: 'roughness 0.38 wet → 0.5 damp → 0.7 muddy (×, as the skin\'s)', sheath: 'A = 1 over the caudal\'s fleshy base and the pectoral\'s root', runtime: { translucency: TRANSLUCENCY_RULE(false) } } },
   },
-  lod1: 'as hero (the same features: BLEND, double-sided, the atlas at 512)',
+  lod1: 'as hero (the same features: BLEND, double-sided, the atlas at 512, the translucency)',
   lod2: {
     name: 'Tobihaze_Fins', alphaMode: 'MASK', alphaCutoff: 0.5, doubleSided: true,
     pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.5, maps: { baseColorTexture: 'fin colour (lod2: composited over lod2Back, A coverage)' } },
     extensions: { KHR_materials_ior: { ior: 1.36 } },
-    extras: { tobihaze: { role: 'fin', merged: true } },
+    extras: { tobihaze: { role: 'fin', merged: true, runtime: { translucency: TRANSLUCENCY_RULE(true) } } },
   },
 };
 
@@ -204,10 +269,33 @@ function rayAt(F, a, l, aa, o = {}) {
 const mixTo = (c, k, a) => { if (a <= 0) return; if (a > 1) a = 1; c[0] += (k[0] - c[0]) * a; c[1] += (k[1] - c[1]) * a; c[2] += (k[2] - c[2]) * a; };
 
 /**
+ * The regions of the fins for the checks (round T2; paintFinAtlas o.labels → out.label, finLabelRGBA): 1 D1 proximal
+ * half, 2 D1 distal half, 3 D2 mid, 4 D2's band, 5 D2's base, 6 anal, 7 caudal, 8 the caudal's sheath, 9 the pectoral
+ * blade, 10 its fleshy root, 11 pelvic; 0 outside the fin.
+ */
+export const FIN_LABELS = { 1: ['D1p', [255, 0, 0]], 2: ['D1d', [255, 0, 128]], 3: ['D2', [0, 255, 0]], 4: ['D2band', [255, 255, 0]], 5: ['D2base', [0, 128, 255]], 6: ['anal', [0, 0, 255]], 7: ['caudal', [255, 0, 255]], 8: ['caudalSheath', [255, 128, 0]], 9: ['pect', [0, 255, 255]], 10: ['pectRoot', [128, 128, 255]], 11: ['pelvic', [128, 255, 0]] };
+function finLabel(type, name, tm, solid, al, cov) {
+  if (cov < 0.5) return 0;
+  if (name === 'Fin_Dorsal1') return tm < 0.5 ? 1 : 2;
+  if (name === 'Fin_Dorsal2') return tm >= 0.6 && tm <= 0.86 ? 4 : tm < 0.45 ? 5 : 3;
+  if (name === 'Fin_Anal') return 6;
+  if (type === 'caudal') return solid > 0.5 ? 8 : 7;
+  if (type === 'pectoral') return solid > 0.5 ? 10 : 9;
+  if (type === 'pelvic') return 11;
+  return 0;
+}
+/** The label atlas as RGBA8 (A 255 inside a fin): for an unlit, alpha-tested ID render of the fins. */
+export function finLabelRGBA(atlas) {
+  const N = atlas.size * atlas.size, u8 = new Uint8Array(N * 4);
+  for (let i = 0; i < N; i++) { const L = FIN_LABELS[atlas.label[i]]; if (!L) continue; u8.set(L[1], i * 4); u8[i * 4 + 3] = 255; }
+  return u8;
+}
+
+/**
  * One texel of a fin: { c: [r, g, b] linear, a: opacity, cov: coverage } at the fractional ray index a and the distance
  * l (HL) up the rays; `fpA` / `fpL` the texel's size in slot units and HL.
  */
-function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
+function finTexel(F, type, def, a, l, fpA, fpL, P, A, o, LK = FIN_LOOK) {
   const n = F.n, mHero = F.margin(a, false), mFlat = F.margin(a, true), m = Math.max(mHero, mFlat);
   const tm = l / Math.max(1e-4, mHero); // the share of the fin's height (the hero's margin = 1)
   const k0 = Math.max(0, Math.min(n - 2, Math.floor(a))), f = a - k0;
@@ -229,6 +317,10 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
     mixTo(c, P.finAccent, rust);
     const mg = sstep(0.9, 0.97, tm + 0.015 * N2);
     mixTo(c, P.d1Margin, mg * 0.85); al = lerp(al, A.d1Margin, mg);
+    // (round T2) the rust line on the margin's very edge: what shows along the back when the fin folds edge-up into its
+    // groove (behaviour §2.3; seen from above the folded fin is its edge)
+    const FL = LK.foldLine;
+    mixTo(c, P.finAccent, FL.k * sstep(FL.edge[0], FL.edge[1], tm + 0.01 * N2));
     rayC = P.d1Spine; rayA = A.d1Spine;
   } else if (name === 'Fin_Dorsal2') {
     // margin / dark band / pale mid / the base with its rows of dark dashes between the rays
@@ -240,7 +332,9 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
     mixTo(c, P.d2Band, band); al = lerp(al, A.d2Band, band);
     const mg = sstep(0.86, 0.92, tb);
     mixTo(c, P.d2Margin, mg); al = lerp(al, A.d2Margin, mg);
-    mixTo(c, P.d2Orange, mg * sstep(0.92, 1.0, tm) * 0.35);
+    // the margin's faint orange tinge (A065), and (round T2) its very edge orange: the folded fins' line along the back
+    mixTo(c, P.d2Orange, mg * sstep(0.88, 0.96, tm) * 0.35);
+    mixTo(c, P.d2Orange, sstep(LK.foldLine.edge[0] - 0.02, LK.foldLine.edge[1] - 0.02, tm + 0.01 * N2) * LK.foldLine.d2);
     // the dashes: two rows (t ≈ 0.38 and 0.15) of short dark marks centred between the rays, along them (A001), each
     // jittered, a few missing
     if (k0 >= 1) {
@@ -286,7 +380,8 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
         const lc = ph0 + j * per + (((hh >>> 8) & 255) / 255 - 0.5) * 0.35 * per;
         if (lc > r.len * 0.95) continue;
         const sz = 0.6 + 0.65 * (((hh >>> 16) & 255) / 255);
-        const ex = (R.dA * sp) / (0.006 * sz), ey = (l - lc) / (0.012 * sz);
+        // (round T2: across in slot units — the spot stays on its ray at any spread; along in HL)
+        const ex = R.dA / (LK.caudalSpot.w * sz), ey = (l - lc) / (LK.caudalSpot.h * sz);
         s = Math.max(s, sstep(1.15, 0.8, Math.hypot(ex, ey) + 0.12 * N2));
       }
       s *= sstep(-0.3, 0.25, perlin3(l * 9 - kk * 0.25, kk * 0.21, 0.5, 81)) * (0.55 + 0.45 * sat(0.5 + perlin3(l * 23, kk * 0.6, 2.5, 83)));
@@ -316,14 +411,16 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
       // (past the sheath the dark basal blotch runs on a little into the membrane)
       const after = sstep(sEnd + 0.1, sEnd, l) * (1 - shz) * blot;
       mixTo(c, P.sheathDark, after * 0.6); al = lerp(al, 0.92, after * 0.6);
-      mixTo(c, bodyC, shz); al = lerp(al, 1, shz);
+      // (round T2: the flesh opaque before its colour shows — A ≥ 0.95 wherever the skin's colour is — so the
+      // membrane's light transmission, which stops at A 0.95, never lights the pale skin through: FIN_MATERIAL)
+      mixTo(c, bodyC, sstep(0.3, 1, shz)); al = lerp(al, 1, sstep(0, 0.3, shz));
     }
     rayC = P.caudalRay; rayA = A.caudalRay;
     if (r.thick) rayA = Math.min(1, rayA + 0.1);
   } else if (type === 'pectoral') {
     c.splice(0, 3, ...P.pectBlade);
     al = lerp(A.pect[0], A.pect[1], sstep(0.2, 0.8, tm));
-    const mg = sstep(0.88, 0.96, tm + 0.015 * N2);
+    const mg = sstep(LK.pectMargin[0], LK.pectMargin[1], tm + 0.015 * N2);
     mixTo(c, P.pectMargin, mg * 0.8); al = lerp(al, A.pectMargin, mg);
     rayC = P.pectRay; rayA = A.pectRay;
     // the dot lines along the rays (A061): dark dots on each ray every ~0.038 HL from the fleshy root to near the
@@ -344,19 +441,38 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
       mixTo(c, P.pectDot, s * 0.9); al = lerp(al, A.pectDot, s);
       R.dot = s;
     }
-    // the fleshy root (fins.mjs pectoral flesh: held 0.02 HL, easing to the bare ray by 0.12): the lobe's ochre
+    // the fleshy root (fins.mjs pectoral flesh: held 0.02 HL, easing to the bare ray by 0.12): the lobe's own colour where
+    // the arm ends (round T2: o.skin at the rays' roots — the pattern's lobe wash and speckle run on over the wrist; T1 a
+    // flat pale ochre), else pectLobe
     const fl = sstep(0.085, 0.03, l + 0.01 * N1);
-    mixTo(c, P.pectLobe, fl); al = lerp(al, 1, fl);
+    if (fl > 0) {
+      let rc = P.pectLobe;
+      if (o.skin) {
+        const k1 = Math.max(0, Math.min(n - 2, Math.floor(a))), ff = sat(a - k1);
+        const ra = F.rays[k1].base, rb = F.rays[k1 + 1].base;
+        rc = o.skin([0, 1, 2].map((i) => (ra[i] + (rb[i] - ra[i]) * ff) * HL), [0, 0, 1]);
+      }
+      mixTo(c, rc, sstep(0.3, 1, fl)); al = lerp(al, 1, sstep(0, 0.3, fl)); sheathK = Math.max(sheathK, fl);
+    }
   } else if (type === 'pelvic') {
     c.splice(0, 3, ...P.pelvic);
     al = A.pelvic * (0.9 + 0.1 * sstep(0.1, 0.8, tm));
     rayC = P.pelvicRay; rayA = A.pelvicRay;
-    // a few dark spots on the inner half (the medial rays, n/2 ± 3) between t 0.2 and 0.7
-    const mid = (n - 1) / 2, inner = sstep(3.6, 2.2, Math.abs(a - mid));
+    // a few dark spots on the inner half (the medial rays, n/2 ± 3) between t 0.2 and 0.7 (round T2: B014's ~0.5 mm
+    // spots, T1's 0.1 mm ones did not show)
+    const mid = (n - 1) / 2, inner = sstep(3.6, 2.2, Math.abs(a - mid)), PS = LK.pelvicSpot;
     if (inner > 0) {
-      const s = dots2(X, Y, 0.045, 0.0065, 0.45, 75, fp) * inner * sstep(0.15, 0.25, tm) * sstep(0.75, 0.6, tm);
-      mixTo(c, P.pelvicSpot, s * 0.85); al = lerp(al, A.pelvicSpot, s);
+      const s = dots2(X, Y, PS.cell, PS.r, PS.p, 75, fp) * inner * sstep(0.15, 0.25, tm) * sstep(0.75, 0.6, tm);
+      mixTo(c, P.pelvicSpot, s * PS.k); al = lerp(al, A.pelvicSpot, s);
     }
+    // the shade under the belly (B014: the pelvic lies in the belly's shadow): darker toward its root
+    const sh = lerp(LK.occlusion.pelvic, 1, sstep(0, 0.5, tm));
+    c[0] *= sh; c[1] *= sh; c[2] *= sh;
+  }
+  // (round T2) every fin's root a little shaded (the fin atlas has no occlusion map), not the fleshy parts
+  if (type !== 'pelvic') {
+    const ro = lerp(1, lerp(LK.occlusion.root, 1, sstep(0, 0.15, tm)), 1 - sheathK);
+    c[0] *= ro; c[1] *= ro; c[2] *= ro;
   }
   // the membrane's melanophore stipple (sparse, finer on the pale fins), faded to its mean under ~1.5 texels
   const stD = { d1: 0.55, d2: 0.35, anal: 0.12, caudal: 0.4, pectoral: 0.35, pelvic: 0.12 }[type === 'median' ? (name === 'Fin_Dorsal1' ? 'd1' : name === 'Fin_Dorsal2' ? 'd2' : 'anal') : type] ?? 0.3;
@@ -380,7 +496,13 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
   const covR = R.d > 0.05 ? sstep(F.rays[R.k].len + e, F.rays[R.k].len - e, l) * sstep(0.02, 0.3, R.d) : 0;
   const cov = l < 0 ? 1 : Math.max(covM, covR);
   al *= 1 - 0.35 * sstep(0.95, 1.0, tm) * (1 - R.d);
-  return { c, a: sat(al), cov };
+  // (round T2) the bare ray tips past the membrane thinner (the furled blade and D1 read as a rake in T1)
+  if (covR > covM) { const Lr = F.rays[R.k].len; al *= 1 - (1 - LK.tips) * (1 - covM) * sstep(m, m + 0.4 * Math.max(1e-4, Lr - m), l); }
+  // (a calibration gain on the membrane's colour per fin, o.gain { D1, D2, anal, caudal, pectoral, pelvic }: the checks'
+  // tool; the palette holds the result)
+  const gk = o.gain?.[name === 'Fin_Dorsal1' ? 'D1' : name === 'Fin_Dorsal2' ? 'D2' : name === 'Fin_Anal' ? 'anal' : type];
+  if (gk !== undefined) { const g = gk + (1 - gk) * sheathK; c[0] *= g; c[1] *= g; c[2] *= g; }
+  return { c, a: sat(al), cov, label: o.labels ? finLabel(type, def.name, tm, sheathK, al, cov) : 0 };
 }
 
 /**
@@ -399,8 +521,9 @@ function finTexel(F, type, def, a, l, fpA, fpL, P, A, o) {
 export function paintFinAtlas(size, defs, o = {}) {
   const P = Object.fromEntries(Object.entries({ ...FIN_PALETTE, ...(o.palette ?? {}) }).map(([k, h]) => [k, hexLinear(h)]));
   const A = { ...FIN_ALPHA, ...(o.alpha ?? {}) };
+  const LK = Object.fromEntries(Object.entries(FIN_LOOK).map(([k, v]) => [k, o.look?.[k] === undefined ? v : typeof v === 'object' && !Array.isArray(v) ? { ...v, ...o.look[k] } : o.look[k]]));
   const S = size, sc = S / ATLAS, N = S * S;
-  const out = { size: S, rgba: new Float32Array(N * 4), coverage: new Float32Array(N), mask: new Uint8Array(N) };
+  const out = { size: S, rgba: new Float32Array(N * 4), coverage: new Float32Array(N), mask: new Uint8Array(N), ...(o.labels ? { label: new Uint8Array(N) } : {}) };
   const ss = o.ss ?? (S >= 1024 ? 2 : S >= 512 ? 3 : 4);
   const far = o.tier === 'lod2';
   const done = new Set();
@@ -425,10 +548,13 @@ export function paintFinAtlas(size, defs, o = {}) {
             const k = Math.max(0, Math.min(F.n - 2, Math.floor(a)));
             const du = (F.src._uv.rays[k + 1] - F.src._uv.rays[k]) * (rw - 2 * I) * sc; // texels per slot here
             const fpA = 1 / Math.max(1e-3, du), fpL = F.Lmax / ((rh - 2 * I) * sc);
-            const q = finTexel(F, type, F.src, a, l, fpA, fpL, P, A, o);
+            const q = finTexel(F, type, F.src, a, l, fpA, fpL, P, A, o, LK);
+            if (o.labels && sy === ss >> 1 && sx === ss >> 1) out.label[py * S + px] = q.label;
             let c = q.c, al = q.a * q.cov;
             if (far) {
-              // the BLEND look over the mid background, alpha the coverage where the fin is ≥ ~15 % opaque
+              // the BLEND look over the mid background, alpha the coverage where the fin is ≥ ~15 % opaque (round T2
+              // tested leaving the clear membranes — the blade, the anal, under 50 % — out of the cards: the far pectoral
+              // then read worse against the hero, dE 6.1 → 8.0 at the 3/4 camera; kept)
               c = [0, 1, 2].map((i) => P.lod2Back[i] + (q.c[i] - P.lod2Back[i]) * q.a);
               al = q.cov * sstep(0.1, 0.2, q.a);
             }

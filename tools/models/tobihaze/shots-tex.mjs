@@ -7,7 +7,16 @@
 //             tools/models/tobihaze/out/tiers)
 //   TEX_SET   photo | macro | detail | tiers | far | all (default all; a comma list, or shot names)
 //   TEX_MODE  textured (default) | clay — the same cameras on the clay for before / after
+//   TEX_LIGHT the viewer's light rig for the textured shots (default: the viewer's own, 'photo' — round T2's canonical
+//             photo light, reference/tobihaze-viewer/main.js LIGHT.photo; 'studio' for the unlit ID passes)
 // The photo each shot matches is in its name (u1, B010, A005, B067, A030, A070, A036, B002, B006, B050, B064).
+// Round T2 (key pattern): the eye's skin cap close up from the side and from above (td_eye_side, td_eye_top: the caps
+// finer and smoother than the head round them), the face from in front (td_face_front: B002's mottle, the lips), the
+// lobe from the 3/4 (td_lobe) and the head top (tm_head_top_B050: the lengthwise vermiculation). The pattern key's
+// measures run on these renders in the pattern's own frame (u = s/TL, v) through unlit ID passes of the same cameras
+// (scratchpad ref/work/t2_pattern: py/trunk.py the band contrast per scale against u1, A030, A070, B067, B010;
+// py/regions.py the region colours against the independent photos; py/tiers.py lod1 and lod2 against the hero at the
+// same camera and size — render.mjs --width 360 / 140 / 48 for the switch sizes; py/cap.py the eye cap).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +26,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..', '..');
 const dir = process.env.TEX_DIR ?? 'tools/models/tobihaze/out/tiers';
 const mode = process.env.TEX_MODE ?? 'textured';
+const light = process.env.TEX_LIGHT ?? null;
 const glb = (t) => `${dir}/tobihaze.${t}.glb`;
 const box = (s0, s1, y0, y1, z0, z1) => {
   const a = toObject([s0 * HL, y0 * HL, z0 * HL]), b = toObject([s1 * HL, y1 * HL, z1 * HL]);
@@ -27,7 +37,7 @@ const stateOf = (state, tier = 'hero') => {
   const s = STATES[tier]?.[state];
   return s ? { ...structuredClone(s.pose), ...(state === 'water' ? {} : { ground: true }) } : {};
 };
-const shot = (name, tier, view, state) => ({ name, mode, model: glb(tier), view: { margin: 0.06, ...view, pose: stateOf(state, tier) } });
+const shot = (name, tier, view, state) => ({ name, mode, ...(light ? { light } : {}), model: glb(tier), view: { margin: 0.06, ...view, pose: stateOf(state, tier) } });
 
 const chest = box(0.70, 1.80, -0.40, 0.75, -0.62, 0.62);
 const face = box(-0.04, 0.56, -0.04, 0.80, -0.38, 0.38);
@@ -37,6 +47,7 @@ const cheek = box(0.30, 1.30, -0.05, 0.62, 0.0, 0.45);
 const flank = box(1.10, 3.60, -0.10, 0.70, 0.0, 0.40);
 const tail = box(2.90, 4.40, 0.0, 0.62, 0.0, 0.30);
 const eye = box(0.18, 0.50, 0.40, 0.80, 0.0, 0.26);
+const eyes = box(0.18, 0.50, 0.40, 0.80, -0.26, 0.26);
 const lips = box(-0.02, 0.45, -0.02, 0.40, 0.0, 0.32);
 const lobe = box(0.95, 1.75, -0.45, 0.55, 0.10, 0.95);
 
@@ -73,6 +84,9 @@ const DETAIL = [
   shot('td_flank', 'hero', { azim: 90, elev: 6, fov: 18, fit: flank, margin: 0.04 }, 'rest'),
   shot('td_tail', 'hero', { azim: 90, elev: 6, fov: 18, fit: tail, margin: 0.04 }, 'rest'),
   shot('td_eye', 'hero', { azim: 60, elev: 20, fov: 22, fit: eye, margin: 0.08 }, 'rest'),
+  shot('td_eye_top', 'hero', { azim: 0, elev: 70, fov: 22, fit: eyes, margin: 0.08 }, 'rest'),
+  shot('td_eye_front', 'hero', { azim: 0, elev: 25, fov: 22, fit: eyes, margin: 0.08 }, 'land'),
+  shot('td_face_front', 'hero', { azim: 0, elev: 12, fov: 24, fit: face, margin: 0.1 }, 'land'),
   shot('td_lips', 'hero', { azim: 50, elev: 5, fov: 22, fit: lips, margin: 0.06 }, 'rest'),
   shot('td_lobe', 'hero', { azim: 70, elev: 15, fov: 22, fit: lobe, margin: 0.05 }, 'land'),
   shot('td_belly', 'hero', { azim: 90, elev: -55, fov: 14, fit: 'all', margin: 0.05 }, 'water'),

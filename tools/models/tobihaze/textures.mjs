@@ -25,12 +25,25 @@
 //   finAtlas(size, defs, { tier, finMeshes }) the fin atlas (contract §2: RGBA, A the membrane's coverage) from
 //     finatlas.paintFinAtlas, the colour carried under A = 0 (no dark fringe in the mips), the caudal's sheath opaque
 //
-// Map channels (contract §2, §5; the pattern and surface keys' requests):
-//   baseColor RGBA  sRGB albedo; A = pattern `bars` (the excitement crossbands' mask: a runtime uniform darkens by it;
-//                   the opaque skin ignores A)
-//   normal RGB      tangent space, +y = cross(n, t)·w (glTF: up the image, −v; the meshes' own tangents)
-//   ORM RGB         R occlusion, G roughness (the WET state), B wet retention (surface.WET: metallicFactor 0, so three.js
-//                   reads no metalness from it)
+// Map channels (contract §2, §5; the pattern and surface keys' requests; round T2 the wet film's channels):
+//   baseColor RGBA  sRGB albedo (the master's: the skin at MASTER_WETNESS); A = pattern `bars` (the excitement
+//                   crossbands' mask: a runtime uniform darkens by it; the opaque skin ignores A)
+//   normal RGB      tangent space, +y = cross(n, t)·w (glTF: up the image, −v; the meshes' own tangents); the clearcoat's
+//                   normal too (round T2: the film follows the scales and the granules)
+//   film RGBA       (the 'ORM' map; round T2, masterChannels) R the water film: the clearcoat at the master wetness
+//                   (KHR_materials_clearcoat clearcoatTexture reads R), G the roughness at the master wetness
+//                   (metallicRoughnessTexture; the clearcoat's roughness through clearcoatRoughnessTexture × a factor),
+//                   B the wet retention (where the film stays as the fish dries: the runtime's wetness rule; metallicFactor 0,
+//                   so three.js reads no metalness from it), A the ambient occlusion (the runtime's: three's aoMap reads R,
+//                   which is the film's — round T1's R occlusion moved here). The surface module gives the WET-state
+//                   roughness and the retention per texel; the master's film and roughness follow surface.WET's rule at
+//                   MASTER_WETNESS (the master is damp-wet: the dorsum drying, the flanks and the belly filmed)
+// Round T2 integrator (the keys' requests, each tested on the merged build, ref/work/t2_build):
+//   the colour × surface.skinDetail's `albedo` (ALBEDO_AO: the creases, the unbanded pits / pores / nostril, the trunk's
+//   scale pockets about their mean) in place of CAVITY_ALBEDO, at the hero and at lod1's 1024 colour pass too (want.albedo:
+//   the surface's fields at the colour's size), not lod2's lit pass; the film map's R × surface.specularOcclusion(ao)
+//   (the surface key's tested patch, t2_surface/py/patch_request.py); the baseColor's A in the iris rect = paintEye's
+//   `glow` (hero, lod1: the runtime pupil variant's mask); the cap's pattern part EYE_SKIN_PART 'eyeSkin'
 //
 // Modules: each of pattern / surface / eye / fin is a module namespace, a path, or (default) the sibling file
 // (./pattern.mjs, ./surface.mjs, ./iris.mjs, ./finatlas.mjs) when it exists — else the stub below with the contract's
@@ -63,8 +76,11 @@ export const CHART_PART = {
  * function: at rest the cap's colour is the turret's at the same point) rather than pattern.mjs's 'eyeSkin' (the head's
  * function with a finer granule cell and an olive blend), which leaves a seam where the globe leaves its turret (round T1
  * integrator: the front close-up at rest, the column step across the cap's medial edge 2.8× its neighbours with
- * 'eyeSkin', 1.5× with 'head'; the eyefin key's p5 test alike). --eye-skin-part eyeSkin restores the pattern key's. */
-export const EYE_SKIN_PART = 'head';
+ * 'eyeSkin', 1.5× with 'head'; the eyefin key's p5 test alike). --eye-skin-part eyeSkin restores the pattern key's.
+ * Round T2 integrator (the pattern key's request): 'eyeSkin'. The T2 pattern gives the cap layer to part 'eyeSkin' and to
+ * the head skin within ~1.1 globe radii alike, so on the cap at rest the two are the same colour (1,884 cap vertices of
+ * the hero's left globe: |ΔL*| 0.000 mean and max, t2_build/js/capcmp.mjs) — the part now says what the texel is. */
+export const EYE_SKIN_PART = 'eyeSkin';
 
 /**
  * The right eye's turret mirrored (round T1 integrator, the eyefin key's request): both globes read the eyeSkin rect, baked
@@ -88,6 +104,28 @@ export function eyeMirrorWeight(p) {
 }
 const NO_MIRROR = new Set(['eyeSkin', 'iris', 'teeth']);
 
+/**
+ * The master's wetness (round T2): the static GLB material is the skin at this value of the runtime's wetness uniform —
+ * damp-wet, the photos' fish a few minutes out of the water: under surface.WET's rule (γ 1.2) the dorsum (retention
+ * ~0.25) is at local wetness ~0.53 (a broken, rougher film: clearcoat ~0.2), the flanks (~0.55) ~0.9 and the belly, the
+ * creases and the head's pits (≥ 0.7) fully wet; at 1 every texel is wet (T1's master), at 0.5 the dorsum dries matte.
+ */
+export const MASTER_WETNESS = 0.65;
+const sstepT = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+/**
+ * The film map's texel from the surface's WET-state roughness, its retention and occlusion (surface.WET's rule, the
+ * runtime's port: build.mjs runtimeParams): the local wetness wl0 = clamp(w0·(1 + γ) − γ·(1 − retain)); R the clearcoat
+ * WET.wet.clearcoat·cw + WET.damp.clearcoat·(1 − cw)·smoothstep(0.15, 0.5, wl0), cw = smoothstep(0.35, 1, wl0); G the
+ * roughness mix(dry, wet, wl0), dry = WET.dry.roughness + (wet − WET.wet.roughness)·WET.carry; B the retention; A the
+ * occlusion.
+ */
+export function masterChannels(roughWet, retain, ao, W, w0 = MASTER_WETNESS) {
+  const g = W.gamma ?? 1.2, wl = clamp01(w0 * (1 + g) - g * (1 - retain));
+  const cw = sstepT(0.35, 1, wl), cc = (W.wet?.clearcoat ?? 0.7) * cw + (W.damp?.clearcoat ?? 0.18) * (1 - cw) * sstepT(0.15, 0.5, wl);
+  const dry = (W.dry?.roughness ?? 0.6) + (roughWet - (W.wet?.roughness ?? 0.35)) * (W.carry ?? 0.5);
+  return [cc, dry + (roughWet - dry) * wl, retain, ao];
+}
+
 /** The scales' pockets in the trunk's albedo (round T1 integrator; the pattern and surface keys' requests: A007's scale
  * margins, the contract's "scales visible on the trunk in close-ups"; the relief alone, 0.9° rms, does not show them under
  * the busy pattern): albedo × (1 − k·(min(cavity, max) − mean)), surface.skinDetail's cavity (the scale pockets 0.35, the
@@ -97,8 +135,10 @@ const NO_MIRROR = new Set(['eyeSkin', 'iris', 'teeth']);
  * surface (the hero's 2048). Photo-camera check (photo light): region means unchanged within ΔE 1, the lower flank's
  * pattern contrast 0.69 → 0.70. null: off (--cav-albedo off). */
 export const CAVITY_ALBEDO = { k: 0.35, max: 0.5, mean: 0.148 };
-/** (the patch islands behind this s, mm — past the opercle's margin, ~1.05 HL — are the trunk's) */
-const CAVITY_TRUNK_S = 1.05 * HL;
+/** (round T2, the colour key's seam finding: the pockets weighted by position — w = smoothstep(s0, s1, s), fish mm — on
+ * every skin chart behind the head, not by chart: T1 applied them to the body charts only, which begin at s 0.43 HL,
+ * a 4.7–6.1 % luminance step across the cheek where the head chart meets them) */
+const CAVITY_RAMP = [0.95 * HL, 1.15 * HL];
 
 /** The texel's skin size per map size (pattern.mjs: hero 2048 0.031 mm, lod1 1024 0.062, lod2 256 0.25). */
 export const texelMM = (size) => (0.031 * 2048) / size;
@@ -304,14 +344,14 @@ function evalRows(S, M, y0, y1) {
       const pos = interp(P, t, w3, [0, 0, 0]), nrm = unit(interp(N, t, w3, [0, 0, 0]));
       const sPart = part === 'patch' ? 'body' : part;
       let sd = null;
-      if (S.want.surface || S.want.lit) {
+      if (S.want.surface || S.want.lit || S.want.albedo) {
         sd = S.test ? testDetail(S.test, pos, nrm, 25 * texelMM(W)) : M.surface.skinDetail(pos, nrm, sPart, S.sctx);
         // (the right turret: the left's relief mirrored, EYE_MIRROR)
         const mw = S.test || NO_MIRROR.has(part) || S.eyeMirror === false ? 0 : eyeMirrorWeight(pos);
         if (mw > 0) {
           const m = M.surface.skinDetail([pos[0], pos[1], -pos[2]], [nrm[0], nrm[1], -nrm[2]], sPart, S.sctx);
           const dm = [m.dn[0], m.dn[1], -m.dn[2]], mix = (a, b) => (a ?? 0) + ((b ?? 0) - (a ?? 0)) * mw;
-          sd = { ...sd, dn: [mix(sd.dn[0], dm[0]), mix(sd.dn[1], dm[1]), mix(sd.dn[2], dm[2])], rough: mix(sd.rough, m.rough), ao: mix(sd.ao ?? 1, m.ao ?? 1), wet: mix(sd.wet, m.wet), cavity: mix(sd.cavity, m.cavity) };
+          sd = { ...sd, dn: [mix(sd.dn[0], dm[0]), mix(sd.dn[1], dm[1]), mix(sd.dn[2], dm[2])], rough: mix(sd.rough, m.rough), ao: mix(sd.ao ?? 1, m.ao ?? 1), wet: mix(sd.wet, m.wet), cavity: mix(sd.cavity, m.cavity), ...(sd.albedo !== undefined ? { albedo: mix(sd.albedo, m.albedo ?? 1) } : {}), ...(sd.pocket !== undefined ? { pocket: mix(sd.pocket, m.pocket ?? 0) } : {}) };
         }
         hi[0] = nrm[0] + sd.dn[0]; hi[1] = nrm[1] + sd.dn[1]; hi[2] = nrm[2] + sd.dn[2]; unit(hi);
       }
@@ -319,8 +359,10 @@ function evalRows(S, M, y0, y1) {
         unit(interp(frames.t, t, w3, T)); unit(interp(frames.b, t, w3, B)); unit(interp(frames.n, t, w3, Nf));
         encodeTangentNormal(hi, T, B, Nf, enc);
         S.nrm[p * 3] = enc[0]; S.nrm[p * 3 + 1] = enc[1]; S.nrm[p * 3 + 2] = enc[2];
-        // (B: the wet retention; on the eye's rects 0 — the Eye material may read B as metalness, the eye painter's)
-        S.orm[p * 3] = sd.ao ?? 1; S.orm[p * 3 + 1] = sd.rough ?? 0.5; S.orm[p * 3 + 2] = part === 'eyeSkin' || part === 'iris' ? 0 : sd.wet ?? 0;
+        // (the occlusion, the WET-state roughness, the wet retention — finishMap writes the film map from them; round T2: the
+        // eye's rects keep their film, retention 1 — the eye is always wet — and the Eye reads no metalness)
+        if (sd.pocket !== undefined && !S.want.colour) { S.cav[p] = sd.pocket; S.cavOn[p] = pos[0] >= CAVITY_RAMP[1] ? 1 : 2; }
+        S.orm[p * 3] = sd.ao ?? 1; S.orm[p * 3 + 1] = sd.rough ?? 0.5; S.orm[p * 3 + 2] = part === 'eyeSkin' || part === 'iris' ? 1 : sd.wet ?? 0;
       }
       if (S.want.colour && S.test) { S.col[p * 3] = S.col[p * 3 + 1] = S.col[p * 3 + 2] = 0.3; S.bars[p] = 0; }
       else if (S.want.colour) {
@@ -348,10 +390,19 @@ function evalRows(S, M, y0, y1) {
           const ratio = Math.min(L.ratio[1], Math.max(L.ratio[0], lightOf(hi) / Math.max(1e-3, lightOf(nrm))));
           f = ratio * (1 - L.ao + L.ao * (sd.ao ?? 1));
         }
-        // (the scales' pockets in the albedo, CAVITY_ALBEDO: the trunk's texels, where this pass has the surface too)
-        if (sd && S.want.surface && (part === 'body' || (part === 'patch' && pos[0] > CAVITY_TRUNK_S))) {
-          S.cav[p] = sd.cavity ?? 0; S.cavOn[p] = 1;
-          if (S.cavAlbedo) f *= 1 - S.cavAlbedo.k * (Math.min(sd.cavity ?? 0, S.cavAlbedo.max ?? 1) - S.cavAlbedo.mean);
+        // (the scales' pockets in the albedo, CAVITY_ALBEDO: the skin behind the head by position, CAVITY_RAMP — round T2 —
+        // where this pass has the surface too)
+        if (sd && (S.want.surface || S.want.albedo) && sd.albedo !== undefined && !S.test) {
+          // (the surface's colour share: creases, fine cavities, the scale pockets — surface.ALBEDO_AO; round T2 integrator:
+          // lod1's colour pass at 1024 too — `want.albedo`, the surface's fields at the colour's own size — so lod1's colour
+          // is the hero's: the surface key's request)
+          f *= sd.albedo;
+          if (sd.pocket !== undefined) { S.cav[p] = sd.pocket; S.cavOn[p] = pos[0] >= CAVITY_RAMP[1] ? 1 : 2; }
+        }
+        const cw = sd && S.want.surface && sd.albedo === undefined && (part === 'body' || part === 'patch' || part === 'head') ? sstepT(CAVITY_RAMP[0], CAVITY_RAMP[1], pos[0]) : 0;
+        if (cw > 0) {
+          S.cav[p] = sd.cavity ?? 0; S.cavOn[p] = cw >= 1 ? 1 : 2;
+          if (S.cavAlbedo) f *= 1 - cw * S.cavAlbedo.k * (Math.min(sd.cavity ?? 0, S.cavAlbedo.max ?? 1) - S.cavAlbedo.mean);
         }
         S.col[p * 3] = r * k * f; S.col[p * 3 + 1] = g * k * f; S.col[p * 3 + 2] = b * k * f; S.bars[p] = br * k;
       }
@@ -364,7 +415,7 @@ async function passContexts(S, M) {
   const { tierField } = await import('./fishmesh.mjs');
   const { fishSDFmm } = await import('./body.mjs');
   if (S.want.colour) S.pctx = M.pattern.patternContext(fishSDFmm(HL), { texelMM: texelMM(S.colourSize ?? S.W), ...(S.patternOpts ?? {}) });
-  if ((S.want.surface || S.want.lit) && !S.test) {
+  if ((S.want.surface || S.want.lit || S.want.albedo) && !S.test) {
     // (the tier's own field: the hero's full sculpt, lod1's sealed one, lod2's far one; lod2's lit colour without relief)
     const fish = tierField(S.fieldTier ?? 'hero');
     S.sctx = M.surface.surfaceContext(fish, { size: S.W, tier: S.fieldTier ?? 'hero', ...(S.want.lit ? { relief: false } : {}), ...(S.surfaceOpts ?? {}) });
@@ -454,6 +505,7 @@ function paintEyeInto(R, M, layout, want, o, ctx) {
     const [x0, y0, x1, y1] = rectPx(rects[key], W);
     const whole = !!E.rgb, layer = whole ? E : E[key];
     if (!layer) continue;
+    const glow = o.fieldTier !== 'lod2' && o.eyeGlow !== false ? layer.glow ?? null : null;
     const code = key === 'iris' ? 1 : 2;
     for (let y = Math.max(0, y0 - 8); y < Math.min(W, y1 + 8); y++) for (let x = Math.max(0, x0 - 8); x < Math.min(W, x1 + 8); x++) {
       const p = y * W + x, t = R.tri[p];
@@ -462,13 +514,19 @@ function paintEyeInto(R, M, layout, want, o, ctx) {
       if (whole) { if (E.mask && E.mask[p] !== code) continue; q = p; } else { if (x < x0 || x >= x1 || y < y0 || y >= y1) continue; q = (y - y0) * (layer.w ?? x1 - x0) + (x - x0); }
       if (want.colour) {
         const c = byte(layer.rgb) ? [0, 1, 2].map((i) => s8lin(layer.rgb[q * 3 + i])) : [layer.rgb[q * 3], layer.rgb[q * 3 + 1], layer.rgb[q * 3 + 2]];
-        R.col[p * 3] = c[0]; R.col[p * 3 + 1] = c[1]; R.col[p * 3 + 2] = c[2]; R.bars[p] = 0;
+        // (round T2 integrator, the eyefin key's request: the baseColor's A in the iris rect is the pupil glow's mask —
+        // paintEye `glow`, the weight of the glow colour in the texel — for the runtime's pupil variant, iris.mjs
+        // EYE_MATERIAL.extras.runtime.pupil; hero and lod1 only (lod2's merged eye has no variant: 0); the cap's A 0)
+        const gl = key === 'iris' && glow ? (byte(glow) ? glow[q] / 255 : glow[q]) : 0;
+        R.col[p * 3] = c[0]; R.col[p * 3 + 1] = c[1]; R.col[p * 3 + 2] = c[2]; R.bars[p] = gl;
       }
       if (want.surface) {
         if (layer.rough) R.orm[p * 3 + 1] = v01(layer.rough, q);
+        // (round T2: the cap keeps the surface's occlusion — the eye finding's P3; the painter's metal is not used: the
+        // Eye material is not metallic, the ring's gold is its colour and the film; retention 1, the eye always wet)
         if (key === 'iris') { R.orm[p * 3] = layer.ao ? v01(layer.ao, q) : 1; R.nrm[p * 3] = 0; R.nrm[p * 3 + 1] = 0; R.nrm[p * 3 + 2] = 1; }
-        else if (layer.ao) R.orm[p * 3] = v01(layer.ao, q);
-        R.orm[p * 3 + 2] = layer.metal ? v01(layer.metal, q) : 0;
+        else if (layer.ao) R.orm[p * 3] = Math.min(R.orm[p * 3] || 1, v01(layer.ao, q));
+        R.orm[p * 3 + 2] = 1;
       }
       R.done[p] = 1; n++;
     }
@@ -485,15 +543,16 @@ function paintTeeth(R, M, layout, want) {
   for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
     const p = y * R.W + x;
     if (c) { R.col.set(c.rgb, p * 3); R.bars[p] = 0; }
-    if (s) { R.orm[p * 3] = s.ao ?? 1; R.orm[p * 3 + 1] = s.rough ?? 0.3; R.orm[p * 3 + 2] = s.wet ?? 1; R.nrm[p * 3] = 0; R.nrm[p * 3 + 1] = 0; R.nrm[p * 3 + 2] = 1; }
+    if (s) { R.orm[p * 3] = s.ao ?? 1; R.orm[p * 3 + 1] = s.rough ?? 0.3; R.orm[p * 3 + 2] = 1; R.nrm[p * 3] = 0; R.nrm[p * 3 + 1] = 0; R.nrm[p * 3 + 2] = 1; }
     R.done[p] = 1;
   }
   return (x1 - x0) * (y1 - y0);
 }
 
 // ------------------------------------------------------------------------------------------------- maps
-/** Floats → 8-bit maps, the gutters filled (bake.fillNearest). Returns { image: { W, H, ch, data }, have }. */
-function finishMap(R, kind) {
+/** Floats → 8-bit maps, the gutters filled (bake.fillNearest). Returns { image: { W, H, ch, data }, have }. The film map
+ * (kind 'orm') RGBA from masterChannels at `w0` with the surface's WET (round T2). */
+function finishMap(R, kind, W = {}, w0 = MASTER_WETNESS, specOcc = null) {
   const N = R.W * R.W, have = Uint8Array.from(R.done);
   let ch, data;
   if (kind === 'baseColor') {
@@ -506,8 +565,12 @@ function finishMap(R, kind) {
       for (let i = 0; i < 3; i++) data[p * 3 + i] = Math.round((R.nrm[p * 3 + i] * 0.5 + 0.5) * 255);
     }
   } else {
-    ch = 3; data = new Uint8Array(N * 3);
-    for (let p = 0; p < N; p++) for (let i = 0; i < 3; i++) data[p * 3 + i] = Math.round(255 * clamp01(R.orm[p * 3 + i]));
+    ch = 4; data = new Uint8Array(N * 4);
+    for (let p = 0; p < N; p++) {
+      const c = masterChannels(R.orm[p * 3 + 1], R.orm[p * 3 + 2], R.orm[p * 3], W, w0);
+      if (specOcc) c[0] *= specOcc(R.orm[p * 3]);
+      for (let i = 0; i < 4; i++) data[p * 4 + i] = Math.round(255 * clamp01(c[i]));
+    }
   }
   const raw = Uint8Array.from(data);
   const src = fillNearest(data, ch, R.W, R.W, have);
@@ -537,6 +600,9 @@ export async function bakeTier(tierMesh, o = {}) {
   const images = {}, stats = { modules: Object.fromEntries(Object.entries(urls).map(([k, u]) => [k, u === 'stub' ? 'stub' : u ? path.basename(fileURLToPath(u)) : 'namespace'])), passes: [] };
   for (const [px, kinds] of [...bySize.entries()].sort((a, b) => b[0] - a[0])) {
     const want = { colour: kinds.includes('baseColor'), surface: kinds.includes('normal') || kinds.includes('orm'), lit: !!o.lit && kinds.includes('baseColor'), irisSurface: false };
+    // (round T2 integrator: a colour pass without the surface — lod1's 1024 — still takes the surface's colour share,
+    // skinDetail's `albedo`, when the module gives one: ALBEDO_AO; not lod2's lit pass, whose occlusion is in its light)
+    want.albedo = want.colour && !want.surface && !want.lit && !o.test && !!M.surface.ALBEDO_AO && o.surfaceAlbedo !== false;
     const R = await runPass(tierMesh, px, want, { ...o, fieldTier: o.fieldTier ?? 'hero' }, M, urls, log);
     // the eye's window from its painter, the teeth's swatch (main thread: one call each)
     const ctxs = {};
@@ -548,16 +614,16 @@ export async function bakeTier(tierMesh, o = {}) {
     const teethTexels = layout && !o.lit && !o.test ? paintTeeth(R, M, layout, want) : 0;
     const passStats = { px, kinds, eyeTexels, teethTexels, maps: {} };
     // (the trunk's cavity where this pass has both the colour and the surface: CAVITY_ALBEDO's mean)
-    if (want.colour && want.surface && !o.test) {
+    if (want.surface && !o.test) {
       const v = [];
-      for (let p = 0; p < px * px; p++) { const t = R.tri[p]; if (t >= 0 && R.done[p] && (R.triPart[t] === PART.body || R.triPart[t] === PART.patch) && R.cavOn[p]) v.push(R.cav[p]); }
+      for (let p = 0; p < px * px; p++) { const t = R.tri[p]; if (t >= 0 && R.done[p] && R.cavOn[p] === 1) v.push(R.cav[p]); }
       v.sort((a, b) => a - b);
       const q = (f) => +(v[Math.min(v.length - 1, Math.floor(f * v.length))] ?? 0).toFixed(4);
       const cm = (o.cavAlbedo === undefined ? CAVITY_ALBEDO : o.cavAlbedo)?.max ?? 0.5;
       passStats.trunkCavity = { texels: v.length, mean: +(v.reduce((a, x) => a + x, 0) / Math.max(1, v.length)).toFixed(4), [`meanClamped${cm}`]: +(v.reduce((a, x) => a + Math.min(x, cm), 0) / Math.max(1, v.length)).toFixed(4), p50: q(0.5), p90: q(0.9), p99: q(0.99) };
     }
     for (const k of kinds) {
-      const F = finishMap(R, k);
+      const F = finishMap(R, k, M.surface.WET ?? {}, o.masterWetness ?? MASTER_WETNESS, M.surface.specularOcclusion ?? null);
       images[k] = F.image;
       const ms = { unfilled: F.unfilled, painted: F.have.reduce((a, v) => a + (v ? 1 : 0), 0) };
       if (o.mips) {

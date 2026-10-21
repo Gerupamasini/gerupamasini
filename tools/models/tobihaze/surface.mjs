@@ -1,4 +1,4 @@
-// The トビハゼ's skin surface for the textures round (T1): the normal-map detail, the occlusion, the cavities and the
+// The トビハゼ's skin surface for the textures rounds (T1, T2): the normal-map detail, the occlusion, the cavities and the
 // roughness / wetness, as functions of the fish-frame position (anatomy.mjs: s back from the snout tip, y up from the
 // head's floor, z to the fish's left; mm), so every chart and every tier bakes the same skin from the same functions
 // (bake.mjs: a texel's value is a function of the place on the fish under it — seamless across the charts' edges).
@@ -6,10 +6,13 @@
 //                             round the body by arc length), the pit organs placed on the skin, the lips', the lobes' and
 //                             the gill cover's frames
 //   skinDetail(p, n, part, ctx, fp)  per texel: the normal perturbation dn (the field's own normal where the tier mesh
-//                             lost the sculpt's detail, plus the skin's relief), the wet-state roughness, the occlusion,
-//                             the cavity, the wet retention (`wet`: how long the place holds its water film)
-//   aoField(fish, p, n)       the sculpt's occlusion from the field (7 taps along the normal; the eye globes added)
-//   WET, wetShade()           the runtime's wetness model (behaviour.md §2.5): wet / damp / dry / mud
+//                             lost the sculpt's detail, plus the skin's relief and the water film's), the wet-state
+//                             roughness, the occlusion, the cavity, the wet retention (`wet`: how long the place holds its
+//                             water film), and (round T2) `albedo`: the colour's share of the occlusion (ALBEDO_AO)
+//   aoField(fish, p, n)       the sculpt's occlusion from the field (7 taps along the normal; round T2: without the eye
+//                             globes, which move)
+//   papillaAt(p, n)           (round T2) the papilla under a point: the relief's granules for the pattern's pale granules
+//   WET, wetShade(), specularOcclusion()  the runtime's wetness model (behaviour.md §2.5): wet / damp / dry / mud
 // The relief (heights in mm, `detailHeight`), from the research (behaviour.md §2.5; research body_fins_colour §4,
 // literature_morph §2–3, face_front_top §4, face_side_34, anat_soft §1, §4) and the photos (u1, B010, A007, B006):
 //   scales      cycloid, imbricate, embedded (the wet skin over them): on the trunk behind the gill cover's margin and on
@@ -21,18 +24,27 @@
 //               75–100, mean 85.3), 34 predorsal (s 0.5 → 1.49 HL; Lee 35–40, Murdy 25–35), rows 0.75 of the pitch apart
 //               (25 rows round the half girth at the anal fin's origin: TRB 24–26, Lee); A007 (the only photo that
 //               resolves them: a dark fish in low sun) reads a 4.5–6 px period on a ~620 px TL, 0.6–0.8 mm
-//   head        granular papillae (u1, B010: a fine granular skin, glints on the granules), sparse pores; the pit
-//               organs' papillae in Lee 1995 Fig. 4A's rows (111 papillae, digitised: the cheek's vertical rows, the
+//   head        granular papillae (PAPILLAE, round T2: one cap per cell along the skin's normal, ~25 a mm², most low under
+//               the film, a share of steeper tubercles that catch the sun as B010's sparse glints), sparse pores; the
+//               pit organs' papillae in Lee 1995 Fig. 4A's rows (111 papillae, digitised: the cheek's vertical rows, the
 //               mandibular rows, the postorbital row onto the nape; "no open head pores"); the posterior nostril's slit
 //   lips        the upper-lip pad and the median lip: a fine stipple and fine wrinkles across the pad (SOFT §1.1: "finely
 //               stippled, glossy"; FST: "finely wrinkled")
 //   lobe        the pectoral lobe: fine longitudinal striations over the radials, converging toward the junction
-//   margins     fine wrinkles along the gill cover's margin, two folds on the eye's collar under the cup's rim
+//   margins     fine wrinkles along the gill cover's margin, four folds on the eye's collar under the cup's rim
+//   film        (round T2, FILM) the water film's own slow undulation: u1's sheet of sky breaks into lobes at its edges
 // Every layer is band-limited for the map it is baked into (ctx.fpRef: ONE footprint for the whole map, the coarsest skin
 // chart's, 0.032 mm a texel at 2048 — a per-texel footprint steps at every triangle and differs between two charts at a
 // seam): a layer fades out where its features span under ~3–6 texels and no edge is sharper than 5 texels (the scales'
 // free margins; the imbrication is painted posterior-first with soft coverage, so it has no step anywhere, the triple
-// points included), and the field's own normal gives way to the mesh's where a crease is tighter than ~2 texels.
+// points included), and the field's own normal gives way to the mesh's where a crease is tighter than ~2 texels. What the
+// band leaves out (the pits' cores, the pores, the nostril's lips) goes to the colour through `albedo` (round T2).
+// Round T2 (key surface; the T1 reviews' surface findings and the eye finding's P1; scratchpad ref/work/t2_surface): the
+// film's relief for glints (the normal map is the clearcoat's too: build.mjs clearcoatNormalTexture), the papillae as one
+// field with the pigment (papillaAt), the fine cavities at the hero's texel and in the colour, the occlusion without the
+// globes (no black slit at the collar, no holes in the blink) and in the colour (ALBEDO_AO) and the film
+// (specularOcclusion), the drier dorsum (retention, roughness), WET's film whole and smooth (clearcoat 1 at 0.07),
+// wetShade relative to the map's master wetness.
 // For the bake (requests to the tech key, measured in round T1, scratchpad ref/work/t1_surface):
 //   - n and dn are directions in the fish frame (anatomy.dirToObject's input); `part` only switches the eye's window, the
 //     eye's skin cap and the teeth: every skin chart (head, body, lobe, lip, interior) runs the same rule, so the charts
@@ -45,9 +57,11 @@
 //     generated mips (Kaiser) of the 2048 level keep 14.5 % at mip 1, 18.7 % at mip 2 (the granules and the scales'
 //     margins at 1.5–2.5 texels there); without custom mips, bake level 0 with { fp: 2 · fpRef } (mip 1 0.7 %, the
 //     head's granules then off at level 0)
-//   - the ORM: R occlusion (aoField, with the eye globes), G the WET state's roughness, B the wet retention (`wet`) with
-//     metallicFactor 0 (three.js multiplies the B channel by it: no metalness); lod2's lit colour: skinDetail with
-//     surfaceContext(fish, { relief: false }) gives the sculpt's normal (n + dn) and the occlusion
+//   - the film map (textures.mjs masterChannels, round T2): A occlusion (aoField), G from the WET state's roughness, B the
+//     wet retention (`wet`), R the film at the master wetness (× specularOcclusion(ao): a request); the colour × `albedo`
+//     where the pass has the surface (a request: it replaces textures.mjs CAVITY_ALBEDO, whose scale pockets it holds);
+//     lod2's lit colour: skinDetail with surfaceContext(fish, { relief: false }) gives the sculpt's normal (n + dn) and the
+//     occlusion
 import { HL, TL, SL, HEAD, EYE_MM } from './anatomy.mjs';
 import { HEAD_SCULPT } from './head.mjs';
 import { BODY_SCULPT, trunkProfile, armField } from './body.mjs';
@@ -84,26 +98,57 @@ export const SCALES = {
   septum: 0.55,         // the horizontal septum's arc share from the ventral midline (v 0.45)
   slant: { up: 0.42, down: 0.22 },  // the transverse rows' backward shift per row above / below the septum (scales)
   radius: [0.85, 0.95], // each scale's half-axes along the row and across it (× pitch, × row spacing): imbricate
-  amp: 0.016,           // relief of a scale's exposed field (mm): embedded under the skin and a water film, so the
-                        // free margins read in grazing light (slopes to ~6°) and the pigment (cavity's pockets) does the rest
+  amp: 0.024,           // relief of a scale's exposed field (mm): embedded under the skin and a water film, so the
+                        // free margins read in grazing light and in the sun's highlight (round T2: 0.016 → 0.024, slopes to
+                        // ~9°: the film's highlight breaks into the scales' facets, A007) and the pigment (the pockets) does the rest
   edge: 0.035,          // the free margin's rounding (mm; at least 1.6 texels)
   rimTexels: 5,         // the free margin at least this many texels wide (level 0 at 2048: the Kaiser mip 1 keeps 6 % of
                         // its detail energy near its Nyquist with 5, 14 % with 3; the gates)
   jitter: 0.16,         // centre jitter (share of the pitch / row): "scale series irregular" (Lee 1995)
   warp: [0.3, 2.6],     // the lattice's slow wander (cells, over mm): the rows are not ruled lines
 };
+/**
+ * The skin's papillae (round T2): ONE field for the relief and the pigment — the pattern key's pale granules are meant to
+ * be these papillae (papillaAt), so the glints, the raised granules and the pale flecks coincide (B010: the glints sit on
+ * the granular skin). 3-D jittered cells (no repeat, no seam), one papilla a cell standing along the skin's normal
+ * (papillae(): ~25 a mm², 0.2 mm apart: u1 / B010's granules 0.09–0.14 mm across, 0.2–0.28 mm apart), each a smooth cap
+ * (1 − d²/r²)²; most are low (slopes 6–12°: the granular skin under its film), a share `tall` are tubercles (slopes
+ * 24–36°) that stand through the water film and catch the sun as B010's sparse glints. Measured on the photos at matched
+ * scale (t2_surface photo_glints.sh,
+ * strict glints: > 20 L* over their 9×9 neighbourhood and > 30 over the region's median): B010's cheek 0.16 glints a mm²,
+ * 0.07 mm across (median; p90 0.17), its nape 0.11 a mm²; u1 (overcast) 0.04 a mm², its film a broad sheen instead.
+ */
+export const PAPILLAE = {
+  cell: 0.2,
+  // radius (mm) and the cap's steepest slope (degrees; the height follows: amp = r·tan(slope)/1.54 for the (1 − d²/r²)²
+  // cap): the low ones a texture the film smooths over, the tubercles the glints
+  r: [0.05, 0.085], slope: [6, 12],
+  tall: { share: 0.15, r: [0.09, 0.13], slope: [24, 36] },
+  seed: 1717,
+};
+/**
+ * The water film's own relief (round T2): a thin film is not a level sheet — it thickens in the hollows and over the
+ * papillae's feet and thins on the crests — so the sky it mirrors (u1: the bluish sheet over the head's top and the
+ * nape) breaks up at its edges into lobes and islands rather than the clean band a smooth shell draws. Two octaves of
+ * gradient noise (fish mm: wavelength, rms slope in degrees), on the skin everywhere but the slit's and the pockets'
+ * walls; the slope is small enough to leave the diffuse shading as it was (≤ 2.5° rms).
+ */
+export const FILM = { octaves: [[1.3, 2.0], [0.5, 1.2]], seed: 911 };
 /** The head's relief (mm). */
 export const HEAD_SKIN = {
   // (the hero's 2048 map draws 0.024–0.032 mm a texel: a relief feature under ~0.1 mm cannot be in it without aliasing;
-  // the finer pigment granules and pores are the colour's)
-  granule: { cell: 0.2, r: [0.06, 0.09], amp: 0.006 },     // the granular papillae (u1, B010: pale granules 0.09–0.14 mm, 0.2–0.28 mm apart)
-  pore: { cell: 0.42, r: 0.05, depth: 0.004, share: 0.45 },  // sparse pores (cheek, snout)
-  pit: { r: 0.085, amp: 0.009, core: 0.035, coreDepth: 0.005 }, // the pit organs' papillae (Lee 1995 Fig. 4A)
-  nostril: { len: 0.26, wid: 0.10, depth: 0.02 },               // the posterior nostril's slit
-  lip: { stipple: { cell: 0.13, r: 0.05, amp: 0.0025 }, wrinkle: { period: 0.2, amp: 0.0018 } },
+  // round T2: what is smaller than the band — the pits' cores, the pores, the nostril's lips, the lips' stipple — is in
+  // the colour instead, through `albedo`: the unbanded cavity)
+  granule: PAPILLAE,                                          // (round T1's name for the papillae)
+  pore: { cell: 0.42, r: 0.07, depth: 0.005, share: 0.45 },  // sparse pores (cheek, snout): 0.14 mm, ≥ 4 texels at 2048
+  pit: { r: 0.085, amp: 0.009, core: 0.06, coreDepth: 0.008 }, // the pit organs' papillae (Lee 1995 Fig. 4A), the neuromast's pit 0.12 mm
+  nostril: { len: 0.32, wid: 0.13, depth: 0.025 },              // the posterior nostril's slit
+  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 } },
   lobe: { lines: 30, amp: 0.0042, ridges: 4, ridgeAmp: 0.009 },
   opercle: { period: 0.22, amp: 0.0018, band: 0.06 },           // gill cover margin wrinkles (band in HL)
-  collar: { folds: [0.032, 0.068], width: 0.09, amp: 0.012 },   // eye collar folds: HL under the cup's rim, mm wide
+  // eye collar folds: HL under the cup's rim, mm wide (round T2: four concentric folds, the eye finding's P9 — u1's
+  // olive collar has three or four under the globe)
+  collar: { folds: [0.026, 0.05, 0.074, 0.098], width: 0.085, amp: 0.018 },
 };
 
 /**
@@ -123,31 +168,45 @@ export const PIT_ORGANS = [[0.022, 0.132], [0.085, 0.153], [0.087, 0.029], [0.10
  * near-white highlights), the albedo's darkening and saturation.
  */
 export const WET = {
-  wet: { roughness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.12, albedo: 0.85, saturation: 1.1 },
-  damp: { roughness: 0.45, clearcoat: 0.18, clearcoatRoughness: 0.2 },
+  // (round T2: the film whole — clearcoat 1, u1's film is continuous, and the eye's cap at 1 meets it without a step —
+  // and smooth: water is a mirror; 0.07 on a wet flank, the glints the sun's size (B010), the sky's edges crisp (u1). The
+  // build's film roughness is the film map's G × clearcoatRoughness / roughness: 0.2, so the drying dorsum's rougher G
+  // gives it a rougher, broken film (~0.10). skinSpecular: the skin's own specular under the film — water on skin is
+  // nearly index-matched — the build's KHR_materials_specular, and the runtime's mix(1, skinSpecular, wl) as it dries)
+  wet: { roughness: 0.35, clearcoat: 1.0, clearcoatRoughness: 0.07, albedo: 0.85, saturation: 1.1, skinSpecular: 0.2 },
+  damp: { roughness: 0.45, clearcoat: 0.2, clearcoatRoughness: 0.16 },
   dry: { roughness: 0.6 },
   mud: { roughness: 0.7, colour: '#8e8a82', wet: '#5f5a52', ventral: [0.15, 0.75] },
   // (the local wetness: w_l = clamp(wetness·(1 + γ) − γ·(1 − retain)); at wetness 1 every texel is wet, at 0 every texel
-  // dry, at 0.5 the dorsum (retain 0.2) 0.14 and the belly (0.85) 0.92)
+  // dry; round T2's retention: at the build's master wetness 0.65 the trunk's dorsal band (retain ~0.3) at w_l ~0.59 —
+  // its film ~0.45 and rougher —, the head (~0.55) ~0.89, the flanks (~0.65) ~1, the belly 1)
   gamma: 1.2,
   // the map's G about wet.roughness carries over to the dry state at this share (the lips stay smoother when dry too)
   carry: 0.5,
   // the eye (the window's G from the eye's own painting; the globe's skin cap always wet)
   eye: { clearcoat: 1, clearcoatRoughness: 0.03, window: 0.05, skin: 0.28 },
-  channels: { roughness: 'ORM G (the wet state)', retain: 'ORM B (metallicFactor 0, so three.js reads no metalness from it)', occlusion: 'ORM R' },
+  // the maps hold the WET state's roughness and the retention (textures.mjs writes the film map at its master wetness
+  // from them) and the master's albedo (the pattern calibrated on wet fish): wetShade's albedo and saturation are
+  // relative to the master (o.w0), 1 at it
+  mapIsWet: true,
+  channels: { roughness: 'the film map G (the master wetness\'s; skinDetail gives the WET state\'s)', retain: 'the film map B (metallicFactor 0, so three.js reads no metalness from it)', occlusion: 'the film map A (the runtime\'s)', film: 'the film map R (the clearcoat at the master wetness)' },
 };
 
 /**
- * One texel's shading state for the runtime's wetness (a reference for the shader: GLSL is a line for line port).
- * @param rough  the map's roughness (ORM G, the wet state)
- * @param retain the map's wet retention (ORM B)
+ * One texel's shading state for the runtime's wetness (a reference for the shader: build.mjs runtimeParams' rule and
+ * reference/tobihaze-viewer patchRuntime are its ports).
+ * @param rough  the WET state's roughness (skinDetail's `rough`; the runtime recovers it from the film map's G)
+ * @param retain the wet retention (the film map's B)
  * @param wetness the fish's wetness uniform, 0 dry … 1 wet
  * @param mud    the mud coat 0..1; ventral: the object-space normal's downward share (−n_y) for the mud's clumps
- * @returns { wl (local wetness), roughness, clearcoat, clearcoatRoughness, albedoMul, saturation, mud (the mud colour's
- *   blend weight) }
+ * @param o      { w0: the master wetness the baseColor holds (textures.mjs MASTER_WETNESS; default 1: the wet state) }
+ * @returns { wl (local wetness), roughness, clearcoat, clearcoatRoughness, specular (the skin's own, under the film),
+ *   albedoMul, saturation (both relative to the map: 1 at the master — round T2, the tech finding's (b): T1 darkened the
+ *   wet look a second time), mud (the mud colour's blend weight) }
  */
-export function wetShade(rough, retain, wetness, mud = 0, ventral = 0) {
-  const g = WET.gamma, wl = clamp(wetness * (1 + g) - g * (1 - retain));
+export function wetShade(rough, retain, wetness, mud = 0, ventral = 0, o = {}) {
+  const g = WET.gamma, local = (w) => clamp(w * (1 + g) - g * (1 - retain));
+  const wl = local(wetness), wl0 = local(o.w0 ?? 1);
   const dry = WET.dry.roughness + (rough - WET.wet.roughness) * WET.carry;
   let roughness = mix(dry, rough, wl);
   const cw = sstep(0.35, 1, wl);
@@ -155,7 +214,21 @@ export function wetShade(rough, retain, wetness, mud = 0, ventral = 0) {
   const clearcoatRoughness = mix(WET.damp.clearcoatRoughness, WET.wet.clearcoatRoughness, cw);
   const mw = clamp(mud * (0.45 + 0.55 * sstep(WET.mud.ventral[0], WET.mud.ventral[1], ventral)));
   roughness = mix(roughness, WET.mud.roughness, mw);
-  return { wl, roughness, clearcoat: clearcoat * (1 - mw), clearcoatRoughness, albedoMul: mix(1, WET.wet.albedo, wl * (1 - mw)), saturation: mix(1, WET.wet.saturation, wl * (1 - mw)), mud: mw };
+  // (the map is the master's albedo: drying lightens and greys it, ×1/WET.wet.albedo at wl 0 against the wet state)
+  const am = (w) => mix(1 / WET.wet.albedo, 1, w), sm = (w) => mix(1 / WET.wet.saturation, 1, w);
+  return {
+    wl, roughness, clearcoat: clearcoat * (1 - mw), clearcoatRoughness, specular: mix(1, WET.wet.skinSpecular, wl * (1 - mw)),
+    albedoMul: am(wl * (1 - mw)) / am(wl0), saturation: sm(wl * (1 - mw)) / sm(wl0), mud: mw,
+  };
+}
+
+/**
+ * The film's specular occlusion from the baked occlusion (round T2): a crease mirrors its own walls, not the sky — the
+ * film map's R (and the runtime's film) × this, so the water in the gill slit, the lips' groove and the collar's folds is
+ * dark, not a lit sheet. 1 on open skin (ao ≥ 0.85), 0.25 at ao 0.
+ */
+export function specularOcclusion(ao) {
+  return 0.25 + 0.75 * sstep(0.15, 0.85, ao);
 }
 
 // ------------------------------------------------------------------------------------------------- the context
@@ -422,13 +495,90 @@ function granules(p, cell, rr, amp, seed, fp, out) {
   return bl;
 }
 
-/** The head's pores: sparse small pits (a share of the cells hold one). */
+/** One papilla cell's papilla (PAPILLAE): centre (cell units), radius and height (mm), tubercle or not, tone. */
+function papillaOf(cx, cy, cz, P) {
+  const hh = hash3i(cx, cy, cz, P.seed);
+  const tall = u01(hash3i(cx, cy, cz, P.seed + 7), 0) < P.tall.share;
+  const t = u01(hh, 3), ta = ((hh >>> 5) & 63) / 63;
+  const r = tall ? mix(P.tall.r[0], P.tall.r[1], t) : mix(P.r[0], P.r[1], t);
+  const deg = tall ? mix(P.tall.slope[0], P.tall.slope[1], ta) : mix(P.slope[0], P.slope[1], ta);
+  const amp = (r * Math.tan((deg * Math.PI) / 180)) / 1.54;
+  return { fx: cx + 0.1 + 0.8 * u01(hh, 0), fy: cy + 0.1 + 0.8 * u01(hh, 1), fz: cz + 0.1 + 0.8 * u01(hh, 2), r, amp, tall, tone: u01(hash3i(cx, cy, cz, P.seed + 13), 1), id: hh };
+}
+
+/**
+ * The papillae at p (mm; PAPILLAE: the skin's granules, the relief and the pigment's one field) on the skin whose normal
+ * is n: each cell's papilla is a column along the skin's normal — the distance is taken in the tangent plane, within a
+ * slab one cell thick about the skin (round T2: T1's 3-D spheres cut by the skin left most caps as small slivers, ~7 a mm²
+ * of visible granules; the columns give every cell its full cap, ~25 a mm², the photos' 0.2–0.28 mm spacing). Their height
+ * and slope (analytic, added to `out` × w, each papilla band-limited by its own diameter for the footprint fp), and the
+ * papilla the point is on: { cover (0..1: 1 on its cap, falling to 0 at its rim), q (1 − d²/r²), tall, tone (0..1, a hash
+ * of the papilla), id }.
+ */
+function papillae(p, n, P, fp, out, w = 1) {
+  const c = P.cell, x = p[0] / c, y = p[1] / c, z = p[2] / c;
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  let best = null, bq = 0;
+  for (let k = -1; k <= 1; k++)
+    for (let j = -1; j <= 1; j++)
+      for (let i = -1; i <= 1; i++) {
+        const pa = papillaOf(ix + i, iy + j, iz + k, P);
+        // (mm) the offset from the papilla's centre, its part along the normal and in the tangent plane
+        const dx = (x - pa.fx) * c, dy = (y - pa.fy) * c, dz = (z - pa.fz) * c;
+        const dn = dx * n[0] + dy * n[1] + dz * n[2];
+        // (the slab: a centre within half a cell of the skin counts whole, fading over the next tenth of a cell)
+        const ws = 1 - sstep(0.4 * c, 0.5 * c, Math.abs(dn));
+        if (ws <= 0) continue;
+        const tx = dx - dn * n[0], ty = dy - dn * n[1], tz = dz - dn * n[2], d2 = tx * tx + ty * ty + tz * tz, r2 = pa.r * pa.r;
+        if (d2 >= r2) continue;
+        const q = 1 - d2 / r2;
+        if (q * ws > bq) { bq = q * ws; best = pa; }
+        if (!out) continue;
+        // a smooth cap (1 − d²/r²)², its slope −4 (1 − d²/r²) t / r² (mm per mm) in the tangent plane
+        const bl = band(2 * pa.r, fp, 2.5, 4) * w * ws;
+        if (bl <= 0) continue;
+        const a = pa.amp * bl;
+        out.h += a * q * q;
+        const g = (-4 * a * q) / r2;
+        out.g[0] += g * tx; out.g[1] += g * ty; out.g[2] += g * tz;
+      }
+  return best ? { cover: sstep(0.0, 0.35, bq), q: bq, tall: best.tall, tone: best.tone, id: best.id } : { cover: 0, q: 0, tall: false, tone: 0, id: 0 };
+}
+
+/**
+ * The papilla under a fish-frame point (mm) of the skin with the normal n, for the pattern key's pale granules (round
+ * T2: one field for the relief and the pigment, so a pale granule is a raised papilla and catches the glint): { cover 0..1
+ * (its cap, soft-edged), q, tall (a tubercle), tone 0..1 (per papilla: pick the pale ones by tone), id }. A pure function
+ * of the position and the normal (no context): import it from './surface.mjs'. The surface draws papillae on the head,
+ * the nape (0.6), the lobe (0.5) and the eye's cap (0.35) by its regions; the pattern may restrict its pale ones further.
+ */
+export function papillaAt(p, n) {
+  const l = Math.hypot(n[0], n[1], n[2]) || 1;
+  return papillae(p, [n[0] / l, n[1] / l, n[2] / l], PAPILLAE, 0, null);
+}
+
+/** The water film's own relief (FILM): its height (mm) at p, smooth gradient noise, each octave band-limited for the
+ * footprint fp (lod1's 512 map draws only the long one). */
+function filmHeight(p, fp) {
+  let h = 0;
+  for (const [lam, deg] of FILM.octaves) {
+    const bl = band(lam, fp, 5, 9);
+    if (bl <= 0) continue;
+    // (rms in-plane slope of 1.4·perlin3 at unit wavelength: 1.342 — measured)
+    const A = ((deg * Math.PI) / 180) * lam / 1.342;
+    h += bl * A * vnoise(p[0] / lam, p[1] / lam, p[2] / lam, FILM.seed + Math.round(lam * 10));
+  }
+  return h;
+}
+
+/** The head's pores: sparse small pits (a share of the cells hold one). Returns { cav: the relief's cavity (banded), fine:
+ * the pit's coverage unbanded (round T2: for the colour, where the normal map cannot draw it) }. */
 function pores(p, P, fp, out, w) {
   const x = p[0] / P.cell, y = p[1] / P.cell, z = p[2] / P.cell;
   const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z), r = P.r / P.cell;
-  const bl = band(2 * P.r, fp, 3, 5) * w;
-  if (bl <= 0) return 0;
-  let cav = 0;
+  const bl = band(2 * P.r, fp, 2.5, 4) * w;
+  let cav = 0, fine = 0;
+  if (w <= 0) return { cav, fine };
   for (let k = -1; k <= 1; k++)
     for (let j = -1; j <= 1; j++)
       for (let i = -1; i <= 1; i++) {
@@ -438,21 +588,24 @@ function pores(p, P, fp, out, w) {
         const dx = x - fx, dy = y - fy, dz = z - fz, d2 = dx * dx + dy * dy + dz * dz;
         if (d2 >= r * r) continue;
         const q = 1 - d2 / (r * r), a = -P.depth * bl;
+        fine = Math.max(fine, sstep(0.0, 0.6, q) * w);
+        if (bl <= 0) continue;
         out.h += a * q * q;
         const g = (-4 * a * q) / (r * r);
         out.g[0] += (g * dx) / P.cell; out.g[1] += (g * dy) / P.cell; out.g[2] += (g * dz) / P.cell;
         cav = Math.max(cav, q * bl);
       }
-  return cav;
+  return { cav, fine };
 }
 
-/** The pit organs' papillae (Lee 1995 Fig. 4A): a low papilla with the neuromast's pit in its middle. */
+/** The pit organs' papillae (Lee 1995 Fig. 4A): a low papilla with the neuromast's pit in its middle. Returns { cav, fine }
+ * as pores(): fine the pit's coverage unbanded. */
 function pitOrgans(p, ctx, fp, out, w) {
   const P = HEAD_SKIN.pit, q = [p[0], p[1], Math.abs(p[2])], sz = p[2] >= 0 ? 1 : -1;
   const bl = band(2 * P.r, fp, 3.5, 5.5) * w;
-  if (bl <= 0) return 0;
+  let cav = 0, fine = 0;
+  if (w <= 0) return { cav, fine };
   const gc = ctx.gc, cx = Math.floor(q[0] / gc), cy = Math.floor(q[1] / gc), cz = Math.floor(q[2] / gc);
-  let cav = 0;
   for (let k = -1; k <= 1; k++)
     for (let j = -1; j <= 1; j++)
       for (let i = -1; i <= 1; i++) {
@@ -464,35 +617,36 @@ function pitOrgans(p, ctx, fp, out, w) {
           const t = 1 - d2 / (P.r * P.r), a = P.amp * bl;
           let h = a * t * t, g = (-4 * a * t) / (P.r * P.r);
           // the pit
-          const rc = P.core, coreBl = band(2 * rc, fp, 3, 5);
-          if (d2 < rc * rc && coreBl > 0) {
+          const rc = P.core, coreBl = band(2 * rc, fp, 2.5, 4);
+          if (d2 < rc * rc) {
             const tc = 1 - d2 / (rc * rc), ac = -P.coreDepth * bl * coreBl;
+            fine = Math.max(fine, sstep(0.0, 0.5, tc) * w);
             h += ac * tc * tc; g += (-4 * ac * tc) / (rc * rc);
             cav = Math.max(cav, tc * coreBl * bl);
           }
           out.h += h; out.g[0] += g * dx; out.g[1] += g * dy; out.g[2] += g * dz * sz;
         }
       }
-  return cav;
+  return { cav, fine };
 }
 
 /** The posterior nostril's slit (a shallow elliptic pit along the snout's slope, in front of the eye). */
 function nostrilSlit(p, ctx, fp, out) {
   const N = HEAD_SKIN.nostril, c = ctx.nostril, q = [p[0] - c[0], p[1] - c[1], Math.abs(p[2]) - c[2]];
   const L = N.len / 2, Wd = N.wid / 2;
-  if (Math.abs(q[0]) > 2 * L || Math.abs(q[1]) > 2 * L || Math.abs(q[2]) > 2 * L) return 0;
+  if (Math.abs(q[0]) > 2 * L || Math.abs(q[1]) > 2 * L || Math.abs(q[2]) > 2 * L) return { cav: 0, fine: 0 };
   // the slit's long axis: up and back along the face (≈ 35° above the s axis), its width across
   const ax = norm3([0.82, 0.57, 0]), d1 = dot3(q, ax), rest = sub3(q, mul3(ax, d1)), d2 = len3(rest);
   const e = (d1 / L) ** 2 + (d2 / Wd) ** 2;
-  if (e >= 1) return 0;
-  const bl = band(N.wid, fp, 3, 5);
+  if (e >= 1) return { cav: 0, fine: 0 };
+  const bl = band(N.wid, fp, 2.5, 4);
   const t = 1 - e, a = -N.depth * bl;
   out.h += a * t * t;
   // (gradient of e: 2 d1 / L² ax + 2 rest / Wd²)
   const g = -2 * a * t, sz = p[2] >= 0 ? 1 : -1;
   const ge = [(2 * d1 * ax[0]) / (L * L) + (2 * rest[0]) / (Wd * Wd), (2 * d1 * ax[1]) / (L * L) + (2 * rest[1]) / (Wd * Wd), ((2 * d1 * ax[2]) / (L * L) + (2 * rest[2]) / (Wd * Wd)) * sz];
   out.g[0] += g * ge[0]; out.g[1] += g * ge[1]; out.g[2] += g * ge[2];
-  return t * bl;
+  return { cav: t * bl, fine: sstep(0.0, 0.4, t) };
 }
 
 /**
@@ -567,8 +721,11 @@ function latticeHeight(p, R, ctx, fp, aux) {
 
 /**
  * The sculpt's occlusion at p (mm) with the outward normal n: 7 taps along n (0.08–1.6 mm), the field's shortfall from
- * the tap's distance weighed down with distance, with the eye globes (separate meshes, not in the field) added as
- * spheres. 1 open … 0 shut.
+ * the tap's distance weighed down with distance. 1 open … 0 shut.
+ * Round T2: the eye globes are NOT in it (o.globe: true adds them as spheres at rest, T1's rule). A globe moves — the
+ * land state's lift, the gaze, the blink's drop into the cup — so the skin it shades at rest is uncovered in motion: baked,
+ * its shadow was the black slit at the collar's base and the holes in the blink (the eye finding's P1). The cup's seat is
+ * the cup's own field (the head's socket and rim are in the sculpt); the globe's contact shade is the runtime's.
  */
 export function aoField(fish, p, n, o = {}) {
   const taps = o.taps ?? [0.08, 0.18, 0.32, 0.5, 0.75, 1.1, 1.6], k = o.k ?? 1.35;
@@ -577,14 +734,27 @@ export function aoField(fish, p, n, o = {}) {
   for (let i = 0; i < taps.length; i++) {
     const d = taps[i], x = p[0] + n[0] * d, y = p[1] + n[1] * d, z = p[2] + n[2] * d;
     let f = fish(x, y, z);
-    const g = Math.hypot(x - e[0], y - e[1], Math.abs(z) - e[2]) - R;
-    if (g < f) f = g;
+    if (o.globe) { const g = Math.hypot(x - e[0], y - e[1], Math.abs(z) - e[2]) - R; if (g < f) f = g; }
     const w = 1 / (1 + 1.6 * i);
     occ += w * clamp((d - f) / d, 0, 1);
     wsum += w;
   }
   return clamp(1 - (k * occ) / wsum);
 }
+
+/**
+ * The colour's share of the occlusion (round T2; skinDetail's `albedo`, a multiplier the bake puts into the baseColor):
+ * the occlusion reaches only the indirect light in the runtime, but under the sun a crease is in its walls' shade too —
+ * the gill slit, the lips' groove, the collar's folds, the axilla, the fins' bases darken under direct light as in the
+ * photos; and the features under the normal map's band (the pit organs' pits, the pores, the posterior nostril) are
+ * drawn here instead. Open skin (ao ≥ 0.95) is left as it is: the pattern's calibration holds (the trunk's pockets are
+ * centred on their measured mean: the build report's trunkCavity.meanClamped0.5, 0.194).
+ *   crease   1 − ALBEDO_AO.crease · smoothstep(creaseAt, 1 − ao) (the occlusion without the relief's own cavities)
+ *   fine     1 − ALBEDO_AO.fine · fine (the unbanded pits, pores, nostril: 0..1 coverage)
+ *   pockets  the trunk's scale pockets about their mean, by position behind the head (T1's CAVITY_ALBEDO, textures.mjs,
+ *            moved here so the colour's every cavity has one rule and the creases are not darkened twice)
+ */
+export const ALBEDO_AO = { crease: 0.6, creaseAt: [0.05, 0.8], fine: 0.32, pockets: { k: 0.35, max: 0.5, mean: 0.194, ramp: [0.95, 1.15] } };
 
 // ------------------------------------------------------------------------------------------------- per texel
 
@@ -599,7 +769,9 @@ export function aoField(fish, p, n, o = {}) {
  * @param fp    the band limits' footprint in mm: leave it out (ctx.fpRef, from the map's size) or pass ONE value for the
  *              whole map (not the texel's own: the charts would disagree at their seams, the triangles show as a mosaic)
  * @returns { dn: [x, y, z] (n + dn is unit: the detailed normal), rough (the WET state's roughness), ao, cavity, wet (the
- *   retention, WET), h (the relief, mm), field (the field-normal term's weight) }
+ *   retention, WET), albedo (round T2: the colour's multiplier, ALBEDO_AO), h (the relief, mm), field (the field-normal
+ *   term's weight), pocket (the scale pockets' cavity as the albedo reads it: the bake's statistics), papilla (papillae()'s
+ *   papilla under the texel, or null off the papillate skin) }
  */
 export function skinDetail(p, n, part, ctx, fp) {
   let nl = len3(n) || 1;
@@ -607,8 +779,8 @@ export function skinDetail(p, n, part, ctx, fp) {
   // (one footprint for the whole map, not the texel's own: a per-triangle footprint steps at every triangle's edge and
   // the band limits with it, a mosaic in the relief, and it differs between two charts at their seam)
   if (fp === undefined) fp = ctx.fpRef;
-  if (part === 'teeth') return { dn: [0, 0, 0], rough: 0.3, ao: 1, cavity: 0, wet: 1, h: 0, field: 0 };
-  if (part === 'iris') return { dn: [0, 0, 0], rough: WET.eye.window, ao: 1, cavity: 0, wet: 1, h: 0, field: 0 };
+  if (part === 'teeth') return { dn: [0, 0, 0], rough: 0.3, ao: 1, cavity: 0, wet: 1, albedo: 1, h: 0, field: 0 };
+  if (part === 'iris') return { dn: [0, 0, 0], rough: WET.eye.window, ao: 1, cavity: 0, wet: 1, albedo: 1, h: 0, field: 0 };
   const fish = ctx.fish;
   // ---- the field's own normal (the sculpt's detail the tier mesh lost), at the texel moved onto the field's surface
   let nF = n0, q = p, wF = 0, lapF = 0;
@@ -634,23 +806,22 @@ export function skinDetail(p, n, part, ctx, fp) {
   const R = part === 'eyeSkin' ? { trunk: 0, nape: 0, head: 1, lip: 0, lobe: 0, v: 0.2, a: 0.8, girth: 1, sh: p[0] / HL, yh: p[1] / HL, zh: Math.abs(p[2]) / HL, dOp: -1, eye: true } : regions(q, ctx, nF);
   const interior = ctx.relief === false;
   const out = { h: 0, g: [0, 0, 0] };
-  let cavD = 0;
-  const G = HEAD_SKIN.granule;
-  const wGran = interior ? 0 : part === 'eyeSkin' ? 0.8 : R.head + 0.35 * R.nape + 0.25 * R.lobe;
-  if (wGran > 0.001) {
-    const o2 = { h: 0, g: [0, 0, 0] };
-    granules(q, G.cell, G.r, G.amp, 1717, fp, o2);
-    out.h += o2.h * wGran; for (let k = 0; k < 3; k++) out.g[k] += o2.g[k] * wGran;
-  }
+  let cavD = 0, fine = 0;
+  // the papillae (PAPILLAE: the head's granular skin, thinning onto the nape and the lobe — u1's lobe is granular and
+  // glinting like the body; the eye's cap smoother — the eye finding's P5: the head's field on the globe at rest at 0.35)
+  const wGran = interior ? 0 : part === 'eyeSkin' ? 0.35 : R.head + 0.6 * R.nape + 0.5 * R.lobe;
+  let pap = null;
+  if (wGran > 0.001) pap = papillae(q, nF, PAPILLAE, fp, out, wGran);
   if (R.lip > 0.001 && !interior) {
     const L = HEAD_SKIN.lip.stipple, o2 = { h: 0, g: [0, 0, 0] };
     granules(q, L.cell, [L.r * 0.8, L.r * 1.2], L.amp, 2323, fp, o2);
     out.h += o2.h * R.lip; for (let k = 0; k < 3; k++) out.g[k] += o2.g[k] * R.lip;
   }
   if (!interior && part !== 'eyeSkin') {
-    cavD = Math.max(cavD, pores(q, HEAD_SKIN.pore, fp, out, R.head * sstep(0.0, 0.1, R.yh)));
-    if (R.head + R.nape > 0.01) cavD = Math.max(cavD, pitOrgans(q, ctx, fp, out, R.head + R.nape));
-    if (R.sh < 0.4 && R.yh > 0.35) cavD = Math.max(cavD, nostrilSlit(q, ctx, fp, out));
+    const po = pores(q, HEAD_SKIN.pore, fp, out, R.head * sstep(0.0, 0.1, R.yh));
+    cavD = Math.max(cavD, po.cav); fine = Math.max(fine, po.fine);
+    if (R.head + R.nape > 0.01) { const pi = pitOrgans(q, ctx, fp, out, R.head + R.nape); cavD = Math.max(cavD, pi.cav); fine = Math.max(fine, pi.fine); }
+    if (R.sh < 0.4 && R.yh > 0.35) { const ns = nostrilSlit(q, ctx, fp, out); cavD = Math.max(cavD, ns.cav); fine = Math.max(fine, ns.fine); }
   }
   // the lattice layers by central differences in the tangent plane of nF (step: half a texel, ≥ 6 µm)
   const [t1, t2] = tangents(nF), e = Math.max(0.5 * fp, 0.006);
@@ -663,37 +834,59 @@ export function skinDetail(p, n, part, ctx, fp) {
     g1 = (h1 - h0) / (2 * e); g2 = (h3 - h2) / (2 * e);
     lapH = (h1 + h0 + h3 + h2 - 4 * hc) / (e * e);
   }
+  // the water film's own relief (FILM: smooth, by central differences over 0.05 mm)
+  if (!interior) {
+    const ef = 0.05, fat = (a, b) => filmHeight([q[0] + t1[0] * a + t2[0] * b, q[1] + t1[1] * a + t2[1] * b, q[2] + t1[2] * a + t2[2] * b], fp);
+    g1 += (fat(ef, 0) - fat(-ef, 0)) / (2 * ef); g2 += (fat(0, ef) - fat(0, -ef)) / (2 * ef);
+  }
   // the analytic layers' slope in the tangent plane
   g1 += dot3(out.g, t1); g2 += dot3(out.g, t2);
   const nH = norm3([nF[0] - g1 * t1[0] - g2 * t2[0], nF[1] - g1 * t1[1] - g2 * t2[1], nF[2] - g1 * t1[2] - g2 * t2[2]]);
   const dn = [nH[0] - n0[0], nH[1] - n0[1], nH[2] - n0[2]];
   // ---- occlusion and cavity
-  // (the globe's skin cap turns and rises with the eye: its occlusion from the cup only half)
-  const ao0 = part === 'eyeSkin' ? 0.55 + 0.45 * aoField(fish, p, n0) : aoField(fish, q, nF);
+  // (the sculpt's, without the globes: aoField. The globe's skin cap turns and rises with the eye: its occlusion from the
+  // cup only half. Round T2, the eye finding's P1: the skin round the globe — the dome, the socket, the collar, which the
+  // lift, the gaze and the blink uncover — floored at 0.5 within 0.3 R of the globe, so a crease there is grey, never black)
+  const eyeD = Math.hypot(p[0] - ctx.eyeC[0], p[1] - ctx.eyeC[1], Math.abs(p[2]) - ctx.eyeC[2]) - ctx.eyeR;
+  let ao0 = part === 'eyeSkin' ? 0.55 + 0.45 * aoField(fish, p, n0) : aoField(fish, q, nF);
+  if (part !== 'eyeSkin') ao0 = Math.max(ao0, 0.5 * (1 - sstep(0.3 * ctx.eyeR, 0.5 * ctx.eyeR, eyeD)));
   // the field's concavity (1/mm: a crease of radius r reads −1/r) and the relief's (the scales' pockets, the pits)
   const cavField = clamp(-lapF * 0.08);
-  const cavRelief = clamp(Math.max(cavD, aux.pocket * 0.35, -lapH * 1.2));
+  const cavPocket = clamp(Math.max(aux.pocket * 0.35, -lapH * 1.2));
+  const cavRelief = clamp(Math.max(cavD, cavPocket));
   const cavity = clamp(Math.max(cavField, cavRelief));
   // the fins' bases (their membranes are not in the field): a narrow contact shade along the keels' lines
   const finAO = finBaseShade(q, R, ctx);
   // (the relief's own cavities stay out of the occlusion: the normal map shades them; `cavity` carries them)
   const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO);
+  // the colour's share (ALBEDO_AO): the creases (the macro occlusion with the fins' bases), the unbanded fine cavities,
+  // the trunk's scale pockets about their mean
+  const A = ALBEDO_AO, PK = A.pockets, aoC = part === 'eyeSkin' ? 1 : clamp(ao0 * finAO);
+  const pw = part === 'eyeSkin' ? 0 : sstep(PK.ramp[0] * HL, PK.ramp[1] * HL, q[0]);
+  const albedo = (1 - A.crease * sstep(A.creaseAt[0], A.creaseAt[1], 1 - aoC)) * (1 - A.fine * fine) * (1 - pw * PK.k * (Math.min(cavPocket, PK.max) - PK.mean));
   // ---- roughness (the wet state) and the wet retention
   const dors = 1 - sstep(0.18, 0.4, R.v), belly = sstep(0.62, 0.85, R.v);
-  const eyeD = Math.hypot(p[0] - ctx.eyeC[0], p[1] - ctx.eyeC[1], Math.abs(p[2]) - ctx.eyeC[2]) - ctx.eyeR;
   const collar = part === 'eyeSkin' ? 0 : 1 - sstep(0.25, 0.8, eyeD);
   const gill = R.dOp > -0.08 && R.dOp < 0.15 ? (1 - sstep(0.04, 0.15, Math.abs(R.dOp))) * sstep(0.12, 0.2, R.yh) * (1 - sstep(0.38, 0.48, R.yh)) : 0;
   const slow = 0.02 * vnoise(q[0] / 0.9, q[1] / 0.9, q[2] / 0.9, 515);
   // (each scale's exposed field a little smoother or rougher than its neighbours: the highlight breaks up by scale)
   const perScale = aux.wS > 0 ? 0.03 * (aux.ro ?? 0) * aux.wS : 0;
-  let rough = WET.wet.roughness + 0.04 * dors * (1 - R.lip) - 0.025 * belly - 0.06 * R.lip - 0.05 * cavity - 0.02 * collar + slow + perScale;
-  let wet = mix(mix(0.22, 0.55, sstep(0.2, 0.5, R.v)), 0.88, belly);
+  // (round T2: the dorsum's drying skin rougher, +0.10 — its film too, through G — the surface finding's P3; the trunk's
+  // back more than the head's top, which the fish keeps wet by rolling and wiping: u1's sheet of sky on the crown)
+  const back = dors * (1 - 0.5 * (R.head + R.lip));
+  let rough = WET.wet.roughness + 0.10 * back * (1 - R.lip) - 0.025 * belly - 0.06 * R.lip - 0.05 * cavity - 0.02 * collar + slow + perScale;
+  // the retention (round T2): the trunk's dorsal band 0.3, the head 0.55, the flanks 0.65, the belly 0.88 — at the build's
+  // master wetness 0.65 (textures.mjs) the back behind the head drier: its film ~0.45, broken by the scale pockets' water
+  // (+0.35·cavity) and rougher (G +0.10: the film ~0.10); the head — the crown too, which the fish keeps wet by rolling
+  // and wiping: u1's sheet of sky — the flanks and the belly filmed whole; drying (wetness 0.5) the back goes matte
+  // first (film ~0.15), the head and the flanks follow
+  let wet = mix(mix(mix(0.3, 0.55, R.head + R.lip), 0.65, sstep(0.15, 0.4, R.v)), 0.88, belly);
   wet = Math.max(wet, 0.92 * R.lip, 0.9 * collar, 0.85 * gill, 0.7 * R.lobe);
-  // (the cavities and what the sculpt shuts in — the mouth's slit, the gill pocket, the socket under the globe — keep
-  // their water: the buccal water, the gill slit's leak)
+  // (the cavities and what the sculpt shuts in — the mouth's slit, the gill pocket, the socket — keep their water: the
+  // buccal water, the gill slit's leak)
   wet = clamp(Math.max(wet + 0.35 * cavity, sstep(0.25, 0.7, 1 - ao0)));
   if (part === 'eyeSkin') { rough = WET.eye.skin; wet = 1; }
-  return { dn, rough: clamp(rough, 0.05, 0.95), ao, cavity, wet, h: hc + out.h, field: wF };
+  return { dn, rough: clamp(rough, 0.05, 0.95), ao, cavity, wet, albedo, h: hc + out.h, field: wF, pocket: cavPocket * pw, papilla: pap };
 }
 
 /** A narrow contact shade (0.75 at the line) along the fins' bases: the median fins on their keels, the caudal's base. */

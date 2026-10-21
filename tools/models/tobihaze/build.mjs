@@ -30,45 +30,62 @@
 // surface's (textures.mjs testDetail). Round T1's integration choices (textures.mjs, defaults): the eye's skin cap coloured
 // as the head's own skin (EYE_SKIN_PART 'head'; --eye-skin-part eyeSkin for the pattern key's finer cap), the right
 // globe's turret mirrored from the left's (EYE_MIRROR; --no-eye-mirror), the trunk's scale pockets in the hero's albedo
-// about their mean (CAVITY_ALBEDO; --cav-albedo off).
+// about their mean (CAVITY_ALBEDO; --cav-albedo off). Round T2 (key tech): the wet film's plumbing (texturedMaterials,
+// textures.mjs masterChannels: the 'ORM' map is the film map — R the film, G the roughness at MASTER_WETNESS, B the
+// retention, A the occlusion), the fins' draws and blending (FIN_MESHES: no TANGENT, the hero's opaque fin parts as their
+// own primitives, lod1's sheath last, the blended material's depthWrite contract in its extras), the teeth in the hero's
+// Body, the scale pockets by position (CAVITY_ALBEDO). --clay keeps B4/T1's clay build (FIN_MESHES_T1, the teeth apart).
 //
-// Meshes per tier — the draws (class M budget, body_contract §6; CLAUDE.md counts a material as a draw: M hero 6, lod1
-// 4, lod2 2; round B4 against B3's 18 / 18 / 2: one primitive an eye, the fins merged, lod1's skin one mesh). The skin is
-// split by the blend-shape groups that move it (headmorphs.splitByMorphs) only where the morph textures need it:
-//   hero  10 draws: Head_Orbit (blinkL, blinkR, eyesUpL, eyesUpR; inflate, inflateMid where the cheeks reach it),
-//         Head_Mouth (gape, gum; throat, inflate, inflateMid), Head (throat, inflate, inflateMid), Body (static),
-//         Mouth_Teeth, Eye_L, Eye_R, and the fins in three meshes (round T1, FIN_MESHES): Fins_Dorsal (D1, D2),
-//         Fins_AnalCaudal (the anal fin, the caudal) and Fins_Paired (the pectorals, the pelvic), each fin's shapes
-//         `<target>_<fin>`. B4's two fin meshes (Fins_Median: D1, D2, anal, caudal) paid every median fin's targets on
-//         every median vertex: 8.32 / 8.91 / 8.53 MB of morph textures at 4096 / 8192 / 16384 rows; the three 6.55 / 6.55
-//         / 5.79 (the best grouping into three of all 301, by three.js's packing; four meshes 5.24 / 4.78 / 4.71 would be
-//         an 11th draw). B4's split study (B3's geometry, B4's planned maps): the three head meshes as one (7 draws)
-//         30.7 / 31.9 / 32.6 MB, the whole skin one mesh (6 draws) 36.0 / 36.6 / 37.4
-//   lod1  4 draws: Body (the whole skin, blinkL, blinkR, throat, inflate, inflateMid, eyesUpL, eyesUpR), Fins (the seven,
-//         their shapes' positions only), Eye_L, Eye_R
-//   lod2  2 draws: Body (with both eyes at rest), Fins (the cards, MASK)
+// Meshes per tier — the draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two;
+// the T2 caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by
+// the blend-shape groups that move it (headmorphs.splitByMorphs) only where the morph textures need it:
+//   hero  12 draws: Head_Orbit (blinkL, blinkR, eyesUpL, eyesUpR; inflate, inflateMid where the cheeks reach it),
+//         Head_Mouth (gape, gum; throat, inflate, inflateMid), Head (throat, inflate, inflateMid), Body (static; round T2
+//         the teeth in its primitive, each row on its jaw joint: T1's Mouth_Teeth draw), Eye_L, Eye_R — 6 opaque — and the
+//         fins in two meshes (FIN_MESHES: Fins_Median D1, D2, anal, caudal; Fins_Paired the pectorals, the pelvic), each
+//         a blended primitive (2 passes) and an opaque one (the sheath, the fleshy roots): 6. Each fin's shapes
+//         `<target>_<fin>`; without the tangent split the two meshes' morph textures are 7.73 / 7.73 / 7.92 MB at 4096 /
+//         8192 / 16384 rows (T1's three split meshes 6.55 / 6.55 / 5.79, one more draw pair). B4's split study (B3's
+//         geometry, B4's planned maps): the three head meshes as one (7 draws) 30.7 / 31.9 / 32.6 MB, the whole skin one
+//         mesh (6 draws) 36.0 / 36.6 / 37.4
+//   lod1  5 draws: Body (the whole skin, blinkL, blinkR, throat, inflate, inflateMid, eyesUpL, eyesUpR), Eye_L, Eye_R, Fins
+//         (the seven, their shapes' positions only; blended, 2 passes; the caudal's sheath last in its index buffer)
+//   lod2  2 draws: Body (with both eyes at rest), Fins (the cards, MASK: one pass)
 // (the exact target list per mesh is in each tier's extras tobihaze.morphs and the build report's headSplit)
-// Materials (round T1, texturedMaterials; contract §2): Tobihaze_Body (the skin, the teeth by their swatch: baseColor RGBA
-// — A the excitement bars' mask —, normal, ORM — R occlusion, G roughness, B the wet retention, metallicFactor 0 —, a
-// clearcoat for the water film), Tobihaze_Eye (each globe whole on the SAME maps through the atlas's iris and eyeSkin
-// rects, its own clearcoat 1 and ior), Tobihaze_Fin (the fin atlas, RGBA with the membrane's coverage in A, BLEND,
-// double-sided, no normal map; lod2 Tobihaze_Fins, MASK); lod2's Body the colour only, its light baked in. 3 materials at
-// hero and lod1, 2 at lod2. The runtime's parameters (wetness, tint, the colour states: contract §5) are in each
-// material's extras.tobihaze.runtime. --clay: B4's clay materials (no maps).
+// Materials (round T1, texturedMaterials; contract §2; round T2 the wet film): Tobihaze_Body (the skin and the teeth:
+// baseColor RGBA — A the excitement bars' mask —, normal, the film map — R the clearcoat's coverage at the master
+// wetness, G the roughness there, B the wet retention, A the occlusion; metallicFactor 0 —, a clearcoat for the water
+// film on the same normal map, the skin's own specular low under it: KHR_materials_specular), Tobihaze_Eye (each globe
+// whole on the SAME maps through the atlas's iris and eyeSkin rects, its own clearcoat 1 on the normal map and ior, not
+// metallic), Tobihaze_Fin (the fin atlas, RGBA with the membrane's coverage in A, BLEND, double-sided, no normal map;
+// extras blend.depthWrite for the runtime) and the hero's Tobihaze_FinOpaque (the same atlas, opaque: the fins' opaque
+// parts); lod2 Tobihaze_Fins, MASK; lod2's Body the colour only, its light baked in. 4 materials at hero, 3 at lod1, 2 at
+// lod2. The runtime's parameters (wetness, tint, the colour states: contract §5) are in each material's
+// extras.tobihaze.runtime, each a rule its material can run; the static material is the master (MASTER_WETNESS).
+// Round T2 integrator (the keys' requests): the Eye's runtime carries iris.mjs's pupil variant (the glow mask in the
+// baseColor's A inside irisRect; the eye skips the bars term), every fin material finatlas.mjs's translucency rule (the
+// membranes' diffuse transmission of the sun, a shader term after three's lights), the body's wetness rule the film's
+// specular occlusion (surface.mjs specularOcclusion on the film map's A, as the master's R has it) and the skin's own
+// specular per texel (surface WET.wet.skinSpecular: the static factor stays SKIN_SPECULAR, one value for the damp dorsum
+// and the wet flanks). The viewer runs all three (reference/tobihaze-viewer/main.js patchRuntime).
+// --clay: B4's clay materials (no maps).
 // GPU (build report gpu: vertex and index buffers as written, the morph textures at 4096 / 8192 / 16384 rows — three.js
 // packs a mesh's targets in one RGBA32F texture, rows of the GPU's maximum texture size — and the maps as KTX2 → BC7 /
-// ASTC, a byte a texel, mipmaps a third more: tools/models/budget.mjs), round T1 (TEX):
-//   hero  body baseColor, normal and ORM at 2048 (5.59 MB each) and the fin atlas at 1024 (1.40): maps 18.17 MB; buffers
-//         2.9; morph textures 10.75 / 10.68 / 11.10 (B4: 12.52 / 13.04 / 13.84); total 31.8 / 31.8 / 32.2 MB of 40
-//   lod1  baseColor 1024 (1.40), normal 512 and ORM 512 (0.35 each), fin atlas 512 (0.35): maps 2.45 MB; buffers 0.35;
-//         morph textures 2.53 / 2.99 / 2.39: total 5.33 / 5.79 / 5.19 MB of 6. The normal and the ORM at 512 because one skin mesh
-//         (4 draws) holds 1.2–1.8 MB of morph textures: the ORM at 1024 (+1.05) fits only with lod1's skin shapes
-//         carrying no normal deltas (the rig's round-B4 shading of lod1's blink, eyes-up and cheeks lost) or a fifth draw.
-//         The 512 maps are 0.125 mm a texel on the body, finer than a screen pixel at lod1's distances (~0.3 mm and up)
+// ASTC, a byte a texel, mipmaps a third more: tools/models/budget.mjs), round T2 (TEX):
+//   hero  body baseColor, normal and the film map at 2048 (5.59 MB each) and the fin atlas at 1024 (1.40): maps 18.17 MB;
+//         buffers 2.7; morph textures 11.46 / 12.44 / 13.65: total 32.4 / 33.3 / 34.6 MB of 40
+//   lod1  baseColor 1024 (1.40), normal 512 and the film map 512 (0.35 each), fin atlas 512 (0.35): maps 2.45 MB; buffers
+//         0.34; morph textures 2.53 / 2.99 / 2.39: total 5.31 / 5.77 / 5.18 MB of 6. The normal and the film map at 512
+//         because one skin mesh (4 draws) holds 1.2–1.8 MB of morph textures: at 1024 (+1.05) it fits only with lod1's
+//         skin shapes carrying no normal deltas (the rig's round-B4 shading of lod1's blink, eyes-up and cheeks lost) or a
+//         fifth draw. The 512 maps are 0.125 mm a texel on the body, finer than a screen pixel at lod1's distances
 //   lod2  body colour and fin atlas at 256 (0.09 MB each), buffers 0.03, morph textures 0.07: 0.27 MB of 0.5
+// Packed (tools/models/pack, round T2's tiers): hero 14.57 MB, lod1 2.21, lod2 0.213 (of 20 / 4 / 0.3); every image's
+// PSNR ≥ 40.6 dB (≥ 30).
 // The fins keep no normal map at any tier (their relief is the hero's geometry; the gobies' standard fins alike); the eye
-// reads the body maps. Same maps and blending at hero and lod1 (the body and the eye opaque with the same maps, the fin
-// blended); lod2 the colours only, the fins alpha-tested.
+// reads the body maps. Same maps at hero and lod1 (the body and the eye opaque with the same maps, the fin blended; the
+// hero draws its fins' opaque parts apart, which lod1's cap of 5 draws cannot); lod2 the colours only, the fins
+// alpha-tested.
 // Units: fish frame mm (s back from the snout, y up from the head's floor, z to the fish's left) to the object frame
 // in metres (+X left, +Y dorsal, +Z anterior) by anatomy.toObject / dirToObject (a rotation: windings keep).
 import fs from 'node:fs';
@@ -91,7 +108,7 @@ import { teethMesh } from './teeth.mjs';
 // (round B4: the clay renderer's eye atlas, the root extras' eyes.clay)
 import { eyeClayAtlas } from './eyemesh.mjs';
 // (round T1: the bake, textures.mjs)
-import { bakeTier, bakeMesh, eyeToFish, finAtlas, encodeImage, loadModules } from './textures.mjs';
+import { bakeTier, bakeMesh, eyeToFish, finAtlas, encodeImage, loadModules, MASTER_WETNESS } from './textures.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
@@ -111,16 +128,51 @@ const logDefault = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).
  * and keeps their targets' positions only (`normals: false`: 1.0 MB, against 2.0–2.9 MB with the normals, which lod1's
  * 6 MB cannot hold; build-report gpu, the plan in the header).
  */
-const FIN_MESHES = {
+const FIN_MESHES_T1 = {
   hero: { normals: true, groups: { Fins_Dorsal: ['Fin_Dorsal1', 'Fin_Dorsal2'], Fins_AnalCaudal: ['Fin_Anal', 'Fin_Caudal'], Fins_Paired: ['Fin_Pectoral_L', 'Fin_Pectoral_R', 'Fin_Pelvic'] } },
   lod1: { normals: false, groups: { Fins: ['Fin_Dorsal1', 'Fin_Dorsal2', 'Fin_Anal', 'Fin_Caudal', 'Fin_Pectoral_L', 'Fin_Pectoral_R', 'Fin_Pelvic'] } },
 };
 /**
+ * The fins as draws, round T2 (the textured build; --clay keeps T1's FIN_MESHES_T1): the fin atlas has no normal map, so
+ * the fin meshes carry no TANGENT and are not split for one (fins.mjs's own vertices: the hero's 21,258 → 17,862, the
+ * morph textures with them). The blending, measured (t2_tech/order: the land pose at the u1, A070, front and top cameras
+ * and T1's order cameras, against a depth-peeled reference — every fin layer sorted per pixel): three's GLTFLoader draws a
+ * BLEND material without depth writes, so a mesh's fin surfaces blend in index order (T1: 4,057 px off by > 24/255 over 8
+ * views; a fixed reversed order no better); the same material writing depth, two passes kept, 167 px — the closest by far
+ * (an alpha-tested twin of each fin mesh, the solid texels drawn first, 3,855–7,417: it takes away the translucency of
+ * every texel it makes solid). glTF cannot say "write depth" for BLEND, so the material's extras carry it
+ * (tobihaze.blend.depthWrite, for the runtime: ModelLoader.prepareMaterial; the viewer applies it) and the GLB itself draws
+ * what is opaque — the caudal's sheath and the fleshy roots, the fin triangles whose atlas coverage is ≥ FIN_SOLID at every
+ * corner and the middle — as a primitive of its own with an opaque copy of the fin material (written with depth by any
+ * loader). Hero: two fin meshes (the median fins, the paired fins: the cheapest pair of the 63 by three's morph packing,
+ * 7.73 / 7.73 / 7.92 MB) × (the blended membranes and rays, two passes, + the opaque parts, one) = 6 draws, with the six
+ * opaque skin and eye meshes 12 (the teeth drawn with the Body). lod1 one blended mesh (2 draws with its 3 opaque, its cap
+ * of 5) with the caudal's sheath last in its index buffer (`sheathLast`: the opaque sheath over what the same draw put
+ * behind it).
+ */
+export const FIN_SOLID = { minCoverage: 0.98 };
+const FIN_MESHES = {
+  hero: { normals: true, tangents: false, solid: FIN_SOLID, groups: { Fins_Median: ['Fin_Dorsal1', 'Fin_Dorsal2', 'Fin_Anal', 'Fin_Caudal'], Fins_Paired: ['Fin_Pectoral_L', 'Fin_Pectoral_R', 'Fin_Pelvic'] } },
+  lod1: { normals: false, tangents: false, sheathLast: true, groups: { Fins: ['Fin_Dorsal1', 'Fin_Dorsal2', 'Fin_Anal', 'Fin_Caudal', 'Fin_Pectoral_L', 'Fin_Pectoral_R', 'Fin_Pelvic'] } },
+};
+/**
+ * The wet skin's static master (round T2; textures.mjs MASTER_WETNESS, masterChannels): the Body's clearcoat is the film
+ * map's R (clearcoatTexture, factor 1), its roughness the film map's G (the skin's at the master wetness) and the film's
+ * roughness the same G × WET.wet.clearcoatRoughness / WET.wet.roughness (0.12 / 0.35: 0.12 on a wet flank, ~0.17 where the
+ * dorsum's film is breaking up); the skin's own specular under the film SKIN_SPECULAR (KHR_materials_specular: water on
+ * skin is nearly index-matched, so the film is the one specular; the drying dorsum keeps a little: velvety, not satin).
+ */
+export const SKIN_SPECULAR = 0.25;
+/** The fins' wet rule (round T2: their material has no film map, so the rule reads only the uniform): roughness
+ * mix(dry, wet, wetness) (FIN_MATERIAL's 0.38 wet), the albedo as the skin's; the master at MASTER_WETNESS. */
+const FIN_WET = { dry: 0.55, albedo: 0.85 };
+/**
  * The maps per tier (round T1; texture_contract.md §2; KTX2 → BC7 / ASTC 4×4 in the packed file, a byte a texel, mipmaps
  * a third more: docs/quality/model-budget.md §1, tools/models/budget.mjs). The body atlas (BODY_LAYOUT; the eye reads it
  * through its iris and eyeSkin rects, the teeth through their swatch) in three maps — baseColor (RGB albedo, A the
- * excitement bars' mask), normal (tangent space, the tier's own tangents), ORM (R occlusion, G roughness, B the wet
- * retention: metallicFactor 0) — and the fin atlas (fins.mjs FIN_ATLAS; RGB, A the membrane's coverage). lod1's normal
+ * excitement bars' mask), normal (tangent space, the tier's own tangents), the film map in the `orm` slot (round T2:
+ * R the film — the clearcoat at the master wetness —, G roughness, B the wet retention, A the occlusion for the runtime;
+ * metallicFactor 0) — and the fin atlas (fins.mjs FIN_ATLAS; RGB, A the membrane's coverage). lod1's normal
  * and ORM at half its colour's size (the GPU: the header); lod2 the colour only with its light baked in (`lit`), the fin
  * cards alpha-tested. Same maps and features at hero and lod1.
  */
@@ -132,7 +184,10 @@ export const TEX = {
 /** The maps per tier as a list (B4's form; the clay build's GPU figures plan with it). */
 export const TEX_PLAN = Object.fromEntries(Object.entries(TEX).map(([t, T]) => [t, [...Object.entries(T.body).map(([k, px]) => ({ map: `body ${k}`, px })), { map: 'fin colour', px: T.fin }]]));
 /** The class-M GPU limits per tier (MB; tools/models/budget.json), and the draws CLAUDE.md allows (materials). */
-const GPU_LIMIT = { hero: 40, lod1: 6, lod2: 0.5 }, DRAW_LIMIT = { hero: 10, lod1: 4, lod2: 2 };
+const GPU_LIMIT = { hero: 40, lod1: 6, lod2: 0.5 };
+/** The draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two — back faces, then
+ * front — as WebGLRenderer.renderObject draws it; the T2 brief's caps: hero 12, lod1 5; lod2 2) */
+const DRAW_LIMIT = { hero: 12, lod1: 5, lod2: 2 };
 /** lod2's fin cards' blend shapes carry normal deltas (round B4: no, see the Fins mesh). */
 const LOD2_CARD_NORMALS = false;
 /** lod2's crawl keys at most (+ the last): tierCrawl takes every k-th of the hero's (round B4). */
@@ -144,11 +199,11 @@ const CARD_FIT = { over: 0.3, gain: 0.2 };
  * shapes and the mesh that carries them (skinMeshes: 'split' the hero's blend-shape groups, headmorphs.splitByMorphs;
  * 'one' a single skin mesh with every shape), the fins' meshes (FIN_MESHES). */
 export const TIERS = {
-  hero: { mesh: 'hero', eye: EYE_TIERS.hero, fins: 'hero', teeth: true, morphs: [...MORPH_ORDER, ...MORPH_EXTRA], morphMesh: 'Head', skinMeshes: 'split', finMeshes: FIN_MESHES.hero },
+  hero: { mesh: 'hero', eye: EYE_TIERS.hero, fins: 'hero', teeth: true, morphs: [...MORPH_ORDER, ...MORPH_EXTRA], morphMesh: 'Head', skinMeshes: 'split', finMeshes: FIN_MESHES.hero, finMeshesClay: FIN_MESHES_T1.hero },
   // (round B3: lod1 has the eyes-up correctives too, re-solved on its skin as its other shapes, so its alert eyes lift as
   // the hero's: B2 held lod1's lift to liftBareM, 0.47 mm under the hero's at the switch; round B4: one skin mesh with all
   // of them, see FIN_MESHES for the draws)
-  lod1: { mesh: 'lod1', eye: EYE_TIERS.lod1, fins: 'lod1', teeth: false, morphs: ['blinkL', 'blinkR', 'throat', 'inflate', 'inflateMid', 'eyesUpL', 'eyesUpR'], morphMesh: 'Head', skinMeshes: 'one', finMeshes: FIN_MESHES.lod1 },
+  lod1: { mesh: 'lod1', eye: EYE_TIERS.lod1, fins: 'lod1', teeth: false, morphs: ['blinkL', 'blinkR', 'throat', 'inflate', 'inflateMid', 'eyesUpL', 'eyesUpR'], morphMesh: 'Head', skinMeshes: 'one', finMeshes: FIN_MESHES.lod1, finMeshesClay: FIN_MESHES_T1.lod1 },
   lod2: { mesh: 'lod2', eye: EYE_TIERS.lod2, fins: 'card', teeth: false, morphs: [], merged: true },
 };
 const P = 'Tobihaze';
@@ -237,79 +292,126 @@ function clayMaterials(gb, tier, layout = BODY_LAYOUT) {
 /**
  * The runtime's parameters (texture_contract §5; behaviour.md §2.5–2.6), written into every material's
  * extras.tobihaze.runtime for the behaviour round: what each uniform does and which map channel it reads. Individual
- * variation stays out of the maps (one texture set per tier; the uniforms vary per fish).
+ * variation stays out of the maps (one texture set per tier; the uniforms vary per fish). Round T2: every rule is one the
+ * material can run — the body's on its film map (textures.mjs masterChannels), the fin's on factors alone (no map), the
+ * eye's none (always wet) — and the static GLB material is the rule at `master.wetness` (reference/tobihaze-viewer/main.js
+ * patchRuntime is the GLSL port, line for line). lod2 (o.short): a reference to the hero file's rules and the numbers only.
  */
-function runtimeParams(M, role) {
-  const W = M.surface.WET ?? {};
-  const wet = {
-    uniform: 'wetness', range: [0, 1], default: 1,
-    rule: 'surface.mjs wetShade (a line-for-line GLSL port): the texel\'s local wetness wl = clamp(wetness·(1 + γ) − γ·(1 − retain)) with retain = ORM B; roughness = mix(dry, ORM G, wl) (dry = WET.dry.roughness + (G − WET.wet.roughness)·WET.carry); clearcoat = WET.wet.clearcoat·cw + WET.damp.clearcoat·(1 − cw)·smoothstep(0.15, 0.5, wl), cw = smoothstep(0.35, 1, wl); clearcoatRoughness = mix(damp, wet, cw); albedo × mix(1 / WET.wet.albedo, 1, wl), saturation × mix(1 / WET.wet.saturation, 1, wl) — the baseColor map holds the WET albedo (pattern.mjs calibrated its palette on wet fish), so wetness 1 leaves the map as it is and the drying skin lightens and greys (surface.wetShade\'s albedoMul / saturation divided by their wet values); `mud` 0..1 blends WET.mud (roughness 0.7, colour) by the downward normal. The master material is the wet state (wetness 1: every texel wl = 1)',
-    states: { wet: 'wetness 1: roughness ORM G (~0.35), clearcoat 0.7 at 0.12', damp: 'wetness ~0.5: the dorsum (retain ~0.2) dries first, the belly and the cavities hold their film', dry: 'wetness 0: roughness ~0.6, no clearcoat', mud: 'uniform mud 0..1' },
-    WET: W.wet ? { wet: W.wet, damp: W.damp, dry: W.dry, mud: W.mud, gamma: W.gamma, carry: W.carry } : null,
+/** The film's specular occlusion as the master bakes it into the film map's R (round T2 integrator; surface.mjs
+ * specularOcclusion(ao) = min + (1 − min)·smoothstep(ao0, ao1, ao), textures.mjs finishMap): its constants for the runtime's
+ * rule, checked against the module's function (null when the module has none or they differ). */
+const SPEC_OCC = { min: 0.25, ao: [0.15, 0.85] };
+function specOccRule(M) {
+  const f = M.surface.specularOcclusion;
+  if (typeof f !== 'function') return null;
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const ok = [0, 0.1, 0.2, 0.33, 0.5, 0.7, 0.9, 1].every((x) => Math.abs(f(x) - (SPEC_OCC.min + (1 - SPEC_OCC.min) * ss(SPEC_OCC.ao[0], SPEC_OCC.ao[1], x))) < 1e-9);
+  return ok ? { ...SPEC_OCC, channel: 'film map A (the occlusion)', rule: 'clearcoat × (min + (1 − min)·smoothstep(ao[0], ao[1], A)): the master\'s R has it (a crease mirrors its walls, not the sky)' } : null;
+}
+function runtimeParams(M, role, o = {}) {
+  const W = M.surface.WET ?? {}, w0 = MASTER_WETNESS, F = finFactors(M.fin.FIN_MATERIAL ?? {}, 'hero');
+  const WETN = W.wet ? { wet: W.wet, damp: W.damp, dry: W.dry, mud: W.mud, gamma: W.gamma, carry: W.carry } : null;
+  const finRule = { master: w0, wet: F.roughness, dry: FIN_WET.dry, albedo: FIN_WET.albedo };
+  if (o.short) return { ref: 'the hero file\'s materials\' extras.tobihaze.runtime (the same uniforms; lod2 bakes its light into its colour and has no film map: wetness moves its roughnessFactor only)', master: { wetness: w0 }, ...(role === 'fin' ? { fin: finRule } : { roughness: { wet: W.wet?.roughness ?? 0.35, dry: W.dry?.roughness ?? 0.6 } }) };
+  if (role === 'eye') return {
+    // (round T2 integrator, the eyefin key's request: the pupil's colour variant, iris.mjs EYE_MATERIAL — the glow mask
+    // in the baseColor's A inside irisRect, textures.mjs paintEyeInto)
+    ...(M.eye.EYE_MATERIAL?.extras?.tobihaze?.runtime?.pupil ? { pupil: M.eye.EYE_MATERIAL.extras.tobihaze.runtime.pupil } : {}),
+    bars: { note: 'not on the eye: its baseColor A is the pupil glow\'s mask inside irisRect (0 on the skin cap); the Eye material skips the bars term' },
+    wetness: { note: 'the eye is always wet (behaviour §2.4: the cornea and the skin cap; the film map\'s R and B are 1 in the eye\'s rects): no wetness rule. The cap\'s albedo follows the body\'s tint, dark and bars uniforms, the window does not (skinRect / irisRect)', ...(W.eye ? { WET: W.eye } : {}) },
+    tint: { note: 'the skin cap (UV inside skinRect) as the body\'s tint; the window untouched' },
   };
-  if (role === 'eye') return { wetness: { note: 'the eye is always wet (behaviour §2.4: the cornea and the skin cap): no wetness uniform', ...(W.eye ? { WET: W.eye } : {}) }, tint: { note: 'the skin cap follows the body\'s tint uniform; the window does not' } };
-  const out = {
-    wetness: wet,
-    tint: { uniforms: { hueDeg: 0, sat: 1, val: 1 }, rule: 'individual variation (behaviour §2.5 morph uniforms: grey mud {sat 0.3, lift to #8f8f8f, contrast 0.6}, dark {val 0.45}, olive {hueDeg +8, sat 1.15}, night {val 1.2, sat 0.4, contrast 1.3}) applied to the albedo in HSV after the map; one texture for every fish' },
+  if (role === 'fin') return {
+    wetness: {
+      uniform: 'wetness', range: [0, 1], default: w0, fin: finRule,
+      rule: `the fin's own (its material has no film map): roughnessFactor = mix(${FIN_WET.dry}, ${F.roughness}, wetness); albedo × mix(1 / ${FIN_WET.albedo}, 1, wetness) / mix(1 / ${FIN_WET.albedo}, 1, ${w0}) (the atlas holds the master's colour); mud 0..1 toward WET.mud.colour × 0.6; the GLB's roughnessFactor is the rule at the master wetness ${w0}`,
+    },
+    states: { dark: { uniform: 'dark 0..1', rule: 'as the body\'s (the membranes darken with it); A untouched' } },
   };
-  if (role === 'body') out.states = {
-    bars: { uniform: 'bars 0..1', channel: 'baseColor A (pattern.mjs `bars`: the 5–7 excitement crossbands, occiput to peduncle)', rule: 'albedo × (1 − 0.6·bars·A): shown under disturbance, at capture, in the chase (behaviour §2.6)' },
-    nuptial: { uniform: 'nuptial 0..1', rule: 'albedo toward a pale orange (unmeasured: behaviour §2.6 has no hex; B062 #a08b79 uncertain) by nuptial × (1 − 0.8·the dark marks: luminance below the ground) — pale at rest, vivid within seconds in display (fade 2–5 s)' },
-    dark: { uniform: 'dark 0..1', rule: 'albedo value × mix(1, 0.45, dark): a chasing or fleeing nuptial male, the receptive female\'s darker grey (with tint sat 0.5)' },
+  return {
+    wetness: {
+      uniform: 'wetness', range: [0, 1], default: w0, master: { wetness: w0, map: 'body_film_rough_retain_ao' }, WET: WETN, ...(specOccRule(M) ? { specularOcclusion: specOccRule(M) } : {}),
+      channels: { R: 'the film: the clearcoat at the master wetness (clearcoatTexture)', G: 'the roughness at the master wetness (metallicRoughnessTexture; the clearcoat\'s roughness = G × clearcoatRoughnessFactor)', B: 'the wet retention (the rule\'s retain; metallicFactor 0)', A: 'the ambient occlusion (three\'s aoMap reads R: the runtime applies A to the indirect light)' },
+      rule: `surface.mjs wetShade on the film map, line for line (the viewer's patchRuntime): retain = B; the master's local wetness wl0 = clamp(w0·(1 + γ) − γ·(1 − retain)), w0 = ${w0}, and the fish's wl likewise from the uniform; the WET-state roughness from G: wet = (G − (1 − wl0)·dK) / (wl0 + (1 − wl0)·carry), dK = WET.dry.roughness − WET.wet.roughness·carry; roughness = mix(dK + wet·carry, wet, wl); clearcoat = WET.wet.clearcoat·cw + WET.damp.clearcoat·(1 − cw)·smoothstep(0.15, 0.5, wl), cw = smoothstep(0.35, 1, wl), × the specular occlusion when \`specularOcclusion\` is given (at wl0 it is R); clearcoatRoughness = mix(WET.damp.clearcoatRoughness, WET.wet.clearcoatRoughness, cw); albedo × mix(1 / WET.wet.albedo, 1, wl) / mix(1 / WET.wet.albedo, 1, wl0) and the saturation likewise (the baseColor map holds the master's albedo, so the rule at the master is the map); mud 0..1 by the downward normal (0.45 + 0.55·smoothstep(WET.mud.ventral)) toward WET.mud.colour × 0.85, roughness WET.mud.roughness, no film. The skin's own specular stays specularFactor ${SKIN_SPECULAR} in the static master (one factor for the damp dorsum and the wet flanks: the film is the wet skin's specular; dry, the skin is velvety)${W.wet?.skinSpecular !== undefined ? `; per texel (surface.mjs wetShade, for a runtime that can) specularIntensity = mix(1, ${W.wet.skinSpecular}, wl·(1 − mud))` : ''}`,
+      states: { wet: 'wetness 1: every texel wl 1 — roughness the wet state (~0.35), the film 0.7 at 0.12', damp: `wetness ~${w0} (the master): the dorsum (retain ~0.25) at wl ~0.5, its film broken (~0.2) and rougher; the flanks and the belly filmed`, dry: 'wetness 0: roughness ~0.6, no film', mud: 'uniform mud 0..1' },
+    },
+    tint: { uniforms: { hueDeg: 0, sat: 1, val: 1, contrast: 1, lift: [0, 0, 0] }, rule: 'individual variation (behaviour §2.5 morph uniforms: grey mud {sat 0.3, lift toward #8f8f8f, contrast 0.6}, dark {val 0.45}, olive {hueDeg +8, sat 1.15}, night {val 1.2, sat 0.4, contrast 1.3}) on the albedo in HSV after the map: contrast scales the value about the map\'s mean value, lift mixes toward its colour; one texture for every fish' },
+    ...(role === 'body' ? { states: {
+      bars: { uniform: 'bars 0..1', channel: 'baseColor A (pattern.mjs `bars`: the 5–7 excitement crossbands, occiput to peduncle)', rule: 'albedo × (1 − 0.6·bars·A): shown under disturbance, at capture, in the chase (behaviour §2.6)' },
+      nuptial: { uniform: 'nuptial 0..1', rule: 'albedo toward a pale orange (unmeasured: behaviour §2.6 has no hex; B062 #a08b79 uncertain) by nuptial × (1 − 0.8·the dark marks: luminance below the ground) — pale at rest, vivid within seconds in display (fade 2–5 s)' },
+      dark: { uniform: 'dark 0..1', rule: 'albedo value × mix(1, 0.45, dark): a chasing or fleeing nuptial male, the receptive female\'s darker grey (with tint sat 0.5)' },
+    } } : {}),
   };
-  if (role === 'fin') out.states = { dark: { uniform: 'dark 0..1', rule: 'as the body\'s (the membranes darken with it); A untouched' } };
-  return out;
 }
 
 /**
- * The textured materials (round T1; texture_contract §2) into the clay materials' slots (their indices are what the
- * primitives point at): Body (baseColor RGBA, normal, ORM: occlusion + metallicRoughness, metallicFactor 0; a clearcoat
- * for the wet film, surface.WET), Eye (the same maps; clearcoat 1, the eye module's factors), Fin (the fin atlas, BLEND,
- * double-sided; the fin module's factors); lod2 Body (the lit colour) and Fins (MASK).
- * @param tex { body: { baseColor, normal?, orm? } (texture indices), fin }   @param M the modules (textures.loadModules)
+ * The textured materials (round T1; texture_contract §2; round T2 the wet film's plumbing) into the clay materials' slots
+ * (their indices are what the primitives point at):
+ *   Body  baseColor RGBA; metallicRoughnessTexture = the film map (G the roughness at the master wetness; metallicFactor 0);
+ *         normal; KHR_materials_clearcoat: clearcoatTexture = the film map (R: the film's coverage at the master), its
+ *         roughness the film map's G × WET.wet.clearcoatRoughness / WET.wet.roughness, clearcoatNormalTexture = the same
+ *         normal map (the film over the scales and the granules breaks into glints; no new image); KHR_materials_specular
+ *         SKIN_SPECULAR (one specular, the film's: water on skin is nearly index-matched); no occlusionTexture (three's aoMap
+ *         reads R, the film's: the occlusion is the film map's A, for the runtime)
+ *   Eye   the same maps through the iris and eyeSkin rects: not metallic (round T2: the ring's gold is its colour and the
+ *         film — T1's metal from ORM B leaked through the mips, the eye finding); clearcoat 1 (always wet) on the normal
+ *         map, its roughness the eye module's factor × G, ior 1.376; the skin's full specular (the cornea's double highlight)
+ *   Fin   the fin atlas, BLEND, double-sided, no normal map (and no TANGENT on its meshes), the roughness the fin rule's at
+ *         the master wetness; extras blend.depthWrite (the runtime's: glTF has no word for it); the hero's FinOpaque the
+ *         same as an opaque material for the fin meshes' opaque triangles (FIN_MESHES)
+ *   lod2  Body the lit colour (roughness 0.45), Fins MASK; extensionsUsed only what a tier uses
+ * @param tex { body: { baseColor, normal?, orm? } (texture indices), fin }   @param M the modules
  */
 function texturedMaterials(gb, tierName, mats, tex, M, layout) {
   const lod2 = tierName === 'lod2', J = gb.json, W = M.surface.WET ?? {}, wet = W.wet ?? { roughness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.12 };
-  const E = eyeFactors(M.eye.EYE_MATERIAL ?? {}, W), F = finFactors(M.fin.FIN_MATERIAL ?? {}, tierName);
-  for (const e of ['KHR_materials_clearcoat', 'KHR_materials_ior']) gb.useExtension(e);
-  const channels = { baseColor: 'sRGB albedo; A the excitement bars\' mask (pattern `bars`)', normal: 'tangent space, the mesh\'s own tangents (+y = cross(n, t)·w)', orm: 'R occlusion, G roughness (the wet state), B the wet retention (metallicFactor 0)' };
+  const E = eyeFactors(M.eye.EYE_MATERIAL ?? {}, W), F = finFactors(M.fin.FIN_MATERIAL ?? {}, tierName), TR = finTranslucency(M.fin.FIN_MATERIAL, tierName);
   const src = Object.fromEntries(Object.entries(M).map(([k, m]) => [k, m.stub ? 'stub' : k]));
   const body = J.materials[mats.body];
   if (lod2) {
     J.materials[mats.body] = {
       name: body.name, pbrMetallicRoughness: { baseColorTexture: { index: tex.body.baseColor }, metallicFactor: 0, roughnessFactor: 0.45 },
-      extras: { tobihaze: { role: 'body', maps: { baseColor: 'sRGB albedo with the light the far mesh lost baked in (textures.mjs LOD2_LIGHT: the sculpt\'s normal under a soft overhead key, the occlusion); A the bars\' mask' }, runtime: runtimeParams(M, 'body'), modules: src } },
+      extras: { tobihaze: { role: 'body', maps: { baseColor: 'sRGB albedo with the far mesh\'s light baked in (textures.mjs LOD2_LIGHT); A the bars\' mask' }, runtime: runtimeParams(M, 'body', { short: true }) } },
     };
     J.materials[mats.fin] = {
       name: J.materials[mats.fin].name, doubleSided: true, alphaMode: 'MASK', alphaCutoff: 0.5,
       pbrMetallicRoughness: { baseColorTexture: { index: tex.fin }, metallicFactor: 0, roughnessFactor: F.roughness },
-      extras: { tobihaze: { role: 'fin', merged: true, maps: { baseColor: 'the fin atlas: sRGB, A the membrane\'s coverage (alpha-tested)' }, runtime: runtimeParams(M, 'fin') } },
+      extras: { tobihaze: { role: 'fin', merged: true, maps: { baseColor: 'the fin atlas (alpha-tested)' }, runtime: { ...runtimeParams(M, 'fin', { short: true }), ...(TR ? { translucency: TR } : {}) } } },
     };
     return;
   }
-  const bodyCore = {
-    pbrMetallicRoughness: { baseColorTexture: { index: tex.body.baseColor }, metallicRoughnessTexture: { index: tex.body.orm }, metallicFactor: 0, roughnessFactor: 1 },
-    normalTexture: { index: tex.body.normal, scale: 1 }, occlusionTexture: { index: tex.body.orm, strength: 1 },
-  };
+  for (const e of ['KHR_materials_clearcoat', 'KHR_materials_ior', 'KHR_materials_specular']) gb.useExtension(e);
+  const film = tex.body.orm, kcc = +(wet.clearcoatRoughness / wet.roughness).toFixed(4);
+  const channels = { baseColor: 'sRGB albedo at the master wetness; A the excitement bars\' mask (pattern `bars`)', normal: 'tangent space, the mesh\'s own tangents (+y = cross(n, t)·w); the clearcoat\'s normal too', film: 'body_film_rough_retain_ao: R the film (the clearcoat at the master wetness), G the roughness at the master wetness, B the wet retention, A the ambient occlusion (the runtime\'s)' };
   J.materials[mats.body] = {
-    name: body.name, ...structuredClone(bodyCore),
-    extensions: { KHR_materials_clearcoat: { clearcoatFactor: wet.clearcoat, clearcoatRoughnessFactor: wet.clearcoatRoughness }, KHR_materials_ior: { ior: 1.37 } },
-    extras: { tobihaze: { role: 'body', layout, maps: channels, runtime: runtimeParams(M, 'body'), modules: src } },
+    name: body.name,
+    pbrMetallicRoughness: { baseColorTexture: { index: tex.body.baseColor }, metallicRoughnessTexture: { index: film }, metallicFactor: 0, roughnessFactor: 1 },
+    normalTexture: { index: tex.body.normal, scale: 1 },
+    extensions: {
+      KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatTexture: { index: film }, clearcoatRoughnessFactor: kcc, clearcoatRoughnessTexture: { index: film }, clearcoatNormalTexture: { index: tex.body.normal, scale: 1 } },
+      KHR_materials_specular: { specularFactor: SKIN_SPECULAR },
+      KHR_materials_ior: { ior: 1.37 },
+    },
+    extras: { tobihaze: { role: 'body', layout, maps: channels, master: { wetness: MASTER_WETNESS, clearcoatRoughness: `G × ${kcc}` }, runtime: runtimeParams(M, 'body'), modules: src } },
   };
-  const eyeX = J.materials[mats.eye].extras?.tobihaze ?? {}, eyeCore = structuredClone(bodyCore);
-  eyeCore.pbrMetallicRoughness.metallicFactor = E.metallic;
+  const eyeX = J.materials[mats.eye].extras?.tobihaze ?? {};
   J.materials[mats.eye] = {
-    name: J.materials[mats.eye].name, ...eyeCore,
-    extensions: { KHR_materials_clearcoat: { clearcoatFactor: E.clearcoat, clearcoatRoughnessFactor: E.clearcoatRoughness, ...(E.ccRoughTex ? { clearcoatRoughnessTexture: { index: tex.body.orm } } : {}) }, KHR_materials_ior: { ior: E.ior } },
-    extras: { tobihaze: { ...eyeX, maps: `the body's: the iris rect the window, the eyeSkin rect the skin cap; ORM G the gloss${E.ccRoughTex ? ' (the clearcoat\'s too)' : ''}, ORM B ${E.metallic ? 'the metalness (the gold ring\'s: the eye painter\'s, metallicFactor 1)' : 'unused (metallicFactor 0)'}`, runtime: runtimeParams(M, 'eye'), modules: src } },
+    name: J.materials[mats.eye].name,
+    pbrMetallicRoughness: { baseColorTexture: { index: tex.body.baseColor }, metallicRoughnessTexture: { index: film }, metallicFactor: 0, roughnessFactor: 1 },
+    normalTexture: { index: tex.body.normal, scale: 1 },
+    extensions: { KHR_materials_clearcoat: { clearcoatFactor: E.clearcoat, clearcoatRoughnessFactor: E.clearcoatRoughness, ...(E.ccRoughTex ? { clearcoatRoughnessTexture: { index: film } } : {}), clearcoatNormalTexture: { index: tex.body.normal, scale: 1 } }, KHR_materials_ior: { ior: E.ior } },
+    extras: { tobihaze: { ...eyeX, maps: `the body's: the iris rect the window, the eyeSkin rect the skin cap; the film map's G the gloss${E.ccRoughTex ? ` (the clearcoat's × ${E.clearcoatRoughness}: the cap ~${(0.278 * E.clearcoatRoughness).toFixed(3)}, the window under three's floor 0.0525)` : ''}; not metallic (round T2)`, runtime: runtimeParams(M, 'eye'), modules: src } },
   };
-  const fin = J.materials[mats.fin];
-  J.materials[mats.fin] = {
-    name: fin.name, doubleSided: true, alphaMode: 'BLEND',
-    pbrMetallicRoughness: { baseColorTexture: { index: tex.fin }, metallicFactor: 0, roughnessFactor: F.roughness },
+  const fin = J.materials[mats.fin], finR = +(F.roughness + (FIN_WET.dry - F.roughness) * (1 - MASTER_WETNESS)).toFixed(4);
+  const finCore = (name, x) => ({
+    name, doubleSided: true, ...x,
+    pbrMetallicRoughness: { baseColorTexture: { index: tex.fin }, metallicFactor: 0, roughnessFactor: finR },
     extensions: { ...(F.clearcoat ? { KHR_materials_clearcoat: { clearcoatFactor: F.clearcoat[0], clearcoatRoughnessFactor: F.clearcoat[1] } } : {}), KHR_materials_ior: { ior: F.ior } },
-    extras: { tobihaze: { role: 'fin', maps: { baseColor: 'the fin atlas: sRGB, A the membrane\'s coverage (BLEND); the caudal\'s sheath A 1 (its triangles: the fin mesh\'s extras `sheath`, drawn opaque)' }, runtime: runtimeParams(M, 'fin') } },
+  });
+  J.materials[mats.fin] = {
+    ...finCore(fin.name, { alphaMode: 'BLEND' }),
+    extras: { tobihaze: { role: 'fin', maps: { baseColor: `the fin atlas: sRGB, A the membrane's coverage (BLEND)${mats.finOpaque !== undefined ? '; the opaque parts (coverage ≥ FIN_SOLID) drawn by Tobihaze_FinOpaque' : '; the caudal\'s sheath A 1, its triangles last in the index buffer'}` }, blend: { depthWrite: true, note: 'a runtime that can draws this blended material writing depth (three: material.depthWrite = true after GLTFLoader, its two passes kept): the fin-order test\'s best by far (t2_tech: 167 px off the depth-peeled reference by > 24/255 over 8 views, against 4,057 without); glTF has no word for it' }, runtime: { ...runtimeParams(M, 'fin'), ...(TR ? { translucency: TR } : {}) } } },
   };
+  if (mats.finOpaque !== undefined) J.materials[mats.finOpaque] = { ...finCore(`${P}_FinOpaque`, {}), extras: { tobihaze: { role: 'fin', pass: 'opaque', maps: { baseColor: `the fin atlas, opaque: the fin triangles whose coverage is ≥ ${FIN_SOLID.minCoverage} (the caudal's sheath, the fleshy roots), drawn with depth by any loader` }, runtime: { ref: 'as Tobihaze_Fin', ...(TR ? { translucency: TR } : {}) } } } };
 }
 
 /** The eye module's material (iris.mjs EYE_MATERIAL: a glTF-like object; the stub's flat factors) as the factors used. */
@@ -322,6 +424,14 @@ function eyeFactors(E, W = {}) {
     ccRoughTex: !!cc.clearcoatRoughnessTexture,
     ior: E.extensions?.KHR_materials_ior?.ior ?? E.ior ?? 1.376,
   };
+}
+/** The fin module's runtime translucency rule for a tier (round T2 integrator, the eyefin key's request: finatlas.mjs
+ * FIN_MATERIAL[tier].extras.tobihaze.runtime.translucency — the membranes' diffuse transmission of the sun, a shader term
+ * after three's lights; lod1 'as hero'), or null. */
+function finTranslucency(F, tierName) {
+  let m = F?.[tierName];
+  if (typeof m === 'string' || !m) m = F?.hero;
+  return m?.extras?.tobihaze?.runtime?.translucency ?? null;
 }
 /** The fin module's material for a tier (finatlas.mjs FIN_MATERIAL: { hero, lod1 ('as hero'), lod2 }; the stub's flat). */
 function finFactors(F, tierName) {
@@ -1025,6 +1135,19 @@ function morphTextureBytes(nVertices, nTargets, withNormals, maxTexture = 4096) 
   return (rows > 1 ? maxTexture * rows : width) * 16 * nTargets;
 }
 
+/**
+ * A fin mesh's primitive of some of its triangles (round T2: the hero's opaque and blended fin parts), with only the
+ * vertices they use: every per-vertex array (object frame, as the merged mesh has them) and every target compacted.
+ * @param F { position, normal, tangent (or null), uv, joints, weights, targets: [], normalTargets: [] }
+ */
+function compactFinPrim(F, I, tris) {
+  const nv = F.position.length / 3, remap = new Int32Array(nv).fill(-1), order = [];
+  const indices = new Uint32Array(tris.length * 3);
+  tris.forEach((t, i) => { for (let c = 0; c < 3; c++) { const v = I[t * 3 + c]; if (remap[v] < 0) { remap[v] = order.length; order.push(v); } indices[i * 3 + c] = remap[v]; } });
+  const take = (A, k) => { if (!A) return null; const o = new A.constructor(order.length * k); order.forEach((v, i) => { for (let c = 0; c < k; c++) o[i * k + c] = A[v * k + c]; }); return o; };
+  return { position: take(F.position, 3), normal: take(F.normal, 3), tangent: take(F.tangent, 4), uv: take(F.uv, 2), joints: take(F.joints, 4), weights: take(F.weights, 4), targets: F.targets.map((d) => take(d, 3)), normalTargets: F.normalTargets.map((d) => take(d, 3)), indices };
+}
+
 /** Per-vertex tangents for an extra mesh (eyes are built with theirs; the teeth and the fins here): tiers.vertexTangents,
  * every per-vertex array in `extra` carried to the split copies. */
 function withTangents(mesh, extra = {}) {
@@ -1177,7 +1300,7 @@ function closestOnTri(p, a, b, c) {
  * over the tier's fin meshes' UVs; the images added (PNG), the textured materials written into the clay ones' slots.
  * @returns { images: [{ name, px }], report }
  */
-async function bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, layout, tex = {}, log }) {
+async function bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, layout, tex = {}, log, finAtlasDone = null }) {
   const t0 = Date.now(), T = TEX[tierName], k = tex.scale ?? 1, lod2 = tierName === 'lod2', TB = TIERS[tierName];
   const sz = (px) => Math.max(16, Math.round(px * k));
   const modSpec = tex.modules ?? {};
@@ -1201,7 +1324,7 @@ async function bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, l
   if (tex.dump) for (const [m, img] of Object.entries(B.images)) if (/Raw$/.test(m)) { fs.mkdirSync(tex.dump, { recursive: true }); fs.writeFileSync(path.join(tex.dump, `${tierName}_${m}.png`), encodeImage(img, 'png')); }
   const { mods: M } = await loadModules(modSpec);
   // the fin atlas over the tier's fin meshes (near: the built meshes, the caudal's sheath opaque; lod2: the cards)
-  const FA = await finAtlas(sz(T.fin), defs, { tier: tierName, fin: modSpec.fin, meshes: finUV, pattern: M.pattern });
+  const FA = finAtlasDone ?? await finAtlas(sz(T.fin), defs, { tier: tierName, fin: modSpec.fin, meshes: finUV, pattern: M.pattern });
   const LINEAR = 9729, MIPMAP = 9987, CLAMP = 33071;
   const sampler = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAMP, wrapT: CLAMP });
   const images = [], texIdx = { body: {} };
@@ -1212,7 +1335,8 @@ async function bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, l
     images.push({ name, px: img.W, bytes: buf.length });
     return gb.addTexture(im, sampler, `${P}_${name}`);
   };
-  const NAMES = { baseColor: 'body_baseColor_bars', normal: 'body_normal', orm: 'body_occlusion_roughness_wet' };
+  // (round T2: the 'orm' map is the film map, RGBA: textures.mjs masterChannels)
+  const NAMES = { baseColor: 'body_baseColor_bars', normal: 'body_normal', orm: 'body_film_rough_retain_ao' };
   for (const m of ['baseColor', 'normal', 'orm']) if (B.images[m]) texIdx.body[m] = add(NAMES[m], B.images[m]);
   texIdx.fin = add('fin_baseColor_coverage', FA.image);
   texturedMaterials(gb, tierName, mats, texIdx, M, layout);
@@ -1247,6 +1371,10 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   const { skin, jointNodes, rootJoint } = addSkeleton(gb, sk);
   const jIndex = Object.fromEntries(sk.map((j, i) => [j.name, i]));
   const mats = clayMaterials(gb, tierName, layout);
+  // (round T2: the opaque fin parts' material — the hero's fin meshes draw their opaque triangles with it, FIN_MESHES)
+  if (!clay && TB.finMeshes?.solid) mats.finOpaque = gb.addMaterial({ name: `${P}_FinOpaque`, doubleSided: true, pbrMetallicRoughness: { baseColorFactor: [0.74, 0.68, 0.58, 1], metallicFactor: 0, roughnessFactor: 0.5 }, extras: { tobihaze: { role: 'fin', pass: 'opaque' } } });
+  // (round T2: the fin atlas when the build needs it before the maps — the opaque fin triangles — reused by bakeTierMaps)
+  let finAtlasDone = null;
   const sceneNodes = [], meshTris = {};
   const toTier = (w) => (tierName === 'hero' ? w : skinForTier(w, tierName));
   const addMeshNode = (name, prims, extras, nodeExtras, { weights = null } = {}) => {
@@ -1254,9 +1382,24 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
     if (weights) gb.json.meshes[mesh].weights = weights;
     const node = gb.addNode({ name, mesh, skin, ...(nodeExtras ? { extras: nodeExtras } : {}) });
     sceneNodes.push(node);
-    meshTris[name] = prims.reduce((a, p) => a + gb.json.accessors[p.indices].count / 3, 0);
+    meshTris[name] = [...new Set(prims.map((p) => p.indices))].reduce((a, i) => a + gb.json.accessors[i].count / 3, 0);
     return node;
   };
+
+  // ---- the teeth's mesh (hero; round T2: built first, the textured hero draws them in the Body's primitive)
+  const tangentGate = {};
+  const gateTangent = (name, normal, tangent) => { if (!tangent) return; const c = tangentCheck(normal, tangent, { tol: 1e-3 }); tangentGate[name] = { n: c.n, bad: c.bad, maxDot: +c.maxDot.toExponential(2), maxLen: +(c.maxLen ?? 0).toExponential(2) }; };
+  let teethData = null;
+  if (TB.teeth) {
+    const tm0 = teethMesh(H.teeth);
+    const tm = withTangents(tm0, { group: tm0.group });
+    const n = tm.position.length / 3, joints = new Uint8Array(n * 4), weights = new Uint8Array(n * 4);
+    const jP = teethWeights('premax', 1).joints[0], jD = teethWeights('dentary', 1).joints[0];
+    for (let v = 0; v < n; v++) { joints[v * 4] = tm.group[v] === 0 ? jP : jD; weights[v * 4] = 255; }
+    gateTangent('Mouth_Teeth', tm.normal, tm.tangent);
+    teethData = { tm, w: toTier({ joints, weights }) };
+  }
+  const teethInBody = !clay && tierName === 'hero';
 
   // ---- the skin
   let body, bodySkin, morph = null, bodyCls = null;
@@ -1307,15 +1450,20 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
       morphMeshes.push({ name: m.name, names: m.targets, vertices: sm.map.length, triangles: m.tris.length });
     }
     const still = new Set(sp.still), bm = subMesh(body, (t) => still.has(t), keys);
-    if (bm.indices.length) addMeshNode('Body', [gb.primitive(bodyAttrs(bm, pick(bodySkin, bm.map)))], { tobihaze: { part: 'body' } }, { tobihaze: { part: 'body' } });
+    // (round T2, textured hero: the teeth in the Body's primitive — the same material, no blend shapes, each tooth row on
+    // its jaw joint — one draw fewer, the fins' opaque parts in its place)
+    if (bm.indices.length && teethData && teethInBody) {
+      const cat = (a, b) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; }, nb = bm.position.length / 3, tm = teethData.tm, w = pick(bodySkin, bm.map);
+      const merged = { position: cat(bm.position, tm.position), normal: cat(bm.normal, tm.normal), tangent: cat(bm.tangent, tm.tangent), uv: cat(bm.uv, tm.uv), indices: Uint32Array.from([...bm.indices, ...Array.from(tm.indices, (v) => v + nb)]) };
+      const cu = (a, b) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+      addMeshNode('Body', [gb.primitive(bodyAttrs(merged, { joints: cu(w.joints, teethData.w.joints), weights: cu(w.weights, teethData.w.weights) }))], { tobihaze: { part: 'body', teeth: { triangles: [bm.indices.length / 3, tm.indices.length / 3], note: 'the teeth (teeth.mjs) in the Body\'s primitive from this triangle on' } } }, { tobihaze: { part: 'body' } });
+    } else if (bm.indices.length) addMeshNode('Body', [gb.primitive(bodyAttrs(bm, pick(bodySkin, bm.map)))], { tobihaze: { part: 'body' } }, { tobihaze: { part: 'body' } });
     morph.names = morph.names.filter((k) => !sp.dropped.includes(k));
     headSplit = { meshes: morphMeshes.map(({ name, names, vertices, triangles }) => ({ name, targets: names, vertices, triangles })), body: bm.indices.length / 3, dropped: sp.dropped, moving: pruned, skinMeshes: TB.skinMeshes ?? 'split' };
     log(`${tierName} skin: ${morphMeshes.map((m) => `${m.name} ${m.triangles} triangles / ${m.vertices} vertices (${m.names.join(', ')})`).join('; ')}${bm.indices.length ? `; Body ${bm.indices.length / 3}` : ''}${sp.dropped.length ? `; dropped ${sp.dropped.join(', ')} (no vertex moves)` : ''}`);
   }
 
   // ---- the eyes (each part with its own UVs and per-vertex tangents: eyemesh.eyeMeshForTier)
-  const tangentGate = {};
-  const gateTangent = (name, normal, tangent) => { if (!tangent) return; const c = tangentCheck(normal, tangent, { tol: 1e-3 }); tangentGate[name] = { n: c.n, bad: c.bad, maxDot: +c.maxDot.toExponential(2), maxLen: +(c.maxLen ?? 0).toExponential(2) }; };
   if (!lod2) {
     // (round B3: a mesh a side, the right built as the left's mirror image with its own tangents (eyemesh side −1), its
     // node not scaled: three.js does not turn the bitangent over for a mirroring node, so B2's Eye_R under scale
@@ -1335,14 +1483,9 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   }
 
   // ---- the teeth (hero; tangents: their constant swatch UV gives the fallback frame, so a normal map reads flat)
-  if (TB.teeth) {
-    const tm0 = teethMesh(H.teeth);
-    const tm = withTangents(tm0, { group: tm0.group });
-    const n = tm.position.length / 3, joints = new Uint8Array(n * 4), weights = new Uint8Array(n * 4);
-    const jP = teethWeights('premax', 1).joints[0], jD = teethWeights('dentary', 1).joints[0];
-    for (let v = 0; v < n; v++) { joints[v * 4] = tm.group[v] === 0 ? jP : jD; weights[v * 4] = 255; }
-    gateTangent('Mouth_Teeth', tm.normal, tm.tangent);
-    addMeshNode('Mouth_Teeth', [gb.primitive({ position: posToObject(tm.position), normal: dirsToObject(tm.normal), tangent: dirsToObject(tm.tangent, 4), uv: tm.uv, indices: compactIndices(tm.indices, n), material: mats.body, extraAttributes: skinAttrs(toTier({ joints, weights })) })], { tobihaze: { part: 'teeth' } }, { tobihaze: { part: 'teeth' } });
+  if (teethData && !teethInBody) {
+    const { tm, w } = teethData, n = tm.position.length / 3;
+    addMeshNode('Mouth_Teeth', [gb.primitive({ position: posToObject(tm.position), normal: dirsToObject(tm.normal), tangent: dirsToObject(tm.tangent, 4), uv: tm.uv, indices: compactIndices(tm.indices, n), material: mats.body, extraAttributes: skinAttrs(w) })], { tobihaze: { part: 'teeth' } }, { tobihaze: { part: 'teeth' } });
   }
 
   // ---- the fins (the reference states first: lod2's far cup carries the land state's J_pelvic pitch as a card shape)
@@ -1499,16 +1642,20 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
       { targetNames: names, drive: driveKept, tobihaze: { part: 'fins', merged: true, fins: defs.map((d) => d.name), offsets } }, { tobihaze: { fin: 'merged' } }, { weights: names.map(() => 0) });
   } else {
     const built = {};
+    // (round T2: the textured build's plan, FIN_MESHES; --clay T1's)
+    const FM = (clay ? TB.finMeshesClay : TB.finMeshes) ?? { normals: true, groups: Object.fromEntries(defs.map((d) => [d.name, [d.name]])) };
+    const useTan = FM.tangents !== false;
     for (const def of defs) {
       const f = fins[def.name], m0 = f.mesh, tg = f.targets, w = toTier(f.w);
       finBind[def.name] = m0.position;
       finParts[def.name] = { position: m0.position, indices: m0.indices, skin: w, targets: { names: tg.names, deltas: tg.deltas } };
-      // (per-vertex tangents: the corners that disagree split their vertex, every target and the skin carried along)
+      // (per-vertex tangents: the corners that disagree split their vertex, every target and the skin carried along; round
+      // T2, textured: no TANGENT — the fins have no normal map — so fins.mjs's vertices as they are)
       const extra = { joints: w.joints, weights: w.weights };
       tg.deltas.forEach((d, i) => { extra[`d${i}`] = d; });
       tg.normals.forEach((d, i) => { extra[`n${i}`] = d; });
-      const m = withTangents(m0, extra);
-      gateTangent(def.name, m.normal, m.tangent);
+      const m = useTan ? withTangents(m0, extra) : { position: m0.position, normal: m0.normal, uv: m0.uv, indices: m0.indices, tangent: null, ...extra };
+      if (useTan) gateTangent(def.name, m.normal, m.tangent);
       // (round B4, the trunk key's request: the caudal's sheath — fins.mjs mesh.extra, 1 = a sheath vertex; its triangles
       // the last of the fin's, contiguous — drawn opaque: its triangle range in the mesh's extras `sheath`)
       if (m0.extra) {
@@ -1523,19 +1670,44 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
       built[def.name] = { m, tg };
       finUV.push({ name: def.name, uv: m.uv, indices: m.indices, ...(m.sheathTris ? { sheathTris: m.sheathTris } : {}) });
     }
+    // (round T2: the opaque fin triangles — the atlas's coverage ≥ FM.solid.minCoverage at the three corners and the middle:
+    // the caudal's sheath, the fleshy roots — from the tier's fin atlas, baked here so the GLB can draw them opaque; the
+    // same atlas goes into the GLB, bakeTierMaps)
+    let solidTris = null;
+    if (!clay && FM.solid) {
+      const { mods: MF } = await loadModules(tex.modules ?? {});
+      finAtlasDone = await finAtlas(Math.max(16, Math.round(TEX[tierName].fin * (tex.scale ?? 1))), defs, { tier: tierName, fin: (tex.modules ?? {}).fin, meshes: finUV, pattern: MF.pattern });
+      const img = finAtlasDone.image, S = img.W, D = img.data;
+      const cov = (u, v) => {
+        const x = u * S - 0.5, y = v * S - 0.5, x0 = Math.min(S - 1, Math.max(0, Math.floor(x))), y0 = Math.min(S - 1, Math.max(0, Math.floor(y))), x1 = Math.min(S - 1, x0 + 1), y1 = Math.min(S - 1, y0 + 1);
+        const fx = Math.min(1, Math.max(0, x - x0)), fy = Math.min(1, Math.max(0, y - y0)), g = (xx, yy) => D[(yy * S + xx) * 4 + 3] / 255;
+        return (g(x0, y0) * (1 - fx) + g(x1, y0) * fx) * (1 - fy) + (g(x0, y1) * (1 - fx) + g(x1, y1) * fx) * fy;
+      };
+      solidTris = {};
+      for (const [k, { m }] of Object.entries(built)) {
+        const I = m.indices, U = m.uv, n = I.length / 3, sol = new Uint8Array(n);
+        for (let t = 0; t < n; t++) {
+          const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+          const mu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, mv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3;
+          sol[t] = Math.min(cov(U[a * 2], U[a * 2 + 1]), cov(U[b * 2], U[b * 2 + 1]), cov(U[c * 2], U[c * 2 + 1]), cov(mu, mv)) >= FM.solid.minCoverage ? 1 : 0;
+        }
+        // (the sheath's triangles are opaque whatever the atlas says at their corners)
+        if (m.sheathTris) for (let t = m.sheathTris[0]; t < m.sheathTris[0] + m.sheathTris[1]; t++) sol[t] = 1;
+        solidTris[k] = sol;
+      }
+    }
     // (round B4: the fins merged into TB.finMeshes' groups, each fin's targets as `<target>_<fin>`, zero off its own
     // vertices; B3 drew each fin as a mesh of its own: 7 draws a tier)
-    const FM = TB.finMeshes ?? { normals: true, groups: Object.fromEntries(defs.map((d) => [d.name, [d.name]])) };
     for (const [gName, members] of Object.entries(FM.groups)) {
       const list = members.filter((k) => built[k]);
       if (!list.length) continue;
       const nv = list.reduce((a, k) => a + built[k].m.position.length / 3, 0), ni = list.reduce((a, k) => a + built[k].m.indices.length, 0);
-      const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), Tn = new Float32Array(nv * 4), UV = new Float32Array(nv * 2), Jn = new Uint8Array(nv * 4), Wt = new Uint8Array(nv * 4), I = new Uint32Array(ni);
+      const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), Tn = new Float32Array(useTan ? nv * 4 : 0), UV = new Float32Array(nv * 2), Jn = new Uint8Array(nv * 4), Wt = new Uint8Array(nv * 4), I = new Uint32Array(ni);
       const names = [], targets = [], normalTargets = [], drive = {}, ranges = {}, sheath = {};
       let v0 = 0, i0 = 0;
       for (const k of list) {
         const { m, tg } = built[k], n = m.position.length / 3;
-        P.set(m.position, v0 * 3); N.set(m.normal, v0 * 3); Tn.set(m.tangent, v0 * 4); UV.set(m.uv, v0 * 2); Jn.set(m.joints, v0 * 4); Wt.set(m.weights, v0 * 4);
+        P.set(m.position, v0 * 3); N.set(m.normal, v0 * 3); if (useTan) Tn.set(m.tangent, v0 * 4); UV.set(m.uv, v0 * 2); Jn.set(m.joints, v0 * 4); Wt.set(m.weights, v0 * 4);
         for (let i = 0; i < m.indices.length; i++) I[i0 + i] = m.indices[i] + v0;
         tg.names.forEach((t, i) => {
           const d = new Float32Array(nv * 3); d.set(m[`d${i}`], v0 * 3);
@@ -1547,15 +1719,50 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
         if (m.sheathTris) sheath[k] = [i0 / 3 + m.sheathTris[0], m.sheathTris[1]];
         v0 += n; i0 += m.indices.length;
       }
-      const prim = gb.primitive({
-        position: posToObject(P), normal: dirsToObject(N), tangent: dirsToObject(Tn, 4), uv: UV, indices: compactIndices(I, nv), material: mats.fin,
-        targets, ...(FM.normals ? { normalTargets } : {}), extraAttributes: skinAttrs({ joints: Jn, weights: Wt }),
-      });
-      countMorph(gName, nv, names.length, !!FM.normals);
+      const full = { position: posToObject(P), normal: dirsToObject(N), tangent: useTan ? dirsToObject(Tn, 4) : null, uv: UV, joints: Jn, weights: Wt, targets, normalTargets: FM.normals ? normalTargets : [] };
+      const nT = I.length / 3;
+      // (round T2: the triangles' kind — 1 opaque (solidTris), 0 blended — and lod1's sheath last)
+      const kind = new Uint8Array(nT);
+      if (solidTris) for (const k of list) { const [t0] = ranges[k].triangles; kind.set(solidTris[k], t0); }
+      const opaqueN = kind.reduce((x, v) => x + v, 0);
+      const prims = [], primInfo = [];
+      if (opaqueN) {
+        // the blended triangles and the opaque ones, each a primitive with its own vertices (one morph texture each, of its
+        // own vertices; every target on both, as glTF has it), per fin in the fins' order
+        for (const want of [0, 1]) {
+          const tris = [];
+          for (let t = 0; t < nT; t++) if (kind[t] === want) tris.push(t);
+          const c = compactFinPrim(full, I, tris);
+          prims.push(gb.primitive({ ...c, indices: compactIndices(c.indices, c.position.length / 3), material: want ? mats.finOpaque : mats.fin, extraAttributes: skinAttrs({ joints: c.joints, weights: c.weights }), targets: c.targets, ...(FM.normals ? { normalTargets: c.normalTargets } : {}) }));
+          countMorph(want ? `${gName}_opaque` : gName, c.position.length / 3, names.length, !!FM.normals);
+          // (each fin's run in this primitive's triangles; the sheath's in the opaque one)
+          const runs = {};
+          let at = 0;
+          for (const k of list) { const [t0, n] = ranges[k].triangles; let c0 = 0; for (let t = t0; t < t0 + n; t++) if (kind[t] === want) c0++; if (c0) runs[k] = [at, c0]; at += c0; }
+          primInfo.push({ pass: want ? 'opaque' : 'blend', triangles: tris.length, vertices: c.position.length / 3, fins: runs });
+        }
+      } else {
+        let Iout = I;
+        if (FM.sheathLast && Object.keys(sheath).length) {
+          // (lod1: the sheath's triangles after every other: drawn last, the opaque sheath covers what the same draw put
+          // behind it, as a depth-writing draw would)
+          const isSh = new Uint8Array(nT);
+          for (const [s0, n] of Object.values(sheath)) for (let t = s0; t < s0 + n; t++) isSh[t] = 1;
+          const order = [];
+          for (let t = 0; t < nT; t++) if (!isSh[t]) order.push(t);
+          for (let t = 0; t < nT; t++) if (isSh[t]) order.push(t);
+          Iout = new Uint32Array(I.length);
+          order.forEach((t, i) => { Iout[i * 3] = I[t * 3]; Iout[i * 3 + 1] = I[t * 3 + 1]; Iout[i * 3 + 2] = I[t * 3 + 2]; });
+          let at = nT - Object.values(sheath).reduce((x, [, n]) => x + n, 0);
+          for (const k of Object.keys(sheath)) { const n = sheath[k][1]; ranges[k].triangles = [ranges[k].triangles[0], ranges[k].triangles[1] - n]; sheath[k] = [at, n]; at += n; }
+        }
+        prims.push(gb.primitive({ position: full.position, normal: full.normal, tangent: full.tangent, uv: UV, indices: compactIndices(Iout, nv), material: mats.fin, targets, ...(FM.normals ? { normalTargets } : {}), extraAttributes: skinAttrs({ joints: Jn, weights: Wt }) }));
+        countMorph(gName, nv, names.length, !!FM.normals);
+      }
       // (`sheath`: [first triangle, count] per fin, top level so the node's own extras do not replace it in a loader that
       // merges them: the caudal's fleshy base past the skin's end, opaque — the clay viewer draws it with the body's clay,
-      // the textures round gives its atlas region full coverage)
-      addMeshNode(gName, [prim], { targetNames: names, drive, ...(Object.keys(sheath).length ? { sheath } : {}), tobihaze: { part: 'fin', fins: list, ranges, normalTargets: !!FM.normals } }, { tobihaze: { fin: list.length > 1 ? 'merged' : list[0] } }, { weights: names.map(() => 0) });
+      // the textures round gives its atlas region full coverage; round T2, hero: in the opaque primitive, `primitives`)
+      addMeshNode(gName, prims, { targetNames: names, drive, ...(Object.keys(sheath).length && !opaqueN ? { sheath } : {}), tobihaze: { part: 'fin', fins: list, ...(opaqueN ? { primitives: primInfo } : { ranges }), normalTargets: !!FM.normals } }, { tobihaze: { fin: list.length > 1 ? 'merged' : list[0] } }, { weights: names.map(() => 0) });
     }
   }
   for (const m of morphMeshes) countMorph(m.name, m.vertices, m.names.length, true);
@@ -1638,7 +1845,8 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   const morphs = {};
   for (const m of morphMeshes) morphs[m.name] = { names: m.names, drivers: Object.fromEntries(m.names.map((k) => [k, MORPH_DRIVERS[k]])), drive: Object.fromEntries(m.names.map((k) => [k, MORPH_DRIVE[k]])) };
   if (headSplit?.dropped?.length) morphs.dropped = Object.fromEntries(headSplit.dropped.map((k) => [k, k === 'vent' ? 'no vertex moves: headrig VENT_CORR (round n17) relaxes nothing (lambda 0, endR 0); the gill slit opens by J_opercL/R alone (HEAD_POSES vent)' : 'no vertex moves']));
-  if (Object.keys(finMorphs).length) morphs.fins = { targets: finMorphs, meshes: TB.finMeshes?.groups, names: '<target>_<fin> on the fin\'s mesh (meshes); weight = pose.morph[fin][target]', normalTargets: !!TB.finMeshes?.normals, drivers: FIN_DRIVERS };
+  const FMx = clay ? TB.finMeshesClay : TB.finMeshes; // the plan the fin meshes were built with (--clay: T1's)
+  if (Object.keys(finMorphs).length) morphs.fins = { targets: finMorphs, meshes: FMx?.groups, names: '<target>_<fin> on the fin\'s mesh (meshes); weight = pose.morph[fin][target]', normalTargets: !!FMx?.normals, drivers: FIN_DRIVERS };
   if (cardTargets) morphs.Fins = { names: cardTargets.names, note: '<state>_<fin>: each card\'s state as the hero\'s fin of that name takes it (fold and spread for every card, the caudal\'s flex, the pectorals\' furl and plant, the pelvic\'s press; weight = the near tiers\' fin weight); pitch_Fin_Pelvic: driven by J_pelvic pitch (drive); <reference state>_<fin> (e.g. water_Fin_Pectoral_L): lod2-only correctives, weight 1 in that state\'s lod2 pose (the card as the hero\'s dropped joints hold it)' };
   // (round B3: the hero's, the same in every tier)
   const footprint = (H.footprint ??= footprintOf(H.tier, (v) => H.rig.m[H.tier.source[v]]));
@@ -1744,22 +1952,27 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   gb.addScene(P, [rootNode, ...sceneNodes]);
   // ---- round T1: the maps (textures.mjs) and the textured materials in the clay materials' slots
   let textures = null;
-  if (!clay) textures = await bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, layout, tex, log });
+  if (!clay) textures = await bakeTierMaps(gb, tierName, { body, bakeEyes, defs, finUV, mats, layout, tex, log, finAtlasDone });
   // (round B4: the draws (primitives over the mesh nodes) and the GPU memory: vertex and index buffers as written (the
   // packer quantizes a little further), the morph textures at 4096 and 16384 rows, the planned maps (TEX_PLAN))
   {
     const SZ = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }, NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 }, J0 = gb.json;
     let draws = 0, buffers = 0;
-    for (const nd of J0.nodes) if (nd.mesh !== undefined) draws += J0.meshes[nd.mesh].primitives.length;
+    // (round T2: three's real draws — a double-sided BLEND material two passes, WebGLRenderer.renderObject — and the
+    // shadow map's, every primitive of a shadow-casting tier: ModelLoader casts from hero and lod1)
+    let shadowDraws = 0;
+    for (const nd of J0.nodes) if (nd.mesh !== undefined) for (const p of J0.meshes[nd.mesh].primitives) { const mt = J0.materials[p.material] ?? {}; draws += mt.alphaMode === 'BLEND' && mt.doubleSided ? 2 : 1; if (tierName !== 'lod2') shadowDraws++; }
+    gpu.shadowDraws = shadowDraws;
     for (const m of J0.meshes) for (const p of m.primitives) {
       for (const a of [...Object.values(p.attributes), ...(p.indices !== undefined ? [p.indices] : [])]) { const A = J0.accessors[a]; buffers += A.count * NC[A.type] * SZ[A.componentType]; }
     }
     // (the maps: the GLB's own images when it has them — round T1 — else the plan's)
     const TP = textures ? textures.images.map((im) => ({ map: im.name, px: im.px })) : TEX_PLAN[tierName], maps = TP.reduce((a, x) => a + (x.px * x.px * 4) / 3, 0);
     const tot = (m) => +((buffers + m + maps) / 1e6).toFixed(3);
-    Object.assign(gpu, { draws, drawTarget: DRAW_LIMIT[tierName], buffersBytes: buffers, mapsPlanned: TP, mapsBytes: Math.round(maps), totalMB4096: tot(gpu.morphBytes4096), totalMB8192: tot(gpu.morphBytes8192), totalMB16384: tot(gpu.morphBytes16384), limitMB: GPU_LIMIT[tierName] });
+    // (the draw target is the game build's: --clay is the sculpt's review build, drawn with the viewer's clay materials)
+    Object.assign(gpu, { draws, drawTarget: clay ? null : DRAW_LIMIT[tierName], buffersBytes: buffers, mapsPlanned: TP, mapsBytes: Math.round(maps), totalMB4096: tot(gpu.morphBytes4096), totalMB8192: tot(gpu.morphBytes8192), totalMB16384: tot(gpu.morphBytes16384), limitMB: GPU_LIMIT[tierName] });
     gpu.totalMB = Math.max(gpu.totalMB4096, gpu.totalMB8192, gpu.totalMB16384);
-    gpu.pass = gpu.totalMB <= GPU_LIMIT[tierName] && draws <= DRAW_LIMIT[tierName];
+    gpu.pass = gpu.totalMB <= GPU_LIMIT[tierName] && (clay || draws <= DRAW_LIMIT[tierName]);
   }
   const buf = gb.toBuffer();
   if (outFile) { fs.mkdirSync(path.dirname(outFile), { recursive: true }); fs.writeFileSync(outFile, buf); }
@@ -1788,7 +2001,7 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   if (lod2) res.crawl.cardLowOverGroundMM = crawl.frames.map((f) => Math.min(...Object.values(f.cardLowOverGroundMM ?? { x: 0 })));
   for (const sd of Object.values(res.land?.sides ?? {})) if (sd && sd.tipErrMM === null) delete sd.tipErrMM;
   log(`${tierName}: ${tris} triangles (${Object.entries(meshTris).map(([k, v]) => `${k} ${v}`).join(', ')}), ${sk.length} joints, ${res.materials} materials → ${outFile ? path.relative(root, outFile) : '(not written)'} (${(buf.length / 1e6).toFixed(2)} MB)`);
-  log(`${tierName}: tangents ${Object.entries(tangentGate).map(([k, g]) => `${k} ${g.bad}/${g.n}`).join(', ')}; contacts max gap ${Object.entries(contactGate).map(([k, g]) => `${k} ${g.maxGapMM} (${g.worst})`).join(', ')} mm; morph textures ${(gpu.morphBytes4096 / 1e6).toFixed(2)} / ${(gpu.morphBytes16384 / 1e6).toFixed(2)} MB (4096 / 16384 rows); draws ${gpu.draws} (target ${gpu.drawTarget}); GPU with the planned maps ${gpu.totalMB4096} / ${gpu.totalMB8192} / ${gpu.totalMB16384} MB at 4096 / 8192 / 16384 rows (limit ${gpu.limitMB})${gpu.pass ? '' : ' — OVER'}`);
+  log(`${tierName}: tangents ${Object.entries(tangentGate).map(([k, g]) => `${k} ${g.bad}/${g.n}`).join(', ')}; contacts max gap ${Object.entries(contactGate).map(([k, g]) => `${k} ${g.maxGapMM} (${g.worst})`).join(', ')} mm; morph textures ${(gpu.morphBytes4096 / 1e6).toFixed(2)} / ${(gpu.morphBytes16384 / 1e6).toFixed(2)} MB (4096 / 16384 rows); draws ${gpu.draws} (target ${gpu.drawTarget ?? 'none: clay'}); GPU with the planned maps ${gpu.totalMB4096} / ${gpu.totalMB8192} / ${gpu.totalMB16384} MB at 4096 / 8192 / 16384 rows (limit ${gpu.limitMB})${gpu.pass ? '' : ' — OVER'}`);
   return res;
 }
 
