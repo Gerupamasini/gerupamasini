@@ -6,9 +6,18 @@
 // extras, tobihaze.axes), quaternions or axis-angles, eye joint translations, the eyes' gaze, and blend-shape weights;
 // `fit: 'all'` then frames the posed fish. In clay mode the fins are drawn double-sided and translucent, the eye's
 // window as its pupil (Cornea) and iris ring (Iris), the teeth as enamel.
+// Round T1 (textured mode): the GLB's own materials (the baked maps; the caudal's sheath range drawn with an opaque copy
+// of the fin material) under the 'photo' light — an image-based environment (three's RoomEnvironment through PMREM:
+// the wet clearcoat and the eye's cornea reflect a room, as the photos' skin reflects the sky) with a sun-like key that
+// follows the camera as the studio key does; its matte diffuse is matched to the studio's (LIGHT.photo: the pattern key
+// calibrated its palette under the studio light, so a matte surface reads within ±5 % of it: LIGHT).
+// shot.light 'studio' | 'photo' overrides the mode's own (clay keeps the studio light). shot.material { wetness, mud,
+// bars, dark, tint: { hueDeg, sat, val } } previews the runtime's uniforms (the materials' extras.tobihaze.runtime: a
+// GLSL port of surface.mjs wetShade on ORM B's wet retention, the bars on baseColor A).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
@@ -24,7 +33,12 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x6f6f6f);
 
 // studio light: a soft key from the front-left above, a fill, a rim from behind, and a sky/ground ambient
-scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x4a4540, 0.9));
+const hemi = new THREE.HemisphereLight(0xdfe6ee, 0x4a4540, 0.9);
+scene.add(hemi);
+// (round T1 integrator: the sunlit substrate's bounce — the photos' mud, sand and rock light the cheek, the throat and the
+// lower flank from below; the room environment has no ground — a hemisphere light dark above, the mud's warm grey below)
+const bounce = new THREE.HemisphereLight(0x000000, 0xc8bba6, 0);
+scene.add(bounce);
 const key = new THREE.DirectionalLight(0xffffff, 2.2);
 key.position.set(0.6, 1.0, 0.8);
 scene.add(key);
@@ -34,6 +48,29 @@ scene.add(fill);
 const rim = new THREE.DirectionalLight(0xffffff, 0.9);
 rim.position.set(-0.2, 0.6, -1.0);
 scene.add(rim);
+/**
+ * The lights per rig (round T1). studio: B1–B4's (clay). photo: the room environment for the ambient and the
+ * reflections (no hemisphere), a warm sun-like key, a weak cool fill and rim; env and key set so a matte white surface's
+ * mean diffuse matches the studio's (round T1, the hero in 'matte' mode, linear luminance over the fish: side 0.953, the
+ * B010 3/4 view 1.039 of the studio's; the env alone 0.69 / 1.04, the key alone 0.56 / 0.39).
+ */
+const LIGHT = {
+  studio: { hemi: 0.9, key: 2.2, keyColor: 0xffffff, fill: 0.7, rim: 0.9, env: 0, bounce: 0 },
+  photo: { hemi: 0, key: 1.9, keyColor: 0xfff3e2, fill: 0.2, rim: 0.5, env: 0.25, bounce: 0.8 },
+};
+let envMap = null, lightRig = 'studio';
+function setLight(name, over = {}) {
+  const L = { ...LIGHT[name] ?? LIGHT.studio, ...over };
+  lightRig = name;
+  if (L.env > 0 && !envMap) {
+    const pm = new THREE.PMREMGenerator(renderer);
+    envMap = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    pm.dispose();
+  }
+  scene.environment = L.env > 0 ? envMap : null;
+  scene.environmentIntensity = L.env;
+  hemi.intensity = L.hemi; bounce.intensity = L.bounce ?? 0; key.intensity = L.key; key.color.setHex(L.keyColor); fill.intensity = L.fill; rim.intensity = L.rim;
+}
 
 const persp = new THREE.PerspectiveCamera(30, 1, 0.0005, 10);
 const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.0005, 10);
@@ -57,6 +94,79 @@ const clayFinMask = new THREE.MeshStandardMaterial({ color: 0xc9bca6, roughness:
 // opaque in the body's clay, so the body's end does not show through it as a band)
 const clayFlesh = new THREE.MeshStandardMaterial({ color: 0xb9b2a8, roughness: 0.62, metalness: 0, side: THREE.DoubleSide });
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x8d877e, roughness: 0.9, metalness: 0 });
+// (round T1: the exposure check's matte white, every mesh alike)
+const matteMat = new THREE.MeshStandardMaterial({ color: 0xbfbfbf, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+// (round T1: the textured fins' sheath — the caudal's fleshy base, alpha 1 in the atlas — drawn with an opaque copy of the
+// fin material, as the clay draws it with the flesh clay: a BLEND material writes no depth)
+const opaqueCopy = new Map();
+const opaqueOf = (m) => { if (!opaqueCopy.has(m)) { const c = m.clone(); c.transparent = false; c.depthWrite = true; c.opacity = 1; c.alphaTest = 0; opaqueCopy.set(m, c); } return opaqueCopy.get(m); };
+
+/**
+ * The runtime's uniforms on the textured materials (round T1, a preview for the behaviour round: the materials' extras
+ * tobihaze.runtime): wetness and mud (surface.mjs wetShade on ORM B, the wet retention), bars (baseColor A), dark, tint.
+ * Only a shot that gives shot.material patches the materials; the plain GLB material is the master (the wet state).
+ */
+const RT = { uOn: { value: 0 }, uWetness: { value: 1 }, uMud: { value: 0 }, uBars: { value: 0 }, uDark: { value: 0 }, uTint: { value: new THREE.Vector3(0, 1, 1) } };
+const GLSL_HSV = `
+vec3 tbHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); float e = 1.0e-10; return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x); }
+vec3 tbRgb(vec3 c) { vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0); vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www); return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y); }
+uniform float uOn; uniform float uWetness; uniform float uMud; uniform float uBars; uniform float uDark; uniform vec3 uTint;
+`;
+const glNum = (v) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+function patchRuntime(mat) {
+  const X = mat?.userData?.tobihaze, R = X?.runtime;
+  if (!R || mat.userData.__tbPatched) return;
+  mat.userData.__tbPatched = true;
+  const role = X.role, W = R.wetness?.WET, wetModel = !!(W?.wet && W?.dry && W?.damp && role !== 'eye');
+  const mud = W?.mud?.colour ? new THREE.Color(W.mud.colour).convertSRGBToLinear() : new THREE.Color(0.27, 0.25, 0.22);
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, RT);
+    sh.fragmentShader = GLSL_HSV + sh.fragmentShader;
+    const skin = role === 'body' || role === 'eye';
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+#ifdef USE_MAP
+${skin ? '  if (uOn > 0.5) diffuseColor.rgb *= 1.0 - 0.6 * uBars * sampledDiffuseColor.a;\n  diffuseColor.a = 1.0;' : ''}
+#endif
+  if (uOn > 0.5) { vec3 h = tbHsv(max(diffuseColor.rgb, vec3(0.0))); h.x = fract(h.x + uTint.x / 360.0); h.y = clamp(h.y * uTint.y, 0.0, 1.0); h.z *= uTint.z * mix(1.0, 0.45, uDark); diffuseColor.rgb = tbRgb(h); }`);
+    if (!wetModel) return;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+#ifdef USE_CLEARCOAT
+  float tbClearcoat = clearcoat; float tbCcRough = clearcoatRoughness;
+#endif
+#ifdef USE_ROUGHNESSMAP
+  if (uOn > 0.5) {
+    float g = ${glNum(W.gamma ?? 1.2)};
+    float wl = clamp(uWetness * (1.0 + g) - g * (1.0 - texelRoughness.b), 0.0, 1.0);
+    float dryR = ${glNum(W.dry.roughness)} + (roughnessFactor - ${glNum(W.wet.roughness)}) * ${glNum(W.carry ?? 0.5)};
+    float rr = mix(dryR, roughnessFactor, wl);
+    float cw = smoothstep(0.35, 1.0, wl);
+    float cc = ${glNum(W.wet.clearcoat)} * cw + ${glNum(W.damp.clearcoat)} * (1.0 - cw) * smoothstep(0.15, 0.5, wl);
+    float mw = clamp(uMud, 0.0, 1.0);
+    roughnessFactor = mix(rr, ${glNum(W.mud?.roughness ?? 0.7)}, mw);
+#ifdef USE_CLEARCOAT
+    tbClearcoat = cc * (1.0 - mw); tbCcRough = mix(${glNum(W.damp.clearcoatRoughness)}, ${glNum(W.wet.clearcoatRoughness)}, cw);
+#endif
+    // (round T1 integrator: the map holds the WET albedo — the pattern palette was calibrated on wet fish — so wetness 1
+    // leaves it as is and the drying skin lightens and greys toward 1 / WET.wet.albedo and 1 / WET.wet.saturation)
+    float am = mix(1.0 / ${glNum(W.wet.albedo ?? 1)}, 1.0, wl * (1.0 - mw)), sat = mix(1.0 / ${glNum(W.wet.saturation ?? 1)}, 1.0, wl * (1.0 - mw));
+    vec3 c = diffuseColor.rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    diffuseColor.rgb = mix(mix(vec3(l), c, sat) * am, vec3(${glNum(mud.r)}, ${glNum(mud.g)}, ${glNum(mud.b)}), mw * 0.85);
+  }
+#endif`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#if defined(USE_CLEARCOAT) && defined(USE_ROUGHNESSMAP)
+  material.clearcoat = saturate(tbClearcoat); material.clearcoatRoughness = min(max(tbCcRough, 0.0525) + geometryRoughness, 1.0);
+#endif`);
+  };
+  mat.customProgramCacheKey = () => `tobihaze-rt-${role}-${wetModel}`;
+  mat.needsUpdate = true;
+}
+function setRuntime(m = null) {
+  RT.uOn.value = m ? 1 : 0;
+  m = m ?? {};
+  RT.uWetness.value = m.wetness ?? 1; RT.uMud.value = m.mud ?? 0; RT.uBars.value = m.bars ?? 0; RT.uDark.value = m.dark ?? 0;
+  RT.uTint.value.set(m.tint?.hueDeg ?? 0, m.tint?.sat ?? 1, m.tint?.val ?? 1);
+}
 const silMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 // x-ray: the skeleton opaque (alizarin red, as a cleared and stained specimen) inside a faint skin
 const boneMat = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5, metalness: 0 });
@@ -107,16 +217,17 @@ function applyMode(m) {
     const om = original.get(o), finRole = om?.userData?.tobihaze?.role === 'fin', fin = finRole || /^Fins?(_|$)/.test(o.name);
     const merged = fin && (om?.alphaTest > 0 || om?.userData?.tobihaze?.merged);
     if (o.name === '__ground') { o.material = m === 'silhouette' ? silMat : groundMat; o.visible = m !== 'silhouette'; return; }
-    o.visible = !(m === 'bones' && !bone && !cart && !tooth) && !((m === 'clay' || m === 'silhouette' || m === 'textured') && (bone || cart));
+    o.visible = !(m === 'bones' && !bone && !cart && !tooth) && !((m === 'clay' || m === 'silhouette' || m === 'textured' || m === 'matte') && (bone || cart));
     if (m === 'xray' || m === 'bones') o.material = bone || tooth ? boneMat : cart ? cartMat : ghostMat;
     // a globe with a window has a skin cap (clay like the head); a bare globe keeps the eye clay
     const capped = eye && o.parent?.children.some((c) => /cornea/i.test((original.get(c) ?? c.material)?.name ?? ''));
     // (round B4: a material whose extras role is 'eye' or 'body' (the one-primitive eye, the skin) on the clay atlas)
     const role = om?.userData?.tobihaze?.role, atlas = m === 'clay' && !tooth && (role === 'eye' || role === 'body') ? clayAtlasMaterial() : null;
-    if (m !== 'xray' && m !== 'bones') o.material = m === 'clay' ? (atlas ?? (tooth ? toothMat : fin ? (merged ? clayFinMask : clayFin) : iris ? clayIris : cornea ? clayCornea : eye && !capped ? clayEye : clayMat)) : m === 'silhouette' ? silMat : original.get(o);
+    if (m !== 'xray' && m !== 'bones') o.material = m === 'clay' ? (atlas ?? (tooth ? toothMat : fin ? (merged ? clayFinMask : clayFin) : iris ? clayIris : cornea ? clayCornea : eye && !capped ? clayEye : clayMat)) : m === 'silhouette' ? silMat : m === 'matte' ? matteMat : original.get(o);
     // (round B4: a fin mesh with a sheath range (geometry groups set at load) draws it with the opaque flesh clay; a single
-    // material ignores the groups)
+    // material ignores the groups; round T1: textured, an opaque copy of the fin material)
     if (m === 'clay' && fin && o.geometry?.groups?.length && o.userData?.sheath) o.material = [o.material, clayFlesh];
+    if (m === 'textured' && fin && o.geometry?.groups?.length && o.userData?.sheath && !Array.isArray(o.material)) o.material = [o.material, opaqueOf(o.material)];
   });
 }
 
@@ -274,7 +385,15 @@ function setView(v) {
   const azim = THREE.MathUtils.degToRad(v.azim ?? 0), elev = THREE.MathUtils.degToRad(v.elev ?? 0);
   const dir = new THREE.Vector3(Math.sin(azim) * Math.cos(elev), Math.sin(elev), Math.cos(azim) * Math.cos(elev));
   let b = box;
-  if (typeof v.fit === 'string' && v.fit !== 'all' && regions[v.fit]) b = new THREE.Box3(new THREE.Vector3(...regions[v.fit][0]), new THREE.Vector3(...regions[v.fit][1]));
+  // (round T1: 'node:<name>' frames that node's posed bounds — a skinned mesh from its skinned, morphed vertices — grown
+  // by v.grow metres: the eye close-ups)
+  // ('node:A|B' frames several nodes together)
+  const nodes = typeof v.fit === 'string' && v.fit.startsWith('node:') ? v.fit.slice(5).split('|').map((n) => model?.getObjectByName(n)).filter(Boolean) : [];
+  if (nodes.length) {
+    b = new THREE.Box3();
+    for (const node of nodes) node.traverse((o) => { if (!o.isMesh) return; if (o.isSkinnedMesh) { o.skeleton.update(); o.computeBoundingBox(); } b.expandByObject(o, !o.isSkinnedMesh); });
+    if (v.grow) b.expandByScalar(v.grow);
+  } else if (typeof v.fit === 'string' && v.fit !== 'all' && regions[v.fit]) b = new THREE.Box3(new THREE.Vector3(...regions[v.fit][0]), new THREE.Vector3(...regions[v.fit][1]));
   else if (Array.isArray(v.fit)) b = new THREE.Box3(new THREE.Vector3(...v.fit[0]), new THREE.Vector3(...v.fit[1]));
   const centre = b.getCenter(new THREE.Vector3());
   if (v.target) centre.set(...v.target);
@@ -342,6 +461,10 @@ window.__tobi = {
     await ready;
     if (shot.model) await load(shot.model);
     if (shot.mode) applyMode(shot.mode);
+    // (round T1: the light rig — the mode's own unless the shot names one — and the runtime uniforms' preview)
+    setLight(shot.light ?? (mode === 'textured' ? 'photo' : 'studio'), shot.lightOver ?? {});
+    if (shot.material && model) model.traverse((o) => { if (!o.isMesh) return; for (const m of [original.get(o)].flat()) patchRuntime(m); for (const m of [o.material].flat()) patchRuntime(m); });
+    setRuntime(shot.material ?? null);
     // (view.only / view.hide: a regular expression on the mesh's node name (or its parent's, for a multi-primitive
     // mesh): only those meshes drawn, or those hidden; for close checks of one part)
     const only = shot.view?.only ? new RegExp(shot.view.only) : null, hide = shot.view?.hide ? new RegExp(shot.view.hide) : null;
@@ -361,7 +484,7 @@ for (const b of document.querySelectorAll('[data-view]')) {
   const views = { front: { azim: 0, elev: 0, ortho: true }, side: { azim: 90, elev: 0, ortho: true }, top: { azim: 0, elev: 90, ortho: true }, q34: { azim: 40, elev: 18 }, macro: { azim: 25, elev: 22, fov: 20, fit: 'face' } };
   b.addEventListener('click', () => setView(views[b.dataset.view]));
 }
-document.getElementById('clay').addEventListener('click', () => applyMode(mode === 'clay' ? 'textured' : 'clay'));
+document.getElementById('clay').addEventListener('click', () => { applyMode(mode === 'clay' ? 'textured' : 'clay'); setLight(mode === 'textured' ? 'photo' : 'studio'); });
 if (!capture) {
   const loop = () => { controls.update(); render(); requestAnimationFrame(loop); };
   window.addEventListener('resize', resize);

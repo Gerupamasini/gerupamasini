@@ -177,8 +177,15 @@ export const RIG = {
   // the eyes' lift (HL): the joint's range up to `eyeLift` (the alert periscope, u1 and A070: the eye's top 0.5–0.9 ED over
   // the nape, the rest 0.55; +0.08: 0.93 ED) with the eyes-up correctives (headmorphs EYES_UP: skinned alone, the collar
   // past +0.03 stretches in a band, 383 web edges over 2× at +0.05 and 1,345 at +0.08, against 3 and 118 with them);
-  // `eyeLiftBare` the most without them (round B1's); `eyeAlert` the alert state's (0.84 ED)
-  eyeLift: 0.08, eyeLiftBare: 0.03, eyeAlert: 0.06,
+  // `eyeLiftBare` the most without them (round B1's); `eyeAlert` the alert state's: the land and reach states', the
+  // prop's and the crawl's (round T1: 0.03, the bare lift — B4's 0.06 stood the globe on a narrow stalk, a periscope
+  // against u1's eye seated in its broad turret: in the hero's land pose, ortho front view, the stalk from the globe's
+  // bulge down to the head's shoulder 0.61 ED at 0.06, 0.53 at 0.03, 0.45 at 0 (u1 ≈ 0.5 under the window), the globe's
+  // top over the dorsal outline 0.93 / 0.80 / 0.64 ED, side view; tech key, scratchpad ref/work/t1_tech eyesil). The joint
+  // keeps its range to `eyeLift` for a brief alert peak, but past 0.03 the eyesUp correctives keep the collar's web, not
+  // its breadth: the silhouette is the periscope's still, so the behaviour should hold the lift within liftBareM until
+  // they are re-solved for a broad dome
+  eyeLift: 0.08, eyeLiftBare: 0.03, eyeAlert: 0.03,
   // the shoulder's channels (round B3, about the bind lobe; deg): swing (about the lateral axis: the lobe swept forward
   // or back as seen from the side), protraction (about the vertical: forward round the flank, the girdle's hinge),
   // depression (about the lobe's bind face normal: the lobe down in its own plane), twist (about its own axis).
