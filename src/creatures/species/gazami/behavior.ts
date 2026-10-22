@@ -124,7 +124,7 @@ const wrap = (a: number) => { while (a > Math.PI) a -= TAU; while (a < -Math.PI)
 const ease = (a: number, b: number, dt: number, k: number) => a + (b - a) * (1 - Math.exp(-k * dt));
 
 /** the body's depth (mm at CW 100: sternum to the top of the dome) and the height that keeps it clear of the sand when swimming */
-const BODY_DEPTH = 23;
+const BODY_DEPTH = 24.5;
 
 export type CrabApi = ReturnType<typeof createCrabBehavior>;
 

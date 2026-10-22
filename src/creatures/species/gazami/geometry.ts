@@ -1,6 +1,6 @@
 import { Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import {
-  ABDOMEN, ANTENNA, ANTENNULE, BIND, CARAPACE, DACTYL_HINGE, ENVELOPE_BACK, EYE, MXP3, ORBIT, domeProfile, dorsalRelief, legSpecs,
+  ABDOMEN, ANTENNA, ANTENNULE, BIND, CARAPACE, DACTYL_HINGE, ENVELOPE_BACK, EYE, MXP3, ORBIT, domeHeight, dorsalRelief, legSpecs,
   marginHeight, marginTeeth, type ArticleSpec, type LegId, type LegSpec, type ToothSpec, type V2,
 } from './anatomy';
 import { GeoBuilder, PART, knotLerp, noise2, smooth } from './mesh';
@@ -161,8 +161,8 @@ function placeTeeth(side: Side): PlacedTooth[] {
   const rng = sideRng(side, 1);
   const specs = marginTeeth();
   // directions of the teeth (rad from +x towards +z): the frontal teeth straight forward, the anterolateral ones
-  // leaning less forward towards the spine (61: near the orbit almost forward, by T8 about 45°)
-  const dirs: Record<string, number> = { F1: 1.54, F2: 1.47, IO: 1.36, T1: 1.31, T2: 1.22, T3: 1.13, T4: 1.05, T5: 0.98, T6: 0.91, T7: 0.86, T8: 0.8 };
+  // hooked forward along the margin, ≈ 35° off its outward normal all the way to the spine (the CC0 scan; 61)
+  const dirs: Record<string, number> = { F1: 1.54, F2: 1.47, IO: 1.36, T1: 1.45, T2: 1.78, T3: 1.71, T4: 1.63, T5: 1.55, T6: 1.48, T7: 1.42, T8: 1.36 };
   const out: PlacedTooth[] = [];
   for (const s0 of specs) {
     const s: ToothSpec = { ...s0, length: s0.length * (1 + (rng.next() - 0.5) * (s0.conical ? 0.07 : 0.12)), lift: s0.lift + (rng.next() - 0.5) * (s0.conical ? 0.5 : 0.15) };
@@ -171,10 +171,7 @@ function placeTeeth(side: Side): PlacedTooth[] {
       // the spine's base: from behind T8 to the start of the posterolateral margin
       const a: V2 = [39.7, -1.0], b: V2 = [ENVELOPE_BACK[0][0], ENVELOPE_BACK[0][1]];
       const mid: V2 = [(a[0] + b[0]) / 2 - 0.4, (a[1] + b[1]) / 2];
-      // keep the spine's length as specified from its base's middle
-      const dx = tip[0] - mid[0], dz = tip[1] - mid[1], L = Math.hypot(dx, dz);
-      const k = s.length / L;
-      out.push({ spec: s, tip: [mid[0] + dx * k, mid[1] + dz * k], a, b, mid, i0: 0, i1: 0 });
+      out.push({ spec: s, tip, a, b, mid, i0: 0, i1: 0 });
       continue;
     }
     const ang = dirs[s.name] + (rng.next() - 0.5) * 0.06;
@@ -203,9 +200,6 @@ function placeTeeth(side: Side): PlacedTooth[] {
     spine.a = t8.b;
     const b = spine.b;
     spine.mid = [(spine.a[0] + b[0]) / 2 - 0.4, (spine.a[1] + b[1]) / 2];
-    const dx = spine.tip[0] - spine.mid[0], dz = spine.tip[1] - spine.mid[1], L = Math.hypot(dx, dz);
-    const k = spine.spec.length / L;
-    spine.tip = [spine.mid[0] + dx * k, spine.mid[1] + dz * k];
   }
   for (const t of out) {
     if (!/^(F1|F2|IO)$/.test(t.spec.name)) continue;
@@ -336,7 +330,6 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
   const N = loop.length;
   const c = C.centre;
   const e2 = C.edge / 2;
-  const Ym0 = 12.4;
   const rings = [0, ...lod.dome];
   const D = rings.length;           // dorsal rows 0 … D-1 (row 0 the pole), row D-1 the margin's top
   const grid: number[][] = [];
@@ -367,10 +360,10 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const L = (u: ArrayLike<number>) => u[i0] + (u[i1] - u[i0]) * f;
     return [L(rad), L(radS), loop[i0].ym + (loop[i1].ym - loop[i0].ym) * f, L(ymS)];
   };
-  const domeAt = (x: number, z: number, d: number, Rs: number, yms: number) => {
+  const domeAt = (x: number, z: number, d: number, Rs: number, yms: number, a: number) => {
     const ss = Math.min(1, d / Rs);
     const unev = (noise2(x * 0.11 + 3.1, z * 0.11, 11) - 0.5) * 0.3 * (1 - ss * ss);
-    return Ym0 + (yms - Ym0) * ss * ss + C.dome * domeProfile(ss) + unev;
+    return domeHeight(((a <= Math.PI ? a : 2 * Math.PI - a) * 180) / Math.PI, ss, yms) + unev;
   };
   const H = (x: number, z: number) => {
     let a = Math.atan2(x - c[0], z - c[1]);
@@ -378,9 +371,9 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const [R, Rs, ym, yms] = lookup(a);
     const d = Math.hypot(x - c[0], z - c[1]);
     const q = d / R;
-    const hs = domeAt(x, z, d, Rs, yms);
+    const hs = domeAt(x, z, d, Rs, yms, a);
     // the margin's band: drawn from the smooth dome down to the real margin at the outline
-    const atRim = domeAt(x, z, R, Rs, yms);
+    const atRim = domeAt(x, z, R, Rs, yms, a);
     const w = smooth(0.62, 1.0, q);
     const relief = dorsalRelief(x, z) * (1 - smooth(0.8, 1.0, q));
     return hs + (ym - atRim) * w * w + relief + e2;
@@ -479,7 +472,7 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     const row: number[] = [];
     for (let i = 0; i < N; i++) {
       const x = stPt[i][0] + (c[0] - stPt[i][0]) * w, z = stPt[i][1] + (c[1] - stPt[i][1]) * w;
-      row.push(gb.v(x, St.y - 0.7 - 0.25 * w, z, body, 1, body, PART.STERNUM, 3 + w, i / N, 0.25));
+      row.push(gb.v(x, St.y - 0.1 - 0.3 * w, z, body, 1, body, PART.STERNUM, 3 + w, i / N, 0.25));
     }
     rowsUnder.push(row);
   });
@@ -487,7 +480,7 @@ export function buildShell(gb: GeoBuilder, lod: Lod, body: number): void {
     for (let i = 0; i < N; i++) { const j = (i + 1) % N; gb.quad(prev[i], row[i], row[j], prev[j]); }
     prev = row;
   }
-  const bpole = gb.v(c[0], St.y - 1.0, c[1], body, 1, body, PART.STERNUM, 4, 0, 0.2);
+  const bpole = gb.v(c[0], St.y - 0.35, c[1], body, 1, body, PART.STERNUM, 4, 0, 0.2);
   for (let i = 0; i < N; i++) gb.tri(bpole, prev[(i + 1) % N], prev[i]);
 }
 
@@ -912,8 +905,9 @@ function buildMxp(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, bone: number,
     }
     grid.push(row); under.push(urow);
   }
+  // (wound so that the plate's outer face looks out, forward and down, and its inner face into the buccal frame)
   for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
-    if (sg > 0) {
+    if (sg < 0) {
       gb.quad(grid[i][k], grid[i][k + 1], grid[i + 1][k + 1], grid[i + 1][k]);
       gb.quad(under[i][k], under[i + 1][k], under[i + 1][k + 1], under[i][k + 1]);
     } else {
@@ -923,8 +917,8 @@ function buildMxp(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, bone: number,
   }
   // the plate's rim
   const rim = (a: number[], b: number[], flip: boolean) => { for (let k = 0; k < a.length - 1; k++) flip ? gb.quad(a[k], b[k], b[k + 1], a[k + 1]) : gb.quad(a[k], a[k + 1], b[k + 1], b[k]); };
-  const f = sg > 0;
-  rim(grid[nx], under[nx], f);
+  const f = sg < 0;
+  rim(grid[nx], under[nx], !f);
   rim(grid.map((r) => r[0]), under.map((r) => r[0]), !f);
   rim(grid.map((r) => r[nz]), under.map((r) => r[nz]), f);
   if (lod.tier < 2) {
@@ -974,10 +968,11 @@ function buildAbdomen(gb: GeoBuilder, lod: Lod, body: number): void {
       for (let j = 0; j <= nw; j++) {
         const u = j / nw * 2 - 1;
         const x = u * Math.max(0.05, half);
-        // a low dome across, the somites' edges as small steps (the shader draws the sutures)
-        const y = -1.0 - 0.7 * (1 - u * u) * Math.min(1, half / 4) - 0.18 * Math.max(0, Math.sin(t * Math.PI * 6.5)) * (1 - u * u);
+        // a low dome across, the somites' edges as small steps (the shader draws the sutures); nearly flush with the
+        // sternum it lies in (the CC0 scan: the underside one plane, the abdomen barely proud of it)
+        const y = 0.45 - 0.5 * (1 - u * u) * Math.min(1, half / 4) - 0.12 * Math.max(0, Math.sin(t * Math.PI * 6.5)) * (1 - u * u);
         row.push(gb.v(x, y, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.2, flag));
-        irow.push(gb.v(x, -0.15, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.9, flag));
+        irow.push(gb.v(x, 0.6, z, body, 1, body, PART.STERNUM, t, (u + 1) / 2, 0.9, flag));
       }
       outer.push(row); inner.push(irow);
     }

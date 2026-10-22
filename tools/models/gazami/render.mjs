@@ -32,8 +32,8 @@ const DEFAULT_SHOTS = [
   { name: 'macro_carapace', set: { view: 'macro', pose: 'rest', fov: 30, cam: [0.0, 0.07, 0.065], target: [0.0, 0.016, 0.0] } },
   { name: 'macro_chela', set: { view: 'macro', pose: 'stand', fov: 28, cam: [0.07, 0.035, 0.11], target: [0.03, 0.006, 0.045] } },
   { name: 'macro_paddle', set: { view: 'macro', pose: 'stand', fov: 30, cam: [0.1, 0.08, -0.1], target: [0.035, 0.012, -0.035] } },
-  { name: 'macro_eye', set: { view: 'macro', pose: 'rest', legs: {}, floor: true, fov: 10, cam: [0.046, 0.037, 0.062], target: [0.0125, 0.0188, 0.0235] } },
-  { name: 'macro_face', set: { view: 'front', pose: 'stand', legs: {}, floor: true, ortho: 0, fov: 22, cam: [0.02, 0.024, 0.12], target: [0.0, 0.012, 0.02] } },
+  { name: 'macro_eye', set: { view: 'macro', pose: 'rest', legs: {}, floor: true, fov: 10, cam: [0.0447, 0.0436, 0.0624], target: [0.0112, 0.0254, 0.0239] } },
+  { name: 'macro_face', set: { view: 'front', pose: 'stand', legs: {}, floor: true, ortho: 0, fov: 22, cam: [0.02, 0.03, 0.12], target: [0.0, 0.017, 0.02] } },
   { name: 'under', set: { view: 'under', pose: 'stand', ortho: 0.07, cam: [0, -0.4, 0.0001], target: [0, 0.05, 0.0], up: [0, 0, 1] } },
   { name: 'under_female', set: { view: 'under', sex: 1, pose: 'stand', ortho: 0.07, cam: [0, -0.4, 0.0001], target: [0, 0.05, 0.0], up: [0, 0, 1] } },
   // the tiers
