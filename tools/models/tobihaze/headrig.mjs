@@ -509,8 +509,25 @@ export function skinVertices(pos, nrm, skin, W) {
 // stands between them. With the mesh's winding repaired (fixWinding) the closed lid's back-facing px fell from
 // 134/58/93/59 to 4/1/0/2 (efront/eq34/eside/etop, CPU raster of the posed build's mesh), the cornea stays hidden and the
 // dip between the domes is 0.027 HL)
+// (round fm_eye, `crease` { mode, eps, belowRim, rings, iters, zip, zipFill, reach, keep }: the infraorbital crease's channel in
+// the closed shape. The sculpt carves the crease at the collar's lateral foot as a keyhole — a tube just under the cups'
+// fillet, its mouth narrow (head.mjs cup.crease) — and laid on the closed surface and relaxed with the rest, its channel
+// was spread flat: the runtime blends the bind and the closed shape linearly (pose.js: the blink's weight is the eye's
+// drop), so on the way the channel's walls turned out of it and opened it under the turret into a dark slot with a pale
+// lip that read as a second small mouth (b 0.25–0.75, T3 alike). Its vertices are those the crease carves more than `eps`
+// (HL: the head with the crease against the head without), `belowRim` HL or more under the cup's rim.
+//   'transport' (the default): the channel, its lips and `rings` rings round them carried whole by the relaxed skin's
+//     move round them (a harmonic fill of the displacement, `iters` passes), laid on the closed surface and sunk by the
+//     crease's own relief, the lips across its mouth drawn `zip` of the way to their midpoint and (`zipFill`) the channel
+//     under them carried along with them: on the way the channel keeps a narrow mouth and closes over it — at the land
+//     lift's b 0.5 a thin line where the bind's shape opened a slot with a pale lip, at b 0.75 a soft fold; the full
+//     blink's new folds about the bind's (head alone 398 against 386 unshut; without zipFill 407; zip 1: 423, 'slave': 456)
+//   'slave': each channel vertex at the mean of the lips within `reach` of it at rest, `keep` of its own offset kept, and
+//     the lips zipped: the slot a hairline too, but the channel shut on itself folds (+70 folds at the full blink, over
+//     the tear check's T3 + 10 %)
 export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.96, 0.995], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
-  convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 } };
+  convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 },
+  crease: { mode: 'transport', eps: 0.0008, belowRim: 0.03, rings: 2, iters: 300, zip: 0.5, zipFill: true, reach: 0.015, keep: 0.08 } };
 export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const CO = { ...BLINK_CLOSE, ...(o.close ?? {}) };
   if (o.close && o.close.hinge !== undefined && o.close.hinge !== false) CO.hinge = { ...BLINK_CLOSE.hinge, ...o.close.hinge };
@@ -725,6 +742,114 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
     for (let k = 0; k < 3; k++) Q[v * 3 + k] = q[k] + (p[k] - q[k]) * w;
   };
   for (const v of free) lay(v, CO.proj);
+  // (`crease`: the infraorbital crease's channel shut in the closed shape — BLINK_CLOSE's note: its vertices, its lips,
+  // the lips' partners across the mouth, and for 'slave' each vertex's lips and offset)
+  const CRS = CO.crease && o.index && (K.cup?.crease?.r ?? 0) > 0 ? CO.crease : null;
+  const inC = new Uint8Array(n), slaves = [], zips = [], relief = new Float32Array(n);
+  if (CRS) {
+    const K0 = structuredClone(K);
+    K0.cup.crease = { ...K0.cup.crease, r: -1 };
+    const f0 = headSDF(K0, { cut: true });
+    // (the crease at the collar's foot only, `belowRim` HL or more under the cup's rim: a few vertices by the rim's lip
+    // carry a trace of the carve too, and the lid's swing is theirs)
+    for (const v of free) {
+      const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
+      if (y - E.y - rimH(x - E.s, Math.abs(z) - E.z) > -(CRS.belowRim ?? 0.03)) continue;
+      // (relief: how deep the crease carves the head there — the head with it against without)
+      relief[v] = Math.max(0, f(x, y, z) - f0(x, y, z));
+      if (relief[v] > CRS.eps) inC[v] = 1;
+    }
+    const I = o.index, lip = new Uint8Array(n);
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2];
+      if (!(inC[a] || inC[b] || inC[c])) continue;
+      for (const u of [a, b, c]) if (!inC[u] && cls[u] === FREE && wReg[u] > 0) lip[u] = 1;
+    }
+    const lips = []; for (let v = 0; v < n; v++) if (lip[v]) lips.push(v);
+    for (const v of free) {
+      if (!inC[v]) continue;
+      const A = [];
+      for (const u of lips) if (Math.hypot(pos[u * 3] - pos[v * 3], pos[u * 3 + 1] - pos[v * 3 + 1], pos[u * 3 + 2] - pos[v * 3 + 2]) < CRS.reach) A.push(u);
+      if (!A.length) { inC[v] = 0; continue; }
+      const m = [0, 0, 0], n0 = [0, 0, 0]; for (const u of A) for (let k = 0; k < 3; k++) { m[k] += pos[u * 3 + k] / A.length; n0[k] += nrm[u * 3 + k]; }
+      const l0 = Math.hypot(...n0) || 1;
+      // (its offset from the lips' mean at rest, `keep` of it, and the lips' mean normal there: closed, the offset turns
+      // with the skin, from that normal to the closed surface's, so the shrunk channel keeps its side of the surface)
+      slaves.push({ v, A: Uint32Array.from(A), off: [0, 1, 2].map((k) => (pos[v * 3 + k] - m[k]) * CRS.keep), n0: n0.map((x) => x / l0) });
+    }
+    // the lips zipped: each lip's partners are the lip vertices across the mouth (the other side of the channel's mean
+    // height round it) within `reach` at rest; closed, each lip lies at the midpoint with them, so the mouth stays shut
+    // all the way (the lips' gap is the bind's narrow mouth eased to none, not the bind's eased to the spread channel's)
+    const sideOf = new Int8Array(n);
+    for (const u of lips) {
+      let yc = 0, c = 0;
+      for (const S of slaves) { const v = S.v; if (Math.hypot(pos[u * 3] - pos[v * 3], pos[u * 3 + 1] - pos[v * 3 + 1], pos[u * 3 + 2] - pos[v * 3 + 2]) < CRS.reach) { yc += pos[v * 3 + 1]; c++; } }
+      if (c) sideOf[u] = pos[u * 3 + 1] > yc / c ? 1 : -1;
+    }
+    for (const u of lips) {
+      if (!sideOf[u]) continue;
+      const B = [];
+      for (const w of lips) if (sideOf[w] === -sideOf[u] && Math.hypot(pos[u * 3] - pos[w * 3], pos[u * 3 + 1] - pos[w * 3 + 1], pos[u * 3 + 2] - pos[w * 3 + 2]) < CRS.reach) B.push(w);
+      if (B.length) zips.push({ v: u, B: Uint32Array.from(B) });
+    }
+  }
+  const zipAll = () => {
+    const T = zips.map((Z) => { const m = [0, 0, 0]; for (const u of Z.B) for (let k = 0; k < 3; k++) m[k] += Q[u * 3 + k] / Z.B.length; return [0, 1, 2].map((k) => (Q[Z.v * 3 + k] + m[k]) / 2); });
+    const zw = CRS.zip ?? 1;
+    zips.forEach((Z, i) => { for (let k = 0; k < 3; k++) Q[Z.v * 3 + k] += zw * (T[i][k] - Q[Z.v * 3 + k]); lay(Z.v, 2); });
+  };
+  // (mode 'transport': the channel, its lips and `rings` rings round them carried whole by the closed shape's move round
+  // them — its displacement filled in over the zone as a harmonic field from the relaxed skin outside — so the crease
+  // keeps its narrow mouth all the way and lies on the closed dome as the rest crease turned with the skin; then laid on
+  // the closed surface and sunk by the crease's own relief there, and the lips zipped (`zip` of the way))
+  const transportAll = () => {
+    const I = o.index, nbr = new Map(), add = (a, b) => { if (!nbr.has(a)) nbr.set(a, new Set()); nbr.get(a).add(b); };
+    for (let t = 0; t < I.length; t += 3) for (const [a, b] of [[I[t], I[t + 1]], [I[t + 1], I[t + 2]], [I[t + 2], I[t]]]) { add(a, b); add(b, a); }
+    const zone = new Uint8Array(n);
+    for (let v = 0; v < n; v++) if (inC[v]) zone[v] = 1;
+    for (let r = 0; r < (CRS.rings ?? 2) + 1; r++) { const add2 = []; for (let v = 0; v < n; v++) if (zone[v]) for (const u of nbr.get(v) ?? []) if (!zone[u] && cls[u] === FREE && wReg[u] > 0) add2.push(u); for (const u of add2) zone[u] = 1; }
+    const Z = []; for (let v = 0; v < n; v++) if (zone[v]) Z.push(v);
+    const D = new Float64Array(n * 3);
+    for (let v = 0; v < n; v++) for (let k = 0; k < 3; k++) D[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k];
+    const nx = new Float64Array(Z.length * 3);
+    for (let it = 0; it < (CRS.iters ?? 300); it++) {
+      Z.forEach((v, i) => { let c = 0; const a = [0, 0, 0]; for (const u of nbr.get(v) ?? []) { if (cls[u] !== FREE && !zone[u]) continue; c++; for (let k = 0; k < 3; k++) a[k] += D[u * 3 + k]; } for (let k = 0; k < 3; k++) nx[i * 3 + k] = c ? a[k] / c : D[v * 3 + k]; });
+      Z.forEach((v, i) => { for (let k = 0; k < 3; k++) D[v * 3 + k] = nx[i * 3 + k]; });
+    }
+    for (const v of Z) {
+      const q = [0, 1, 2].map((k) => pos[v * 3 + k] + D[v * 3 + k]), p = project(q, CO.proj), w = wReg[v], x = [0, 1, 2].map((k) => q[k] + (p[k] - q[k]) * w), e = 1e-4;
+      const g = [T(x[0] + e, x[1], x[2]) - T(x[0] - e, x[1], x[2]), T(x[0], x[1] + e, x[2]) - T(x[0], x[1] - e, x[2]), T(x[0], x[1], x[2] + e) - T(x[0], x[1], x[2] - e)], gl = Math.hypot(...g) || 1;
+      for (let k = 0; k < 3; k++) Q[v * 3 + k] = x[k] - (relief[v] * g[k]) / gl;
+    }
+    if ((CRS.zip ?? 0) > 0) {
+      const Q0 = Float64Array.from(Q);
+      zipAll();
+      // (`zipFill`: the channel under the zipped lips carried along with them — their move filled in over the channel as
+      // a harmonic field, the ring round the zone held — so its walls close with the lips instead of pinching between them)
+      if (CRS.zipFill) {
+        const fixed = new Uint8Array(n), dZ = new Float64Array(n * 3);
+        for (const Zp of zips) { fixed[Zp.v] = 1; for (let k = 0; k < 3; k++) dZ[Zp.v * 3 + k] = Q[Zp.v * 3 + k] - Q0[Zp.v * 3 + k]; }
+        const C = Z.filter((v) => inC[v] && !fixed[v]);
+        for (let it = 0; it < (CRS.iters ?? 300); it++) for (const v of C) {
+          let c = 0; const a = [0, 0, 0];
+          for (const u of nbr.get(v) ?? []) { if (!zone[u] && cls[u] !== FREE) continue; c++; for (let k = 0; k < 3; k++) a[k] += dZ[u * 3 + k]; }
+          if (c) for (let k = 0; k < 3; k++) dZ[v * 3 + k] = a[k] / c;
+        }
+        for (const v of C) for (let k = 0; k < 3; k++) Q[v * 3 + k] += dZ[v * 3 + k];
+      }
+    }
+    transportAll.zone = Z.length;
+  };
+  const slaveAll = () => {
+    zipAll();
+    for (const S of slaves) {
+      const m = [0, 0, 0]; for (const u of S.A) for (let k = 0; k < 3; k++) m[k] += Q[u * 3 + k] / S.A.length;
+      const w = wReg[S.v], p = project(m, 4), e = 1e-4, x = [0, 1, 2].map((k) => m[k] + (p[k] - m[k]) * w);
+      const g = [T(x[0] + e, x[1], x[2]) - T(x[0] - e, x[1], x[2]), T(x[0], x[1] + e, x[2]) - T(x[0], x[1] - e, x[2]), T(x[0], x[1], x[2] + e) - T(x[0], x[1], x[2] - e)], gl = Math.hypot(...g) || 1;
+      const off = rotateTo(S.n0, g.map((c) => c / gl), S.off);
+      for (let k = 0; k < 3; k++) Q[S.v * 3 + k] = x[k] + off[k];
+    }
+  };
   if (o.index && CO.iters > 0) {
     const nb = new Map();
     const fs = new Uint8Array(n); for (const v of free) fs[v] = 1;
@@ -750,13 +875,17 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       for (let i = 0; i < free.length; i++) { const v = free[i]; Q[v * 3] = nx[i * 3]; Q[v * 3 + 1] = nx[i * 3 + 1]; Q[v * 3 + 2] = nx[i * 3 + 2]; lay(v, 2); }
     }
   }
+  // (the crease shut once the skin round it is relaxed: drawing the lips together inside the relaxation drew the skin
+  // round them into the line too, a band packed so tight that lod1's shrink-wrap folded its coarse cells there)
+  if (CRS && CRS.mode === 'transport') transportAll();
+  else if (CRS) slaveAll();
   // ---- the seam zipped (round n17, `zipSeam`: { gap, near, w, smooth, hops }): the lid's rim (the free skin next to the
   // tucked lining) and the medial skin's edge (next to the hidden head) are drawn together where they face each other
   // within `gap` on the dome (within `near` of the lowered globe): each edge vertex moves `w` of the way to the midpoint
   // with its nearest partner across the seam and is laid again; then the skin within `hops` rings of the seam is relaxed
   // (`smooth` passes, the seam held), so the closed dome has one fine seam instead of a crack with torn edges
   const ZS = CO.zipSeam;
-  const stats = { zipped: 0 };
+  const stats = { zipped: 0, crease: slaves.length, creaseLips: zips.length, creaseZone: transportAll.zone ?? 0 };
   if (o.index && ZS) {
     const I = o.index, nbAll = new Map();
     const isF = new Uint8Array(n); for (const v of free) isF[v] = 1;

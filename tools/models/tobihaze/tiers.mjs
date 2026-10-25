@@ -170,6 +170,344 @@ export function compactMesh(mesh, indices, keys) {
   return out;
 }
 
+// ------------------------------------------------------------------------------------------------ the decimation lock
+
+/** The decimation lock in effect while `fn` runs (2026-10-25; decimlock.mjs, build.mjs lighterSkin): `L` { tris:
+ * { position (mm), indices, chart (per triangle: a chart name or null) } — a former simplification of this tier —,
+ * free(centroid) → bool — where it may change —, changedCell(key) → bool and cell (mm) — the dense cells the sculpt changed
+ * since —, label }; tierMesh holds every triangle of it outside `free` on unchanged dense skin and simplifies the rest
+ * (frozenPlan). null: none. Returns fn's result; tierMesh's stats.frozen report it. */
+let DECIMATION_LOCK = null;
+export function withDecimationLock(L, fn) {
+  const prev = DECIMATION_LOCK;
+  DECIMATION_LOCK = L;
+  try { return fn(); } finally { DECIMATION_LOCK = prev; }
+}
+
+/** Distance from p to triangle abc (closest point, Ericson). */
+function pointTriDist(p, a, b, c) {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+  const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  const d1 = dot(ab, ap), d2 = dot(ac, ap);
+  const at = (q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  if (d1 <= 0 && d2 <= 0) return at(a);
+  const bp = [p[0] - b[0], p[1] - b[1], p[2] - b[2]], d3 = dot(ab, bp), d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return at(b);
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) { const v = d1 / (d1 - d3); return at([a[0] + v * ab[0], a[1] + v * ab[1], a[2] + v * ab[2]]); }
+  const cp = [p[0] - c[0], p[1] - c[1], p[2] - c[2]], d5 = dot(ab, cp), d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return at(c);
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) { const w = d2 / (d2 - d6); return at([a[0] + w * ac[0], a[1] + w * ac[1], a[2] + w * ac[2]]); }
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { const w = (d4 - d3) / (d4 - d3 + (d5 - d6)); return at([b[0] + w * (c[0] - b[0]), b[1] + w * (c[1] - b[1]), b[2] + w * (c[2] - b[2])]); }
+  const den = 1 / (va + vb + vc), v = vb * den, w = vc * den;
+  return at([a[0] + ab[0] * v + ac[0] * w, a[1] + ab[1] * v + ac[1] * w, a[2] + ab[2] * v + ac[2] * w]);
+}
+/** Distance from p to segment ab. */
+function pointSegDist(p, a, b) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] || 1e-30;
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / L2));
+  return Math.hypot(p[0] - a[0] - t * d[0], p[1] - a[1] - t * d[1], p[2] - a[2] - t * d[2]);
+}
+
+/**
+ * One region's input with the decimation lock held (2026-10-25): the lock's triangles that lie in the region, outside
+ * `free`, on dense skin the sculpt did not change and whose corners are vertices of this mesh at the same place — the
+ * frozen ones — as they are (their vertices locked), and the rest of the region's dense surface to simplify, joined to
+ * them along each frozen edge that borders it (a lens edge a → b):
+ *   1. the dense triangles are labelled by the lock triangle nearest their centroid: free unless it is held (in a zone,
+ *      more than two dense edges off a held one, free too: skin the lock never had)
+ *   2. the lens edges walked loop by loop; per lens edge the shortest path a → … → b over dense edges (Dijkstra) through
+ *      vertices that touch a free-labelled triangle — else, where the free part is thin, any vertex within 1.5 dense
+ *      edges of the edge on its free side —, no frozen corner and no vertex an earlier cut took but the loop's previous
+ *      one's (two cuts that share no vertex cannot cross); each loop's cuts end to end with their spikes (u → v → u, where
+ *      the free part reaches a frozen corner by one edge) dropped: the free part's edge; a vertex met twice: a crossing
+ *   3. the free surface: flooded from the dense triangle on the far side of every edge of that walk, never across a cut
+ *   4. each lens edge's pocket (between the frozen edge and its path) a fan from a: (a, x_i, x_i+1), wound as the frozen
+ *      triangle's neighbour, so the input is one oriented manifold: frozen ∪ pockets ∪ free (checked: every directed
+ *      edge round the frozen part and the cuts once, with its twin)
+ * A lens edge without a path, a crossing, a stitch that is not manifold or a flood that leaks under the frozen surface
+ * (from the cut it started at) unfreezes the frozen triangles there and the plan starts again (up to o.rounds, 60);
+ * none left frozen: null (simplified as before).
+ * @param P positions (mm)  @param sub the region's triangles (vertex indices)  @param wid vertex → welded id
+ * @param L withDecimationLock's  @param o { lockW (per lock vertex: its welded id here, or −1), lockTris (the lock
+ *   triangles of this region: simplifyRegions assigns each to one), border(w) → bool (the welded id on another region's
+ *   border too), chartOf (per vertex chart index, the charted tiers; null: one copy a vertex), chartIndex(name) → index or
+ *   −1, rounds, log, debug (each failing round logged: TOBI_FROZEN_DEBUG=1 in simplifyRegions) }
+ * @returns null | { indices (the region's input), lock (vertex indices to lock), frozen, freeTarget, stats }
+ */
+export function frozenPlan(P, sub, wid, L, o = {}) {
+  const log = o.log ?? (() => {});
+  const T = L.tris, LP = T.position, LI = T.indices, nL = LI.length / 3, nS = sub.length / 3;
+  // ---- the region's vertices by welded id and by place
+  const copies = new Map();
+  for (let i = 0; i < sub.length; i++) { const v = sub[i], w = wid(v); let a = copies.get(w); if (!a) copies.set(w, (a = [])); if (!a.includes(v)) a.push(v); }
+  const posW = (w) => { const v = copies.get(w)[0]; return [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]]; };
+  // (each lock vertex's welded id, o.lockW, found by simplifyRegions over the whole mesh; one this region does not have
+  // counts as not found)
+  const findW = (i) => { const w = o.lockW[i]; return w >= 0 && copies.has(w) ? w : -1; };
+  const lp = (i) => [LP[i * 3], LP[i * 3 + 1], LP[i * 3 + 2]];
+  const cell = L.cell ?? 1;
+  // (a changed dense cell under or beside the triangle: a cell's centre within half its diagonal and `m` of it)
+  const changedNear = (pc, lo, hi, m = 0.3) => {
+    if (!L.changedCell) return false;
+    const r = 0.87 * cell + m;
+    for (let i = Math.floor((lo[0] - r) / cell); i <= Math.floor((hi[0] + r) / cell); i++) for (let j = Math.floor((lo[1] - r) / cell); j <= Math.floor((hi[1] + r) / cell); j++) for (let k = Math.floor((lo[2] - r) / cell); k <= Math.floor((hi[2] + r) / cell); k++) {
+      if (!L.changedCell(`${i},${j},${k}`)) continue;
+      if (pointTriDist([(i + 0.5) * cell, (j + 0.5) * cell, (k + 0.5) * cell], pc[0], pc[1], pc[2]) <= r) return true;
+    }
+    return false;
+  };
+  // ---- the lock's triangles in this region: their welded corners, centroids, whether each may be held
+  const LT = [];
+  for (const t of o.lockTris ?? Array.from({ length: nL }, (_, i) => i)) {
+    const pc = [0, 1, 2].map((k) => lp(LI[t * 3 + k])), c = [0, 1, 2].map((q) => (pc[0][q] + pc[1][q] + pc[2][q]) / 3);
+    const w = [0, 1, 2].map((k) => findW(LI[t * 3 + k])), ch = T.chart?.[t] ? o.chartIndex?.(T.chart[t]) ?? -1 : -1;
+    const mapped = w.every((x) => x >= 0);
+    const lo = [0, 1, 2].map((q) => Math.min(pc[0][q], pc[1][q], pc[2][q])), hi = [0, 1, 2].map((q) => Math.max(pc[0][q], pc[1][q], pc[2][q]));
+    let why = null;
+    if (!mapped) why = 'moved'; else if (new Set(w).size < 3) why = 'degenerate'; else if (L.free?.(c)) why = 'zone'; else if (changedNear(pc, lo, hi)) why = 'changed';
+    // (its copies: the lock's chart if every corner has one there, else a chart all three share, else each corner's copy
+    // in the lock's chart or the chart most of the corners have — a triangle across a seam, which the repair after the
+    // simplification (charts.repairFolds) lays into one chart: its UVs, not its place)
+    let vs = null, mixed = false;
+    if (!why) {
+      if (o.chartOf) {
+        const charts = w.map((x) => new Set(copies.get(x).map((v) => o.chartOf[v])));
+        let pick = ch >= 0 && charts.every((s) => s.has(ch)) ? ch : -1;
+        if (pick < 0) for (const c0 of charts[0]) if (charts[1].has(c0) && charts[2].has(c0)) { pick = c0; break; }
+        if (pick >= 0) vs = w.map((x) => copies.get(x).find((v) => o.chartOf[v] === pick));
+        else {
+          const tally = new Map(); for (const s of charts) for (const c0 of s) tally.set(c0, (tally.get(c0) ?? 0) + 1);
+          const best = [...tally].sort((a, b) => (b[0] === ch) - (a[0] === ch) || b[1] - a[1])[0][0];
+          vs = w.map((x) => copies.get(x).find((v) => o.chartOf[v] === best) ?? copies.get(x).find((v) => o.chartOf[v] === ch) ?? copies.get(x)[0]);
+          mixed = true;
+        }
+      } else vs = w.map((x) => copies.get(x)[0]);
+    }
+    LT.push({ t, pc, c, w, vs, lo, hi, held: !why, why, mixed });
+  }
+  const freeTarget0 = LT.filter((x) => !x.held).length;
+  if (!LT.some((x) => x.held)) return null;
+  // ---- the dense triangles: welded corners, centroids, adjacency by welded edge
+  const DW = new Int32Array(sub.length); for (let i = 0; i < sub.length; i++) DW[i] = wid(sub[i]);
+  const dc = (d) => [0, 1, 2].map((q) => (P[sub[d * 3] * 3 + q] + P[sub[d * 3 + 1] * 3 + q] + P[sub[d * 3 + 2] * 3 + q]) / 3);
+  const ekey = (a, b) => a * 4194304 + b;
+  const dirTri = new Map();
+  for (let d = 0; d < nS; d++) for (let k = 0; k < 3; k++) dirTri.set(ekey(DW[d * 3 + k], DW[d * 3 + (k + 1) % 3]), d);
+  const nbr = new Map();
+  for (let d = 0; d < nS; d++) for (let k = 0; k < 3; k++) { const a = DW[d * 3 + k], b = DW[d * 3 + (k + 1) % 3]; for (const [x, y] of [[a, b], [b, a]]) { let s = nbr.get(x); if (!s) nbr.set(x, (s = new Set())); s.add(y); } }
+  // the dense mesh's median edge (the seed and leak distances' unit)
+  const el = []; for (let d = 0; d < Math.min(nS, 4000); d++) { const a = sub[d * 3], b = sub[d * 3 + 1]; el.push(Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2])); }
+  el.sort((a, b) => a - b); const hd = el[el.length >> 1] || 0.1;
+  // the lock triangles' grid (nearest-triangle queries)
+  const G = 0.6, grid = new Map(), gk = (i, j, k) => `${i},${j},${k}`;
+  LT.forEach((x, n) => { for (let i = Math.floor(x.lo[0] / G); i <= Math.floor(x.hi[0] / G); i++) for (let j = Math.floor(x.lo[1] / G); j <= Math.floor(x.hi[1] / G); j++) for (let k = Math.floor(x.lo[2] / G); k <= Math.floor(x.hi[2] / G); k++) { const key = gk(i, j, k); let a = grid.get(key); if (!a) grid.set(key, (a = [])); a.push(n); } });
+  const nearest = (p) => {
+    const i0 = Math.floor(p[0] / G), j0 = Math.floor(p[1] / G), k0 = Math.floor(p[2] / G);
+    let best = -1, bd = Infinity;
+    for (let r = 0; r <= 6; r++) {
+      for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) for (let k = -r; k <= r; k++) {
+        if (Math.max(Math.abs(i), Math.abs(j), Math.abs(k)) !== r) continue;
+        for (const n of grid.get(gk(i0 + i, j0 + j, k0 + k)) ?? []) { const x = LT[n], e = pointTriDist(p, x.pc[0], x.pc[1], x.pc[2]); if (e < bd) { bd = e; best = n; } }
+      }
+      if (best >= 0 && bd < r * G) break;
+    }
+    return [best, bd];
+  };
+  const owner = new Int32Array(nS), ownerD = new Float32Array(nS), cen = [];
+  for (let d = 0; d < nS; d++) { const c = dc(d); cen.push(c); [owner[d], ownerD[d]] = nearest(c); }
+  const freeHere = new Uint8Array(nS);
+  for (let d = 0; d < nS; d++) if (L.free?.(cen[d])) freeHere[d] = 1;
+  // ---- rounds: plan, check, unfreeze where it fails
+  const rounds = o.rounds ?? 60;
+  let fail = null;
+  for (let round = 0; round < rounds; round++) {
+    const frozen = LT.filter((x) => x.held), fV = new Set(), fDir = new Map();
+    for (const x of frozen) for (let k = 0; k < 3; k++) { fV.add(x.w[k]); fDir.set(ekey(x.w[k], x.w[(k + 1) % 3]), x); }
+    // the lens edges: a frozen edge a → b whose twin b → a no frozen triangle has, not on another region's border
+    const lens = [];
+    for (const x of frozen) for (let k = 0; k < 3; k++) { const a = x.w[k], b = x.w[(k + 1) % 3]; if (fDir.has(ekey(b, a))) continue; if (o.border?.(a) && o.border?.(b)) continue; lens.push({ a, b, x, k }); }
+    // the labels: a dense triangle is free unless its nearest lock triangle is held (and it is not in a zone)
+    const isFree = new Uint8Array(nS), touch = new Set();
+    // (in a zone, a dense triangle more than 2 edges off its nearest held triangle is free too: new skin the lock never had)
+    for (let d = 0; d < nS; d++) if (owner[d] < 0 || !LT[owner[d]].held || (freeHere[d] && ownerD[d] > 2 * hd)) { isFree[d] = 1; for (let k = 0; k < 3; k++) touch.add(DW[d * 3 + k]); }
+    // the cuts, loop by loop along the frozen boundary, each through vertices no earlier cut took: cuts that share no vertex
+    // cannot cross, so a free part too thin for two of them gets none (no path: its frozen triangle unfreezes, the part
+    // grows) instead of two that cross and let the flood out
+    // (a corner of the frozen boundary the free part reaches by one dense edge only: the two cuts there share it, out and
+    // back — a spike, which the loop's walk drops below; so a cut may share vertices with the loop's previous cut)
+    const byStart = new Map(); for (const e of lens) { let l = byStart.get(e.a); if (!l) byStart.set(e.a, (l = [])); l.push(e); }
+    const loops = [], taken = new Set();
+    for (const e0 of lens) {
+      if (taken.has(e0)) continue;
+      const loop = [];
+      let e = e0;
+      while (e && !taken.has(e)) { taken.add(e); loop.push(e); e = (byStart.get(e.b) ?? []).find((q) => !taken.has(q)); }
+      loops.push(loop);
+    }
+    const order = loops.flat(), loopOf = new Map(), posIn = new Map();
+    loops.forEach((lp, li) => lp.forEach((e, i) => { loopOf.set(e, li); posIn.set(e, i); }));
+    const used = new Set(), interiorOf = new Map();
+    const bad = new Set(), paths = [];
+    let sharedOK = new Set();
+    // (the shortest path a → b through the vertices `allow` admits, within 3 chords and 4 dense edges of length)
+    const shortest = (e, allow) => {
+      const A = posW(e.a), B = posW(e.b), cap = 3 * Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) + 4 * hd;
+      const dist = new Map([[e.a, 0]]), prev = new Map(), done = new Set();
+      for (let it = 0; it < 4000; it++) {
+        let u = -1, du = Infinity;
+        for (const [k, v] of dist) if (!done.has(k) && v < du) { du = v; u = k; }
+        if (u < 0 || du > cap) return null;
+        if (u === e.b) break;
+        done.add(u);
+        const pu = posW(u);
+        for (const v of nbr.get(u) ?? []) {
+          if (done.has(v) || (v !== e.b && (fV.has(v) || (used.has(v) && !sharedOK.has(v)) || !allow(v)))) continue;
+          const pv = posW(v), nd = du + Math.hypot(pu[0] - pv[0], pu[1] - pv[1], pu[2] - pv[2]);
+          if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, u); }
+        }
+      }
+      if (!prev.has(e.b)) return null;
+      const path = [e.b]; while (path[path.length - 1] !== e.a) path.push(prev.get(path[path.length - 1]));
+      return path.reverse();
+    };
+    let relaxed = 0;
+    for (const e of order) {
+      // (the vertices this cut may share: the loop's previous cut's, and for its last the first's)
+      const lp = loops[loopOf.get(e)], i0 = posIn.get(e);
+      sharedOK = new Set([...(interiorOf.get(lp[i0 - 1]) ?? []), ...(i0 === lp.length - 1 && i0 > 0 ? interiorOf.get(lp[0]) ?? [] : [])]);
+      // (first through the free-labelled skin; else, where the free part is thin, through any vertex within 1.5 dense edges
+      // of the frozen edge on its free side: the side away from the frozen triangle's third corner)
+      let path = shortest(e, (v) => touch.has(v));
+      if (!path) {
+        const A = posW(e.a), B = posW(e.b), C = posW(e.x.w[(e.k + 2) % 3]), ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], ac = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+        const n = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]], inward = [n[1] * ab[2] - n[2] * ab[1], n[2] * ab[0] - n[0] * ab[2], n[0] * ab[1] - n[1] * ab[0]];
+        const il = Math.hypot(...inward) || 1;
+        path = shortest(e, (v) => { const p = posW(v); if (pointSegDist(p, A, B) > 1.5 * hd) return false; return ((p[0] - A[0]) * inward[0] + (p[1] - A[1]) * inward[1] + (p[2] - A[2]) * inward[2]) / il <= 0.25 * hd; });
+        if (path) relaxed++;
+      }
+      if (!path) {
+        bad.add(e.x);
+        if (o.debug) { const f = (w) => posW(w).map((x) => x.toFixed(2)).join(' '); const nb = [...(nbr.get(e.a) ?? [])]; log(`      no path ${f(e.a)} → ${f(e.b)} (third ${f(e.x.w[(e.k + 2) % 3])}); a's neighbours: ${nb.length}, touch ${nb.filter((v) => touch.has(v)).length}, frozen ${nb.filter((v) => fV.has(v)).length}, used ${nb.filter((v) => used.has(v)).length}; b's: ${[...(nbr.get(e.b) ?? [])].length}, touch ${[...(nbr.get(e.b) ?? [])].filter((v) => touch.has(v)).length}, frozen ${[...(nbr.get(e.b) ?? [])].filter((v) => fV.has(v)).length}, used ${[...(nbr.get(e.b) ?? [])].filter((v) => used.has(v)).length}`); }
+        continue;
+      }
+      interiorOf.set(e, path.slice(1, -1));
+      for (let i = 1; i + 1 < path.length; i++) used.add(path[i]);
+      paths.push({ ...e, path });
+    }
+    if (bad.size) { for (const x of bad) { x.held = false; x.why = 'no path'; } fail = `${bad.size} lens edges without a path`; if (o.debug) log(`    round ${round}: ${fail} (of ${lens.length})`); continue; }
+    // the cut: each loop's cuts walked end to end, its spikes (u → v → u) dropped — the free part's edge; a vertex the walk
+    // still meets twice is a crossing: the cuts through it fail
+    const cutEdges = [], crossed = new Set();
+    for (const lp of loops) {
+      const P0 = lp.map((e) => paths.find((p) => p.a === e.a && p.b === e.b && p.x === e.x)), walk = [], owner2 = [];
+      P0.forEach((p, pi) => { for (let i = 0; i + 1 < p.path.length; i++) { walk.push(p.path[i]); owner2.push(pi); } });
+      let changed = true;
+      while (changed && walk.length > 2) {
+        changed = false;
+        for (let i = 0; i < walk.length && walk.length > 2; i++) {
+          const n = walk.length, a = walk[(i + n - 1) % n], c = walk[(i + 1) % n];
+          if (a === c) { const j = (i + 1) % n; owner2[(i + n - 1) % n] = owner2[j]; const drop = [i, j].sort((x, y) => y - x); for (const q of drop) { walk.splice(q, 1); owner2.splice(q, 1); } changed = true; break; }
+        }
+      }
+      const seen = new Map();
+      walk.forEach((w, i) => { if (!fV.has(w)) { if (seen.has(w)) { crossed.add(P0[owner2[i]].x); crossed.add(P0[owner2[seen.get(w)]].x); } else seen.set(w, i); } });
+      for (let i = 0; i < walk.length && walk.length > 2; i++) cutEdges.push([walk[i], walk[(i + 1) % walk.length], owner2[i]]);
+    }
+    if (crossed.size) { for (const x of crossed) { x.held = false; x.why = 'crossing'; } fail = `${crossed.size} cuts cross`; if (o.debug) log(`    round ${round}: ${fail}`); continue; }
+    // the free surface: flooded from the far side of every cut edge
+    const cut = new Set(), ukey = (a, b) => (a < b ? ekey(a, b) : ekey(b, a));
+    for (const p of paths) for (let i = 0; i + 1 < p.path.length; i++) cut.add(ukey(p.path[i], p.path[i + 1]));
+    const inFree = new Uint8Array(nS), stack = [], seedOf = new Int32Array(nS).fill(-1), par = new Int32Array(nS).fill(-1);
+    for (const [u, v] of cutEdges) { const d = dirTri.get(ekey(v, u)); if (d !== undefined && !inFree[d]) { inFree[d] = 1; seedOf[d] = paths.findIndex((p) => p.path.includes(u) && p.path.includes(v)); stack.push(d); } }
+    // (only there: every free part is bounded by lens edges, so their far sides reach all of it; a seed anywhere else could
+    // lie outside a cut that runs inside a zone, and flood under the held surface)
+    while (stack.length) {
+      const d = stack.pop();
+      for (let k = 0; k < 3; k++) {
+        const a = DW[d * 3 + k], b = DW[d * 3 + (k + 1) % 3];
+        if (cut.has(ukey(a, b))) continue;
+        const u = dirTri.get(ekey(b, a));
+        if (u === undefined || inFree[u]) continue;
+        inFree[u] = 1; seedOf[u] = seedOf[d]; par[u] = d; stack.push(u);
+      }
+    }
+    // (a leak: a flooded triangle under a held one, far from every cut — the paths' frozen edges near it unfreeze)
+    const chords = paths.map((p) => [posW(p.a), posW(p.b)]);
+    const leakAt = [];
+    for (let d = 0; d < nS; d++) {
+      if (!inFree[d] || isFree[d] || freeHere[d]) continue;
+      let near = Infinity; for (const [A, B] of chords) { near = Math.min(near, pointSegDist(cen[d], A, B)); if (near < 3 * hd + 0.2) break; }
+      if (near >= 3 * hd + 0.2) leakAt.push(d);
+    }
+    if (leakAt.length) {
+      // (the leak's source: the cut whose far side each leaking triangle was flooded from — a cut through a free part too
+      // thin to hold it, e.g. one long held sliver's edge — its held triangle unfrozen, the free part fattened there)
+      const hit = new Set();
+      for (const d0 of leakAt) { let d = d0, n = 0; while (par[d] >= 0 && n++ < nS) d = par[d]; if (seedOf[d] >= 0) hit.add(paths[seedOf[d]].x); }
+      for (const x of hit) { x.held = false; x.why = 'leak'; }
+      fail = `the free surface leaked under ${leakAt.length} held dense triangles`;
+      if (o.debug) log(`    round ${round}: ${fail}; unfreezing ${hit.size}; e.g. ${leakAt.slice(0, 3).map((d) => cen[d].map((x) => x.toFixed(2)).join(' ')).join(' | ')}`);
+      if (o.debug) {
+        // (the first leaking triangle's seed: the cut it was flooded from)
+        let d = leakAt[0]; while (par[d] >= 0) d = par[d];
+        const sp = seedOf[d] >= 0 ? paths[seedOf[d]] : null, f = (w) => posW(w).map((x) => x.toFixed(2)).join(' ');
+        if (sp) log(`      leak from the cut ${f(sp.a)} → ${f(sp.b)} (${sp.path.length} vertices; its frozen triangle ${sp.x.w.map(f).join(' | ')})`);
+      }
+      if (!hit.size) break;
+      continue;
+    }
+    // the input: frozen, pockets, free
+    const tris = [], kind = [];
+    for (const x of frozen) { tris.push(x.vs[0], x.vs[1], x.vs[2]); kind.push(0); }
+    const copyIn = (w, chart) => { const a = copies.get(w); return o.chartOf ? a.find((v) => o.chartOf[v] === chart) ?? -1 : a[0]; };
+    for (const p of paths) {
+      const aCopy = p.x.vs[p.k];
+      for (let i = 1; i + 1 < p.path.length; i++) {
+        const d = dirTri.get(ekey(p.path[i + 1], p.path[i]));
+        const cornerOf = (w) => { for (let k = 0; k < 3; k++) if (DW[d * 3 + k] === w) return sub[d * 3 + k]; return -1; };
+        const xi = cornerOf(p.path[i]), xj = cornerOf(p.path[i + 1]);
+        const ach = o.chartOf ? copyIn(p.a, o.chartOf[xi]) : -1;
+        tris.push(ach >= 0 ? ach : aCopy, xi, xj); kind.push(1);
+      }
+    }
+    for (let d = 0; d < nS; d++) if (inFree[d]) { tris.push(sub[d * 3], sub[d * 3 + 1], sub[d * 3 + 2]); kind.push(2); }
+    // the stitch checked: welded, every directed edge once, each with its twin, round the frozen surface and the cuts
+    const band = new Set(fV); for (const p of paths) for (const w of p.path) band.add(w);
+    const dirs = new Map();
+    let degenerate = 0;
+    for (let i = 0; i < tris.length; i += 3) {
+      const w = [wid(tris[i]), wid(tris[i + 1]), wid(tris[i + 2])];
+      if (w[0] === w[1] || w[1] === w[2] || w[0] === w[2]) { degenerate++; continue; }
+      for (let k = 0; k < 3; k++) { const q = ekey(w[k], w[(k + 1) % 3]); dirs.set(q, (dirs.get(q) ?? 0) + 1); }
+    }
+    const badV = new Set();
+    for (const [q, n] of dirs) {
+      const a = Math.floor(q / 4194304), b = q % 4194304;
+      if (!band.has(a) && !band.has(b)) continue;
+      if (n > 1 || (!dirs.has(ekey(b, a)) && !(o.border?.(a) && o.border?.(b)))) { badV.add(a); badV.add(b); }
+    }
+    if (degenerate || badV.size) {
+      let hit = 0;
+      for (const x of frozen) if (x.w.some((w) => badV.has(w))) { x.held = false; x.why = 'stitch'; hit++; }
+      fail = `the stitch is not manifold at ${badV.size} vertices (${degenerate} degenerate)`;
+      if (o.debug) log(`    round ${round}: ${fail}; e.g. ${[...badV].slice(0, 4).map((w) => posW(w).map((x) => x.toFixed(2)).join(' ')).join(' | ')}`);
+      if (!hit && !degenerate) break;
+      if (!hit) for (const p of paths) { p.x.held = false; p.x.why = 'stitch'; }
+      continue;
+    }
+    const lockV = new Set(); for (const w of fV) for (const v of copies.get(w)) lockV.add(v);
+    const why = {}; for (const x of LT) if (!x.held) why[x.why] = (why[x.why] ?? 0) + 1;
+    const stats = { label: L.label, round, lockTriangles: LT.length, frozen: frozen.length, acrossSeams: frozen.filter((x) => x.mixed).length, relaxedCuts: relaxed, free: LT.length - frozen.length, why, lensEdges: paths.length, pocketTriangles: kind.filter((k) => k === 1).length, freeDense: kind.filter((k) => k === 2).length, freeDenseOf: nS };
+    log(`  decimation lock ${L.label ?? ''}: ${frozen.length} of ${LT.length} triangles held (${Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ')} not), ${paths.length} lens edges, ${stats.pocketTriangles} pocket triangles, ${stats.freeDense} of ${nS} dense triangles to simplify${round ? ` (round ${round + 1})` : ''}`);
+    return { indices: Uint32Array.from(tris), lock: [...lockV], frozen: frozen.map((x) => x.w), freeTarget: LT.length - frozen.length, freeTarget0, stats };
+  }
+  log(`  decimation lock ${L.label ?? ''}: not held (${fail})`);
+  return null;
+}
+
 /**
  * Simplify a mesh region by region, each region to its own triangle target. The vertices two regions share (their
  * border, welded by `weld`) are locked, so the regions stay joined without a crack; `lock` (per vertex) locks more.
@@ -194,22 +532,69 @@ export function simplifyRegions(mesh, regionOf, regions, o = {}) {
   const stride = o.stride ?? 0;
   const attrs = stride ? o.attrs : new Float32Array(nv);
   const weights = stride ? o.weights : [0];
-  const parts = [], regOut = [], errors = [];
+  const parts = [], regOut = [], errors = [], frozen = [];
+  // (2026-10-25, the decimation lock: each lock vertex's welded id — the one vertex of this mesh at its place, within
+  // 2e-4 mm; none, or two (a split vertex), −1 — and each lock triangle's region: the region a corner is inside of, else
+  // (every corner on the border or not found) the regions' own rule on its centroid)
+  let lockW = null, lockRegion = null;
+  if (o.frozen) {
+    const LP = o.frozen.tris.position, LI = o.frozen.tris.indices, Q = 1e-3, place = new Map(), seen = new Set();
+    for (let v = 0; v < nv; v++) { const w = wid(v); if (seen.has(w) || !mask.has(w)) continue; seen.add(w); const k = `${Math.round(P[v * 3] / Q)},${Math.round(P[v * 3 + 1] / Q)},${Math.round(P[v * 3 + 2] / Q)}`; let a = place.get(k); if (!a) place.set(k, (a = [])); a.push(v); }
+    lockW = new Int32Array(LP.length / 3).fill(-1);
+    for (let i = 0; i < lockW.length; i++) {
+      const p = [LP[i * 3], LP[i * 3 + 1], LP[i * 3 + 2]], i0 = Math.round(p[0] / Q), j0 = Math.round(p[1] / Q), k0 = Math.round(p[2] / Q), hit = new Set();
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) for (const v of place.get(`${i0 + a},${j0 + b},${k0 + c}`) ?? []) if (Math.max(Math.abs(P[v * 3] - p[0]), Math.abs(P[v * 3 + 1] - p[1]), Math.abs(P[v * 3 + 2] - p[2])) < 2e-4) hit.add(wid(v));
+      if (hit.size === 1) lockW[i] = [...hit][0];
+    }
+    const nL = LI.length / 3, chartIdx = (t) => (o.frozen.tris.chart?.[t] ? o.chartIndex?.(o.frozen.tris.chart[t]) ?? -1 : -1);
+    lockRegion = new Int16Array(nL).fill(-1);
+    for (let t = 0; t < nL; t++) {
+      let r = -1;
+      for (let k = 0; k < 3; k++) { const w = lockW[LI[t * 3 + k]]; if (w < 0) continue; const mm = mask.get(w) ?? 0; if (mm && !(mm & (mm - 1))) { r = 31 - Math.clz32(mm); break; } }
+      if (r < 0) {
+        const c = [0, 1, 2].map((q) => (LP[LI[t * 3] * 3 + q] + LP[LI[t * 3 + 1] * 3 + q] + LP[LI[t * 3 + 2] * 3 + q]) / 3);
+        r = 0; while (r < regions.length - 1 && !(regions[r].select ? regions[r].select(c, chartIdx(t)) : false)) r++;
+      }
+      lockRegion[t] = r;
+    }
+  }
   for (let r = 0; r < regions.length; r++) {
     const R = regions[r], sub = [];
     for (let t = 0; t < nt; t++) if (regionOf[t] === r) sub.push(I[t * 3], I[t * 3 + 1], I[t * 3 + 2]);
-    let idx = Uint32Array.from(sub), err = 0;
-    if (idx.length / 3 > R.target) {
-      [idx, err] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, attrs, stride || 1, weights, lock, R.target * 3, R.error ?? 1, R.flags ?? []);
+    let idx = Uint32Array.from(sub), err = 0, target = R.target, lockR = lock;
+    // (2026-10-25: the decimation lock, o.frozen — withDecimationLock: the lock's triangles held, the rest simplified to
+    // the lock's own count there)
+    const lockTris = lockRegion ? [...lockRegion.keys()].filter((t) => lockRegion[t] === r) : null;
+    const plan = o.frozen && sub.length && lockTris.length ? frozenPlan(P, idx, wid, o.frozen, {
+      border: (w) => { const mm = mask.get(w) ?? 0; return !!(mm & (mm - 1)); },
+      lockW, lockTris, chartOf: o.chartOf ?? null, chartIndex: o.chartIndex, log, debug: !!process.env.TOBI_FROZEN_DEBUG,
+    }) : null;
+    if (plan) {
+      // (the free part: the lock's own count there, plus what the region's target gained since the lock — e.g. the far
+      // tier's second pass, raised by what the refill freed)
+      const base = o.frozen.tris.targets?.[R.name];
+      idx = plan.indices; target = plan.frozen.length + plan.freeTarget + (Number.isFinite(base) ? R.target - base : 0);
+      lockR = Uint8Array.from(lock); for (const v of plan.lock) lockR[v] = 1;
+      frozen.push({ region: R.name, ...plan.stats, target });
     }
-    log(`  region ${R.name}: ${sub.length / 3} → ${idx.length / 3} triangles (target ${R.target}, error ${err.toExponential(2)})`);
+    if (idx.length / 3 > target) {
+      [idx, err] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, attrs, stride || 1, weights, lockR, target * 3, R.error ?? 1, R.flags ?? []);
+    }
+    if (plan) {
+      // (every held triangle kept? welded)
+      const out = new Set(); for (let i = 0; i < idx.length; i += 3) out.add([wid(idx[i]), wid(idx[i + 1]), wid(idx[i + 2])].sort((a, b) => a - b).join(','));
+      const lost = plan.frozen.filter((w) => !out.has([...w].sort((a, b) => a - b).join(','))).length;
+      frozen[frozen.length - 1].lostHeld = lost;
+      if (lost) log(`  region ${R.name}: ${lost} held triangles lost in the simplification`);
+    }
+    log(`  region ${R.name}: ${sub.length / 3} → ${idx.length / 3} triangles (target ${target}${plan ? `, ${plan.frozen.length} held` : ''}, error ${err.toExponential(2)})`);
     parts.push(idx); errors.push(err);
     regOut.push(new Uint8Array(idx.length / 3).fill(r));
   }
   const len = parts.reduce((a, p) => a + p.length, 0), indices = new Uint32Array(len), region = new Uint8Array(len / 3);
   let at = 0, rt = 0;
   parts.forEach((p, r) => { indices.set(p, at); at += p.length; region.set(regOut[r], rt); rt += regOut[r].length; });
-  return { indices, region, errors, locked };
+  return { indices, region, errors, locked, ...(frozen.length ? { frozen } : {}) };
 }
 
 /**
@@ -267,15 +652,16 @@ export function tierMesh(f, box, o) {
     const A = attrsFor(dense.normal, null, ident, nD);
     const lock = o.lockDense ?? null;
     const rOf = regionOfTri(dense, null);
-    simp = simplifyRegions(dense, rOf, regions, { ...A, lock, log });
+    simp = simplifyRegions(dense, rOf, regions, { ...A, lock, log, frozen: DECIMATION_LOCK });
     if (o.refill) {
-      // (the triangles the refill frees go back to the regions: simplified again to targets raised by as many)
+      // (the triangles the refill frees go back to the regions: simplified again to targets raised by as many; with the
+      // decimation lock, its free part's target raised by them)
       let rf = refillRegions(dense.position, simp.indices, simp.region, o.refill);
       const saved = rf.removed - rf.added;
       if (saved > 0) {
         const total = regions.reduce((a, R) => a + R.target, 0);
         const regions2 = regions.map((R) => ({ ...R, target: Math.round(R.target * (1 + saved / total)) }));
-        simp = simplifyRegions(dense, rOf, regions2, { ...A, lock, log });
+        simp = simplifyRegions(dense, rOf, regions2, { ...A, lock, log, frozen: DECIMATION_LOCK });
         rf = refillRegions(dense.position, simp.indices, simp.region, o.refill);
       }
       if (rf.removed) { simp.indices = rf.indices; simp.region = rf.region; log(`  refilled ${rf.removed} hidden triangles with ${rf.added}`); }
@@ -299,7 +685,7 @@ export function tierMesh(f, box, o) {
     let lock = null;
     if (o.lockDense) { lock = new Uint8Array(n); for (let i = 0; i < n; i++) lock[i] = o.lockDense[charted.source[i]]; }
     const tc = charted.triChart;
-    simp = simplifyRegions(charted, regionOfTri(charted, (t) => tc[t]), regions, { ...A, lock, weld: charted.source, log });
+    simp = simplifyRegions(charted, regionOfTri(charted, (t) => tc[t]), regions, { ...A, lock, weld: charted.source, log, frozen: DECIMATION_LOCK, chartOf: charted.chart, chartIndex: (nm) => o.charts.findIndex((c) => c.name === nm) });
     // the kept triangles' charts: the corners' chart (every corner of a charted triangle has its chart)
     const c = compactMesh(charted, simp.indices, ['position', 'normal', 'uv', 'chart', 'source', 'depth']);
     const triChart = new Int16Array(c.indices.length / 3);
@@ -326,7 +712,7 @@ export function tierMesh(f, box, o) {
   const tangent = vt.tangent;
   const nT = tier.indices.length / 3;
   log(`tier mesh: ${tier.position.length / 3} vertices, ${nT} triangles (dense ${dense.indices.length / 3}, charted ${charted.position.length / 3} vertices${repair ? `, ${repair.islands} patch islands` : ''}); tangents: ${vt.stats.split} vertices split, ${vt.stats.fallback} without UV area`);
-  return { ...tier, tangent, region, dense, charted, stats: { regions: regions.map((R, r) => ({ name: R.name, target: R.target, triangles: region.reduce((a, x) => a + (x === r ? 1 : 0), 0), error: simp.errors[r] })), locked: simp.locked, repair, tangents: vt.stats } };
+  return { ...tier, tangent, region, dense, charted, stats: { regions: regions.map((R, r) => ({ name: R.name, target: R.target, triangles: region.reduce((a, x) => a + (x === r ? 1 : 0), 0), error: simp.errors[r] })), locked: simp.locked, repair, tangents: vt.stats, ...(simp.frozen ? { frozen: simp.frozen } : {}) } };
 }
 
 /**

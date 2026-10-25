@@ -25,9 +25,12 @@ import { BODY_LAYOUT } from './fishmesh.mjs';
 import { vertexTangents } from './tiers.mjs';
 
 /** The ring counts per tier (triangles = 2·nt·np − 2·np per globe: the two poles' fans, without the zero-area facets
- * eyeGlobe's pole rows make, compact): hero 4,992, lod1 352, lod2 96 (8 columns: an octagon from every side, where B1's
- * 6 showed a hexagon in the far renders). */
-export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 16 }, lod2: { nt: 7, np: 8 } };
+ * eyeGlobe's pole rows make, compact): hero 4,992, lod1 704, lod2 96 (8 columns: an octagon from every side, where B1's
+ * 6 showed a hexagon in the far renders).
+ * (round fm_eye: lod1 32 columns, was 16 — the window's outline is a ring of the mesh, and at 16 sides its back end
+ * was one hard corner at the states' default gaze, the pointed almond the owner named, on the tier the 図鑑's 'low'
+ * preview, FieldCase, the net and the tanks show close; 32 round it as the hero's 64 do: +352 triangles a globe) */
+export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 32 }, lod2: { nt: 7, np: 8 } };
 
 /** eyeGlobe's uv (u = azimuth / 2π, v = ρ / 2: the window v ≤ 0.5, the skin 0.5 … 1) on the atlas: `part` 'window' maps
  * v ∈ [0, 0.5] onto the iris rect, 'skin' maps v ∈ [0.5, 1] onto the eyeSkin rect (v clamped into the part's range).

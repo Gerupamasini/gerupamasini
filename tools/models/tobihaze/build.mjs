@@ -19,7 +19,7 @@
 //   node tools/models/tobihaze/build.mjs [--tier hero|lod1|lod2|all] [--out <dir>] [--clay] [--cache <file>] [--hero-h <mm>]
 //        [--tex-scale <k>] [--tex-workers <n>] [--tex-dump <dir>] [--pattern|--surface|--eye|--fin <module path>]
 //        [--tex-test domes] [--eye-skin-part head|eyeSkin] [--eye-mirror] [--cav-albedo k:mean[:max] | off]
-//        [--film-normal-scale k]
+//        [--film-normal-scale k] [--pose-lock <file> | --no-pose-lock] [--decimation-lock <file> | --no-decimation-lock]
 // --out defaults to tools/models/tobihaze/out/tiers/ (shipping into src/assets/ is a later round); --cache keeps the
 // hero data on disk (a scratch file) so a rebuild of the GLBs skips the hero's meshing, weights and blend-shape solve
 // (several minutes); --clay writes the clay materials of rounds B1–B4 (no maps). Without it (round T1) the tiers are
@@ -44,19 +44,44 @@
 // its own in the fin atlas (SHEATH_ISLAND: opaque at hero and lod1 alike); the states' eyes at the default gaze
 // (rig.statePose); the fins' shadow by coverage as a runtime rule in their extras (FIN_SHADOW); the shadow pass's draws
 // in the report (--film-normal-scale k, --eye-mirror for the measurements).
+// 2026-10-25 (the eye and lip round: only the head's sculpt changes): two locks hold what the head must not move.
+//   the pose lock (poselock.mjs, tools/models/tobihaze/poselock.json: round T3's e6079e5 GLBs' extras): the body's poses
+//     are still solved on this build's mesh (rig.statePose, propFrames, crawlFrames, stateTransitions — the drift goes to
+//     the report's poseLock), then every joint channel outside the head and every fin weight is the lock's — the hero's
+//     states, prop keys and transition lifts (heroStates, heroProp: the transition keys follow from the held states and
+//     lifts), each tier's crawl frames with their welded contacts (heldCrawl); lod1 and lod2 carry the hero's states, prop
+//     and transitions as before. Re-measured on this mesh: each state's and prop key's solve ground (rig.groundUnder, the
+//     rule the solve used; the crawl's is the land state's), the states' groundMM and contacts (rig.contactsFor, by
+//     name on each tier's posed skin) and the transition keys' grounds and gates (rig.armClearance). --no-pose-lock
+//     solves the body afresh, --pose-lock <file> holds another lock
+//   the decimation lock (decimlock.mjs, tools/models/tobihaze/decimationlock.json: T3's lod1 and lod2 skin triangles and
+//     its dense cells' hashes): lighterSkin runs bodyTierMesh under tiers.withDecimationLock, and tiers.frozenPlan keeps
+//     every T3 triangle outside the eye and the mouth (decimlock FREE_ZONES) on dense skin the sculpt did not change,
+//     simplifying only the rest (joined to the kept triangles along their edges) to T3's count there; the report's
+//     decimationLock says per region what it kept and why the rest was not. --no-decimation-lock simplifies afresh,
+//     --decimation-lock <file> holds another. The hero's tier mesh is not locked
 //
 // Meshes per tier — the draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two;
-// the T2 caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by
-// the blend-shape groups that move it (headmorphs.splitByMorphs) only where the morph textures need it:
-//   hero  12 draws: Head_Orbit (blinkL, blinkR, eyesUpL, eyesUpR; inflate, inflateMid where the cheeks reach it),
-//         Head_Mouth (gape, gum; throat, inflate, inflateMid), Head (throat, inflate, inflateMid), Body (static; round T2
-//         the teeth in its primitive, each row on its jaw joint: T1's Mouth_Teeth draw), Eye_L, Eye_R — 6 opaque — and the
-//         fins in two meshes (FIN_MESHES: Fins_Median D1, D2, anal, caudal; Fins_Paired the pectorals, the pelvic), each
-//         a blended primitive (2 passes) and an opaque one (the sheath, the fleshy roots): 6. Each fin's shapes
-//         `<target>_<fin>`; without the tangent split the two meshes' morph textures are 7.73 / 7.73 / 7.92 MB at 4096 /
-//         8192 / 16384 rows (T1's three split meshes 6.55 / 6.55 / 5.79, one more draw pair). B4's split study (B3's
-//         geometry, B4's planned maps): the three head meshes as one (7 draws) 30.7 / 31.9 / 32.6 MB, the whole skin one
-//         mesh (6 draws) 36.0 / 36.6 / 37.4
+// the caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by
+// the blend-shape groups that move it (headmorphs.splitByMorphs) only where the morph textures need it: the triangles
+// grouped by the groups whose shapes move a corner (eyes: blinkL/R, eyesUpL/R; mouth: gape, gum; face: throat, inflate,
+// inflateMid), then two meshes merged while the merged one's morph textures (4096 rows) cost less than the two's plus a
+// draw's worth (MORPH_EPS.draw: 0.5 MB at hero, 0.05 at lod1), so the split follows the sculpt — each build decides it,
+// its report's headSplit says what it chose:
+//   hero  12 draws (the 2026-10-25 shipped head, as T3's; 9977d95's first lip overlap moved so much of the face with the
+//         gape that the face-only Head merged into Head_Mouth, 11 draws): Head_Orbit (blinkL, blinkR, eyesUpL, eyesUpR;
+//         inflate, inflateMid where the cheeks reach it), Head_Mouth (gape, gum, throat, inflate, inflateMid), Head (the
+//         face: throat, inflate, inflateMid), Body (static; round T2 the teeth in its primitive, each row
+//         on its jaw joint: T1's Mouth_Teeth draw), Eye_L, Eye_R — 6 opaque — and the fins in two meshes (FIN_MESHES:
+//         Fins_Median D1, D2, anal, caudal; Fins_Paired the pectorals, the pelvic), each a blended primitive (2 passes)
+//         and an opaque one (the sheath, the fleshy roots): 6. Each fin's shapes `<target>_<fin>`; the two fin meshes'
+//         morph textures with their opaque primitives are 7.55 / 8.59 / 8.46 MB at 4096 / 8192 / 16384 rows (T2's
+//         7.73 / 7.73 / 7.92; T1's three split meshes 6.55 / 6.55 / 5.79, one more draw pair), the skin's three moving
+//         meshes 3.80 / 4.00 / 5.18 (the build report's gpu.meshes, 2026-10-25: Head_Orbit 1.97 / 2.36 / 3.15 on 10,184
+//         vertices, Head_Mouth 0.66 / 0.46 / 0.46 on 2,884, Head 1.18 / 1.18 / 1.57 on 11,895; T3's three 4.19 / 4.13 /
+//         5.31: Head_Orbit 2.36 / 2.36 / 3.15, Head_Mouth 0.66 / 0.59 / 0.59 on 3,688, Head 1.18 / 1.18 / 1.57 on 11,329;
+//         9977d95's two 4.65 / 4.98 / 5.77, one draw fewer); B4's split study (B3's geometry, B4's planned maps): the three head meshes as one
+//         (7 draws) 30.7 / 31.9 / 32.6 MB, the whole skin one mesh (6 draws) 36.0 / 36.6 / 37.4
 //   lod1  5 draws: Body (the whole skin, blinkL, blinkR, throat, inflate, inflateMid, eyesUpL, eyesUpR), Eye_L, Eye_R, Fins
 //         (the seven, their shapes' positions only; blended, 2 passes; the caudal's sheath last in its index buffer)
 //   lod2  2 draws: Body (with both eyes at rest), Fins (the cards, MASK: one pass)
@@ -81,7 +106,9 @@
 // packs a mesh's targets in one RGBA32F texture, rows of the GPU's maximum texture size — and the maps as KTX2 → BC7 /
 // ASTC, a byte a texel, mipmaps a third more: tools/models/budget.mjs), round T2 (TEX):
 //   hero  body baseColor, normal and the film map at 2048 (5.59 MB each) and the fin atlas at 1024 (1.40): maps 18.17 MB;
-//         buffers 2.7; morph textures 11.46 / 12.44 / 13.65: total 32.4 / 33.3 / 34.6 MB of 40
+//         buffers 2.7; morph textures 11.46 / 12.44 / 13.65: total 32.4 / 33.3 / 34.6 MB of 40 (2026-10-25 shipped, 12
+//         draws: maps 18.18, buffers 2.73, morph textures 11.35 / 12.60 / 13.65: total 32.3 / 33.5 / 34.6 MB; 9977d95's
+//         11 draws 33.1 / 34.5 / 35.1; T3's 12 draws 32.7 / 33.6 / 34.7)
 //   lod1  baseColor 1024 (1.40), normal 512 and the film map 512 (0.35 each), fin atlas 512 (0.35): maps 2.45 MB; buffers
 //         0.34; morph textures 2.53 / 2.99 / 2.39: total 5.31 / 5.77 / 5.18 MB of 6. The normal and the film map at 512
 //         because one skin mesh (4 draws) holds 1.2–1.8 MB of morph textures: at 1024 (+1.05) it fits only with lod1's
@@ -109,9 +136,13 @@ import { bodyTierMesh, fishDense, tierField, morphAttrs, tierMorphAttrs, ready, 
 // the atlas rects written in the extras as [u, v, w, h], rounded to 1e-4 (a fifth of a texel at 2048) so the contract
 // reads clean numbers (round T3)
 const uvwh = (r) => rectUVWH(r).map((x) => +x.toFixed(4));
-import { vertexTangents, tangentCheck } from './tiers.mjs';
+import { vertexTangents, tangentCheck, withDecimationLock } from './tiers.mjs';
+// (2026-10-25: lod1's and lod2's skin held to round T3's outside the eye and the mouth, decimlock.mjs)
+import { loadDecimationLock, changedCells, inFreeZone, FREE_ZONES } from './decimlock.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, finCard, finCardTargets, finTierParams } from './fins.mjs';
-import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, poseWorldHero, skinPacked, statePose, crawlFrames, propFrames, plantedSole, fishToQuatObj, contactsFor, contactGaps, poseForTier, mirrorErrors, limitExcess, AXES, stateTransitions } from './rig.mjs';
+import { JOINTS, J, NJ, TIER_JOINTS, jointsForTier, heroRig, packTop4, morphSkin, skinForTier, finWeights, teethWeights, axesForTier, partShares, poseWorldHero, skinPacked, statePose, crawlFrames, propFrames, plantedSole, fishToQuatObj, contactsFor, contactGaps, poseForTier, mirrorErrors, limitExcess, AXES, stateTransitions, groundUnder, RIG } from './rig.mjs';
+// (2026-10-25: the body's poses held to round T3's, poselock.mjs)
+import { loadPoseLock, withBody, bodyDrift, matchFrames } from './poselock.mjs';
 import { headMorphs, solveBindDelta, poseWorldFor, skinWith, wrapMorph, MORPH_ORDER, MORPH_EXTRA, MORPH_DRIVERS, MORPH_DRIVE, MORPH_EPS, MORPH_GROUPS_SIDES, MORPH_MESH_SIDES, pruneMorphs, splitByMorphs, morphJointMove } from './headmorphs.mjs';
 import { vertexGrid, tissueClass, transferRows, eyeLiftOnTier } from './transfer.mjs';
 import { eyeMeshForTier, eyesAtRest, EYE_TIERS } from './eyemesh.mjs';
@@ -681,7 +712,16 @@ export function lighterSkin(tierName, H, log = logDefault) {
     extraAttrs = tierMorphAttrs(TB.mesh, LOD1_ATTR_MORPHS, LOD1_ATTR_MORPHS.map((_, j) => { const d = new Float32Array(nD * 3); for (let v = 0; v < nD; v++) for (let c = 0; c < 3; c++) d[v * 3 + c] = t[v * k + j * 3 + c]; return d; }));
     log(`${tierName}: the hero's ${LOD1_ATTR_MORPHS.join(', ')} carried to the dense mesh`);
   }
-  const tier = bodyTierMesh(TB.mesh, { dense, extraAttrs, log });
+  // (2026-10-25: the decimation lock — T3's skin held outside the eye and the mouth, decimlock.mjs; tiers.frozenPlan)
+  const DL = decimationLockOf(H)?.tiers?.[TB.mesh];
+  let held = null;
+  if (DL) {
+    const changed = changedCells(DL.cells, dense.position, DL.cell);
+    held = { label: tierName, tris: DL, free: inFreeZone, changedCell: (k) => changed.has(k), cell: DL.cell };
+    log(`${tierName}: decimation lock ${path.relative(root, decimationLockOf(H).file)}: ${changed.size} dense cells changed since (${[...changed].filter((k) => !inFreeZone(k.split(',').map((x) => (+x + 0.5) * DL.cell))).length} outside the eye and the mouth)`);
+  }
+  const tier = withDecimationLock(held, () => bodyTierMesh(TB.mesh, { dense, extraAttrs, log }));
+  (H.decimationReport ??= {})[tierName] = held ? { file: path.relative(root, decimationLockOf(H).file), source: decimationLockOf(H).source, zones: FREE_ZONES, regions: tier.stats.frozen ?? 'not held' } : null;
   const n = tier.position.length / 3, cls = new Uint8Array(n);
   for (let v = 0; v < n; v++) cls[v] = dcls[tier.source[v]];
   const dst = { position: tier.position, normal: tier.normal, cls };
@@ -1033,10 +1073,69 @@ export function heroStates(H) {
   // (round B4: the water state is the bottom rest under water (A061); the swimming fish its own state)
   const swim = statePose('swim');
   H.states = { land, reach, rest, water, swim };
+  // (2026-10-25, the pose lock: each state's body — every joint but the head's, every fin weight — held to the lock's,
+  // the solve's own kept for the report's drift; the solve grounds re-measured under the held poses on this mesh by
+  // the rule the solve used: land and reach the settle's (RIG.bend.land: the trunk behind J_sp1, the anal and caudal
+  // fins), the rest's (RIG.bend.rest: the whole skin, every fin but the pectorals); water and swim have none)
+  const L = poseLockOf(H), parts = { skin: { ...tierMesh, indices: H.tier.indices }, fins: finParts };
+  if (L) {
+    const finsNoPec = Object.fromEntries(Object.entries(finParts).filter(([k]) => !/^Fin_Pectoral_/.test(k)));
+    const rule = { land: [RIG.bend.land, finParts], reach: [RIG.bend.land, finParts], rest: [RIG.bend.rest, finsNoPec] };
+    const R = (H.poseLockReport = { file: path.relative(root, L.file), source: L.source, states: {}, transitions: {}, prop: null, crawl: {} });
+    for (const [st, S] of Object.entries(H.states)) {
+      const B = L.hero.states[st]?.pose;
+      if (!B) throw new Error(`pose lock ${L.file}: no hero state '${st}'`);
+      const solved = S.pose;
+      S.pose = withBody(solved, B);
+      R.states[st] = { solverDrift: bodyDrift(solved, S.pose) };
+      if (rule[st]) {
+        const y = +groundUnder(S.pose, { skin: tierMesh, fins: rule[st][1] }, rule[st][0]).toFixed(4);
+        R.states[st].solveGroundMM = { solved: S.ground?.y ?? null, held: y };
+        S.ground = { y, from: 'the pose lock: rig.groundUnder of the held pose on this mesh' };
+      }
+    }
+  }
   // (round B4, poses P2: the transitions between them, the arms lifted over an arc so no planted blade sweeps the ground,
-  // solved on the hero: rig.stateTransitions)
-  H.transitions = stateTransitions(H.states, { skin: { ...tierMesh, indices: H.tier.indices }, fins: finParts });
+  // solved on the hero: rig.stateTransitions; with the pose lock the lifts held, the keys and gates measured on this mesh)
+  if (L) {
+    const lifts = Object.fromEntries(Object.entries(L.hero.transitions).map(([k, T]) => [k, T.lift]));
+    const solved = stateTransitions(H.states, parts);
+    H.transitions = stateTransitions(H.states, parts, { lifts });
+    for (const [k, T] of Object.entries(H.transitions)) H.poseLockReport.transitions[k] = { solvedLift: solved[k]?.lift ?? null, heldLift: T.lift, gatePass: T.gate.pass, keyMinClearMM: T.gate.keyMinClearMM };
+  } else H.transitions = stateTransitions(H.states, parts);
   return H.states;
+}
+
+/** The decimation lock the lighter tiers' skins are held to (decimlock.mjs): H.decimationLock when set (null: none,
+ * --no-decimation-lock), else the committed tools/models/tobihaze/decimationlock.json. */
+function decimationLockOf(H) {
+  if (H.decimationLock === undefined) H.decimationLock = loadDecimationLock();
+  return H.decimationLock;
+}
+
+/** The pose lock the build holds the body to (poselock.mjs): H.poseLock when set (null: none, --no-pose-lock), else the
+ * committed tools/models/tobihaze/poselock.json. */
+function poseLockOf(H) {
+  if (H.poseLock === undefined) H.poseLock = loadPoseLock();
+  return H.poseLock;
+}
+
+/** A crawl cycle (crawlFrames' result, or lod2's carried one) with the pose lock's frames for `tier` held: each frame's
+ * body and its contacts (the welded spots and bearing vertices: the poses' and the fins', neither of which the head
+ * moves), the touch-down's weld; the ground the land state's held one (crawlCycle's own: base.ground). */
+function heldCrawl(H, C, tier) {
+  const L = poseLockOf(H)?.[tier]?.crawl;
+  if (!L) return C;
+  matchFrames(C.frames, L.frames, 'phase', `${tier} crawl`);
+  let drift = { deg: 0, mm: 0, w: 0, worst: null };
+  const frames = C.frames.map((f, i) => {
+    const B = L.frames[i], pose = withBody(f.pose, B.pose), d = bodyDrift(f.pose, pose);
+    if (d.deg > drift.deg) drift = { ...d, frame: i };
+    return { ...f, pose, contacts: B.contacts ? structuredClone(B.contacts) : f.contacts, ...(B.tipErrMM !== undefined ? { tipErrMM: B.tipErrMM } : {}) };
+  });
+  const g = H.states.land.ground.y;
+  if (H.poseLockReport) H.poseLockReport.crawl[tier] = { solverDrift: drift, groundMM: { solved: +(+(C.ground?.y ?? C.ground)).toFixed(4), held: g, lock: L.groundMM }, weldOverGroundMM: +(L.weldMM[1] - g).toFixed(4) };
+  return { ...C, frames, weld: L.weldMM, weldMM: L.weldMM, weldRMM: L.weldRMM, ...(L.weldBind ? { weldBind: L.weldBind } : {}), ground: g };
 }
 
 /**
@@ -1070,7 +1169,7 @@ function tierCrawl(tierName, H, tierMesh, morphNames) {
     // 'plant' card bakes the land leg's −84° in-plane sweep and is never blended toward), the shoulder turned by the
     // least rotation that lays the card's tip toward that point; where the straight aim would put the tip under the
     // ground, the tip laid on the ground toward it; and the card's own lowest vertex never under the ground)
-    const hero = (H.crawl ??= crawlFrames(heroTM, opts('hero')));
+    const hero = (H.crawl ??= heldCrawl(H, crawlFrames(heroTM, opts('hero')), 'hero'));
     const card = tierFins('lod2', H).Fin_Pectoral_L, kF = card.targets.names.indexOf('furl'), sh = JOINTS[J.J_pecL].at;
     const cardAt = (w, v) => [0, 1, 2].map((c) => card.mesh.position[v * 3 + c] + w * card.targets.deltas[kF][v * 3 + c]);
     let tv = 0, far = -1;
@@ -1152,9 +1251,9 @@ function tierCrawl(tierName, H, tierMesh, morphNames) {
       const { vertex, transfers, ...ct } = f.contacts ?? {};
       return { ...f, pose, contacts: ct, cardLowFromHeroLowMM: err, cardLowOverGroundMM: lo };
     });
-    C = { ...hero, frames };
-  } else if (tierName === 'hero') C = (H.crawl ??= crawlFrames(tierMesh, opts('hero')));
-  else C = crawlFrames(tierMesh, { tier: tierName, ...opts(tierName) });
+    C = heldCrawl(H, { ...hero, frames }, 'lod2');
+  } else if (tierName === 'hero') C = (H.crawl ??= heldCrawl(H, crawlFrames(tierMesh, opts('hero')), 'hero'));
+  else C = heldCrawl(H, crawlFrames(tierMesh, { tier: tierName, ...opts(tierName) }), tierName);
   const r4 = (v) => +(+v).toFixed(4);
   const out = {
     frames: C.frames.map((f) => ({ phase: r4(f.phase), raise: r4(f.raise), pose: withFins(f.pose), ...(f.tipErrMM !== undefined && tierName !== 'lod2' ? { tipErrMM: r4(f.tipErrMM) } : {}), ...(f.contacts ? { contacts: f.contacts } : {}), ...(f.cardLowFromHeroLowMM ? { cardLowFromHeroLowMM: f.cardLowFromHeroLowMM, cardLowOverGroundMM: f.cardLowOverGroundMM } : {}) })),
@@ -1175,6 +1274,20 @@ function heroProp(H) {
   if (H.prop) return H.prop;
   const fp = finPartsFor('hero', H), heroTM = { position: H.tier.position, skin: heroTierSkin(H), names: TIER_JOINTS.hero };
   H.prop = propFrames({ tierMesh: heroTM, fins: fp, pelvic: fp.Fin_Pelvic, ref: H.states.land });
+  // (2026-10-25, the pose lock: each key's body held, its ground re-measured under it by the rule propPose's settle used
+  // — RIG.bend.land, J_root's t in the pose — and its weld error the lock's: the planted feet are the held poses')
+  const L = poseLockOf(H)?.hero?.prop;
+  if (L) {
+    matchFrames(H.prop, L, 'raise', 'hero prop');
+    let drift = { deg: 0, mm: 0, w: 0, worst: null }, dg = 0;
+    H.prop = H.prop.map((k, i) => {
+      const pose = withBody(k.pose, L[i].pose), d = bodyDrift(k.pose, pose), y = +groundUnder(pose, { skin: heroTM, fins: fp }, RIG.bend.land).toFixed(4);
+      if (d.deg > drift.deg) drift = { ...d, raise: k.raise };
+      dg = Math.max(dg, Math.abs(y - (k.ground?.y ?? k.ground)));
+      return { ...k, pose, ground: { y }, weldErrMM: L[i].weldErrMM };
+    });
+    if (H.poseLockReport) H.poseLockReport.prop = { solverDrift: drift, groundVsSolvedMM: +dg.toFixed(4) };
+  }
   return H.prop;
 }
 
@@ -2123,6 +2236,10 @@ export async function buildTier(tierName, { outFile, clay = true, hero, log = lo
   };
   // (round B4: the contacts' posed points, gaps and distances to the hero's (the extras keep { name, kind, bone, local }))
   res.contacts = contactReport;
+  // (2026-10-25: the pose lock — its file, and how far the solves on this mesh would have moved each held pose)
+  res.poseLock = H.poseLockReport ? { file: H.poseLockReport.file, source: H.poseLockReport.source, ...(tierName === 'hero' ? { states: H.poseLockReport.states, transitions: H.poseLockReport.transitions, prop: H.poseLockReport.prop } : {}), crawl: H.poseLockReport.crawl[tierName] ?? null } : null;
+  // (2026-10-25: the decimation lock — per region what was held and why the rest was not)
+  res.decimationLock = H.decimationReport?.[tierName] ?? null;
   Object.assign(posesHeld, holdPosesToTier(res.states, tierName, gb.json.meshes));
   res.posesHeld = posesHeld;
   // (round B4, tech P5: numbers in the report, not nulls: lod2's crawl error is its card tip's distance from the weld; a
@@ -2147,6 +2264,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     modules: Object.fromEntries(['pattern', 'surface', 'eye', 'fin'].map((k) => [k, arg(`--${k}`, null)]).filter(([, v]) => v).map(([k, v]) => [k, path.resolve(v)])),
   };
   const hero = await heroData({ cache: cache ? path.resolve(cache) : null, h: heroH ? Number(heroH) : null });
+  // (2026-10-25: the body's poses held to tools/models/tobihaze/poselock.json, round T3's; --pose-lock <file> another,
+  // --no-pose-lock the solves' own)
+  for (const k of ['--pose-lock', '--decimation-lock']) if (arg(k, null) && !fs.existsSync(path.resolve(arg(k)))) throw new Error(`${k}: no file ${arg(k)}`);
+  hero.poseLock = args.includes('--no-pose-lock') ? null : loadPoseLock(arg('--pose-lock', null) ? path.resolve(arg('--pose-lock')) : undefined);
+  hero.decimationLock = args.includes('--no-decimation-lock') ? null : loadDecimationLock(arg('--decimation-lock', null) ? path.resolve(arg('--decimation-lock')) : undefined);
+  logDefault(hero.decimationLock ? `decimation lock: ${path.relative(root, hero.decimationLock.file)} (${hero.decimationLock.source})` : 'decimation lock: none, the lighter tiers simplified afresh');
+  logDefault(hero.poseLock ? `pose lock: ${path.relative(root, hero.poseLock.file)} (${hero.poseLock.source})` : 'pose lock: none, the body\'s poses solved on this mesh');
   const results = [];
   for (const t of which === 'all' ? Object.keys(TIERS) : which.split(',')) results.push(await buildTier(t, { outFile: path.join(outDir, `tobihaze.${t}.glb`), clay, hero, tex }));
   // the reference states' poses per tier (the GLBs' extras tobihaze.states), for the render shots (shots-final.mjs)

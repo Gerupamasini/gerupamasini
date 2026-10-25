@@ -91,6 +91,7 @@
 import { HL, TL, HEAD, EYE_MM } from './anatomy.mjs';
 import { BODY_SCULPT, trunkProfile, lobeParam, armField } from './body.mjs';
 import { HEAD_SCULPT } from './head.mjs';
+import { smoothPath } from './sdf.mjs';
 import { sealedFishSDF } from './seal.mjs';
 import { perlin3, hash3i } from '../../lib/noise.mjs';
 import { granuleAt, GRANULE_PALE } from './surface.mjs';
@@ -140,8 +141,9 @@ export const PALETTE = {
   lip: '#968e73',           // lip pads: olive-tan (u1 L 49 C 18 h 92 in shade, B010); round M: u1's pad under the photo
                             // light L* 57.5 a −1.0 b 13.4 (T3 '#958465' rendered 52.8 / 2.1 / 15.3, ΔE2000 6.0: warmer)
   lipStipple: '#6c6352',    // the lip's fine dark stipple
-  lipLine: '#6a604d',       // round M: the labial groove's fine line along the pad's top (u1 L* 27 in the photo)
-  lipShade: '#766c59',      // round M: the mouth line — the lower jaw's skin under the overlapping upper lip, olive
+  lipLine: '#4c4437',       // round M: the labial groove's fine line along the pad's top (u1 L* 27 in the photo); round mouthA darker (was #6a604d: L* 41–44 rendered at u1, a 1-texel line washed out)
+  lipShade: '#60574a',      // the mouth line — the lower jaw's skin in the upper lip's shade, olive (round mouthB: darker,
+                            // the line a thin soft shadow now the slit is hidden under the pad; round M '#766c59')
   pectLobe: '#8e7c64',      // the pectoral lobe's olive-tan wash (u1 C 10 h 82, B010 golden; its chroma the cheek's, not
                             // T2's peach #977445, C 32)
   lobeDot: '#433b31',       // the lobe's dark speckles
@@ -196,6 +198,23 @@ function tubeNear(q, path, radius, sy = 1) {
   }
   return best;
 }
+
+/** (round mouthA) The upper lip's tubes as the sculpt has them (head.mjs: the pad's and the median lip's paths smoothed,
+ * the pad stretched by `sy` about its path's mean height) — the raw polylines' corners put the distance off the skin by
+ * up to 0.003 HL between the path's points, which the labial groove's fine line drew as dark bands across the pad.
+ * padNear(q): tubeNear's { d, cy, r } for the pad; medNear(q): for the median lip. */
+let _lipTubes = null;
+function lipTubes() {
+  if (_lipTubes) return _lipTubes;
+  const PD = HEAD_SCULPT.pad, sy = PD.sy ?? 1, yc = PD.path.reduce((a, p) => a + p[1], 0) / PD.path.length;
+  _lipTubes = { pad: smoothPath(PD.path, PD.radius, PD.samples ?? 64), med: smoothPath(PD.median.path, PD.median.radius, 24), sy, yc };
+  return _lipTubes;
+}
+function padNear(q) {
+  const T = lipTubes(), b = tubeNear([q[0], T.yc + (q[1] - T.yc) / T.sy, q[2]], T.pad.points, T.pad.radii, 1);
+  return { d: b.d * Math.min(1, T.sy), cy: T.yc + (b.cy - T.yc) * T.sy, r: b.r * T.sy };
+}
+const medNear = (q) => { const T = lipTubes(); return tubeNear(q, T.med.points, T.med.radii, 1); };
 
 /** Distance (HL) from q to a swept tube (polyline `path` with radii, y stretched by `sy` about the axis). */
 function tubeDist(q, path, radius, sy = 1) {
@@ -322,7 +341,19 @@ const SPOTS = {
  * point (`below` [from, full] HL under it, fading out `reach` [full, none] further down, the face's olive to `jaw` —
  * where the skin faces down, only to `side`), `off` [from, full] off the lip and within `d` of it: the lower jaw's skin
  * the upper lip overlaps. */
-export const LIP = { groove: { at: 0.005, w: 0.0035, above: [0.35, 0.7] }, mouth: { below: [-0.006, 0.002], off: [0.001, 0.004], reach: [0.008, 0.025], jaw: [0.05, 0.08], side: [0.03, 0.045], d: 0.07 } };
+// (round mouthA, the pad covers the jaw: the groove a thin line all round the pad — over its top and down both ends to
+// `above` [−0.45, −0.1] of the half-height, fading out by `z` toward the median lip, which flows out of the snout with no
+// line — u1's dark outline round the whole bean; the mouth line under it a line, not a band (reach [0.004, 0.012]); the
+// lower jaw's skin in the face's colour down to where it truly faces down (`down` [from, full] normal y, after `side`
+// below the line) and over a wider feather (`jaw`), within `d` of the upper lip, so the chin's front and the jaw under the
+// pad read as the face's skin, not the throat's cream (u1's band L* 25–33, u5's chin 27–41); and at the front, under the
+// median lip only (`rim.z` [full, none]), the lower lip a narrow paler rim `rim.dy` [from, full, to, none] under the line
+// (u5: line, a bright narrow lower lip, the darker chin))
+export const LIP = {
+  groove: { at: 0.004, w: 0.0027, above: [-0.45, -0.1], z: [0.11, 0.15] },
+  mouth: { below: [-0.006, 0.002], off: [0.001, 0.004], reach: [0.004, 0.012], jaw: [0.04, 0.12], side: [0.02, 0.07], down: [-0.85, -0.95], d: 0.14, back: [0.34, 0.415], tone: 0.3, deep: { dy: [0.01, 0.03], mix: 0.45 }, edgeSoft: 0.012, lift: [0.85, 0.05, 0.09] },
+  rim: { dy: [0.0005, 0.002, 0.005, 0.0075], z: [0.05, 0.1], mix: 0.45 },
+};
 
 /** Each layer's opacity (0..1; the calibrated look: region contrast against the photos, see the header).
  * patternContext's `strength` multiplies them (tests, morphs). */
@@ -331,7 +362,7 @@ export const LAYERS = {
   saddle: 0.95, blotch: 1.0, band: 0.55, barcode: 0.45, dash: 1.0, spotRow: 0.9, rust: 1.0, pepper: 0.4, brownSpeck: 0.7, trunkSalt: 0.3,
   // head
   mottle: 0.65, cloud: 0.75, patch: 0.85, speck: 0.95, cluster: 0.95, microDark: 0.7, microPale: 0.65, gran: 0.4, grain: 0.7, verm: 0.9, pale: 0.8, streak: 0.62, opBar: 0.75, axilla: 0.72,
-  crescent: 0.25, collar: 0.6, lip: 0.9, lipStipple: 0.35, lipLine: 0.6, lipShade: 0.75, lipJaw: 0.85,
+  crescent: 0.25, collar: 0.6, lip: 0.9, lipStipple: 0.35, lipLine: 0.9, lipShade: 0.15, lipJaw: 0.85, lipRim: 0.75,
   // lobe, eye cap
   lobe: 0.95, lobeDot: 0.95, lobeSpot: 0.9, lobeStreak: 0.7, eyeCap: 0.35,
 };
@@ -904,7 +935,9 @@ export function skinColour(p, n, part, ctx) {
   // ---- the lips: olive-tan pads a little paler than the cheek, finely stippled; the lower lip's thin pale line
   if (x < 0.42 && y < 0.24) {
     const PD = HEAD_SCULPT.pad, J = HEAD_SCULPT.jaw, qa = [x, y, az];
-    const dPad = Math.min(tubeDist(qa, PD.path, PD.radius, PD.sy), tubeDist(qa, PD.median.path, PD.median.radius));
+    // (round mouthA: the distances from the sculpt's own tubes, padNear / medNear)
+    const nb = padNear(qa), nm = medNear(qa);
+    const dPad = Math.min(nb.d, nm.d);
     const dLow = tubeDist(qa, J.lip.path, J.lip.radius);
     const wl = Math.max(1 - sstep(0.005, 0.02, dPad), (1 - sstep(0.002, 0.008, dLow)) * 0.85) * A.lip;
     if (wl > 0) {
@@ -916,24 +949,60 @@ export function skinColour(p, n, part, ctx) {
     // groove a fine soft line along the pad's top (u1: L* 27 against the pad's 45 and the face's 49 over 0.1 of the pad's
     // height; B010 a soft valley, 40 against 54–60), and the mouth line under the pad and the median lip: the lower jaw's
     // skin the upper lip overlaps in its shade, olive (u1: L* 28–35 under the pad; B010, B009 dark), not the throat's cream
-    const nb = tubeNear(qa, PD.path, PD.radius, PD.sy), nm = tubeNear(qa, PD.median.path, PD.median.radius, 1);
     const n0 = nb.d <= nm.d ? nb : nm;
-    const wg = Math.exp(-(((nb.d - LIP.groove.at) / LIP.groove.w) ** 2)) * sstep(LIP.groove.above[0], LIP.groove.above[1], (y - nb.cy) / Math.max(1e-4, nb.r));
+    // (round mouthA: round the whole pad but its underside — over the top and down both ends — fading toward the median
+    // lip by `z`)
+    const LG = LIP.groove;
+    const wg = Math.exp(-(((nb.d - LG.at) / LG.w) ** 2)) * sstep(LG.above[0], LG.above[1], (y - nb.cy) / Math.max(1e-4, nb.r)) * (LG.z ? sstep(LG.z[0], LG.z[1], az) : 1);
     if (wg > 0.01) blend(c, P.lipLine, wg * A.lipLine * (0.85 + 0.3 * sat(0.5 + lf2)));
     // (the mouth line: below the upper lip's lowest point there — the nearest section of the pad or the median lip —
     // `below` [from, full] HL under it, fading by `reach` [full, none] further down; off the lip itself, and within `d`
     // of it, so it stops at the rictus; and the lower jaw's skin under it, to `jaw` [full, none] below the line, the
     // face's olive like the upper lip's — B012, B013, u5: the lower lip is the face's colour — not the throat's cream,
     // which framed by the pads read as a big pale lower lip from the front)
-    const dy = n0.cy - n0.r - y, LM = LIP.mouth;
-    const wo = sstep(LM.below[0], LM.below[1], dy) * sstep(LM.off[0], LM.off[1], dPad) * (1 - sstep(LM.d * 0.6, LM.d, dPad));
+    // (round mouthA: the upper lip's lower edge as a soft blend of the pad's and the median lip's, weighted by how near
+    // each is (`edgeSoft` HL), so under their junction the line and the jaw's bands do not jump from one tube's lowest
+    // point to the other's — a V-shaped seam across the chin's front)
+    const LM = LIP.mouth, es = LM.edgeSoft;
+    let yEdge = n0.cy - n0.r;
+    if (es) { const wb = Math.exp(-Math.max(0, nb.d) / es), wq = Math.exp(-Math.max(0, nm.d) / es); yEdge = (wb * (nb.cy - nb.r) + wq * (nm.cy - nm.r)) / Math.max(1e-9, wb + wq); }
+    const dy = yEdge - y;
+    // (round mouthA: faded out behind the rictus by `back` [full, none] s, before this block's own end at s 0.42 — the
+    // wider `d` reached past it and cut the jaw's colour off in a straight edge)
+    const wo = sstep(LM.below[0], LM.below[1], dy) * sstep(LM.off[0], LM.off[1], dPad) * (1 - sstep(LM.d * 0.6, LM.d, dPad)) * (LM.back ? 1 - sstep(LM.back[0], LM.back[1], x) : 1);
     // (the jaw's colour on its front and sides only: past the mouth line, where the skin turns to face down — the chin's
     // underside, the throat — the throat's cream stays; under the pad, where the jaw's side faces down too, it is kept
     // to `side` [from, to] below the line: the band a side view sees under the pad, u1 L* 28–35)
-    const down = n ? sstep(-0.3, -0.7, n[1]) * sstep(LM.side[0], LM.side[1], dy) : 0;
+    // (round mouthA: `down` [from, full] the normal's y — only where the skin truly faces down; the feathers wider, so
+    // neither the closed chin nor the dropped jaw shows the paint's edge as a contour)
+    const LD = LM.down ?? [-0.3, -0.7];
+    const down = n ? sstep(LD[0], LD[1], n[1]) * sstep(LM.side[0], LM.side[1], dy) : 0;
     const wj = wo * (1 - sstep(LM.jaw[0], LM.jaw[1], dy)) * (1 - down), wm = wo * (1 - sstep(LM.reach[0], LM.reach[1], dy));
-    if (wj > 0.01) blend(c, P.cheek, wj * A.lipJaw);
+    // (round mouthA: the face's olive taken toward the mouth line's shade by `tone`, and further down — `deep.dy` [from,
+    // full] under the line, where the jaw's side turns down and the light under the pad comes up off the ground — darker
+    // again toward the head's dark olive-brown by `deep.mix`, so under the pad the jaw reads as one even dark band of skin
+    // (u1 L* 25–33), not a lit roll with a pale lower edge)
+    if (wj > 0.01) {
+      lerp3(P.cheek, P.cheekOlive, 0.5 * sat(0.5 + lf1), _k); lerp3(_k, P.lipShade, LM.tone ?? 0, _k);
+      if (LM.deep) { const kd = sstep(LM.deep.dy[0], LM.deep.dy[1], dy) * LM.deep.mix; _k[0] += (P.headBlotch[0] - _k[0]) * kd; _k[1] += (P.headBlotch[1] - _k[1]) * kd; _k[2] += (P.headBlotch[2] - _k[2]) * kd; }
+      blend(c, _k, wj * A.lipJaw);
+    }
+    // (round mouthA: the lower lip's narrow paler rim right under the line, at the front only — under the median lip —
+    // and the chin below it the face's darker skin, u5)
+    const LR = LIP.rim;
+    if (LR && A.lipRim) {
+      const wr = wo * sstep(LR.dy[0], LR.dy[1], dy) * (1 - sstep(LR.dy[2], LR.dy[3], dy)) * (1 - sstep(LR.z[0], LR.z[1], az));
+      if (wr > 0.01) blend(c, lerp3(P.lip, P.cheekLow, LR.mix, _k), wr * A.lipRim);
+    }
     if (wm > 0.01) blend(c, P.lipShade, wm * A.lipShade);
+    // (round mouthA: under the pads — not under the median lip, where u5's line is dark — the line's skin a little paler,
+    // `lift` [share, z from, z full]: the pad hanging over the jaw casts its shade there, and the line under it should read
+    // as a fine dark outline, not a black slot — u1's L* 14–27)
+    // (the pad's own lowest edge too — no `off` term: its underside there faces the jaw in the same shade)
+    if (LM.lift) {
+      const wlf = sstep(LM.below[0], LM.below[1], dy) * (1 - sstep(LM.reach[0], LM.reach[1], dy)) * (1 - sstep(LM.d * 0.6, LM.d, dPad)) * LM.lift[0] * sstep(LM.lift[1], LM.lift[2], az) * (LM.back ? 1 - sstep(LM.back[0], LM.back[1], x) : 1);
+      if (wlf > 0.01) blend(c, P.cheekLow, wlf);
+    }
   }
 
   // ---- the pectoral lobe (past the root pad, where the axilla mark stays): the body's ground and marks under an ochre-

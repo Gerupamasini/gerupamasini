@@ -70,8 +70,9 @@ const mixTo = (c, k, a) => { if (a <= 0) return; if (a > 1) a = 1; c[0] += (k[0]
 export const EYE_PALETTE = {
   pupil: '#070f0f',        // the pupil's ground: near black, a hair teal (round T3; T2 #0b1414)
   pupilRuff: '#020303',    // the pupil's margin, a hair darker
-  ring: '#e6c47c',         // the gold ring (round T3: less saturated, T2 #f0cc70; u1 #dac28c, B010 #e8cda0 as photographed)
-  ringPale: '#e6dcc2',     // the ring's wider, paler crescent under the pupil (B010), run on over the lid margin
+  ring: '#e0c45c',         // the gold ring (round fm_eye: gold, not cream — T3 #e6c47c rendered C* 25, h 85 at u1 against u1's
+                           // rim C* 35–50, h 88–95; T2 #f0cc70; u1 #dac28c, B010 #e8cda0 as photographed)
+  ringPale: '#e6d6a4',     // the ring's paler gold under the pupil (B010), run on over the lid margin (fm_eye: T3 #e6dcc2 cream)
   ringOrange: '#d9893a',   // the orange-copper variant (B020, B062): o.ring 'orange'
   iris: '#93774d',         // the olive-bronze iris outside the ring (A004 #927652, B010 #a68d65)
   irisOlive: '#7a7150',    // its olive end (the low-frequency variation)
@@ -311,11 +312,12 @@ function windowTexel(rho, ph, fp, P, o, PP) {
     // (round T3) fills the band under the pupil down to the window's edge and runs on over the lid (EYE_CAP.pale)
     const ringC = P[o.ring === 'orange' ? 'ringOrange' : 'ring'].slice();
     // (round fin_eye, a followed pupil: the band is the thin gold rim itself, the pupil's edge to the window's — u1's, B012's
-    // — its outer third easing a little toward the olive-bronze iris, the rim paler cream-gold under the pupil (B010) but
-    // no broad pale zone; T3's band was a hairline of gold in a broad olive / cream band)
+    // — its outer third easing a little toward the olive-bronze iris (fm_eye: 0.15 of the way, fin_eye 0.3, which with the
+    // cream drew the rim's ends to C* 25), the rim paler gold under the pupil (B010) but no broad pale zone; T3's band was
+    // a hairline of gold in a broad olive / cream band)
     const paleK = PP.follow ? 0.6 * sstep(0.3, 0.85, below) : sstep(0.15, 0.7, below);
     mixTo(ringC, P.ringPale, paleK * sstep(0.006, 0.03, dd) * 0.95);
-    const r1 = PP.follow ? 1 - 0.3 * sstep(0.55 * w, w, dd) : Math.max(1 - sstep(ringW * 0.55, ringW * 1.15, dd), paleK * 0.95 * (1 - sstep(w - 0.02, w, dd) * 0.2));
+    const r1 = PP.follow ? 1 - 0.15 * sstep(0.55 * w, w, dd) : Math.max(1 - sstep(ringW * 0.55, ringW * 1.15, dd), paleK * 0.95 * (1 - sstep(w - 0.02, w, dd) * 0.2));
     const tone = 0.9 + 0.12 * perlin3(Math.cos(ph) * 14, Math.sin(ph) * 14, 3.3, 39) + 0.06 * fib * fine;
     const band = irisT.slice();
     mixTo(band, ringC.map((v) => v * tone), r1);

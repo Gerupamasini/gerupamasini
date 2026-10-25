@@ -77,7 +77,8 @@
 //   - (round T3, a request) the texel's distance from its chart's edge as skinDetail's o.edge (textures.mjs runPass: a
 //     chamfer from the uncovered texels; tested as ref/work/t3_surface/py/mklib.py), for SEAM_FADE
 import { HL, TL, SL, HEAD, EYE_MM } from './anatomy.mjs';
-import { HEAD_SCULPT } from './head.mjs';
+import { HEAD_SCULPT, headSDF } from './head.mjs';
+import { gapeSide } from './headrig.mjs';
 import { BODY_SCULPT, trunkProfile, armField } from './body.mjs';
 import { smoothPath, tube, smin } from './sdf.mjs';
 import { perlin3 } from '../../lib/noise.mjs';
@@ -169,7 +170,12 @@ export const HEAD_SKIN = {
   pore: { cell: 0.42, r: 0.07, depth: 0.005, share: 0.45 },  // sparse pores (cheek, snout): 0.14 mm, ≥ 4 texels at 2048
   pit: { r: 0.085, amp: 0.009, core: 0.06, coreDepth: 0.008 }, // the pit organs' papillae (Lee 1995 Fig. 4A), the neuromast's pit 0.12 mm
   nostril: { len: 0.32, wid: 0.13, depth: 0.025 },              // the posterior nostril's slit
-  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 } },
+  // (round mouthA, mouth: the mouth line's crease — where the upper lip's pad and median lip hang over the lower jaw —
+  // a water-filled crease like the eye's meniscus, dark but not black (u1's line L* 14–27 under the pad, its band 25–33):
+  // within `dp` [full, none] (HL) of the lips' tubes, under the pad's axis (`y` [full, none]) and in front of the rictus
+  // (`s` [full, none]), the occlusion floored at `floor` and the colour's crease darkening (ALBEDO_AO crease, fold) eased
+  // by `ease`)
+  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 }, mouth: { dp: [0.012, 0.03], y: [0.105, 0.125], s: [0.32, 0.36], floor: 0.5, ease: 0.6 } },
   lobe: { lines: 30, amp: 0.0042, ridges: 4, ridgeAmp: 0.009 },
   opercle: { period: 0.22, amp: 0.0018, band: 0.06 },           // gill cover margin wrinkles (band in HL)
   // eye collar folds: HL under the cup's rim, mm wide (round T2: four concentric folds, the eye finding's P9 — u1's
@@ -377,8 +383,23 @@ export function surfaceContext(fish, o = {}) {
   pits.forEach((q, i) => { const k = gkey(q[0], q[1], q[2]); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); });
   const eyeC = EYE_MM.center, eyeR = EYE_MM.radius;
   const keels = K.keels;
+  // (round mouthB) the lower jaw's skin hidden at rest (JAW_HIDDEN): on the lower side of the gape (headrig.mjs gapeSide,
+  // the slit's own carve) within d [full, none] of the upper head — the jaw's edge tucked under the pads — on the jaw's
+  // own outer skin (its tissue's distance over j [none, full]: the slit's carved floor, the mouth's floor seen when it
+  // opens, keeps its shade); and, when JAW_HIDDEN has `under`, its underside (past f [none, full] of the upper head — ff
+  // at the front, before sf [ff, f] — facing down by −n.y [none, full], in front of s [full, none]; mouthB's, not taken:
+  // the shipped mouth is mouthA's, whose jaw.under and lowered pad leave no V on the chin), 0..1
+  const JH = JAW_HIDDEN, hParts = JH ? headSDF(H).parts : null, isLower = JH ? gapeSide(H, 0.33) : null;
+  const jawHidden = JH ? (x, y, z, ny = 0) => {
+    if (x > JH.box[0] || y > JH.box[1]) return 0;
+    const pp = hParts(x, y, z);
+    if (!isLower(x, y, pp)) return 0;
+    const U = JH.under, fr = U ? sstep(U.sf[0], U.sf[1], x) : 0, f0 = U ? U.ff[0] + (U.f[0] - U.ff[0]) * fr : 0, f1 = U ? U.ff[1] + (U.f[1] - U.ff[1]) * fr : 0;
+    const und = U ? sstep(f0, f1, pp.f) * sstep(U.n[0], U.n[1], -ny) * (1 - sstep(U.s[0], U.s[1], x)) : 0;
+    return Math.max((1 - sstep(JH.d[0], JH.d[1], pp.f)) * sstep(JH.j[0], JH.j[1], pp.j), und);
+  } : null;
   return {
-    fish, K, H, size, tier: o.tier ?? 'hero', field: o.field !== false, relief: o.relief !== false, arcs, axisY, law, sOp, pad, arm, armFrame: { au, an, aw, aL, shoulder: PC.shoulder, radius: PC.radius },
+    fish, K, H, size, tier: o.tier ?? 'hero', field: o.field !== false, relief: o.relief !== false, arcs, axisY, law, sOp, pad, arm, armFrame: { au, an, aw, aL, shoulder: PC.shoulder, radius: PC.radius }, jawHidden,
     pits, grid, gc, nostril, eyeC, eyeR, prof, keels, cup: H.cup, cupOpen: norm3(H.cup.open ?? [0, 0, 1]),
     // the band limits' footprint (mm a texel), ONE value for the whole map so the charts agree at their seams: the
     // coarsest of the skin's charts (fishmesh.mjs BODY_LAYOUT sizes the body's for 0.0019 HL a texel at 2048, the face's
@@ -825,6 +846,11 @@ export function aoField(fish, p, n, o = {}) {
  *            head 1, the nape 0.6, the lobe 0.5, the cap's ramp) and the colour's texel draws `size` mm (the hero's 2048),
  *            faded out over the pale underside (v `pale`)
  */
+/** (round mouthB, grafted onto mouthA's mouth) The lower jaw's skin hidden at rest (surfaceContext's jawHidden): within
+ * `box` [s, y] (HL), on the gape's lower side within d [full, none] HL of the upper head and on the jaw tissue's outer skin
+ * (its distance j [none, full] HL) — the dropped jaw's rim when the mouth opens — its colour's crease shade lifted to
+ * `ao`. (An optional `under` {f, ff, sf, n, s} would add the jaw's down-facing underside: not set.) */
+export const JAW_HIDDEN = { box: [0.36, 0.13], d: [0.014, 0.022], j: [-0.006, -0.002], ao: 0.9 };
 export const ALBEDO_AO = { crease: 0.6, creaseAt: [0.05, 0.6], fine: 0.32, pockets: { k: 0.35, max: 0.5, mean: 0.194, ramp: [0.95, 1.15], belly: [0.55, 0.8] }, fold: { k: 0.3, at: [0.12, 0.5] }, relief: { k: 0.25, at: [1, 6] }, gran: { k: 0.2, mean: 0.3, size: 0.14, pale: [0.55, 0.8] } };
 /** The wet retention (the ORM's A: where the film lasts as the fish dries; the runtime's wetness rule) by region: the
  * trunk's dorsal band, the head (its top too), the flanks, the belly (round T2: 0.3 / 0.55 / 0.65 / 0.88). */
@@ -972,13 +998,27 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
   const menisc = MN && part !== 'eyeSkin' ? (1 - sstep(MN.ao[0], MN.ao[1], aoRaw)) * sstep(MN.eye[0] * ctx.eyeR, MN.eye[1] * ctx.eyeR, eyeD) * (1 - sstep(MN.eye[2] * ctx.eyeR, MN.eye[3] * ctx.eyeR, eyeD)) * sstep(MN.below[0], MN.below[1], (ctx.eyeC[1] - p[1]) / ctx.eyeR) : 0;
   // (the water fills the crease: what shows is the fillet's open surface, not the crease's walls — its occlusion lifted)
   if (menisc > 0) ao0 = Math.max(ao0, MN.fill * menisc);
+  // (round mouthA: the mouth line's crease under the upper lip, HEAD_SKIN.lip.mouth: the occlusion floored, the colour's
+  // crease darkening eased below)
+  const LMO = HEAD_SKIN.lip.mouth;
+  const mouthW = LMO && part !== 'eyeSkin' && R.sh < LMO.s[1] && R.yh < LMO.y[1] ? (1 - sstep(LMO.dp[0], LMO.dp[1], ctx.pad(R.sh, R.yh, R.zh))) * (1 - sstep(LMO.y[0], LMO.y[1], R.yh)) * (1 - sstep(LMO.s[0], LMO.s[1], R.sh)) : 0;
+  if (mouthW > 0) ao0 = Math.max(ao0, LMO.floor * mouthW);
   // the fins' bases (their membranes are not in the field): a narrow contact shade along the keels' lines
   const finAO = finBaseShade(q, R, ctx);
   // (the relief's own cavities stay out of the occlusion: the normal map shades them; `cavity` carries them)
   const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO);
   // the colour's share (ALBEDO_AO): the creases (the macro occlusion with the fins' bases), the unbanded fine cavities,
   // the trunk's scale pockets about their mean
-  const A = ALBEDO_AO, PK = A.pockets, aoC = part === 'eyeSkin' ? 1 : clamp(ao0 * finAO);
+  const A = ALBEDO_AO, PK = A.pockets;
+  let aoC = part === 'eyeSkin' ? 1 : clamp(ao0 * finAO);
+  // (round mouthB: the lower jaw's skin hidden at rest in the slit and under the pads' overhang is the dropped jaw's rim
+  // and edges when the mouth opens: no crease shade in its colour there (JAW_HIDDEN.ao) — it drew a dark U round the
+  // dropped jaw seen from below, 9977d95 and T3 alike; B054's rim is the skin's colour; the outer skin only: the
+  // cavity's floor keeps its shade)
+  if (ctx.jawHidden && !interior && part !== 'eyeSkin' && R.sh < JAW_HIDDEN.box[0] && R.yh < JAW_HIDDEN.box[1]) {
+    const jh = ctx.jawHidden(R.sh, R.yh, R.zh, n[1]);
+    if (jh > 0) aoC += (Math.max(aoC, JAW_HIDDEN.ao) - aoC) * jh;
+  }
   // (round T3, the surface finding's P4: the pockets fade out over the pale belly — they printed a fine dark net there —
   // so the scales read where the pigment is: the dorsum, the flanks; PK.belly the v ramp)
   const pw = part === 'eyeSkin' ? 0 : sstep(PK.ramp[0] * HL, PK.ramp[1] * HL, q[0]) * (PK.belly ? 1 - sstep(PK.belly[0], PK.belly[1], R.v) : 1);
@@ -995,7 +1035,8 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
   // pale granules on a darker ground); band-limited like the papillae, off where the colour's texel cannot draw them, and
   // faded over the pale throat and belly as the pockets are (GA.pale: B067's smooth pale underside, the T2 belly net)
   const GA = A.gran, gr = GA && pap ? GA.k * Math.min(1, wGran) * band(GA.size, fp, 2.5, 4) * (pap.cover - GA.mean) * (1 - sstep(GA.pale[0], GA.pale[1], R.v)) : 0;
-  const albedo = (1 - A.crease * sstep(A.creaseAt[0], A.creaseAt[1], 1 - aoC)) * (1 - fold) * (1 - rcr) * (1 - A.fine * fine) * (1 - pw * PK.k * (Math.min(cavPocket, PK.max) - PK.mean)) * (1 + gr);
+  const easeM = mouthW > 0 ? 1 - LMO.ease * mouthW : 1;
+  const albedo = (1 - A.crease * easeM * sstep(A.creaseAt[0], A.creaseAt[1], 1 - aoC)) * (1 - fold * easeM) * (1 - rcr) * (1 - A.fine * fine) * (1 - pw * PK.k * (Math.min(cavPocket, PK.max) - PK.mean)) * (1 + gr);
   // ---- roughness (the wet state) and the wet retention
   const dors = 1 - sstep(0.18, 0.4, R.v), belly = sstep(0.62, 0.85, R.v);
   const collar = part === 'eyeSkin' ? 0 : 1 - sstep(0.25, 0.8, eyeD);

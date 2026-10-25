@@ -1275,6 +1275,14 @@ export function settleOnGround(pose, parts, spec) {
   return { pose: out, deltas: Object.fromEntries(js.map((j, i) => [j, +x[i].toFixed(3)])), gapsMM, groundMM: +m.g.toFixed(4), cost: +c0.toFixed(5) };
 }
 
+/** The ground a settle would find under a pose as it is (2026-10-25, the pose lock): settleOnGround's lowest posed point
+ * of what `spec` counts (the skin's lower half the arms do not carry — behind `spec.from`'s pivot unless spec.ground is
+ * 'all' — and the fins it names), no joint moved. The states' and the prop keys' solve grounds are this of their own
+ * poses, so build.mjs re-measures them on a new mesh for poses it holds (poselock.mjs). Returns mm. */
+export function groundUnder(pose, parts, spec) {
+  return settleOnGround(pose, parts, { ...spec, joints: [] }).groundMM;
+}
+
 /** The lowest posed point (fish mm) of a skinned mesh among the vertices `keep` admits: { y, at, v }. */
 export function lowestPosed(mesh, W, keep = null) {
   const names = mesh.names ?? TIER_JOINTS.hero, P = skinPacked(mesh.position, mesh.skin, W, { names });
@@ -2308,7 +2316,8 @@ export function armClearance(pose, parts, { inside = false, depthMM = 0.05 } = {
 /**
  * One transition solved (see TRANSITIONS): the lift along RIG.transition.lift's directions, the arc's samples and keys.
  * @param A, B statePose results (hero)   @param parts { skin: { position, skin, names, indices }, fins: { [name]:
- *   { position, skin, targets } } } (the hero's tier skin and fins)   @param o { clearMM, samples, keys }
+ *   { position, skin, targets } } } (the hero's tier skin and fins)   @param o { clearMM, samples, keys, fixedLift (the
+ *   lift to take instead of solving one: its keys and gates measured as they are; 2026-10-25, the pose lock) }
  * @returns { lift, direction, scale, minClearMM, peakClearMM, allowMM: [from, to], inside, keys: [{ u, pose, groundMM }],
  *   keyMinClearMM, pass, note }
  */
@@ -2328,7 +2337,8 @@ export function transitionPlan(A, B, parts, o = {}) {
   const ok = (r) => r.worst >= 0;
   const plain = run({});
   let best = null;
-  if (ok(plain)) best = { lift: {}, direction: 'none', scale: 0, r: plain };
+  if (o.fixedLift) best = { lift: structuredClone(o.fixedLift), direction: 'held (pose lock)', scale: null, r: run(o.fixedLift) };
+  else if (ok(plain)) best = { lift: {}, direction: 'none', scale: 0, r: plain };
   for (const [dn, d] of Object.entries(C.lift)) {
     if (best) break;
     if (!ok(run(scaled(d, C.maxDeg)))) continue;
@@ -2360,7 +2370,8 @@ export function stateTransitions(states, parts, o = {}) {
   const out = {};
   for (const [a, b] of o.pairs ?? TRANSITIONS) {
     if (!states[a] || !states[b]) continue;
-    const T = transitionPlan(states[a], states[b], parts, o);
+    // (o.lifts: { 'a>b': lift } held instead of solved — build.mjs's pose lock)
+    const T = transitionPlan(states[a], states[b], parts, { ...o, fixedLift: o.lifts?.[`${a}>${b}`] });
     out[`${a}>${b}`] = {
       from: a, to: b, ease: 'u²(3 − 2u)', curve: 'sin(πu)', lift: T.lift, liftDirection: T.direction,
       rule: 'e(u) = u²(3 − 2u); body(u) = lerp(from, to, e(u)) (every channel but the arms\', the other fins\' weights, groundMM); arms(u) = lerp(from, to, e(u)) + sin(πu)·lift (J_pec*: `lift` is the left arm\'s, the right takes the same values, the rig\'s mirror; each channel held in its AXES range), the pectoral weights lerped; backwards (to→from) the same with u → 1 − u',

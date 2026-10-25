@@ -237,7 +237,11 @@ export function solveBindDelta(pos, skin, jointNames, W, E, o = {}) {
  *               point on the hero, the closest hero bind point, instead of the closest posed point; b2_rig: the lod1
  *               hood with its kept lining closes with 0 globe pixels in view at gaze 0 and 45°), targetNormal (the
  *               target's posed normals), tuckMode ('keep' the default: the tucked lining keeps the start; 'project': laid
- *               on the hero's own tucked lining; 'surface': wrapped like the rest, for a tier without a lining) }
+ *               on the hero's own tucked lining; 'surface': wrapped like the rest, for a tier without a lining); round
+ *               fm_eye, each with its note below and null / 0 to turn it off: collapse (0.05), untangle ({ rounds 6,
+ *               iters 30, rings 2, lambda 0.5 }, run again once the seam is zipped), zip ({ gap 0.45, hops 2, iters 8,
+ *               pair { gap 0.45, hops 3, passes 3 } }), clear (0.03 mm), unfold ({ reach 0.3, rounds 8, iters 20,
+ *               rings 1 }), deep (0.12 mm) }
  * @returns { d: Float32Array (bind-frame displacement, mm), stats }
  */
 export function wrapMorph(tier, target, o) {
@@ -267,12 +271,30 @@ export function wrapMorph(tier, target, o) {
   // same material point, its closest point on the hero's bind surface carried through the hero's own pose; the tucked
   // lining, the lid and its seam come out as the hero has them)
   const gridB = o.targetBind ? vertexGridLocal(o.targetBind, 0.2) : null, TN = o.targetNormal ?? null;
+  // (round fm_eye, `collapse` (0.05; null: off): no material point on a target triangle the pose all but collapses — its
+  // posed area under `collapse` of its bind area: the hero's infraorbital crease, its channel shrunk shut onto its lips
+  // in the closed blink (headrig BLINK_CLOSE.crease). A tier vertex carried there followed it into one point: lod1's
+  // coarse cells at the collar's foot drew in to a puckered star on the closed dome's flank (flipped facets 10 → 34);
+  // the tier vertex takes the nearest point of the triangles round it instead, the lips that close over it)
+  const CL = o.collapse === undefined ? 0.05 : o.collapse, TB = o.targetBind;
+  let okTri = null;
+  if (CL && TB) {
+    const TI = target.indices, nt = TI.length / 3, ar = (A, a, b, c) => { const e1 = [0, 1, 2].map((k) => A[b * 3 + k] - A[a * 3 + k]), e2 = [0, 1, 2].map((k) => A[c * 3 + k] - A[a * 3 + k]); return Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]); };
+    okTri = new Uint8Array(nt).fill(1);
+    let nc = 0;
+    for (let t = 0; t < nt; t++) { const a = TI[t * 3], b = TI[t * 3 + 1], c = TI[t * 3 + 2], aB = ar(TB, a, b, c); if (aB > 1e-9 && ar(TP, a, b, c) < CL * aB) { okTri[t] = 0; nc++; } }
+    okTri.count = nc;
+    // (and no nearest vertex whose every triangle is so: its triangles would all be skipped)
+    okTri.v = new Uint8Array(TP.length / 3);
+    for (let t = 0; t < nt; t++) if (okTri[t]) { okTri.v[TI[t * 3]] = 1; okTri.v[TI[t * 3 + 1]] = 1; okTri.v[TI[t * 3 + 2]] = 1; }
+  }
   for (let g = 0; g < m; g++) {
     const v = rep[g];
     let p = [Ps[v * 3], Ps[v * 3 + 1], Ps[v * 3 + 2]];
     if (gridB && mask[v] > 0) {
       const b = [bind[v * 3], bind[v * 3 + 1], bind[v * 3 + 2]], nv = tier.normal ? [tier.normal[v * 3], tier.normal[v * 3 + 1], tier.normal[v * 3 + 2]] : null;
-      const c = gridB.closest(b, target.indices, nv && TN ? (u) => TN[u * 3] * nv[0] + TN[u * 3 + 1] * nv[1] + TN[u * 3 + 2] * nv[2] > 0 : null);
+      const facing = nv && TN ? (u) => TN[u * 3] * nv[0] + TN[u * 3 + 1] * nv[1] + TN[u * 3 + 2] * nv[2] > 0 : null;
+      const c = gridB.closest(b, target.indices, okTri ? (u) => okTri.v[u] === 1 && (!facing || facing(u)) : facing, okTri ? (t) => okTri[t] === 1 : null);
       if (c) p = [0, 1, 2].map((k) => c.w[0] * TP[c.ids[0] * 3 + k] + c.w[1] * TP[c.ids[1] * 3 + k] + c.w[2] * TP[c.ids[2] * 3 + k]);
     }
     q.set(p, g * 3);
@@ -297,6 +319,195 @@ export function wrapMorph(tier, target, o) {
     q.set(tmp);
     for (let g = 0; g < m; g++) if (free[g]) lay(g);
   }
+  // (round fm_eye, `untangle` { rounds, iters, rings, lambda } (null: off): the wrapped skin's facets that face against
+  // the target's under them — where the coarse cells, carried each to its own material point, crossed over: lod1's
+  // flank of the closed dome, the collar's foot drawn up there in a puckered star (34 flipped facets at the full
+  // blink) — and `rings` rings round them relaxed again over the target, `iters` passes a round, until none is left)
+  const UT = o.untangle === undefined ? { rounds: 6, iters: 30, rings: 2, lambda: 0.5 } : o.untangle;
+  const untangle = { flipped: [] };
+  const untangleRun = (log) => {
+    // (the rows next to the tucked lining are held: relaxed, an open edge draws back from the seam and bares the globe)
+    const held = new Uint8Array(m); for (let g = 0; g < m; g++) if (free[g]) for (const h of nb[g]) if (tuckedG[h]) { held[g] = 1; break; }
+    const triW = [];
+    for (let t = 0; t < I.length; t += 3) { const a = wid[I[t]], b = wid[I[t + 1]], c = wid[I[t + 2]]; if (a !== b && b !== c && a !== c && free[a] && free[b] && free[c] && !held[a] && !held[b] && !held[c]) triW.push(a, b, c); }
+    const cr = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const flippedNow = () => {
+      const bad = new Set();
+      for (let k = 0; k < triW.length; k += 3) {
+        const [a, b, c] = [triW[k], triW[k + 1], triW[k + 2]], A = [q[a * 3], q[a * 3 + 1], q[a * 3 + 2]];
+        const nn = cr([q[b * 3] - A[0], q[b * 3 + 1] - A[1], q[b * 3 + 2] - A[2]], [q[c * 3] - A[0], q[c * 3 + 1] - A[1], q[c * 3 + 2] - A[2]]);
+        // (the target's normal from a triangle the pose keeps open: a collapsed one has none)
+        const ce = [0, 1, 2].map((j) => (q[a * 3 + j] + q[b * 3 + j] + q[c * 3 + j]) / 3), h = grid.closest(ce, target.indices, (v) => okT[v] === 1 && (!okTri || okTri.v[v] === 1), okTri ? (t) => okTri[t] === 1 : null);
+        if (!h) continue;
+        const T0 = [TP[h.ids[0] * 3], TP[h.ids[0] * 3 + 1], TP[h.ids[0] * 3 + 2]];
+        const tn = cr([TP[h.ids[1] * 3] - T0[0], TP[h.ids[1] * 3 + 1] - T0[1], TP[h.ids[1] * 3 + 2] - T0[2]], [TP[h.ids[2] * 3] - T0[0], TP[h.ids[2] * 3 + 1] - T0[1], TP[h.ids[2] * 3 + 2] - T0[2]]);
+        if (nn[0] * tn[0] + nn[1] * tn[1] + nn[2] * tn[2] < 0) { bad.add(a); bad.add(b); bad.add(c); }
+      }
+      return bad;
+    };
+    for (let r = 0; r < UT.rounds; r++) {
+      const bad = flippedNow();
+      log.push(bad.size);
+      if (!bad.size) break;
+      let zone = new Set(bad);
+      for (let k = 0; k < UT.rings + r; k++) { const nz = new Set(zone); for (const g of zone) for (const h of nb[g]) if (free[h]) nz.add(h); zone = nz; }
+      const Z = [...zone].filter((g) => !held[g]);
+      for (let it = 0; it < UT.iters; it++) {
+        tmp.set(q);
+        for (const g of Z) {
+          const a = [0, 0, 0]; let cnt = 0; for (const h of nb[g]) { if (tuckedG[h]) continue; cnt++; for (let k = 0; k < 3; k++) a[k] += q[h * 3 + k]; }
+          if (!cnt) continue; for (let k = 0; k < 3; k++) tmp[g * 3 + k] = (1 - UT.lambda) * q[g * 3 + k] + UT.lambda * (a[k] / cnt);
+        }
+        q.set(tmp);
+        for (const g of Z) lay(g);
+      }
+    }
+  };
+  if (UT) untangleRun(untangle.flipped);
+  // (round fm_eye, `zip` { gap, hops, iters, pair } (null: off): the seam zipped as the hero's is (headrig zipSeam).
+  // The wrapped skin's rows next to the tucked lining — the lid's rim on one side, the medial skin's edge on the other —
+  // lay each at its own material point, a coarse cell apart, and the tier's triangles from them dived into the lowered
+  // globe between: lod1's closed dome showed the globe in a sliver down each dome's medial face (960 globe px over the
+  // ten views at the full blink). Each row vertex is laid on the target's own seam (below) within `gap` mm, the two
+  // rows drawn together (`pair`), and the skin `hops` rings round relaxed `iters` passes over the target, the rows held)
+  const ZP = o.zip === undefined ? { gap: 0.45, hops: 2, iters: 8, pair: { gap: 0.45, hops: 3, passes: 3 } } : o.zip;
+  let zipped = 0, paired = 0;
+  if (ZP) {
+    // (the target's seam: its outer skin's edge against its tucked parts — the hero's zipped lid rim and medial edge —
+    // as segments; each wrapped vertex next to the tier's tucked lining is laid on the nearest of them within `gap` mm,
+    // so the tier's two edges meet on the one line the hero's do, whatever their cells)
+    const TI = target.indices, seamV = new Uint8Array(nT);
+    for (let t = 0; t < TI.length; t += 3) for (const [a, b] of [[TI[t], TI[t + 1]], [TI[t + 1], TI[t + 2]], [TI[t + 2], TI[t]]]) { if (okT[a] && !okT[b]) seamV[a] = 1; if (okT[b] && !okT[a]) seamV[b] = 1; }
+    const segs = [];
+    for (let t = 0; t < TI.length; t += 3) for (const [a, b] of [[TI[t], TI[t + 1]], [TI[t + 1], TI[t + 2]], [TI[t + 2], TI[t]]]) if (a < b && seamV[a] && seamV[b]) segs.push(a, b);
+    const onSeam = (p) => {
+      let best = null, bd = ZP.gap;
+      for (let k = 0; k < segs.length; k += 2) {
+        const a = segs[k], b = segs[k + 1], A = [TP[a * 3], TP[a * 3 + 1], TP[a * 3 + 2]], ab = [TP[b * 3] - A[0], TP[b * 3 + 1] - A[1], TP[b * 3 + 2] - A[2]];
+        const L2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2] || 1e-12, u = Math.max(0, Math.min(1, ((p[0] - A[0]) * ab[0] + (p[1] - A[1]) * ab[1] + (p[2] - A[2]) * ab[2]) / L2));
+        const c = [A[0] + ab[0] * u, A[1] + ab[1] * u, A[2] + ab[2] * u], d = Math.hypot(c[0] - p[0], c[1] - p[1], c[2] - p[2]);
+        if (d < bd) { bd = d; best = c; }
+      }
+      return best;
+    };
+    const tgt = new Map();
+    for (let g = 0; g < m; g++) if (free[g] && [...nb[g]].some((h) => tuckedG[h])) { const c = onSeam([q[g * 3], q[g * 3 + 1], q[g * 3 + 2]]); if (c) tgt.set(g, c); }
+    for (const [g, t] of tgt) q.set(t, g * 3);
+    zipped = tgt.size;
+    // (`pair` { gap, hops, passes }: the two edges then drawn together: each edge vertex to the midpoint with the
+    // nearest point of the other edge's polyline — the edge's segments, none of whose ends lies within `hops` steps of
+    // it along the edge — within `gap` mm; `passes` times. The hero's own two edges lie ≈0.11 mm apart along the seam,
+    // its lining under them, and lod1's laid on them kept that slit and a coarse cell more: its globe showed in a
+    // sliver down each dome's medial face)
+    if (ZP.pair) {
+      const PR = ZP.pair, rows = [...tgt.keys()], inRow = new Uint8Array(m); for (const g of rows) inRow[g] = 1;
+      const segR = []; for (const a of rows) for (const b of nb[a]) if (inRow[b] && a < b) segR.push(a, b);
+      const near = new Map();
+      for (const a of rows) { const loc = new Set([a]); let fr = [a]; for (let h = 0; h < PR.hops; h++) { const nf = []; for (const x of fr) for (const y of nb[x]) if (inRow[y] && !loc.has(y)) { loc.add(y); nf.push(y); } fr = nf; } near.set(a, loc); }
+      for (let pass = 0; pass < PR.passes; pass++) {
+        const T = new Map();
+        for (const a of rows) {
+          const loc = near.get(a), p = [q[a * 3], q[a * 3 + 1], q[a * 3 + 2]];
+          let best = null, bd = PR.gap;
+          for (let k = 0; k < segR.length; k += 2) {
+            const s0 = segR[k], s1 = segR[k + 1];
+            if (loc.has(s0) || loc.has(s1)) continue;
+            const A = [q[s0 * 3], q[s0 * 3 + 1], q[s0 * 3 + 2]], ab = [q[s1 * 3] - A[0], q[s1 * 3 + 1] - A[1], q[s1 * 3 + 2] - A[2]];
+            const L2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2] || 1e-12, u = Math.max(0, Math.min(1, ((p[0] - A[0]) * ab[0] + (p[1] - A[1]) * ab[1] + (p[2] - A[2]) * ab[2]) / L2));
+            const c = [A[0] + ab[0] * u, A[1] + ab[1] * u, A[2] + ab[2] * u], d = Math.hypot(c[0] - p[0], c[1] - p[1], c[2] - p[2]);
+            if (d < bd) { bd = d; best = c; }
+          }
+          if (best) T.set(a, [0, 1, 2].map((k) => (p[k] + best[k]) / 2));
+        }
+        for (const [a, t] of T) q.set(t, a * 3);
+        paired = T.size;
+      }
+    }
+    const hop = new Int16Array(m).fill(-1); let front = [...tgt.keys()]; for (const g of front) hop[g] = 0;
+    for (let h = 1; h <= ZP.hops; h++) { const nf = []; for (const g of front) for (const u of nb[g]) if (free[u] && hop[u] < 0) { hop[u] = h; nf.push(u); } front = nf; }
+    const act = []; for (let g = 0; g < m; g++) if (hop[g] > 0) act.push(g);
+    for (let it = 0; it < ZP.iters; it++) {
+      tmp.set(q);
+      for (const g of act) { const a = [0, 0, 0]; let cnt = 0; for (const h of nb[g]) { if (tuckedG[h]) continue; cnt++; for (let k = 0; k < 3; k++) a[k] += q[h * 3 + k]; } if (cnt) for (let k = 0; k < 3; k++) tmp[g * 3 + k] = 0.5 * q[g * 3 + k] + 0.5 * (a[k] / cnt); }
+      q.set(tmp); for (const g of act) lay(g);
+    }
+  }
+  // (and again once the seam is zipped, the zipped rows held: drawn together, they turned some of the cells beside
+  // them over)
+  if (UT && ZP) { untangle.after = []; untangleRun(untangle.after); }
+  // (round fm_eye, `clear` mm (0: off): the wrapped skin kept that far off the lowered globes: the hero's closed skin is
+  // as little as 0.008 mm over its globe by the seam and between the domes, and a coarser tier's facets, laid corner by
+  // corner on it, cut chords into the globe there — lod1's globe showed through in slivers on the domes' medial faces)
+  const CLR = o.clear === undefined ? 0.03 : o.clear;
+  let cleared = 0;
+  if (CLR && G) for (let g = 0; g < m; g++) {
+    if (!free[g]) continue;
+    let bc = null, bd = Infinity; for (const c of G.centres) { const d = Math.hypot(q[g * 3] - c[0], q[g * 3 + 1] - c[1], q[g * 3 + 2] - c[2]); if (d < bd) { bd = d; bc = c; } }
+    if (bd < G.radius + CLR && bd > 1e-9) { const k = (G.radius + CLR) / bd; for (let j = 0; j < 3; j++) q[g * 3 + j] = bc[j] + (q[g * 3 + j] - bc[j]) * k; cleared++; }
+  }
+  // (round fm_eye, `unfold` { reach, rounds, iters, rings } (null: off): the wrapped skin over a lowered globe — its
+  // facets within `reach` mm of the globe — that faces the globe's centre is turned out: those facets' corners and
+  // `rings` rings round them drawn to their neighbours' mean and set at their neighbours' mean distance from the centre,
+  // `iters` passes a round, the seam's rows held, and a facet still turned in then shut. The hero's shut crease faces in
+  // across the closed dome's lateral face (its lips folded over the channel), so `untangle`, which reads the target's
+  // normals, passes a lod1 facet laid the same way: two such facets in the middle of lod1's closed dome, specks of the
+  // inside showing through)
+  const UF = o.unfold === undefined ? { reach: 0.3, rounds: 8, iters: 20, rings: 1 } : o.unfold;
+  const unfold = [];
+  if (UF && G) {
+    const cOf = (p) => { let bc = G.centres[0], bd = Infinity; for (const c of G.centres) { const d = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]); if (d < bd) { bd = d; bc = c; } } return [bc, bd]; };
+    const heldU = new Uint8Array(m); for (let g = 0; g < m; g++) if (free[g]) for (const h of nb[g]) if (tuckedG[h]) { heldU[g] = 1; break; }
+    const triU = []; for (let t = 0; t < I.length; t += 3) { const a = wid[I[t]], b = wid[I[t + 1]], c = wid[I[t + 2]]; if (a !== b && b !== c && a !== c && free[a] && free[b] && free[c]) triU.push(a, b, c); }
+    for (let r = 0; r < UF.rounds; r++) {
+      const bad = new Set();
+      for (let k = 0; k < triU.length; k += 3) {
+        const [a, b, c] = [triU[k], triU[k + 1], triU[k + 2]], ce = [0, 1, 2].map((j) => (q[a * 3 + j] + q[b * 3 + j] + q[c * 3 + j]) / 3), [C, dC] = cOf(ce);
+        // (a facet on the seam's held rows is the zip's: left as it lies)
+        if (dC > G.radius + UF.reach || heldU[a] || heldU[b] || heldU[c]) continue;
+        const e1 = [0, 1, 2].map((j) => q[b * 3 + j] - q[a * 3 + j]), e2 = [0, 1, 2].map((j) => q[c * 3 + j] - q[a * 3 + j]);
+        const nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if (nn[0] * (ce[0] - C[0]) + nn[1] * (ce[1] - C[1]) + nn[2] * (ce[2] - C[2]) < 0) { bad.add(a); bad.add(b); bad.add(c); }
+      }
+      unfold.push(bad.size);
+      if (!bad.size) break;
+      let zone = new Set(bad);
+      for (let k = 0; k < UF.rings + Math.floor(r / 2); k++) { const nz = new Set(zone); for (const g of zone) for (const h of nb[g]) if (free[h]) nz.add(h); zone = nz; }
+      const Z = [...zone].filter((g) => !heldU[g]);
+      for (let it = 0; it < UF.iters; it++) {
+        tmp.set(q);
+        for (const g of Z) {
+          const a = [0, 0, 0]; let cnt = 0, rr = 0;
+          for (const h of nb[g]) { if (tuckedG[h]) continue; cnt++; for (let k = 0; k < 3; k++) a[k] += q[h * 3 + k]; rr += cOf([q[h * 3], q[h * 3 + 1], q[h * 3 + 2]])[1]; }
+          if (!cnt) continue;
+          for (let k = 0; k < 3; k++) a[k] /= cnt;
+          const [C] = cOf(a), d = [0, 1, 2].map((k) => a[k] - C[k]), l = Math.hypot(...d) || 1;
+          for (let k = 0; k < 3; k++) tmp[g * 3 + k] = C[k] + (d[k] / l) * (rr / cnt);
+        }
+        q.set(tmp);
+      }
+    }
+    // (a facet still turned in after the rounds is shut: its corners at its centroid, at their mean distance from the
+    // centre — a fold too small for the relaxation to open, a speck of the inside showing through)
+    for (let k = 0; k < triU.length; k += 3) {
+      const ids = [triU[k], triU[k + 1], triU[k + 2]], ce = [0, 1, 2].map((j) => (q[ids[0] * 3 + j] + q[ids[1] * 3 + j] + q[ids[2] * 3 + j]) / 3), [C, dC] = cOf(ce);
+      if (dC > G.radius + UF.reach || ids.some((g) => heldU[g])) continue;
+      const e1 = [0, 1, 2].map((j) => q[ids[1] * 3 + j] - q[ids[0] * 3 + j]), e2 = [0, 1, 2].map((j) => q[ids[2] * 3 + j] - q[ids[0] * 3 + j]);
+      const nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      if (nn[0] * (ce[0] - C[0]) + nn[1] * (ce[1] - C[1]) + nn[2] * (ce[2] - C[2]) >= 0) continue;
+      const rr = ids.reduce((acc, g) => acc + cOf([q[g * 3], q[g * 3 + 1], q[g * 3 + 2]])[1], 0) / 3, d = [0, 1, 2].map((j) => ce[j] - C[j]), l = Math.hypot(...d) || 1;
+      for (const g of ids) for (let j = 0; j < 3; j++) q[g * 3 + j] = C[j] + (d[j] / l) * rr;
+      unfold.shut = (unfold.shut ?? 0) + 1;
+    }
+  }
+  // (round fm_eye, `deep` mm (0: off): the tucked lining sunk at least that far into the lowered globe: laid just under
+  // its skin as the hero's is, the coarse cells from the wrapped edge to it made a shallow trench along the seam whose
+  // floor showed, and the globe between)
+  const DEEP = o.deep === undefined ? 0.12 : o.deep;
+  if (DEEP && G) for (let g = 0; g < m; g++) {
+    if (!tuckedG[g]) continue;
+    let bc = null, bd = Infinity; for (const c of G.centres) { const d = Math.hypot(q[g * 3] - c[0], q[g * 3 + 1] - c[1], q[g * 3 + 2] - c[2]); if (d < bd) { bd = d; bc = c; } }
+    if (bd > G.radius - DEEP) { const k = (G.radius - DEEP) / bd; for (let j = 0; j < 3; j++) q[g * 3 + j] = bc[j] + (q[g * 3 + j] - bc[j]) * k; }
+  }
   // the bind displacement that lands the tier's skin there
   const E = new Float32Array(n * 3), sm = new Float32Array(n);
   for (let v = 0; v < n; v++) {
@@ -306,7 +517,7 @@ export function wrapMorph(tier, target, o) {
     for (let k = 0; k < 3; k++) E[v * 3 + k] = (free[g] || (tuckedG[g] && (o.tuckMode === 'project' || gridB)) ? q[g * 3 + k] : Ps[v * 3 + k]) - bind[v * 3 + k];
   }
   const d = solveBindDelta(bind, tier.skin, names, W, E, { mask: sm });
-  return { d, stats: { wrapped: free.reduce((a, b) => a + b, 0), tucked, welded: m, iters } };
+  return { d, stats: { wrapped: free.reduce((a, b) => a + b, 0), tucked, welded: m, iters, ...(okTri ? { collapsedTargetTris: okTri.count } : {}), ...(UT ? { untangleFlipped: untangle.flipped, ...(untangle.after ? { untangleAfterZip: untangle.after } : {}) } : {}), ...(ZP ? { seamZipped: zipped, seamPaired: paired } : {}), ...(CLR ? { cleared } : {}), ...(UF ? { unfold, unfoldShut: unfold.shut ?? 0 } : {}) } };
 }
 
 /** A small uniform grid over posed points for closest-point queries (transfer.mjs's vertexGrid, local copy so this
@@ -327,10 +538,11 @@ function vertexGridLocal(position, cell) {
     }
     return best;
   };
-  const closest = (p, indices, accept) => {
+  const closest = (p, indices, accept, acceptTri = null) => {
     if (!vt) { vt = Array.from({ length: n }, () => []); for (let t = 0; t < indices.length / 3; t++) for (let k = 0; k < 3; k++) vt[indices[t * 3 + k]].push(t); }
     let best = null;
     for (const [v] of near(p, 3, accept)) for (const t of vt[v]) {
+      if (acceptTri && !acceptTri(t)) continue;
       const ids = [indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2]], P = ids.map((i) => [position[i * 3], position[i * 3 + 1], position[i * 3 + 2]]);
       const r = closestOnTri(p, P[0], P[1], P[2]);
       if (!best || r.d < best.d) best = { ids, w: r.w, d: r.d };
