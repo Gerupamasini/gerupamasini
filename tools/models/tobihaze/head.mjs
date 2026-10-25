@@ -113,7 +113,13 @@ export const HEAD_SCULPT = {
     // blink hood short of the lowered window); in front and medially (rFront, rMedial) it keeps inside the dome's
     // outline, so it is a fold under the window and behind it, not a roll round the front of the dome (no turtleneck:
     // B002, u5)
-    collar: { y0: 0.528, r: [0.124, 0.054, 0.106], blend: 0.030, rFront: 0.092, rMedial: 0.088 },
+    // (round fin_eye: the collar raised and taller, its widest part up under the bead's lip (y0 0.545, 0.066 tall; was
+    // 0.528, 0.054) and laterally no wider than the lip (0.099, was 0.106), so the cup's wall runs from the one rim down
+    // to the crease at its foot as one convex sleeve — u1's cup rim and meniscus, B012, B013 — where T3's collar bulged
+    // out again 0.04 HL under the lip, a second roll with a hollow between (the cup's section under the window: one
+    // bulge and one hollow at 0°, 25°, 50° forward of lateral and 30° behind it, was two and two; the lip 0.107 HL
+    // from the globe's axis at its widest, T3's collar 0.106)
+    collar: { y0: 0.545, r: [0.124, 0.066, 0.099], blend: 0.030, rFront: 0.092, rMedial: 0.088 },
     // the infraorbital crease where the collar meets the head (k: its rounding; 0.012 rounded its lateral ends but
     // opened the blink: the closed hood left the lowered window showing at the lateral base), fading out behind the
     // globe (back: [from, to] behind its centre) before it would turn up the collar's back into the nape as a ragged
@@ -156,7 +162,11 @@ export const HEAD_SCULPT = {
     // its lower edge reaches y 0.08; its front stays over the premaxilla's tip (0.046, 0.11) by 0.004 or more; toward
     // the pad's front end it stays low, so the upper lip's lower edge runs nearly level across the front (no arch at
     // the junction for the lower lip to follow up into a horn)
-    median: { path: [[0.070, 0.100, 0.000], [0.071, 0.101, 0.040], [0.084, 0.104, 0.080], [0.104, 0.116, 0.118]], radius: [0.017, 0.017, 0.018, 0.022], blend: 0.045 },
+    // (round M, the lips' overlap: a fuller curtain hanging lower in front of the lower jaw, its lower edge at y 0.070
+    // level with the pads' (u5, B002: from the front the upper lip is a broad band whose lower edge, the mouth line,
+    // runs level across, the lower lip a narrow band set back under it); was y 0.100 / r 0.017, its lower edge at
+    // 0.083 arched 0.027 over the pads' and the lower jaw's whole front showed under it as a big lower lip)
+    median: { path: [[0.058, 0.090, 0.000], [0.060, 0.090, 0.040], [0.074, 0.094, 0.080], [0.098, 0.108, 0.118]], radius: [0.020, 0.020, 0.021, 0.024], blend: 0.045 },
     // the pad: a bean along the premaxilla's arm, its front end narrower and tucked under the bulb, its rear end the
     // fattest part, round, over the maxilla's tip at the rictus; sy: the section's vertical stretch
     // (side view 1.23 × 0.60 ED, aspect 2.0, widest at 0.57 of its length, its axis level, the front end 0.68 of the
@@ -178,7 +188,17 @@ export const HEAD_SCULPT = {
     // rictus the groove keeps to the outside, from `out` under the gape's line up (inside the slit the same cut grooved
     // its roof where the pad's underside meets the palate: hidden at rest, but a crease in the opened mouth, and it
     // folded the lower lip's end under the slit's end in the posed mesh)
-    seam: { r: 0.004, k: 0.007, z: [0.08, 0.13], out: 0.01, rear: { s: [0.216, 0.286], r: 0.005, k: 0.011 } },
+    // (round M: r 0 — no cut. The cut's slot (0.025–0.03 HL deep under the sheath, its occlusion 0.01) baked and shaded
+    // as a black line round the pad's top and rear end, so the pad read as a lower lip under an overhanging snout (u1's
+    // groove line is L* 27 against the pad's 45, the model's 2). The pad is filleted onto the face instead (blendTop)
+    // and the fine line is the colour's (pattern.mjs, the lips))
+    seam: { r: 0, k: 0.007, z: [0.08, 0.13], out: 0.01, rear: { s: [0.216, 0.286], r: 0, k: 0.011 } },
+    // (round M) the pad filleted onto the face over its top: from y[0] to y[1] above the path's mean height the pad's
+    // union with the face widens to k (0.004 below it), so the face runs down onto the pad in a soft valley (u1, B010,
+    // B009): the groove's depth under the face-to-pad bridge 0.011–0.022 HL (was 0.024–0.033), its occlusion ≥ 0.65
+    // (was 0.01–0.13); under the pad's centre (its medial underside by the slit's roof) the tight union stays, so the
+    // slit and the jaw's bones are as before (0.03 rounded the pad's top edge away; 0.02 keeps it, B009, u1)
+    blendTop: { k: 0.02, y: [0.0, 0.03] },
     // at the foot of the rear end the groove fades into the rictal fold's web (the crease carries it on)
     web: { s: [0.276, 0.326], y: [0.052, 0.072], k: 0.03 },
   },
@@ -195,7 +215,10 @@ export const HEAD_SCULPT = {
     ramus: { path: [[0.094, 0.100, 0.000], [0.103, 0.100, 0.040], [0.138, 0.098, 0.084], [0.200, 0.092, 0.126], [0.276, 0.087, 0.158], [0.340, 0.084, 0.182]], radius: [0.012, 0.013, 0.015, 0.018, 0.022, 0.028] },
     floor: { c: [0.34, 0.060], r: [0.25, 0.060, 0.15] },
     lip: { path: [[0.086, 0.093, 0.000], [0.090, 0.093, 0.040], [0.105, 0.095, 0.070], [0.140, 0.098, 0.094], [0.196, 0.097, 0.116], [0.255, 0.095, 0.136], [0.295, 0.092, 0.150]], radius: [0.011, 0.011, 0.008, 0.0055, 0.005, 0.0045, 0.004] },
-    chin: { c: [0.126, 0.080], r: [0.030, 0.022, 0.034] },
+    // (round M: the chin set back and up under the fuller median lip, c [0.126, 0.080] r [0.030, 0.022, 0.034] before,
+    // so the lower jaw's front recedes under the upper lip (from the front a narrow band under the mouth line, not a
+    // big lower lip under the snout); the dentary's front stays inside it)
+    chin: { c: [0.135, 0.084], r: [0.030, 0.020, 0.030] },
     blend: 0.05, fuse: 0.04,
   },
   // the rictal fold: the web joining the pad's rear end to the lower lip at the corner, and its crease running on down
@@ -490,7 +513,11 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     const RW = K.pad.web, rw = RW ? smoothstep(RW.s[0], RW.s[1], x) * (1 - smoothstep(RW.y[0], RW.y[1], y)) : 0;
     // across the front the median lip flows out of the snout (a soft blend, no crease: the sheath runs on into it)
     const mb = K.pad.median.blend ? K.pad.median.blend * (1 - smoothstep(0.04, 0.09, za)) : 0;
-    let d = smin(m, p, Math.max(mb, 0.004 + (RW ? (RW.k - 0.004) * rw : 0)));
+    // (blendTop {k, y: [from, to]}: over the pad's top — from y[0] to y[1] above the pad's mean centre height — the pad
+    // is filleted onto the face with the wider blend k, so the face runs down onto the pad in a soft valley instead of a
+    // slot; lower down, at the pad's medial underside by the slit's roof, the tight 0.004 stays)
+    const BT = K.pad.blendTop, kTop = BT ? 0.004 + (BT.k - 0.004) * smoothstep(pyc + BT.y[0], pyc + BT.y[1], y) : 0.004;
+    let d = smin(m, p, Math.max(mb, kTop + (RW ? Math.max(0, RW.k - kTop) * rw : 0)));
     const SZ = K.pad.seam.z ?? [0.05, 0.11];
     // (seam.out: in front of the rictus the groove stays on the outside, `out` over the gape's line and up; under it
     // the pad's underside meets the palate inside the slit, where the same cut grooved the slit's roof and folded the
@@ -500,7 +527,9 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     // tissue fuses into the cheek does not pinch its bottom into a cusp, and it stays two cells wide in the posed mesh)
     const SR = K.pad.seam.rear, rt = SR ? smoothstep(SR.s[0], SR.s[1], x) : 0;
     const sr = K.pad.seam.r + (SR ? (SR.r - K.pad.seam.r) * rt : 0), sk = K.pad.seam.k + (SR ? (SR.k - K.pad.seam.k) * rt : 0);
-    if (sw > 0) d += (ssub(d, Math.hypot(m, p) - sr, sk) - d) * sw;
+    // (round M: r 0 turns the cut off; with the pad filleted the line where the two fields meet lies inside the fillet,
+    // where the cut would hollow a tunnel)
+    if (sw > 0 && sr > 0) d += (ssub(d, Math.hypot(m, p) - sr, sk) - d) * sw;
     return smin(d, rictal(x, y, za), K.rictal.blend);
   };
 

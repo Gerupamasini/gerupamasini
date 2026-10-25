@@ -137,8 +137,11 @@ export const PALETTE = {
   dashPale: '#ebe5d6',      // the upper flank's white dashes (u1, B010)
   crescent: '#cfc6ab',      // the pale crescent under the eye
   collar: '#6e614e',        // the cup's rim under the globe: dark olive-brown (u1 L 32 C 13 h 92 rendered in shade)
-  lip: '#958465',           // lip pads: golden olive-tan (u1 L 49 C 18 h 92 in shade, B010)
+  lip: '#968e73',           // lip pads: olive-tan (u1 L 49 C 18 h 92 in shade, B010); round M: u1's pad under the photo
+                            // light L* 57.5 a −1.0 b 13.4 (T3 '#958465' rendered 52.8 / 2.1 / 15.3, ΔE2000 6.0: warmer)
   lipStipple: '#6c6352',    // the lip's fine dark stipple
+  lipLine: '#6a604d',       // round M: the labial groove's fine line along the pad's top (u1 L* 27 in the photo)
+  lipShade: '#766c59',      // round M: the mouth line — the lower jaw's skin under the overlapping upper lip, olive
   pectLobe: '#8e7c64',      // the pectoral lobe's olive-tan wash (u1 C 10 h 82, B010 golden; its chroma the cheek's, not
                             // T2's peach #977445, C 32)
   lobeDot: '#433b31',       // the lobe's dark speckles
@@ -177,6 +180,22 @@ function fbm(x, y, z, oct, seed) {
   return s / n;
 }
 const h01 = (a, b, c, seed) => hash3i(a, b, c, seed) / 4294967296;
+
+/** The nearest point of a swept tube's axis (as tubeDist): { d (the distance to the tube), cy (the axis's height
+ * there, HL), r (its radius there, × sy: the half-height of the section) } (round M, the lips). */
+function tubeNear(q, path, radius, sy = 1) {
+  let best = { d: Infinity, cy: 0, r: 0 };
+  for (let i = 0; i + 1 < path.length; i++) {
+    const a = path[i], b = path[i + 1];
+    const ab0 = b[0] - a[0], ab1 = (b[1] - a[1]) / sy, ab2 = b[2] - a[2];
+    const ap0 = q[0] - a[0], ap1 = (q[1] - a[1]) / sy, ap2 = q[2] - a[2];
+    const L2 = ab0 * ab0 + ab1 * ab1 + ab2 * ab2;
+    const t = sat((ap0 * ab0 + ap1 * ab1 + ap2 * ab2) / L2), r = radius[i] + (radius[i + 1] - radius[i]) * t;
+    const d = Math.hypot(ap0 - ab0 * t, ap1 - ab1 * t, ap2 - ab2 * t) - r;
+    if (d < best.d) best = { d, cy: a[1] + (b[1] - a[1]) * t, r: r * sy };
+  }
+  return best;
+}
 
 /** Distance (HL) from q to a swept tube (polyline `path` with radii, y stretched by `sy` about the axis). */
 function tubeDist(q, path, radius, sy = 1) {
@@ -297,6 +316,14 @@ const SPOTS = {
   lobeSpot: { cell: 0.05, r: 0.011, rVar: 0.35, soft: 0.12, seed: 83 },
 };
 
+/** (round M, the lips' overlap) The upper lip's two lines (skinColour, the lips): the labial groove — a soft line `w` wide
+ * (HL, gaussian) at `at` off the pad's tube, where the fillet onto the face lies, over the pad's top (`above`: from
+ * [0] to [1] of the section's half-height above its axis) — and the mouth line: the skin under the upper lip's lowest
+ * point (`below` [from, full] HL under it, fading out `reach` [full, none] further down, the face's olive to `jaw` —
+ * where the skin faces down, only to `side`), `off` [from, full] off the lip and within `d` of it: the lower jaw's skin
+ * the upper lip overlaps. */
+export const LIP = { groove: { at: 0.005, w: 0.0035, above: [0.35, 0.7] }, mouth: { below: [-0.006, 0.002], off: [0.001, 0.004], reach: [0.008, 0.025], jaw: [0.05, 0.08], side: [0.03, 0.045], d: 0.07 } };
+
 /** Each layer's opacity (0..1; the calibrated look: region contrast against the photos, see the header).
  * patternContext's `strength` multiplies them (tests, morphs). */
 export const LAYERS = {
@@ -304,7 +331,7 @@ export const LAYERS = {
   saddle: 0.95, blotch: 1.0, band: 0.55, barcode: 0.45, dash: 1.0, spotRow: 0.9, rust: 1.0, pepper: 0.4, brownSpeck: 0.7, trunkSalt: 0.3,
   // head
   mottle: 0.65, cloud: 0.75, patch: 0.85, speck: 0.95, cluster: 0.95, microDark: 0.7, microPale: 0.65, gran: 0.4, grain: 0.7, verm: 0.9, pale: 0.8, streak: 0.62, opBar: 0.75, axilla: 0.72,
-  crescent: 0.25, collar: 0.6, lip: 0.9, lipStipple: 0.35,
+  crescent: 0.25, collar: 0.6, lip: 0.9, lipStipple: 0.35, lipLine: 0.6, lipShade: 0.75, lipJaw: 0.85,
   // lobe, eye cap
   lobe: 0.95, lobeDot: 0.95, lobeSpot: 0.9, lobeStreak: 0.7, eyeCap: 0.35,
 };
@@ -885,6 +912,28 @@ export function skinColour(p, n, part, ctx) {
       const st = spotsAt(ctx, 'speck', [x * 1.25, y * 1.25, z * 1.25], _w, 0.5, null);
       blend(c, P.lipStipple, st * A.lipStipple * wl);
     }
+    // (round M, the lips' overlap) where the upper lip meets the face and where it overlaps the lower jaw — the labial
+    // groove a fine soft line along the pad's top (u1: L* 27 against the pad's 45 and the face's 49 over 0.1 of the pad's
+    // height; B010 a soft valley, 40 against 54–60), and the mouth line under the pad and the median lip: the lower jaw's
+    // skin the upper lip overlaps in its shade, olive (u1: L* 28–35 under the pad; B010, B009 dark), not the throat's cream
+    const nb = tubeNear(qa, PD.path, PD.radius, PD.sy), nm = tubeNear(qa, PD.median.path, PD.median.radius, 1);
+    const n0 = nb.d <= nm.d ? nb : nm;
+    const wg = Math.exp(-(((nb.d - LIP.groove.at) / LIP.groove.w) ** 2)) * sstep(LIP.groove.above[0], LIP.groove.above[1], (y - nb.cy) / Math.max(1e-4, nb.r));
+    if (wg > 0.01) blend(c, P.lipLine, wg * A.lipLine * (0.85 + 0.3 * sat(0.5 + lf2)));
+    // (the mouth line: below the upper lip's lowest point there — the nearest section of the pad or the median lip —
+    // `below` [from, full] HL under it, fading by `reach` [full, none] further down; off the lip itself, and within `d`
+    // of it, so it stops at the rictus; and the lower jaw's skin under it, to `jaw` [full, none] below the line, the
+    // face's olive like the upper lip's — B012, B013, u5: the lower lip is the face's colour — not the throat's cream,
+    // which framed by the pads read as a big pale lower lip from the front)
+    const dy = n0.cy - n0.r - y, LM = LIP.mouth;
+    const wo = sstep(LM.below[0], LM.below[1], dy) * sstep(LM.off[0], LM.off[1], dPad) * (1 - sstep(LM.d * 0.6, LM.d, dPad));
+    // (the jaw's colour on its front and sides only: past the mouth line, where the skin turns to face down — the chin's
+    // underside, the throat — the throat's cream stays; under the pad, where the jaw's side faces down too, it is kept
+    // to `side` [from, to] below the line: the band a side view sees under the pad, u1 L* 28–35)
+    const down = n ? sstep(-0.3, -0.7, n[1]) * sstep(LM.side[0], LM.side[1], dy) : 0;
+    const wj = wo * (1 - sstep(LM.jaw[0], LM.jaw[1], dy)) * (1 - down), wm = wo * (1 - sstep(LM.reach[0], LM.reach[1], dy));
+    if (wj > 0.01) blend(c, P.cheek, wj * A.lipJaw);
+    if (wm > 0.01) blend(c, P.lipShade, wm * A.lipShade);
   }
 
   // ---- the pectoral lobe (past the root pad, where the axilla mark stays): the body's ground and marks under an ochre-

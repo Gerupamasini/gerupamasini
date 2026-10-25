@@ -31,7 +31,7 @@
 //   lips        the upper-lip pad and the median lip: a fine stipple and fine wrinkles across the pad (SOFT §1.1: "finely
 //               stippled, glossy"; FST: "finely wrinkled")
 //   lobe        the pectoral lobe: fine longitudinal striations over the radials, converging toward the junction
-//   margins     fine wrinkles along the gill cover's margin, four folds on the eye's collar under the cup's rim
+//   margins     fine wrinkles along the gill cover's margin (the eye's collar no relief folds since round fin_eye)
 //   film        (round T2, FILM) the water film's own slow undulation: u1's sheet of sky breaks into lobes at its edges
 // Every layer is band-limited for the map it is baked into (ctx.fpRef: ONE footprint for the whole map, the coarsest skin
 // chart's, 0.032 mm a texel at 2048 — a per-texel footprint steps at every triangle and differs between two charts at a
@@ -179,7 +179,12 @@ export const HEAD_SKIN = {
   // collar a smooth sleeve, the eye finding's P3); menisc: the water's fillet in the crease at the turret's foot, u1's
   // bright line under the folds — the sculpt's deep crease there (its occlusion under `ao`) within `eye` × R of the
   // globe's surface, `below` × R under its centre: the film smoother by `rough` and the water kept)
-  collar: { folds: [0.022, 0.046, 0.07, 0.094], width: 0.12, amp: 0.05, rh: [0.06, 0.09, 0.17, 0.21], menisc: { ao: [0.15, 0.5], eye: [0.35, 0.5, 0.95, 1.15], below: [0.9, 1.15], rough: 0.15, fill: 0.85 } },
+  // (round fin_eye: folds [] — was [0.022, 0.046, 0.07, 0.094]. The sculpt's collar is now one convex sleeve from the
+  // cup's rim down to the crease at its foot (head.mjs HEAD_SCULPT.cup.collar), as u1's one cup rim and meniscus, B012,
+  // B013; the four relief folds stacked rings under the globe in the normal map (no-albedo fold count under the globe at
+  // u1 / B010 / B012: 3 / 2 / 4 with them, 1 / 1 / 2 without — B012's second the meniscus crease at the foot). The
+  // meniscus stays)
+  collar: { folds: [], width: 0.12, amp: 0.05, rh: [0.06, 0.09, 0.17, 0.21], menisc: { ao: [0.15, 0.5], eye: [0.35, 0.5, 0.95, 1.15], below: [0.9, 1.15], rough: 0.15, fill: 0.85 } },
 };
 
 /**
@@ -765,7 +770,7 @@ function latticeHeight(p, R, ctx, fp, aux) {
       h += -O.amp * Math.pow(0.5 + 0.5 * Math.cos(TAU * (dmm / O.period + wv)), 2) * brk * w * bl;
     }
   }
-  // the eye's collar: two folds following the cup's rim under the globe
+  // the eye's collar: folds following the cup's rim under the globe (none since round fin_eye: HEAD_SKIN.collar.folds)
   const C = HEAD_SKIN.collar, e = ctx.eyeC;
   const px = (p[0] - e[0]) / HL, py = (p[1] - e[1]) / HL, pz = (Math.abs(p[2]) - e[2]) / HL;
   const rh = Math.hypot(px, pz);

@@ -41,6 +41,12 @@
 //              apart, H/W 0.62; the pale zone under the pupil 0.10–0.13 ED (T2 0.02–0.03); the ring's C* 22–25, 31 under
 //              the game light (T2 26–37); the variants red dE 2.8 to B010's pupil, black 3.4 to B049's
 //
+// Round fin_eye (the owner: 目の形; scratch ref/work/fin_eye): the window a big rounded oval (eye.mjs) and the paint
+// following it — the dark pupil fills the window inside a thin gold rim (EYE_PAINT.pupil.follow, the rim paler under the
+// pupil, a thin dark limbal line outside it), where T3's bean sat in a broad cream / olive band that drew the window's
+// corners as a pointed almond; no painted concentric folds on the cap (EYE_CAP.folds k 0: with the collar's they stacked
+// as rings under the globe) and the pale zone under the window only a narrow lip of the rim's cream.
+//
 // Texels: the colour as linear RGB, the roughness (the ORM's G: the window 0.03–0.05, the lid margin's wet meniscus
 // easing to the skin's), the glow mask (`glow`: the bake's baseColor A in the iris rect), the occlusion (1: the globe
 // turns, so no occlusion is baked on it). Supersampled per texel (anti-aliased at every size) and every detail finer than
@@ -149,9 +155,17 @@ export const EYE_MATERIAL = {
  * closer than `minRingED` to the window's edge. The mesh's pupil ring (eye.mjs pupilEdge) only places vertices: the
  * texture's edge is what shows, at every tier. (T2 drew in the mesh's ring by fixed amounts and cut a 26° notch at the
  * window's flat top: a narrow V that read as lips.)
+ * Round fin_eye (`follow`): the pupil is the window's own outline drawn in by a thin ring — the photos' dark window with
+ * a thin gold rim (u1 face-on, traced: the rim 0.026 ED over the pupil, 0.036 at the ends and under it, the pupil
+ * 0.65 × 0.35 ED in a 0.72 × 0.41 window, 0.76 of its area; B010 the rim wider and paler under the pupil, 0.05–0.08 ED;
+ * B012 / B013 thin all round; rendered at u1's camera the pupil is 0.78 of the window, T3's 0.61) —
+ * so the pupil has the window's round ends; T3's bean inside a broad cream band ended short of the window's ends and
+ * the band drew them as an almond. `ring` { top, end, bottom } the rim's width in ED as seen face-on (eased round the
+ * outline by the azimuth), `dent` a gentle dip in the pupil's top edge (u1's; B010's kidney deeper) `depth` ED at `at`
+ * degrees round from the back edge, `width` degrees wide; never closer than `minRingED` to the window's edge.
  */
 export const EYE_PAINT = {
-  pupil: { centre: [0.012, -0.036], a: 0.276, bt: 0.192, bb: 0.166, nt: 2.4, nb: 2.2, tilt: -0.07, notch: { x: -0.03, depth: 0.066, width: 0.11, pow: 2.4 }, minRingED: 0.012 },
+  pupil: { follow: true, ring: { top: 0.026, end: 0.036, bottom: 0.038 }, dent: { at: 112, depth: 0.012, width: 24 }, minRingED: 0.012 },
 };
 
 /**
@@ -163,11 +177,15 @@ export const EYE_PAINT = {
  *   folds  the lid's concentric folds round the window (u1): soft dark lines at `at` degrees, `width` wide, at `k`,
  *          weighted `sides` round the sides and below against the top (where the hood's own fold and the sky sheen
  *          are), broken by noise
+ * Round fin_eye: no painted folds (k 0) — round the window and under it the photos show the globe's smooth skin down to
+ * the one rim of the cup (u1, B012, B013); T3's three painted rings stacked over the cup's rim and the collar's folds
+ * under the globe — and the pale zone under the window only a narrow lip of the rim's cream (B010), not a band (T3's ran
+ * 11° over the lid and widened the window's lower edge into a cream crescent).
  */
 export const EYE_CAP = {
-  rim: { k: 0.25, to: 1.6, under: 0.9 },
-  pale: { to: [5.0, 11.0], arc: [0.25, 0.75], k: 0.8 },
-  folds: { at: [6.5, 12.5, 19], width: 1.3, k: 0.3, sides: [0.45, 1] },
+  rim: { k: 0.25, to: 1.6, under: 0.6 },
+  pale: { to: [1.5, 4.0], arc: [0.3, 0.8], k: 0.5 },
+  folds: { at: [6.5, 12.5, 19], width: 1.3, k: 0, sides: [0.45, 1] },
 };
 
 /** The window's geometry (eye.mjs) as tables over φ: θb (rad), the mesh's pupil ρ, the painted pupil's ρ (per pupil
@@ -182,6 +200,17 @@ function pupilEdges(PP, X) {
   const top = PP.centre[1] + PP.bt * st + (PP.tilt ?? 0) * (X - PP.centre[0]) * st - (N ? N.depth * Math.exp(-Math.pow(Math.abs((X - N.x) / N.width), N.pow ?? 2)) : 0);
   return { top, bot: PP.centre[1] - PP.bb * sup(u, PP.nb) };
 }
+/** The followed pupil's ρ at φ (EYE_PAINT.pupil with `follow`): the window's bound less the ring's width, a face-on width
+ * w (ED) taken as the polar span 2w / cos θ at the bound. */
+function followRho(PP, ph, b) {
+  const roll = (EYE_SCULPT.windowRoll ?? 0) * D2R, phr = ph - roll, s = Math.sin(phr), c = Math.cos(phr);
+  const R = PP.ring, w0 = c * c * R.end + s * s * (s >= 0 ? R.top : R.bottom);
+  const D = PP.dent, dphi = D ? wrapPi(phr - D.at * D2R) : 0;
+  const w = w0 + (D ? D.depth * Math.exp(-((dphi / (D.width * D2R)) ** 2)) : 0);
+  const dth = (2 * Math.max(w, PP.minRingED ?? 0)) / Math.max(0.35, Math.cos(b));
+  return Math.max(0.2, 1 - dth / b);
+}
+const wrapPi = (x) => ((((x + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
 function geometry(PP = EYE_PAINT.pupil) {
   const key = JSON.stringify(PP);
   if (GEOS.has(key)) return GEOS.get(key);
@@ -191,6 +220,7 @@ function geometry(PP = EYE_PAINT.pupil) {
   for (let i = 0; i <= N; i++) {
     const ph = (i / N) * 2 * Math.PI, b = thB(ph), r = pupilEdge(ph, EYE_SCULPT);
     tb[i] = b; rp[i] = r;
+    if (PP.follow) { rt[i] = followRho(PP, ph, b); continue; }
     // (the outline's radius along this azimuth: from the window's axis, inside, out to the edge — the bean is star-shaped
     // about the axis — then bisected; ED in the plane, a chord sin θ / 2)
     const c = Math.cos(ph - roll), s = Math.sin(ph - roll);
@@ -280,15 +310,19 @@ function windowTexel(rho, ph, fp, P, o, PP) {
     // the ring: brightest at the pupil's edge, easing into the iris; under the pupil the pale cream-gold crescent, which
     // (round T3) fills the band under the pupil down to the window's edge and runs on over the lid (EYE_CAP.pale)
     const ringC = P[o.ring === 'orange' ? 'ringOrange' : 'ring'].slice();
-    const paleK = sstep(0.15, 0.7, below);
+    // (round fin_eye, a followed pupil: the band is the thin gold rim itself, the pupil's edge to the window's — u1's, B012's
+    // — its outer third easing a little toward the olive-bronze iris, the rim paler cream-gold under the pupil (B010) but
+    // no broad pale zone; T3's band was a hairline of gold in a broad olive / cream band)
+    const paleK = PP.follow ? 0.6 * sstep(0.3, 0.85, below) : sstep(0.15, 0.7, below);
     mixTo(ringC, P.ringPale, paleK * sstep(0.006, 0.03, dd) * 0.95);
-    const r1 = Math.max(1 - sstep(ringW * 0.55, ringW * 1.15, dd), paleK * 0.95 * (1 - sstep(w - 0.02, w, dd) * 0.2));
+    const r1 = PP.follow ? 1 - 0.3 * sstep(0.55 * w, w, dd) : Math.max(1 - sstep(ringW * 0.55, ringW * 1.15, dd), paleK * 0.95 * (1 - sstep(w - 0.02, w, dd) * 0.2));
     const tone = 0.9 + 0.12 * perlin3(Math.cos(ph) * 14, Math.sin(ph) * 14, 3.3, 39) + 0.06 * fib * fine;
     const band = irisT.slice();
     mixTo(band, ringC.map((v) => v * tone), r1);
     // the limbus: a dark line over the window's last 0.02 rad (round T3: faint under the pupil, where the pale zone runs
-    // on over the lid; T2 0.4 all round)
-    mixTo(band, P.limbus, sstep(w - 0.03, w - 0.004, dd) * 0.4 * (1 - 0.9 * paleK));
+    // on over the lid; T2 0.4 all round; fin_eye: the thin dark line round the rim of u1 and B012, half as faint under)
+    if (PP.follow) mixTo(band, P.limbus, sstep(w - 0.022, w - 0.003, dd) * 0.45 * (1 - 0.5 * paleK));
+    else mixTo(band, P.limbus, sstep(w - 0.03, w - 0.004, dd) * 0.4 * (1 - 0.9 * paleK));
     // the edge between the pupil and the ring (anti-aliased by the supersampling: a 0.004 rad ramp)
     const a = sstep(-0.004, 0.004, dd);
     c[0] = q[0] + (band[0] - q[0]) * a; c[1] = q[1] + (band[1] - q[1]) * a; c[2] = q[2] + (band[2] - q[2]) * a;
@@ -351,8 +385,10 @@ function skinTexel(t, ph, fp, P, o, PP) {
 export function windowRegion(rho, ph, PP = EYE_PAINT.pupil) {
   const { thB, rhoP } = geometry(PP);
   const b = thB(ph), rp = rhoP(ph), dd = (rho - rp) * b, w = (1 - rp) * b, below = sat(-Math.sin(ph));
-  const ringW = Math.max(0.026, Math.min(0.13, (0.42 + 0.48 * below) * w));
-  const part = dd < -0.012 ? 'pupil' : dd > 0.003 && dd < ringW * 0.8 ? 'ring' : dd > ringW * 1.2 && dd < w - 0.01 ? 'iris' : 'edge';
+  const ringW = PP.follow ? w : Math.max(0.026, Math.min(0.13, (0.42 + 0.48 * below) * w));
+  const part = PP.follow
+    ? (dd < -0.012 ? 'pupil' : dd > 0.003 && dd < w - 0.012 ? 'ring' : 'edge')
+    : (dd < -0.012 ? 'pupil' : dd > 0.003 && dd < ringW * 0.8 ? 'ring' : dd > ringW * 1.2 && dd < w - 0.01 ? 'iris' : 'edge');
   return { part, dd, w, ringW };
 }
 
@@ -455,9 +491,21 @@ export function eyeMeasures(PP = EYE_PAINT.pupil) {
   const band = (ph) => +(((1 - rhoP(ph)) * thB(ph)) / 2).toFixed(4);
   // the painted outline's top edge sampled along X: the notch under the chord of the highest points either side (within
   // 15–85 % of the width, as notchw.py measures a render's mask)
+  // (a followed pupil: its outline's top and bottom edges sampled from the outline itself)
+  const edgesOf = () => {
+    if (!PP.follow) return (X) => pupilEdges(PP, X);
+    const pts = Array.from({ length: 2048 }, (_, i) => { const ph = (i / 2048) * 2 * Math.PI, t = Math.sin(rhoP(ph) * thB(ph)) / 2; return [t * Math.cos(ph - roll), t * Math.sin(ph - roll)]; });
+    return (X) => {
+      const ys = [];
+      for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; if ((a[0] - X) * (b[0] - X) <= 0 && a[0] !== b[0]) ys.push(a[1] + ((b[1] - a[1]) * (X - a[0])) / (b[0] - a[0])); }
+      return ys.length >= 2 ? { top: Math.max(...ys), bot: Math.min(...ys) } : null;
+    };
+  };
+  const pupilAt = edgesOf();
+  const span = (() => { if (!PP.follow) return [PP.centre[0] - PP.a, 2 * PP.a]; let a = 1e9, b = -1e9; for (let i = 0; i < 2048; i++) { const ph = (i / 2048) * 2 * Math.PI, X = (Math.sin(rhoP(ph) * thB(ph)) / 2) * Math.cos(ph - roll); a = Math.min(a, X); b = Math.max(b, X); } return [a, b - a]; })();
   const shape = () => {
-    const n = 600, x0 = PP.centre[0] - PP.a, Wd = 2 * PP.a, tops = [], bots = [];
-    for (let i = 1; i < n; i++) { const e = pupilEdges(PP, x0 + (Wd * i) / n); tops.push(e.top); bots.push(e.bot); }
+    const n = 600, [x0, Wd] = span, tops = [], bots = [];
+    for (let i = 1; i < n; i++) { const e = pupilAt(x0 + (Wd * i) / n) ?? { top: 0, bot: 0 }; tops.push(e.top); bots.push(e.bot); }
     const a = Math.floor(0.15 * tops.length), b = Math.floor(0.85 * tops.length);
     let best = { d: 0 };
     for (let i = a + 1; i < b - 1; i++) {

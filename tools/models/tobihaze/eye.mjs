@@ -20,27 +20,36 @@
 // level with the near dome's centre in u1; from the front (u5, the cheeks blown) a tall crescent on the outer edge
 // of each dome, reaching its outline, narrow at the top. The mesh splits the window into the pupil and the iris
 // (eyeGlobe), so the clay and the textured eye show the iris ring light and only the pupil dark.
+// Round fin_eye (the owner: 目の形; the lead's review at the photos' cameras): the window a big rounded oval with blunt
+// round ends (EYE_SCULPT.windowPow) — T3's flat top cut across a round cap left near right-angled corners at the top's
+// ends, which read as a pointed almond, worst at the states' default gaze — and the dark pupil filling it inside a thin
+// gold rim (the mesh's pupil ring `pupil.follow`; the paint, iris.mjs EYE_PAINT.pupil.follow), the skin cap, its hood
+// over the top and the lid margin as they were.
 
 import { HEAD } from './anatomy.mjs';
 
 /** Eye-mesh tunables (angles in degrees, heights as fractions of the globe's radius). */
 export const EYE_SCULPT = {
-  // the clear window (cornea over the iris and pupil), a flat-topped bean as in the lateral photos (u1, at its camera
-  // h/w 0.55, the top quarter 1.6 × the bottom's width, both ends round, the top edge level and straight, the bottom
-  // edge's low point in front of the middle; B010 the same from above), its outline convex from every camera (n16
-  // cut a notch into its upper front for u5, which every side and 3/4 view showed as a bite): the smooth intersection
-  // of spherical caps (windowCaps: each { at: [u, v] its centre in degrees from the axis, u toward the back edge, v
-  // up; r its angular radius }, corners rounded over k radians) — a round main cap whose centre sits high (the
-  // rounded bottom and ends), a wide cap centred far below the axis (the flat top), a cap centred below and behind
-  // (the front's upper corner set back, so from the front (u5) the window is a crescent narrowing upward); turned
-  // `windowRoll` degrees about the axis (back end up). Each cap
-  // is convex in any view within 90° of its centre, so the outline stays convex (concavity ≤ 0.012 ED at the photo
-  // cameras, n16 0.023–0.043). Seen face-on its half-angles are about 49° behind the axis, 21° above it, 32° below and
-  // 43° in front (windowHalf, which also sizes the pupil when it does not follow the window); it reaches 35° behind
-  // lateral and 65° forward of it, so turned ±30° (the runtime clamp) it keeps clear of the head's lobes
-  windowHalf: [49, 21, 32, 43],
-  windowCaps: { k: 0.0356, caps: [{ at: [2.5, 20.5], r: 53 }, { at: [-2, -53.25], r: 74.31 }, { at: [33.75, -55], r: 94.75 }] },
-  windowRoll: 9,
+  // the clear window (cornea over the iris and pupil): a big rounded oval, as the photos show it with the eye looking
+  // into the lens (round fin_eye, the window traced on the photos at their cameras: u1 h/w 0.57, the pupil 0.53, the
+  // height 10 % of the width in from either end 0.57 / 0.69 of the full height, the tightest radius at either end
+  // 0.28 / 0.43 of it, the window 0.72 × 0.41 ED with its rim, its area 0.30 of the globe's disc; B010 h/w 0.69 (its
+  // kidney) and 0.40 of the disc; B012 / B013 h/w 0.68 / 0.65): an oval of the half-angles `windowHalf` [behind the axis,
+  // above it, below it, in front of it], each quadrant a superellipse of the exponents `windowPow` [back-top, front-top,
+  // front-bottom, back-bottom] — [along, across] pairs, the along exponents 2.6–3.4 with 2 across, so the ends are blunt
+  // and round and the top flatter than the bottom, the front end the roundest (the photos') — turned `windowRoll` 19°
+  // about the axis, back end up (level in u1's view, the back end up 7–27° at B010's and B012 / B013's cameras, as in the
+  // photos, 10–21°). Rendered at the photos' cameras with the eye turned into the lens: h/w 0.63, the pupil 0.59, ends
+  // 0.65–0.72, their tightest radius 0.25–0.31 of H, 0.32–0.33 of the globe's disc, the pupil 0.78 of the window; at the
+  // states' default gaze from u1's camera (the window 44° from the lens) the ends 0.57 / 0.53 and their radius ≥ 0.17 H.
+  // Round T3's windowCaps — a round main cap cut by a wide flat-top cap — made two near right-angled corners at the top's
+  // ends: ends 0.50 / 0.53 and radius 0.15–0.17 H at u1 looking into the lens, 0.36 and 0.12 H at the default gaze (the
+  // pointed almond). The half-angles put the mesh pupil's centroid (rig.mjs EYE_REST) exactly where round T3 had it,
+  // 71.7° out and 12.2° up (the runtime's rest gaze, src behaviour.ts), so the gaze channels keep their numbers.
+  // (windowCaps { k, caps: [{ at, r }] }: the older form, the smooth intersection of spherical caps, if given)
+  windowHalf: [47.438, 21.692, 30.308, 43.562],
+  windowPow: [[3, 2], [3.4, 2], [2.6, 2], [2.6, 2]],
+  windowRoll: 19,
   // the window's axis in the eye's rest frame (fish frame: forward is −s, up +y, lateral +z for the left eye): 19°
   // forward of lateral, 13° above the equator (the window's mass lies under its flat top, so with the axis there its
   // middle is level with the dome's centre at the u1 camera, as in the photo)
@@ -68,7 +77,10 @@ export const EYE_SCULPT = {
   // wide in its top edge at `dentAt` degrees round from the back edge (the kidney of B010, its notch over the front
   // third), kept `ring` of the window's radius inside its edge; at the u1 camera 0.55 ED wide, h/w 0.56 (u1's dark
   // area 0.55); a ring of the mesh runs along it (`half`, `lift`: the oval used without `follow`)
-  pupil: { follow: [0.90, 0.86, 0.74], dent: 0.10, dentAt: 110, dentWidth: 22, ring: 0.04, half: [0.88, 0.66], lift: 0.14 },
+  // (round fin_eye: the mesh's pupil ring where the painted pupil now ends, iris.mjs EYE_PAINT — the window drawn in by
+  // the thin rim, ρ 0.855 over it, 0.87 at the ends, 0.83 under it — with the paint's gentle dip; the clay shows the same
+  // dark window with a thin rim)
+  pupil: { follow: [0.855, 0.87, 0.83], dent: 0.03, dentAt: 112, dentWidth: 24, ring: 0.04, half: [0.88, 0.66], lift: 0.14 },
 };
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -88,16 +100,40 @@ export function windowBound(K = EYE_SCULPT) {
   const hh = WH[0] * D2R, hv = WH[1] * D2R, hb = (WH[2] ?? WH[1]) * D2R, hf = (WH[3] ?? WH[0]) * D2R, CL = K.clip;
   // (windowPow: the superellipse exponent per quadrant [back-top, front-top, front-bottom, back-bottom], 2 an oval's;
   // windowRoll: degrees the outline turns about the axis, back end up and front end down)
+  // (round fin_eye: a quadrant's exponent may be a pair [along, across] — |x|^along + |y|^across = 1: an `along` over 2
+  // with `across` 2 rounds the end out toward a half-circle (its radius along/2 × the oval's) and flattens the top and
+  // bottom, where one exponent over 2 squares the quadrant's corner instead; the bound is then tabled, 2048 steps)
   const PW = K.windowPow ?? [2, 2, 2, 2], roll = (K.windowRoll ?? 0) * D2R;
-  return (ph0) => {
+  const pair = PW.some((n) => Array.isArray(n));
+  const fn = (ph0) => {
     const ph = ph0 - roll, sn = Math.sin(ph), cs = Math.cos(ph);
     const n = PW[sn >= 0 ? (cs >= 0 ? 0 : 1) : cs < 0 ? 2 : 3];
     const x = Math.abs(cs / (cs < 0 ? hf : hh)), y = Math.abs(sn / (sn < 0 ? hb : hv));
-    let b = n === 2 ? 1 / Math.hypot(x, y) : Math.pow(Math.pow(x, n) + Math.pow(y, n), -1 / n);
+    let b;
+    if (Array.isArray(n)) {
+      // r with (r x)^p + (r y)^q = 1: bisected on r (the sum rises with r)
+      const [p, q] = n;
+      let lo = 0, hi = 1 / Math.max(x, y, 1e-9);
+      for (let i = 0; i < 2 && Math.pow(hi * x, p) + Math.pow(hi * y, q) < 1; i++) hi *= 2;
+      for (let i = 0; i < 48; i++) { const m = (lo + hi) / 2; if (Math.pow(m * x, p) + Math.pow(m * y, q) < 1) lo = m; else hi = m; }
+      b = (lo + hi) / 2;
+    } else b = n === 2 ? 1 / Math.hypot(x, y) : Math.pow(Math.pow(x, n) + Math.pow(y, n), -1 / n);
     if (CL && CL.depth) b *= 1 - CL.depth * Math.exp(-((wrapPi(ph - CL.at * D2R) / (CL.width * D2R)) ** 2));
     return b;
   };
+  if (!pair) return fn;
+  const key = JSON.stringify([WH, PW, K.windowRoll ?? 0, CL ?? null]);
+  if (pairCache.has(key)) return pairCache.get(key);
+  const M = 2048, T = new Float64Array(M + 1);
+  for (let i = 0; i <= M; i++) T[i] = fn((i / M) * 2 * Math.PI);
+  const tab = (ph) => {
+    const x = ((((ph / (2 * Math.PI)) % 1) + 1) % 1) * M, i = Math.floor(x), f = x - i;
+    return T[i] + (T[Math.min(M, i + 1)] - T[i]) * f;
+  };
+  pairCache.set(key, tab);
+  return tab;
 }
+const pairCache = new Map();
 
 /**
  * The window as the smooth intersection of spherical caps (windowCaps: { caps: [{ at: [u, v], r }], k }): each cap a
