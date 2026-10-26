@@ -26,7 +26,7 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
     const along = smooth(0, 0.006, s) * (1 - smooth(c - 0.002, c + 0.008, s));
     const lips = r.lips ?? 1;
     out.h += side * along * lips * (0.0003 * g2(Math.abs(dy) - 0.0026, 0.0016) - 0.0005 * g2(dy, 0.0011));
-    out.ao *= 1 - side * along * 0.22 * g2(dy, 0.001);
+    out.ao *= 1 - side * along * 0.45 * g2(dy, 0.0012);
     // the maxilla: a plate above the gape, a groove along its upper edge and round its rounded hind end
     const mxH = (r.maxilla ?? 0.016) * (0.45 + 0.55 * Math.min(1, s / c));
     if (mxH > 0) {
@@ -44,8 +44,8 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
     const d = Math.hypot(s - e.s, y - e.y) / e.r;
     if (d < 3) {
       const k = (r.orbit ?? 1) * e.r;
-      out.h += side * 0.07 * k * g2(d - 1.28, 0.24);
-      out.ao *= 1 - side * 0.15 * g2(d - 1.02, 0.12);
+      out.h += side * 0.035 * k * g2(d - 1.3, 0.3);
+      out.ao *= 1 - side * 0.1 * g2(d - 1.04, 0.12);
       for (const [ds, dyy] of [[-1.55, 0.35], [-2.15, 0.18]]) {
         const pit = g2(Math.hypot(s - (e.s + ds * e.r), y - (e.y + dyy * e.r)), 0.16 * e.r);
         out.h -= side * 0.03 * e.r * pit;
@@ -62,9 +62,11 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
     out.ao *= 1 - k * 0.12 * g2(s - pre - 0.0012, 0.0012);
     // the gill cover: proud of the body up to its free edge, the edge throwing a soft shadow back onto the shoulder
     const edge = oper.s - oper.sweep * v * v;
+    // (fading out toward the top and bottom of the opening, where the membrane runs into the body)
     const plate = smooth(edge - 0.07, edge - 0.03, s) * (1 - smooth(edge - 0.0012, edge + 0.0006, s));
-    out.h += side * 0.0013 * plate;
-    out.ao *= 1 - side * 0.26 * (s > edge ? g2(s - edge - 0.002, 0.005) : 0);
+    const ends = 1 - 0.6 * smooth(0.45, 0.95, Math.abs(v));
+    out.h += side * 0.001 * plate * ends;
+    out.ao *= 1 - side * 0.16 * ends * (s > edge ? g2(s - edge - 0.002, 0.005) : 0);
   }
   return out;
 }

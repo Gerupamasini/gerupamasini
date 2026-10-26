@@ -64,15 +64,16 @@ export function spots(x: number, y: number, cell: number, r: number, seed = 0, r
 /**
  * The imbricate scale lattice at (x along, y round; one scale a unit, rows staggered by half a scale): of the scales that
  * cover the point, the one whose centre is furthest forward lies on top (its exposed field overlaps the scale behind
- * it). `d` is how far the point is from that scale's centre toward its free margin (1 at the margin), r1 and r2 the
- * scale's own random numbers.
+ * it). `d` is how far the point is from that scale's centre toward its free margin (1 at the margin), `back` the
+ * direction from the centre (1 straight back toward the free margin, −1 forward), r1 and r2 the scale's own random
+ * numbers.
  */
-export interface ScaleHit { d: number; r1: number; r2: number }
-export const SC: ScaleHit = { d: 0, r1: 0, r2: 0 };
+export interface ScaleHit { d: number; r1: number; r2: number; back: number }
+export const SC: ScaleHit = { d: 0, r1: 0, r2: 0, back: 0 };
 export function scaleAt(x: number, y: number, out: ScaleHit): ScaleHit {
   const row0 = Math.floor(y);
   let best = Infinity;
-  out.d = 1; out.r1 = 0.5; out.r2 = 0.5;
+  out.d = 1; out.r1 = 0.5; out.r2 = 0.5; out.back = 0;
   for (let rr = row0 - 1; rr <= row0 + 1; rr++) {
     const off = rr & 1 ? 0.5 : 0;
     const c0 = Math.floor(x - off);
@@ -80,9 +81,9 @@ export function scaleAt(x: number, y: number, out: ScaleHit): ScaleHit {
       const cx = cc + off + 0.5, cy = rr + 0.5;
       // a scale reaches 0.95 back from its centre (where its margin lies) and less forward (into its pocket)
       const dx = x - cx, dy = y - cy;
-      const d = Math.hypot(dx > 0 ? dx / 0.95 : dx / 0.6, dy / 0.78);
+      const ex = dx > 0 ? dx / 0.95 : dx / 0.6, d = Math.hypot(ex, dy / 0.78);
       if (d < 1 && cx < best) {
-        best = cx; out.d = d;
+        best = cx; out.d = d; out.back = ex / Math.max(d, 1e-4);
         out.r1 = hash(cc, rr, 11); out.r2 = hash(cc, rr, 29);
       }
     }
@@ -185,20 +186,25 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
       // a shade apart in tone and silver
       const fade = (0.35 + 0.65 * smooth(oper.s - 0.02, oper.s + 0.01, s)) * smooth(oper.s - 0.13, oper.s - 0.09, s) * (1 - smooth(cb - 0.01, cb + 0.02, s));
       if (fade > 0) {
-        const sc = scaleAt((s / cb) * spec.scales.along, (phi / (2 * Math.PI)) * spec.scales.around, SC);
-        const d = sc.d, inner = 1 - d * d;
+        // (the rows wander a little: no lattice is that regular on a fish)
+        const sx = (s / cb) * spec.scales.along, sy = (phi / (2 * Math.PI)) * spec.scales.around;
+        const sc = scaleAt(sx + 0.3 * (noise(sx * 0.15, sy * 0.3, 41) - 0.5), sy + 0.25 * (noise(sx * 0.2, sy * 0.15, 43) - 0.5), SC);
+        const d = sc.d, inner = 1 - d * d, post = smooth(-0.4, 0.6, sc.back);
         const size = 1 / spec.scales.along;
-        // the exposed field rises a little to the free margin, which steps down onto the scale behind
-        hgt += fade * spec.scales.depth * 0.06 * size * (d * d - smooth(0.9, 1.0, d));
-        // each scale tilted a little its own way (the glitter), most in its middle
-        TX[o1] = fade * 0.22 * (sc.r1 - 0.5) * inner;
-        TY[o1] = fade * 0.22 * (sc.r2 - 0.5) * inner;
-        // the margin's pigmented pocket, dark on the back, faint on the silver flank; each scale's own shade of tone and silver
+        // the exposed field rises a little to the free margin, which steps down onto the scale behind (most at its hind arc)
+        hgt += fade * spec.scales.depth * 0.06 * size * (d * d - (0.4 + 0.6 * post) * smooth(0.9, 1.0, d));
+        // each scale tilted a little its own way (the glitter of a turning fish), most in its middle; less on a mirror
+        // silver flank, where the least tilt already throws a scale from bright to dark
+        const tilt = 0.13 * (1 - 0.7 * out.metal) * inner * fade;
+        TX[o1] = tilt * (sc.r1 - 0.5);
+        TY[o1] = tilt * (sc.r2 - 0.5);
+        // the margin's pigmented pocket, dark on the back, faint on the silver flank, darkest along the hind arc; each
+        // scale's own shade of tone and silver
         const pig = (spec.scales.pigment ?? 0.3) * (0.25 + 0.75 * smooth(-0.3, 0.6, p.h));
-        const margin = smooth(0.72, 0.93, d) * (1 - smooth(0.97, 1.0, d));
+        const margin = (0.35 + 0.65 * post) * smooth(0.74, 0.94, d) * (1 - smooth(0.97, 1.0, d));
         const k = 1 + fade * (-pig * margin + 0.06 * (sc.r1 - 0.5));
         out.r *= k; out.g *= k; out.b *= k;
-        out.metal = Math.min(1, Math.max(0, out.metal * (1 + fade * (0.35 * (sc.r2 - 0.5) - 0.4 * margin))));
+        out.metal = Math.min(1, Math.max(0, out.metal * (1 + fade * (0.15 * (sc.r2 - 0.5) - 0.25 * margin))));
         out.rough += fade * 0.08 * margin;
       }
       // living skin is never one flat tone: a fine mottle of pigment over it
@@ -213,9 +219,9 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
       for (const { e, side } of eyes) {
         if (side !== p.side) continue;
         const dx = (s - e.s) / e.r, dy = (pt[1] - e.y) / e.r;
-        if (dx * dx + dy * dy > 1.3) continue;
+        if (dx * dx + dy * dy > 1.22) continue;
         eyeColour(spec, dx, dy, iris);
-        const t = 1 - smooth(1.0, 1.14, Math.hypot(dx, dy));
+        const t = 1 - smooth(0.96, 1.1, Math.hypot(dx, dy));
         out.r += (iris[0] - out.r) * t; out.g += (iris[1] - out.g) * t; out.b += (iris[2] - out.b) * t;
         out.metal *= 1 - t; out.rough += (0.3 - out.rough) * t;
         hgt *= 1 - t; TX[o1] *= 1 - t; TY[o1] *= 1 - t;
@@ -260,30 +266,32 @@ function paintFins(spec: FishSpec, w: number, bandH: number): Uint8Array {
 }
 
 /**
- * The eye's colour at (dx, dy) on its disc (radii): a black pupil with a little depth, the iris a band of guanine silver
- * or gold, fibrous, darker toward the rim and shadowed under the orbit's upper edge, the rim dark; no bright ring.
+ * The eye's colour at (dx, dy) on its disc (radii): a black pupil reaching a little forward (the aphakic gap in front
+ * of the lens), the iris a band of guanine silver or gold, fibrous and flecked, carrying the back's pigment over its
+ * upper part as most fishes' eyes do, darker at its periphery where the skin of the orbit closes over it; no bright
+ * ring and no drawn outline (paintBody blends it into the skin round it).
  */
 function eyeColour(spec: FishSpec, dx: number, dy: number, c: number[]): void {
   const e = spec.eyes[0];
   const i0 = hex(e.iris[0]), i1 = hex(e.iris[1]), rim = hex(e.rim ?? 0x1a1a18);
   const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
-  // (the pupil reaches a little further forward: the aphakic gap in front of the lens)
-  const pupil = Math.max(e.pupil, 0.6) * (1 + 0.1 * Math.max(0, -dx / Math.max(r, 1e-4)));
+  const fwd = Math.max(0, -dx / Math.max(r, 1e-4));
+  const pupil = Math.max(e.pupil, 0.6) * (1 + 0.16 * fwd ** 3);
   if (r < pupil) {
-    const k = 0.012 + 0.03 * (1 - smooth(0, pupil, r));
-    c[0] = k * 0.8; c[1] = k * 0.95; c[2] = k * 1.15;
-  } else if (r < 0.92) {
-    const t = (r - pupil) / (0.92 - pupil);
-    const fib = 0.82 + 0.26 * noise(a * 18, t * 4, 3) + 0.08 * noise(a * 60, t * 2, 5);
-    for (let k = 0; k < 3; k++) c[k] = (i0[k] + (i1[k] - i0[k]) * smooth(0.15, 0.95, t)) * fib * 0.82;
-    // the upper iris in the orbit's shadow, the pupil's edge a thin dark line
-    const shade = 1 - 0.35 * smooth(0.0, 0.8, dy) * smooth(0.4, 1, t + 0.3);
-    const edge = 1 - 0.45 * (1 - smooth(0, 0.12, t));
-    for (let k = 0; k < 3; k++) c[k] *= shade * edge;
-  } else {
-    const t = smooth(0.92, 1.0, r);
-    for (let k = 0; k < 3; k++) c[k] = i1[k] * 0.5 * (1 - t) + (rim[k] * 0.5 + i1[k] * 0.25) * t;
+    // the lens's depth: a faint cold glint deep in the black
+    const k = 0.012 + 0.025 * (1 - smooth(0, pupil, r));
+    c[0] = k * 0.75; c[1] = k * 0.95; c[2] = k * 1.2;
+    return;
   }
+  const t = Math.min(1, (r - pupil) / (1 - pupil));
+  const fib = 0.78 + 0.3 * noise(a * 18, t * 4, 3) + 0.1 * noise(a * 64, t * 3, 5);
+  const fleck = smooth(0.62, 0.8, noise(a * 30, t * 9, 7)) * 0.25;
+  for (let k = 0; k < 3; k++) c[k] = (i0[k] + (i1[k] - i0[k]) * smooth(0.1, 1, t)) * (fib + fleck) * 0.6;
+  // the upper iris pigmented like the back, the periphery dark, the pupil's margin a thin dark line
+  const top = 0.85 * smooth(-0.1, 0.8, dy / Math.max(r, 1e-4)) * smooth(0.2, 0.7, t + 0.25);
+  const per = 1 - 0.45 * smooth(0.72, 1, t);
+  const edge = 1 - 0.5 * (1 - smooth(0, 0.1, t));
+  for (let k = 0; k < 3; k++) c[k] = (c[k] + (rim[k] * 1.6 - c[k]) * top) * per * edge;
   if (e.lid) {
     // the clear fatty eyelid clouds the front and back of the eye a little
     const lid = e.lid * 0.5 * smooth(0.55, 0.95, Math.abs(dx));
@@ -401,13 +409,16 @@ export function fishLook(spec: FishSpec): FishLook {
         .replace('#include <lights_fragment_maps>', ENV_INJECT)
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * texture2D( normalMap, vNormalMapUv ).a;')
         .replace('#include <metalnessmap_fragment>', `float metalnessFactor = metalness * texture2D( map, vMapUv ).a;
-  // the gill chamber: seen through the skin's open edges (back faces), and in the slit behind a flared gill cover
-  float chamber = gl_FrontFacing ? clamp(vGill * uGillOpen * 1.6, 0.0, 1.0) : 1.0;
-  diffuseColor.rgb = mix(diffuseColor.rgb, uInside, chamber);
+  // the gill chamber: seen through the skin's open edges (back faces), and in the slit behind a flared gill cover;
+  // the mouth's lining (aGill 2) pinkish grey, darkening into the throat (its vertex colour)
+  float chamber = vGill > 1.0 ? vGill - 1.0 : gl_FrontFacing ? clamp(vGill * uGillOpen * 1.6, 0.0, 1.0) : 1.0;
+  vec3 inside = vGill > 1.0 ? mix(uInside, vec3(0.32, 0.26, 0.25), 0.6) * (0.15 + vColor.r) : uInside;
+  diffuseColor.rgb = mix(diffuseColor.rgb, inside, chamber);
   metalnessFactor *= 1.0 - chamber;
-  roughnessFactor = mix(roughnessFactor, 0.55, chamber);`);
+  roughnessFactor = mix(roughnessFactor, 0.55, chamber);`)
+        .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n  material.clearcoat *= 1.0 - chamber;');
     };
-    b.customProgramCacheKey = () => 'fish-body-v3';
+    b.customProgramCacheKey = () => 'fish-body-v4';
     body.push(b);
     const finT = dataTexture(ff === 1 ? fins0 : shrink(fins0, S0.fw, S0.fh * FIN_BAND_COUNT, ff), S.fw, S.fh * FIN_BAND_COUNT, true);
     fins.push(finMaterial(finT, ripple));
@@ -415,7 +426,7 @@ export function fishLook(spec: FishSpec): FishLook {
     bytes.push((S.bw * S.bh * 8 + S.fw * S.fh * FIN_BAND_COUNT * 4) * 4 / 3);
     if (S.eye) {
       // the iris is guanine silver like the flank: it mirrors the water round the fish under the glossy cornea
-      const e = new MeshPhysicalMaterial({ map, roughness: 0.32, metalness: 0.75, clearcoat: 1, clearcoatRoughness: 0.03 });
+      const e = new MeshPhysicalMaterial({ map, roughness: 0.38, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.03 });
       e.name = `fish-eye-${spec.id}-${t}`;
       e.envMapIntensity = 0.25;
       e.onBeforeCompile = (sh) => {

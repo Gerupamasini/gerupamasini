@@ -90,6 +90,8 @@ export interface MouthSpec {
   open: number;
   /** inside of the mouth (linear rgb multiplier) */
   inside: number;
+  /** how far the lower jaw juts past the upper at the tip (TL): the bass's, the flathead's, the flounder's */
+  jut?: number;
 }
 
 /** What the skin painter is asked about one point of the body. */

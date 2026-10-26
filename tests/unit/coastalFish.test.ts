@@ -126,6 +126,28 @@ describe('coastal fishes: behaviour', () => {
     expect(flashes.length).toBeGreaterThan(0);
   });
 
+  it('at an easy pace a sea bass beats its tail and glides; a routine turn bends it gently, an escape into a C', () => {
+    const spec = FISH_SPECS.suzuki, rng = new Rng(5), E = env();
+    const a = new FishAgent(spec, spec.modelTL, () => rng.next());
+    a.pos.set(0, -0.6, 0);
+    let lo = Infinity, hi = 0, bend = 0;
+    for (let k = 0; k < 4; k++) {
+      a.request('wander', 6, new Vector3(a.pos.x + (k % 2 ? -1 : 1), 0, a.pos.z + 1), undefined, null);
+      for (let t = 0; t < 6; t += 1 / 30) {
+        a.update(1 / 30, E);
+        if (a.state === 'SWIM' && t > 1) { lo = Math.min(lo, a.pose.amp); hi = Math.max(hi, a.pose.amp); }
+        bend = Math.max(bend, Math.abs(a.pose.curv));
+      }
+    }
+    expect(hi).toBeGreaterThan(0.05);
+    expect(lo).toBeLessThan(0.02);
+    expect(bend).toBeLessThanOrEqual(1.1);
+    a.request('flee', 1, null, undefined, new Vector3(a.pos.x - 0.3, a.pos.y, a.pos.z));
+    let c = 0;
+    for (let t = 0; t < 0.5; t += 1 / 60) { a.update(1 / 60, E); c = Math.max(c, Math.abs(a.pose.curv)); }
+    expect(c).toBeGreaterThan(2);
+  });
+
   it('a sea bass stalks and strikes at a small fish nearby', () => {
     const E = env();
     const rng = new Rng(11);

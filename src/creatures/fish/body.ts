@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Uint16BufferAttribute, Vector3 } from 'three';
 import {
-  FIN_BAND_COUNT, FIN_BANDS, curve, mix, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, zOf,
+  FIN_BAND_COUNT, FIN_BANDS, curve, mix, nose, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, zOf,
   type EyeSpec, type FishSpec, type MedianFinSpec, type PairedFinSpec, type Section,
 } from './spec';
 
@@ -200,6 +200,12 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
     const sec = { hwL: 1, hwR: 1, top: Math.max(1e-4, P.top(ss)), bot: Math.max(1e-4, P.bot(ss)), nTop: P.nTop(ss), nBot: P.nBot(ss) };
     return phiAtHeight(sec, P.gape(ss));
   };
+  // the lower jaw's tip carried forward past the upper (below the gape line, fading back along the jaw)
+  const jutAt = (s: number, y: number) => {
+    if (!m.jut || s > 0.6 * m.corner) return 0;
+    const g = P.gape(Math.min(s, m.corner)) * nose(s, spec.snoutCap);
+    return m.jut * (1 - smooth(0, 0.6 * m.corner, s)) * smooth(g + 0.002, g - 0.006, y);
+  };
   const phiC = gapeAt(m.corner);
   const Ku = Math.max(2, Math.round((K * phiC) / Math.PI)), Kl = Math.max(2, K - Ku);
   const ringLen = Ku + Kl + 2;
@@ -232,7 +238,8 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
         const edge = oper.s - oper.sweep * (y / Math.max(1e-4, hh)) ** 2;
         if (y < oper.top && y > -oper.bot) {
           const side = Math.sin(phi) ** 2;
-          const step = oper.step * side * (1 - smooth(edge - 0.004, edge + 0.0015, s)) * smooth(edge - 0.11, edge - 0.07, s);
+          const ends = 1 - 0.6 * smooth(0.45, 0.95, Math.abs(y / Math.max(1e-4, hh)));
+          const step = oper.step * side * ends * (1 - smooth(edge - 0.004, edge + 0.0015, s)) * smooth(edge - 0.11, edge - 0.07, s);
           const r = Math.hypot(x, y) || 1;
           x += (x / r) * step; y += (y / r) * step;
         }
@@ -249,7 +256,7 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
         bones[0] = w3[0]; bones[1] = w3[1]; bones[2] = BONE_JAW; bones[3] = Math.sin(phi) >= 0 ? BONE_OPERL : BONE_OPERR;
         const rest = 1 - wj - wo;
         weights[0] = (1 - w3[2]) * rest; weights[1] = w3[2] * rest; weights[2] = wj; weights[3] = wo;
-        const k = b.vertex(x * T, y * T, zOf(spec, s), bodyU(spec, s), phi / (2 * Math.PI), bones, weights);
+        const k = b.vertex(x * T, y * T, zOf(spec, s) + jutAt(s, y) * T, bodyU(spec, s), phi / (2 * Math.PI), bones, weights);
         if (tp.mouth && pt[1] < oper.top * 0.8 && pt[1] > -oper.bot * 0.9) {
           b.gill[k] = sideK * (s > edge ? 1 - smooth(edge + 0.002, edge + 0.008, s) : 0);
         }
@@ -273,7 +280,9 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
           const wj = part === 1 ? 1 - smooth(0.62 * m.corner, m.corner * (1 + 0.5 * away), s) : 0;
           bones[0] = 0; bones[1] = 0; bones[2] = BONE_JAW; bones[3] = 0;
           weights[0] = 1 - wj; weights[1] = 0; weights[2] = wj; weights[3] = 0;
-          b.vertex(x * T, y * T, zOf(spec, si), bodyU(spec, s), phi / (2 * Math.PI), bones, weights, m.inside);
+          // (aGill 2: drawn as the inside of the head, not as skin)
+          const kk = b.vertex(x * T, y * T, zOf(spec, si) + jutAt(s, y) * T, bodyU(spec, s), phi / (2 * Math.PI), bones, weights, m.inside * (1 - 0.75 * smooth(0.15 * m.corner, 0.9 * m.corner, s)));
+          b.gill[kk] = 2;
         }
       }
     }

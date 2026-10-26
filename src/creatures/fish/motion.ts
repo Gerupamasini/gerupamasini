@@ -96,6 +96,11 @@ export class FishAgent {
   private eyePitchT = 0;
   private tailPh = 0;
   private finPh = 0;
+  /** burst and coast: swimming so, gliding, the glide's time left, the tail phase the beats end at */
+  private coasting = false;
+  private gliding = false;
+  private glideT = 0;
+  private beatEnd = 0;
   private lastEvent = '';
   private readonly tmp = new Vector3();
   private readonly tmp2 = new Vector3();
@@ -211,7 +216,8 @@ export class FishAgent {
     const D = Math.max(0, L.surface - L.bottom);
     // what each state wants
     let wantSpeed = 0, wantY = L.bottom + Math.max(B.minLift * tl, B.level * D) + this.half.below;
-    let wantH = this.heading, turnK = 3, maxYaw = 3.5;
+    // a cruising fish turns on a wide arc; slow, it pivots more on its fins than it bends (rad/s)
+    let wantH = this.heading, turnK = 2, maxYaw = 0.8 + 1.3 * clamp(this.speed / tl, 0, 2);
     let wantPitch = 0, headBend = 0, jaw = 0.05, pec = 0.35, pecBeat = 0, extraAmp = 0, ripple = 0, wantRoll = 0;
     let curvKick = 0;
     const school = this.school;
@@ -253,7 +259,7 @@ export class FishAgent {
       case 'TURN': {
         wantH = this.wantHeading;
         wantSpeed = 0.15 * tl;
-        turnK = 6; maxYaw = 4;
+        turnK = 5; maxYaw = 2.5;
         if (Math.abs(wrap(wantH - this.heading)) < 0.15) this.setState(this.hasGoal ? 'SWIM' : 'IDLE', this.hasGoal ? 10 : 4);
         break;
       }
@@ -346,16 +352,30 @@ export class FishAgent {
       const l = this.depthAt(env, this.heading + 0.8, ahead), r = this.depthAt(env, this.heading - 0.8, ahead);
       wantH = this.heading + (l > r ? 1.2 : -1.2);
       wantSpeed = Math.min(wantSpeed, 0.5 * B.cruise * tl);
-      turnK = Math.max(turnK, 4);
+      turnK = Math.max(turnK, 4); maxYaw = Math.max(maxYaw, 3);
     }
     const bd = env.bounds;
     if (bd) {
       const m = 0.6 * tl;
       if (this.pos.x < bd.minX + m || this.pos.x > bd.maxX - m || this.pos.z < bd.minZ + m || this.pos.z > bd.maxZ - m) {
         wantH = Math.atan2((bd.minX + bd.maxX) / 2 - this.pos.x, (bd.minZ + bd.maxZ) / 2 - this.pos.z);
-        turnK = Math.max(turnK, 5);
+        turnK = Math.max(turnK, 5); maxYaw = Math.max(maxYaw, 3);
       }
     }
+    // burst and coast: at an easy pace most fishes beat their tail a few times and then glide, slowing, before the next
+    // beats (the schoolers and the flatfish keep their own rhythm)
+    const easy = (st === 'SWIM' || st === 'IDLE' || st === 'FORAGE') && B.habit !== 'schooler' && !this.spec.flat
+      && wantSpeed > 0.15 * B.cruise * tl && wantSpeed < 1.1 * B.cruise * tl;
+    this.coasting = easy;
+    if (!easy) this.gliding = false;
+    else if (this.gliding) {
+      this.glideT -= dt;
+      if (this.glideT <= 0) { this.gliding = false; this.beatEnd = this.tailPh + TAU * (2 + Math.floor(this.rnd() * 3)); }
+    } else if (this.tailPh >= this.beatEnd) {
+      if (this.beatEnd > 0) { this.gliding = true; this.glideT = 0.35 + this.rnd() * 0.9; }
+      else this.beatEnd = this.tailPh + TAU * (1 + Math.floor(this.rnd() * 3));
+    }
+    if (easy) wantSpeed *= this.gliding ? 0.55 : 1.2;
     // kinematics: heading by a rate limited with speed, speed by the burst's acceleration or the glide's drag
     const e = wrap(wantH - this.heading);
     const yaw = clamp(e * turnK, -maxYaw, maxYaw);
@@ -399,14 +419,16 @@ export class FishAgent {
     const p = this.pose, sw = this.spec.swim, B = this.spec.behavior, tl = this.tl;
     const rel = this.speed / tl;
     // tail-beat frequency from the stride (body lengths per beat), a slow beat while hovering
-    const f = Math.max(this.benthic && this.state === 'REST' ? 0 : 0.9, rel / sw.stride + (extraAmp > 0.05 ? 6 : 0));
+    const f = this.gliding ? 0.35 : Math.max(this.benthic && this.state === 'REST' ? 0 : 0.9, rel / sw.stride + (extraAmp > 0.05 ? 6 : 0));
     this.tailPh += TAU * f * dt;
     p.phase = this.tailPh;
     const k = clamp(rel / B.cruise, 0, 1.4);
-    const ampW = (this.state === 'REST' ? 0.004 : 0.018 + (sw.amp - 0.018) * Math.min(1, k)) + extraAmp;
-    p.amp = damp(p.amp, ampW, 8, dt);
-    // the body bends into the turn: curvature from the yaw rate over the speed
-    const turn = clamp(this.yawRate / Math.max(rel, 1.2), -5, 5) * 0.8;
+    // (the beats between glides are strong ones)
+    const ampW = (this.state === 'REST' || this.gliding ? 0.004 : 0.018 + (sw.amp - 0.018) * Math.min(1, this.coasting ? Math.max(k, 0.6) : k)) + extraAmp;
+    p.amp = damp(p.amp, ampW, this.gliding ? 5 : 8, dt);
+    // the body bends into the turn: curvature from the yaw rate over the speed, held to a routine turn's (the C of the
+    // escape is the kick)
+    const turn = clamp((0.5 * this.yawRate) / Math.max(rel, 1), -1.1, 1.1);
     p.curv = damp(p.curv, turn + curvKick, curvKick !== 0 ? 60 : 10, dt);
     p.headBend = damp(p.headBend, headBend, 6, dt);
     // breathing, the buccal pump: the mouth opens to draw water in while the gill covers are shut, then closes as they
@@ -426,7 +448,8 @@ export class FishAgent {
     p.eyePitch = damp(p.eyePitch, this.eyePitchT, 25, dt);
     // pectorals: spread when hovering or braking, pressed flat at speed
     const press = clamp(k - 0.8, 0, 1);
-    const pw = pec * (1 - 0.8 * press);
+    // (held out a little in a glide, steadying it)
+    const pw = (this.gliding ? Math.max(pec, 0.5) : pec) * (1 - 0.8 * press);
     p.pecL = damp(p.pecL, pw, 6, dt);
     p.pecR = damp(p.pecR, pw, 6, dt);
     p.pecBeat = damp(p.pecBeat, pecBeat, 8, dt);
