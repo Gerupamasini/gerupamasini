@@ -132,7 +132,14 @@ export const HEAD_SCULPT = {
     // the blink, blending the bind and the closed shape linearly, turned that end's walls out into a dark slot with a
     // pale lip under the dome mid-blink (clay slot px at the land lift, side / low: b 0.5 442 / 417 → 2 / 0, b 0.25 low
     // 1513 → 87); further back, under the collar's overhang, it is as it was)
-    crease: { r: 0.005, k: 0.008, back: [0.03, 0.08], front: [-0.05, 0.02] },
+    // (round fl_eye3: r 0, was 0.005 — no crease. Between the front fade and the back fade only a short piece of it was
+    // left (103 vertices of the fast head, 0.02–0.08 HL behind the globe's centre at the turret's lateral foot), a small
+    // pit under the collar at rest that the linear blink opened into a dark slot with a pale lip at b 0.25–0.5, the
+    // 'second small mouth' under the eye at u1 (fast head, clay slit px at the land lift, u1 / side / low: b 0.25
+    // 294 / 167 / 84 → 167 / 96 / 0, b 0.5 430 / 20 / 21 → 0 / 0 / 0; what is left is the cup's lip at the globe's edge,
+    // as at rest); the collar, its fold under the globe and the hood are untouched. Shifted back instead (front
+    // [-0.01, 0.05], back [0.05, 0.10]) the strip grew to 254 vertices and the slot widened (b 0.5 u1 823 px))
+    crease: { r: 0, k: 0.008, back: [0.03, 0.08], front: [-0.05, 0.02] },
   },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.33, 0.60], r: [0.10, 0.07, 0.045] },
@@ -239,7 +246,9 @@ export const HEAD_SCULPT = {
     // slit and the jaw's bones are as before (0.03 rounded the pad's top edge away; 0.02 keeps it, B009, u1)
     blendTop: { k: 0.02, y: [0.0, 0.03] },
     // at the foot of the rear end the groove fades into the rictal fold's web (the crease carries it on)
-    web: { s: [0.276, 0.326], y: [0.052, 0.072], k: 0.03 },
+    // (round geoA3: y [0.050, 0.064], k 0.02 (was [0.052, 0.072], 0.03): the web lies flat into the crease over the jaw's
+    // raised shoulder, so the rear end has no pale crumpled flap at the corner (u1, B013))
+    web: { s: [0.276, 0.326], y: [0.050, 0.064], k: 0.02 },
   },
   // the lower jaw's tissue (left half): the mandible's flesh round the dentary rami, the floor between them, the
   // thin lower lip along the dentary's outer edge (just under the pads), and the narrow chin knob
@@ -289,14 +298,22 @@ export const HEAD_SCULPT = {
     // low views the eye no longer looks into it (the lit sliver of the jaw's top along the slit is gone) and below the flap
     // the jaw's skin turns down and in, one surface on into the throat. carve.k 0.012 (was 0.008) smooths the flap's
     // inner edge. The underside behind s 0.22 (the chin contact's station, s 0.25) is as before.)
+    // (round geoA3, approach A: the lips overlap. Under the pads (s 0.12–0.32) the jaw's shoulder rides up inside the
+    // pad's flap — yW 0.056–0.061 (was 0.048–0.052, at or under the pad's lowest point), w 0.004–0.014 wider, its lower
+    // flank fuller (nL 1.7–1.9, was 1.25–1.5) — so the carve trims the pad's underside over it and the pad's lower edge
+    // laps 0.004–0.009 HL down over the jaw's shoulder, lateral of it: from the side the pad's edge meets the jaw in one
+    // dark crease and the jaw's skin runs on down and in to the throat; from below and at 3/4 the jaw's top no longer
+    // shows as a lit second roll under the pad with a slit over it (B013, q34, low), and from the in-game front camera the
+    // corner slits close (crevice px 13 → 4 own, 175 → 32 strict on the hero). The front stations, the chin contact's
+    // underside and the median lip are as before.)
     envelope: {
       s: [0.070, 0.076, 0.084, 0.094, 0.106, 0.120, 0.140, 0.160, 0.180, 0.200, 0.220, 0.240, 0.260, 0.280, 0.300, 0.320, 0.340, 0.370, 0.400],
-      w: [0.020, 0.045, 0.068, 0.085, 0.100, 0.115, 0.148, 0.172, 0.181, 0.194, 0.205, 0.215, 0.217, 0.220, 0.220, 0.210, 0.200, 0.190, 0.180],
-      yW: [0.046, 0.046, 0.047, 0.050, 0.053, 0.050, 0.049, 0.052, 0.048, 0.048, 0.048, 0.048, 0.048, 0.050, 0.048, 0.052, 0.055, 0.054, 0.050],
+      w: [0.020, 0.045, 0.068, 0.085, 0.100, 0.128, 0.162, 0.180, 0.193, 0.203, 0.210, 0.215, 0.218, 0.218, 0.214, 0.206, 0.198, 0.190, 0.180],
+      yW: [0.046, 0.046, 0.047, 0.050, 0.053, 0.056, 0.060, 0.061, 0.061, 0.061, 0.060, 0.059, 0.058, 0.057, 0.055, 0.054, 0.055, 0.054, 0.050],
       yT: [0.052, 0.060, 0.066, 0.072, 0.080, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.086, 0.084, 0.080, 0.074],
       yB: [0.040, 0.032, 0.027, 0.024, 0.022, 0.021, 0.0205, 0.019, 0.0175, 0.0135, 0.009, 0.0055, 0.0055, 0.0075, 0.0075, 0.0075, 0.0075, 0.008, 0.010],
       nU: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-      nL: [2, 2, 2, 2, 2, 2, 1.5, 1.5, 1.45, 1.4, 1.3, 1.25, 1.25, 1.3, 1.4, 1.6, 1.8, 2, 2],
+      nL: [2, 2, 2, 2, 2, 1.9, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.7, 1.7, 1.8, 2, 2],
       k: 0.012, end: [0.42, 0.03], carve: { g: 0.001, slit: true, k: 0.012 },
     },
   },
@@ -537,7 +554,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     // runs into the head without a dark slot under its overhang in front views)
     const CF = K.cup.crease.front;
     const cw = smoothstep(0.02, 0.07, za - E.z) * (CB ? 1 - smoothstep(E.s + CB[0], E.s + CB[1], x) : 1) * (CF ? smoothstep(E.s - CF[1], E.s - CF[0], x) : 1);
-    return cw > 0 ? d + (ssub(d, Math.hypot(m, c) - K.cup.crease.r, K.cup.crease.k) - d) * cw : d;
+    return cw > 0 && K.cup.crease.r > 0 ? d + (ssub(d, Math.hypot(m, c) - K.cup.crease.r, K.cup.crease.k) - d) * cw : d;
   };
 
   // ---- mouth

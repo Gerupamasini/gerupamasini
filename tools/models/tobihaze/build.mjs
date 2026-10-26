@@ -77,6 +77,16 @@
 //     fringe. hero 119,085 triangles (Head_Orbit 14,923, Head_Mouth 4,552, Head 21,253, Body 37,371), lod1 14,430
 //     (Body 8,936, the eyes 1,056 each), lod2 1,274; the chin's contact against T3 hero 0.014 mm, lod1 0.036, lod2
 //     0.031)
+//     (2026-10-26, round 3: the lips overlap — the lower jaw's shoulder under the pads raised and widened inside the
+//     pad's flap (head.mjs jaw.envelope, s 0.12–0.32), so the pad's lower edge laps down over the jaw in one crease, the
+//     rictal web flatter (pad.web); the lip paint (pattern.mjs LIP, jawSkin, LAYERS.lipRim; surface.mjs HEAD_SKIN.lip:
+//     no throat smear past s 0.39 HL, no dark chin disc, a pale rim under the mouth line, the band in the face's mottle,
+//     no pit organs on the lips); the eye: no infraorbital crease (head.mjs cup.crease r 0: the mid-blink slot under the
+//     eye), the blink's medial seam zipped on both lips (headrig BLINK_CLOSE.zipSeam.split) with a softer hinge; the
+//     lock: lod1's mouth focus in parts (decimlock FOCUS_PARTS), lod1's cup lip faired before charting (tiers.fairBand,
+//     decimlock FAIR), lod2's chin floor wider and lifted part way (FLOOR share 0.6). hero 119,084 triangles (Head_Orbit
+//     14,734, Head_Mouth 4,443, Head 21,407, Body 37,514), lod1 14,616 (Body 9,122), lod2 1,270; the chin's contact
+//     against T3 hero 0.010 mm, lod1 0.020, lod2 0.009)
 //
 // Meshes per tier — the draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two;
 // the caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by

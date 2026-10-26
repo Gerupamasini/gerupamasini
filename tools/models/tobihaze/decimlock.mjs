@@ -30,6 +30,11 @@
 // zones' sculpt moved by less than 0.01 mm there counts as unchanged — lod1 holds 63 more of T3's triangles at s 6–9 mm
 // and lod2 the big ones out to s 12 (round 1 put a new vertex 0.235 mm off T3's skin at fish [10.91, −0.11, −3.40]).
 // (c) FLOOR: lod2's chin no lower than T3's (its contact had sunk 0.14 mm into the ground).
+// 2026-10-26, round 3 (the reviews of round 2): FOCUS_PARTS — lod1's focus in parts, each at its own error, and shaped by
+// the head's own pad (the median lip finer, the pad's top held to the hero's outline: the front views' upper lip and
+// the pad's h/l at u1 on whichever head the mouth keys give) —; FAIR — lod1's cup lip faired before the simplification
+// (the saw teeth along it in clay were the dense mesh's staircase). Both act in the zones only: outside them the lock
+// holds T3's triangles and UVs as before.
 //   node tools/models/tobihaze/decimlock.mjs --from-git e6079e5 --dense-tree <a checkout of the same commit's tools/>
 //   node tools/models/tobihaze/decimlock.mjs --from-dir <dir with tobihaze.{lod1,lod2}.glb> [--dense-tree <dir>]
 // (--dense-tree: the tree whose fishmesh.mjs meshes the dense skin the GLBs were simplified from; default this tree. build.mjs
@@ -40,7 +45,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import zlib from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { S0, HL, toObject } from './anatomy.mjs';
+import { S0, HL, HEAD, toObject } from './anatomy.mjs';
+import { HEAD_SCULPT, cupField } from './head.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DECIMATION_LOCK_FILE = path.join(here, 'decimationlock.json');
@@ -71,8 +77,36 @@ export const inFreeZone = ([s, y, z]) => FREE_ZONES.some((Z) => s >= Z.s[0] && s
  * included — the mouth review asked for it on lod1's front view; with it the focus's notch triangles no longer fold
  * into the patch (one simplification pass, no retry) and lod1's gapes stretch fewer triangles than round 1's (gapeHalf
  * 59 / gapeFull 66 over 3× against 62 / 68; inflated 6 new folds, T3's 6; |z| < 0.16 made it 8). */
+// (2026-10-26, round 3: the focus in parts, each at its own error — FOCUS_PARTS below)
 export const FOCUS = {
   lod1: { label: 'the median lip', error: 1e-3, s: [-Infinity, 0.25], y: [0.03, 0.19], z: 0.10, also: [{ s: [-Infinity, 0.16], y: [0.09, 0.13], z: 0.14 }] },
+};
+/** (2026-10-26, round 3) The focus in parts, each simplified to its own error (finest first; tiers.simplifyRegions), the
+ * box form above or one of the head's own shapes, so each follows whatever head the sculpt gives:
+ *   box   { s, y, z, also } (HL), as FOCUS
+ *   tube  'pad': the upper-lip pad (HEAD_SCULPT.pad: its path, radii and vertical squash sy; mirrored in z) — the skin
+ *         within d [from, to] HL of the tube's surface, s ≤ sMax
+ *   cup   the cup's lip under each globe (head.cupField: the rim's height rimH about the globe's centre, the bead's outer
+ *         radius re + gap + thick): the skin dy [from, to] HL of the rim's height and dr [from, to] of that radius
+ * A tier with FOCUS_PARTS takes them instead of its FOCUS entry.
+ * lod1 (round 3, the mouth review's lod1 items: the upper lip low from the front, jaw/upper 1.525 at the in-game camera,
+ * and the pad rounded, its box h/l 0.486 at u1, limit 0.47; tried on both round-3 heads, geoA3 and geoB3, each with eye3's
+ * cup): the median lip above the mouth's line (y ≥ 0.05) at 3e-4 — on the geoB3 head's taller lip the 1e-3 focus left
+ * the front view's upper lip at 44.0 px of the dense mesh's 52.2 (jaw/upper 1.44 against the hero's 1.01); now 56.7
+ * (1.02); geoA3 44.0 → 45.8 (dense 45.0, hero 46.2) —; the mouth's front below it at the round-2 focus' 1e-3 (finer there,
+ * 3e-4 from y 0.02 or 0.03, gave the same front views but its small triangles along the closed mouth's line stretched
+ * in the gapes: gapeHalf over 3× 43 → 62–91, edge × 2.5 23 → 46–79, geoA3); the pad's top — its skin from 0.004 inside
+ * the tube to 0.016 outside, above the tube's axis, back to s 0.32: the groove over the pad, where the u1 pad label's
+ * box ended on a few big triangles' corners — at 1e-3: box h/l at u1 geoA3 0.462 → 0.455, geoB3 0.481 → 0.466 (the
+ * dense mesh 0.472, the hero 0.455; its underside along the mouth's line left out, for the gapes as above). lod1's skin
+ * 8,938–8,942 → 9,118–9,122 triangles (the tier 14,612–14,616 of the class's 15,000); the gapes and the inflation stretch
+ * and fold as many as with the round-2 focus (geoA3 gapeHalf 41 / 23 / 5 against 43 / 23 / 4). */
+export const FOCUS_PARTS = {
+  lod1: [
+    { label: 'the median lip', error: 3e-4, s: [-Infinity, 0.25], y: [0.05, 0.19], z: 0.10 },
+    { label: 'the mouth\'s front', error: 1e-3, s: [-Infinity, 0.25], y: [0.03, 0.19], z: 0.10, also: [{ s: [-Infinity, 0.16], y: [0.09, 0.13], z: 0.14 }] },
+    { label: 'the pad\'s top', error: 1e-3, tube: 'pad', d: [-0.004, 0.016], sMax: 0.32, top: true },
+  ],
 };
 /** (2026-10-26, round 2) The part of a free zone whose skin a tier keeps no lower than the lock's (fish mm; per tier):
  * lod2's chin. The chin's contact is a ray down at s 0.25 HL on the midline (rig.contactsFor), and the states' ground
@@ -82,13 +116,74 @@ export const FOCUS = {
  * lock triangle over its s, z) is lifted onto it (tiers.floorToLock), so the chin's skin and its contact stay where T3's
  * were whatever the jaw's sculpt does (at lod2's distance the lift, ≤ 0.15 mm, is not seen). The box: round the contact's
  * station (the ray meets the triangles of the midline's vertices); a vertex more than maxLift below is left (the jaw's
- * front, where the round 1 envelope lies 0.4–1.2 mm under T3's lod2: new skin, not a simplification's error). */
+ * front, where the round 1 envelope lies 0.4–1.2 mm under T3's lod2: new skin, not a simplification's error).
+ * (Round 3: the box to |z| 1.6 and s 6.6, the lift `share` 0.6 of the way. On the round-3 heads the triangle the chin's
+ * ray meets had its two free corners at |z| 1.4, outside the box, and the chin sank 0.08 mm (geoA3: the ray's skin at
+ * s 0.25 HL 0.195 mm up against T3's 0.275; J_head −6.551 → −6.631); lifted the whole way onto T3's big flat triangles,
+ * which chord the curved underside, those corners put the midline 0.07 mm over T3's (0.342); at 0.6 of the way 0.283
+ * (geoA3) and 0.250 (geoB3), within 0.05 mm of T3.) */
 export const FLOOR = {
-  lod2: { label: 'the chin', s: [3.0, 6.5], y: [-Infinity, 1.0], z: 1.2, maxLift: 0.25 },
+  lod2: { label: 'the chin', s: [3.0, 6.6], y: [-Infinity, 1.0], z: 1.6, maxLift: 0.25, share: 0.6 },
 };
-const floorOf = (F) => F && { label: F.label, maxLift: F.maxLift ?? Infinity, box: { s: F.s, y: F.y, z: F.z }, inside: ([s, y, z]) => s >= F.s[0] && s <= F.s[1] && y >= F.y[0] && y <= F.y[1] && Math.abs(z) <= F.z };
+const floorOf = (F) => F && { label: F.label, maxLift: F.maxLift ?? Infinity, share: F.share ?? 1, box: { s: F.s, y: F.y, z: F.z }, inside: ([s, y, z]) => s >= F.s[0] && s <= F.s[1] && y >= F.y[0] && y <= F.y[1] && Math.abs(z) <= F.z };
+/** (2026-10-26, round 3) The part of a free zone whose dense skin a tier fairs before it is charted and simplified
+ * (tiers.fairBand; per tier, FOCUS_PARTS' forms): lod1's cup lip. The eye review (round 2) found its lip under the globe
+ * saw-toothed in clay (u1, the whole lip; the hero's smooth): the sealed field's surface nets at 0.16 mm staircase the
+ * lip's crease (its rounding 0.010 HL is one cell), so the dense mesh had the teeth already and no finer simplification
+ * took them out (the lip at error 3e-4 as a focus part, +370 triangles: the same teeth). Faired — 10 rounds of Taubin's
+ * umbrella pair (lambda 0.5, mu −0.53), not projected back onto the field (projected, the vertices went back onto its
+ * sharp crease and the teeth stayed), normals the faired mesh's own —, the lip is a soft rounded roll along its whole
+ * length at u1, B012 and B010, for no triangles more. The band: 0.016 HL under the rim's height to 0.008 over it, 0.03 HL
+ * inside the bead's outer radius to 0.015 outside (397 dense vertices of both cups move, the lining's and the junction's
+ * locked ones stay: tierMesh passes its lockDense), at most 0.32 mm (along the lip). */
+export const FAIR = {
+  lod1: { label: 'the cup\'s lip', cup: { dy: [-0.016, 0.008], dr: [-0.03, 0.015] }, iters: 10, lambda: 0.5, mu: -0.53, project: false, normals: 'mesh' },
+};
+const fairOf = (F) => F && { label: F.label, iters: F.iters, lambda: F.lambda, mu: F.mu ?? 0, project: F.project ?? true, normals: F.normals ?? 'field', inside: partInside(F) };
 const inBoxHL = (B, [s, y, z]) => s >= B.s[0] * HL && s <= B.s[1] * HL && y >= B.y[0] * HL && y <= B.y[1] * HL && Math.abs(z) <= B.z * HL;
-const focusOf = (F) => F && { label: F.label, error: F.error, box: { s: F.s.map((x) => x * HL), y: F.y.map((x) => x * HL), z: F.z * HL }, inside: (p) => inBoxHL(F, p) || (F.also ?? []).some((B) => inBoxHL(B, p)) };
+// (a focus part's test, fish mm: its box, the pad's tube or the cups' lips)
+const partInside = (F) => {
+  if (F.tube === 'pad') {
+    const T = HEAD_SCULPT.pad, sy = T.sy ?? 1, path = T.path, rad = T.radius, [d0, d1] = F.d, sMax = F.sMax ?? Infinity;
+    // (idw.tube's distance: each segment's, its radius linear along it, y squashed by sy)
+    // (also the height of the nearest point of the tube's axis, for `top`: only the skin above the axis — the pad's top
+    // and the groove over it, not its underside along the mouth's line, whose finer triangles the gapes stretch)
+    const dist = (q) => {
+      let best = Infinity, cy = 0;
+      for (let i = 0; i + 1 < path.length; i++) {
+        const a = path[i], b = path[i + 1], ab = [b[0] - a[0], (b[1] - a[1]) / sy, b[2] - a[2]], ap = [q[0] - a[0], (q[1] - a[1]) / sy, q[2] - a[2]];
+        const t = Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2])));
+        const d = Math.hypot(ap[0] - t * ab[0], ap[1] - t * ab[1], ap[2] - t * ab[2]) - (rad[i] + (rad[i + 1] - rad[i]) * t);
+        if (d < best) { best = d; cy = a[1] + (b[1] - a[1]) * t; }
+      }
+      return [best, cy];
+    };
+    return ([s, y, z]) => {
+      if (s / HL > sMax) return false;
+      const [d, cy] = dist([s / HL, y / HL, Math.abs(z) / HL]);
+      return d >= d0 && d <= d1 && (!F.top || y / HL >= cy + (F.top === true ? 0 : F.top));
+    };
+  }
+  if (F.cup) {
+    const E = HEAD.eye, re = E.d / 2, C = HEAD_SCULPT.cup, cup = cupField(HEAD_SCULPT), [y0, y1] = F.cup.dy, [r0, r1] = F.cup.dr, R = re + C.gap + C.thick;
+    return ([s, y, z]) => {
+      const px = s / HL - E.s, py = y / HL - E.y, pz = Math.abs(z) / HL - E.z;
+      if (Math.abs(px) > 0.2 || Math.abs(py) > 0.2 || Math.abs(pz) > 0.2) return false;
+      const dy = py - cup.rimH(px, pz), dr = Math.hypot(px, py, pz) - R;
+      return dy >= y0 && dy <= y1 && dr >= r0 && dr <= r1;
+    };
+  }
+  return (p) => inBoxHL(F, p) || (F.also ?? []).some((B) => inBoxHL(B, p));
+};
+export const focusOf = (F) => {
+  if (!F) return null;
+  // (parts: the union is the focus — what tiers.tierMesh keeps out of the patch —, each part at its own error)
+  if (Array.isArray(F)) {
+    const parts = F.map((P) => ({ label: P.label, error: P.error, inside: partInside(P) })).sort((a, b) => a.error - b.error);
+    return { label: parts.map((P) => P.label).join(', '), error: parts[0].error, parts, inside: (p) => parts.some((P) => P.inside(p)) };
+  }
+  return { label: F.label, error: F.error, box: { s: F.s.map((x) => x * HL), y: F.y.map((x) => x * HL), z: F.z * HL }, inside: partInside(F) };
+};
 
 // ------------------------------------------------------------------------------------------------ the dense cells
 
@@ -180,9 +275,11 @@ export function loadDecimationLock(file = DECIMATION_LOCK_FILE) {
       // tiers.restoreHeld; a lock written before 2026-10-26 has none)
       uv: T.uv ? Float32Array.from(fromB64(T.uv, Uint16Array), (x) => x / 65535) : null,
       // (the tier's focus, FOCUS: not the lock's data, the build's rule for its free part)
-      focus: focusOf(FOCUS[t]) ?? null,
+      focus: focusOf(FOCUS_PARTS[t] ?? FOCUS[t]) ?? null,
       // (the tier's floor, FLOOR: the build's rule as well)
       floor: floorOf(FLOOR[t]) ?? null,
+      // (the tier's fairing, FAIR: the build's rule as well)
+      fair: fairOf(FAIR[t]) ?? null,
       cells: (() => {
         const K = fromB64(T.cellKeys, Int16Array), H = fromB64(T.cellHashes, Uint32Array), m = new Map(); for (let i = 0; i < H.length; i++) m.set(`${K[i * 3]},${K[i * 3 + 1]},${K[i * 3 + 2]}`, H[i]);
         // (2026-10-26, round 2: the fringe's dense vertices, FRINGE_MM; a lock without them has the exact test only)

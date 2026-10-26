@@ -575,9 +575,29 @@ export function skinVertices(pos, nrm, skin, W) {
 // / 0.5 / 0.75 within T3 + 10 %; the lid's edge at b 0.9 (clay) low 2.28 → 0.79, B010 2.19 → 1.17, u1 1.04 → 0.86, side
 // 1.13 → 0.78 px rms; the closed dome's pale vertical band in front (the cup wall's streak) gone. Tried and left: the
 // relaxation at 300 passes with it (b 0.25 / 0.5 edge25 +21 / +25 % over T3), the smoothing after the zip (folds +190))
-export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.96, 0.995], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
-  convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 },
-  crease: null, dSmooth: { iters: 100, lambda: 0.5, hold: 1, after: true, relax: 0 } };
+// (round fl_eye3: the reviewers' blink — the closed hero dome cracked along the medial seam's back half on both eyes, a
+// dark slit a third of the dome long (seamL / seamR / inL / inR at b 1), the lid's front end leading the rest of its edge
+// mid-blink, b 0.75's new folds over T3 + 10 %, the closed dome's skin in vertical streaks. Measured on the fast head
+// (the land lift, eye zone; bm2.mjs, crease-free sculpt):
+//   - `zipSeam.split` 0.5: the seam's crack was the lid's rim and the medial skin both bordering the tucked lining at the
+//     dome's back half, where the medial edge has no hidden head next to it, so the zip found no partners there (gap 0.08
+//     / near 0.05 zipped the same 353); split by the hinge's weight (lidW) the medial lip joins the zip there (363 zipped,
+//     118 lid / 245 medial): the dome's crack px (clay, b 1, seamL / seamR / inL / inR) 398 / 682 / 384 / 320 →
+//     266 / 323 / 247 / 75, the crack across the dome's top gone (what is left is the dome's foot against the head); on
+//     the hero (clay, the x views at b 1) 493 / 660 / 349 / 317 → 227 / 362 / 290 / 113, and the shiny smeared line on
+//     the textured closed dome (inR) gone
+//   - `hinge.ends` [0.90, 0.98] (was [0.96, 0.995]) and `endsFree` front 0.75 (was 0.85): the lid's ends swing less and
+//     the front end's skin is laid instead of tucked: new folds b 0.5 / 0.75 / 0.9 / 1 154 / 252 / 287 / 401 → 115 / 180
+//     / 213 / 359; on the hero (q34, Head_Orbit) b 0.25 / 0.5 / 0.75 / 1 newFolds 146 / 197 / 273 / 394 → 136 / 171 / 241
+//     / 326, stretch3 at b 1 2028 → 1863. ([0.80, 1.0] gave fewer folds still (hero b 0.75 218) but a longer cleft at the
+//     far dome's back-medial foot (b 1, the seam views), and the lid's ends rose as before; [0.7, 0.98] likewise)
+//   - `region` [0.07, 0.16] and `dSmooth.iters` 160 (were [0.07, 0.13], 100): the cheek takes more of the climb, the
+//     dome's s1 / s2 2.91 → 2.54, its area stretched along over 3× 0.17 → 0.12, stretch3 at b 1 3620 → 3449
+//   Tried and left: rhoSmooth 30, hinge.offRim [0.02, 0.05], edgeK 0.05 (the lid's edge and the folds unchanged within
+//   1 %))
+export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.16], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.90, 0.98], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
+  convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.75, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30, split: 0.5 },
+  crease: null, dSmooth: { iters: 160, lambda: 0.5, hold: 1, after: true, relax: 0 } };
 export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const CO = { ...BLINK_CLOSE, ...(o.close ?? {}) };
   if (o.close && o.close.hinge !== undefined && o.close.hinge !== false) CO.hinge = { ...BLINK_CLOSE.hinge, ...o.close.hinge };
@@ -689,7 +709,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const tabAt = (T, w) => { const x = Math.min(tabN - 1.001, Math.max(0, (w + re) / tabW)), i = Math.floor(x), u = x - i; return T[i] * (1 - u) + T[i + 1] * u; };
   // ---- the map
   const HID = 1, TUCK = 2, FREE = 3;
-  const cls = new Uint8Array(n), Q = new Float64Array(n * 3), wReg = new Float32Array(n);
+  const cls = new Uint8Array(n), Q = new Float64Array(n * 3), wReg = new Float32Array(n), lidW = new Float32Array(n);
   for (let v = 0; v < n; v++) {
     const z = pos[v * 3 + 2], side = z >= 0 ? 1 : -1;
     const dx = pos[v * 3] - E.s, dy = pos[v * 3 + 1] - E.y, dz = Math.abs(z) - E.z;
@@ -736,6 +756,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       // the dome where the globe's front lies bare low down, is not the cup)
       const above = smooth(thR + 0.03, thR + 0.2, th) * smooth(re + gap + HG.offRim[0], re + gap + HG.offRim[1], r);
       const wl = (1 - above) * smooth(thB - 0.3, thB, th) * (1 - smooth(thJ - 0.35, thJ - 0.12, th)) * (1 - smooth(re * HG.ends[0], re * HG.ends[1], Math.abs(w))) * (1 - smooth(re + reach * 0.7, re + reach, r));
+      lidW[v] = wl;
       if (wl > 0) {
         // (round fl_eye2, `hinge.ease`: the swing's share along the wall from its foot (t 0) to its rim (t 1), the
         // smoothstep's (0) eased toward the linear share (1): the smoothstep kept the rim's band rigid and stretched the
@@ -1001,6 +1022,14 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       if (!(wReg[v] > 0) || off(v) > ZS.near) continue;
       let t = false, h = false; for (const u of nbAll.get(v) ?? []) { if (cls[u] === TUCK) t = true; if (cls[u] === HID) h = true; }
       if (t) Bh.push(v); else if (h) Bm.push(v);
+    }
+    // (`split`: the lid's rim is the free edge next to the tucked lining that the hinge swung (lidW over `split`); the
+    // rest of that edge — the medial skin's, where it too borders the tucked lining instead of the hidden head, as at the
+    // dome's back end — joins the medial side, so the two lips of the seam pair there too)
+    if (ZS.split) {
+      const lid = Bh.filter((v) => lidW[v] > ZS.split), med = Bh.filter((v) => !(lidW[v] > ZS.split));
+      Bh.length = 0; Bh.push(...lid); Bm.push(...med);
+      stats.seamLid = lid.length; stats.seamMed = Bm.length;
     }
     const target = new Map();
     const pair = (A, B) => {

@@ -324,6 +324,83 @@ export function restoreHeld(mesh, held, L, charts, { spare = [] } = {}) {
   return { mesh: out, keep, kept, moved, copies: from.length, relayed };
 }
 
+/**
+ * (2026-10-26, round 3) A dense mesh's vertices inside `inside(p)` (fish mm) faired along the surface: `iters` rounds of
+ * the umbrella step (each vertex `lambda` of the way to its neighbours' mean), each followed by a projection back onto
+ * the field's zero set (two Newton steps along its numeric gradient, step `eps` mm). The surface nets' vertices sit at
+ * their cells' mass points, so a crease sharper than the cell — the cup's lip under the globe at lod1's 0.16 mm, its
+ * rounding 0.010 HL — comes out a staircase along its length, which no simplification error takes out (the lod1 "saw
+ * teeth" along the cup's lip in clay; the hero's 0.09 mm cell rounds it). Positions are copied, not changed in place
+ * (the dense mesh's vertex ids stay, so `source`, the rig rows and the morphs carry over as before). Returns { position,
+ * moved (vertices), max (mm) }.
+ */
+export function fairBand(dense, f, inside, { iters = 6, lambda = 0.5, mu = 0, project: onto = true, normals = 'field', hold = null, eps = 0.01, nh = null } = {}) {
+  const P0 = dense.position, I = dense.indices, nv = P0.length / 3, P = Float32Array.from(P0);
+  const band = new Uint8Array(nv);
+  let n = 0;
+  for (let v = 0; v < nv; v++) if (!(hold && hold[v]) && inside([P0[v * 3], P0[v * 3 + 1], P0[v * 3 + 2]])) { band[v] = 1; n++; }
+  if (!n) return { position: P0, moved: 0, max: 0 };
+  const nb = new Map();
+  for (let t = 0; t < I.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = I[t + k], b = I[t + (k + 1) % 3];
+    if (band[a]) { let s = nb.get(a); if (!s) nb.set(a, (s = new Set())); s.add(b); }
+    if (band[b]) { let s = nb.get(b); if (!s) nb.set(b, (s = new Set())); s.add(a); }
+  }
+  const project = (p) => {
+    for (let k = 0; k < 2; k++) {
+      const d = f(p[0], p[1], p[2]);
+      const g = [(f(p[0] + eps, p[1], p[2]) - f(p[0] - eps, p[1], p[2])) / (2 * eps), (f(p[0], p[1] + eps, p[2]) - f(p[0], p[1] - eps, p[2])) / (2 * eps), (f(p[0], p[1], p[2] + eps) - f(p[0], p[1], p[2] - eps)) / (2 * eps)];
+      const g2 = g[0] * g[0] + g[1] * g[1] + g[2] * g[2];
+      if (!(g2 > 1e-12)) break;
+      for (let q = 0; q < 3; q++) p[q] -= (d * g[q]) / g2;
+    }
+    return p;
+  };
+  // (a step `w` of the way to the neighbours' mean: lambda, then Taubin's mu < 0 when given — so the crease is rounded
+  // without the band shrinking —, each optionally followed by the projection)
+  const step = (w) => {
+    const Q = Float32Array.from(P);
+    for (const [v, s] of nb) {
+      const m = [0, 0, 0];
+      for (const u of s) for (let q = 0; q < 3; q++) m[q] += P[u * 3 + q] / s.size;
+      const p = [0, 1, 2].map((q) => P[v * 3 + q] + w * (m[q] - P[v * 3 + q]));
+      if (onto) project(p);
+      for (let q = 0; q < 3; q++) Q[v * 3 + q] = p[q];
+    }
+    P.set(Q);
+  };
+  for (let it = 0; it < iters; it++) { step(lambda); if (mu) step(mu); }
+  // (the moved vertices' normals: from the field again, as the mesher takes them — central differences at half the
+  // cell —, or normals 'mesh': the faired mesh's own, its triangles' area-weighted, so the shading follows the rounded
+  // crease instead of the field's sharp one; their neighbours' too)
+  const N = dense.normal ? Float32Array.from(dense.normal) : null, gh = nh ?? eps;
+  let max = 0;
+  for (const v of nb.keys()) max = Math.max(max, Math.hypot(P[v * 3] - P0[v * 3], P[v * 3 + 1] - P0[v * 3 + 1], P[v * 3 + 2] - P0[v * 3 + 2]));
+  if (N && normals === 'mesh') {
+    const want = new Set(nb.keys()); for (const s of nb.values()) for (const u of s) want.add(u);
+    const acc = new Map([...want].map((v) => [v, [0, 0, 0]]));
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2];
+      if (!acc.has(a) && !acc.has(b) && !acc.has(c)) continue;
+      const u = [0, 1, 2].map((q) => P[b * 3 + q] - P[a * 3 + q]), w = [0, 1, 2].map((q) => P[c * 3 + q] - P[a * 3 + q]);
+      const fn = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      for (const x of [a, b, c]) { const m = acc.get(x); if (m) for (let q = 0; q < 3; q++) m[q] += fn[q]; }
+    }
+    for (const [v, m] of acc) {
+      const l = Math.hypot(...m);
+      if (!(l > 0)) continue;
+      // (wound outward as the field's gradient)
+      const sg = m[0] * N[v * 3] + m[1] * N[v * 3 + 1] + m[2] * N[v * 3 + 2] < 0 ? -1 : 1;
+      for (let q = 0; q < 3; q++) N[v * 3 + q] = (sg * m[q]) / l;
+    }
+  } else if (N) for (const v of nb.keys()) {
+    const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+    const g = [f(x + gh, y, z) - f(x - gh, y, z), f(x, y + gh, z) - f(x, y - gh, z), f(x, y, z + gh) - f(x, y, z - gh)], l = Math.hypot(...g) || 1;
+    for (let q = 0; q < 3; q++) N[v * 3 + q] = g[q] / l;
+  }
+  return { position: P, normal: N, moved: nb.size, max };
+}
+
 /** Triangles per chart (for the logs). */
 export function chartTally(triChart, charts) {
   const n = new Map();
@@ -393,7 +470,9 @@ export function floorToLock(position, L) {
       const yy = w0 * a[1] + w1 * b[1] + w2 * c[1];
       if (floor === -Infinity || yy < floor) floor = yy;
     }
-    if (floor > y + 1e-5 && floor - y <= (F.maxLift ?? Infinity)) { position[v * 3 + 1] = floor; lifted++; max = Math.max(max, floor - y); }
+    // (round 3: `share` of the way, F.share — the lock's big triangles chord the chin's curved underside, so the whole way
+    // lifts a vertex beside the midline over the skin T3 had at the midline itself)
+    if (floor > y + 1e-5 && floor - y <= (F.maxLift ?? Infinity)) { const up = (floor - y) * (F.share ?? 1); position[v * 3 + 1] = y + up; lifted++; max = Math.max(max, up); }
   }
   return { lifted, max };
 }
@@ -922,19 +1001,34 @@ export function simplifyRegions(mesh, regionOf, regions, o = {}) {
       // than the rest. Pass 1, the rest locked, only the focus's vertices collapse, to F.error; pass 2, the focus's
       // vertices left locked, the rest to its own count — what a plain simplification gives it — so the focus's extra
       // triangles are its own. The vertices inside: F.inside(p), mm)
+      // (2026-10-26, round 3: F.parts — decimlock FOCUS_PARTS —, each part simplified in turn to its own error, the
+      // finest first, everything but that part's vertices locked; a vertex in two parts goes with the finer. F.inside,
+      // the union, may be narrowed by the caller (tierMesh's patch rule): a part's vertex counts only inside it too)
+      const parts = F.parts ?? [{ label: F.label, error: F.error, inside: F.inside }];
       const inF = (v) => F.inside([P[v * 3], P[v * 3 + 1], P[v * 3 + 2]]);
       const cin = (ix) => { let n = 0; for (let i = 0; i < ix.length; i += 3) if ([0, 1, 2].every((k) => inF(ix[i + k]))) n++; return n; };
       const [plain] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, attrs, stride || 1, weights, lockR, target * 3, R.error ?? 1, R.flags ?? []);
-      const lockA = Uint8Array.from(lockR), used = new Set(idx);
-      for (const v of used) if (!inF(v)) lockA[v] = 1;
-      const [a] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, attrs, stride || 1, weights, lockA, 0, F.error, R.flags ?? []);
+      let a = idx;
+      const taken = new Set(), perPart = [];
+      for (const Q of parts) {
+        const lockA = Uint8Array.from(lockR), mine = new Set();
+        for (const v of new Set(a)) {
+          const p = [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]];
+          if (!taken.has(v) && inF(v) && Q.inside(p)) mine.add(v); else lockA[v] = 1;
+        }
+        if (!mine.size) { perPart.push(`${Q.label} 0`); continue; }
+        [a] = MeshoptSimplifier.simplifyWithAttributes(a, P, 3, attrs, stride || 1, weights, lockA, 0, Q.error, R.flags ?? []);
+        for (const v of mine) taken.add(v);
+        let n = 0; for (let i = 0; i < a.length; i += 3) if ([0, 1, 2].some((k) => mine.has(a[i + k]))) n++;
+        perPart.push(`${Q.label} ${n} at ${Q.error}`);
+      }
       const lockB = Uint8Array.from(lockR);
       for (const v of new Set(a)) if (inF(v)) lockB[v] = 1;
       const nPlain = cin(plain), nA = cin(a), extra = Math.max(0, nA - nPlain);
       target += extra;
       [idx, err] = MeshoptSimplifier.simplifyWithAttributes(a, P, 3, attrs, stride || 1, weights, lockB, target * 3, R.error ?? 1, R.flags ?? []);
-      frozen[frozen.length - 1].focus = { error: F.error, plain: nPlain, focus: nA, extra, triangles: cin(idx) };
-      log(`  region ${R.name}: the focus (${F.label ?? 'focus'}) at error ${F.error}: ${nA} triangles (a plain simplification left it ${nPlain}), ${extra} more for the region`);
+      frozen[frozen.length - 1].focus = { error: F.error, plain: nPlain, focus: nA, extra, triangles: cin(idx), ...(F.parts ? { parts: perPart } : {}) };
+      log(`  region ${R.name}: the focus (${F.label ?? 'focus'}) at error ${F.error}: ${nA} triangles (a plain simplification left it ${nPlain}), ${extra} more for the region${F.parts ? ` (${perPart.join('; ')})` : ''}`);
     } else if (idx.length / 3 > target) {
       [idx, err] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, attrs, stride || 1, weights, lockR, target * 3, R.error ?? 1, R.flags ?? []);
     }
@@ -972,6 +1066,13 @@ export function tierMesh(f, box, o) {
   const log = o.log ?? (() => {});
   let dense = o.dense;
   if (!dense) { dense = surfaceNets(f, box, o.h, { log }); fixWinding(dense.indices); }
+  // (2026-10-26, round 3: the decimation lock's fairing — decimlock FAIR, `L.tris.fair`: a crease the tier's cell
+  // staircases faired along the surface before the charts and the simplification; the zones only)
+  const FR = DECIMATION_LOCK?.tris?.fair;
+  if (FR && typeof f === 'function') {
+    const r = fairBand(dense, f, FR.inside, { ...FR, hold: o.lockDense ?? null, nh: FR.nh ?? (o.h ? o.h * 0.5 : null) });
+    if (r.moved) { dense = { ...dense, position: r.position, ...(r.normal ? { normal: r.normal } : {}) }; log(`  faired ${FR.label}: ${r.moved} dense vertices, at most ${r.max.toFixed(3)} mm`); }
+  }
   const nD = dense.position.length / 3;
   const regions = o.regions ?? [{ name: 'all', target: o.target, flags: o.flags ?? [], select: () => true }];
   const nw = o.normalWeight ?? 0.5, uw = o.uvWeight ?? 2;
