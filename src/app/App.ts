@@ -1299,7 +1299,8 @@ export class App {
     const shovel = this.toolType(this.capture.state.value?.toolId ?? '') === 'dig';
     if (!shovel) for (const ind of caught) this.creatures.remove(ind.id);
     const first = caught[0];
-    const ready = this.catchReady?.ind === first ? this.catchReady.obj : first ? this.displayModelFor(first) : null;
+    // (an empty swing has nothing to show, prepared or not)
+    const ready = !first ? null : this.catchReady?.ind === first ? this.catchReady.obj : this.displayModelFor(first);
     this.catchReady = null;
     if (first && ready) void ready.then((obj) => {
       if (!obj || this.capture.catches[0] !== first) return;
