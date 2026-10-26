@@ -51,9 +51,9 @@ try {
   await page.waitForFunction(() => window.__higata.mode === 'home');
   await page.evaluate(() => window.__higata.enterField());
   await page.waitForFunction(() => window.__higata.mode === 'field' && !!window.__higata.world, null, { timeout: 300000 });
+  // on a fixed day (JST): at 16:45 the sun's height depends on the date, and by late October it has set below 1°
   const setHour = (hour) => page.evaluate((hour) => {
-    const a = window.__higata, d = new Date(a.clock.nowReal() + 9 * 3600000);
-    a.setDebugTime(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0) - 9 * 3600000 + hour * 3600000);
+    window.__higata.setDebugTime(Date.UTC(2026, 9, 13, 0, 0) - 9 * 3600000 + hour * 3600000);
   }, hour);
   // the relief map, read back (one byte a texel), against the same march on the CPU at texels spread over the map (the
   // ones in the penumbra left out)
