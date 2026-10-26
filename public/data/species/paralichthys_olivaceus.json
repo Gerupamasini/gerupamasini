@@ -1,0 +1,193 @@
+{
+  "id": "paralichthys_olivaceus",
+  "names": {
+    "ja": "ヒラメ",
+    "sci": "Paralichthys olivaceus",
+    "en": "Olive flounder"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Paralichthyidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "hirame",
+    "modelLength_mm": 350,
+    "viewDistance_m": 14,
+    "driver": "hirame",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 40,
+      "max": 380,
+      "mean": 160,
+      "sd": 80
+    },
+    "weightCoef": {
+      "a": 1e-05,
+      "b": 3.05
+    },
+    "minDepthFraction": 0.06
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "稚魚",
+      "maxLength_mm": 100
+    },
+    {
+      "id": "young",
+      "ja": "若魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "shallow",
+        "bare"
+      ],
+      "substrate": [
+        "sand"
+      ],
+      "depth_m": [
+        0.1,
+        1.2
+      ],
+      "season": [
+        "spring",
+        "summer"
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.5,
+      "group": [
+        1,
+        2
+      ],
+      "maxPopulation": 8,
+      "length_mm": [
+        40,
+        160
+      ]
+    },
+    {
+      "tags": [
+        "channel",
+        "deep"
+      ],
+      "substrate": [
+        "sand",
+        "muddy_sand",
+        "channel"
+      ],
+      "depth_m": [
+        0.4,
+        4
+      ],
+      "season": [
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.15,
+      "group": [
+        1,
+        1
+      ],
+      "maxPopulation": 4,
+      "length_mm": [
+        150,
+        350
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "flatfish_sand",
+    "params": {
+      "fleeDistance_m": 1.3,
+      "restMean_s": 30,
+      "wanderDistance_m": [
+        0.3,
+        1.5
+      ],
+      "fleeLengthRef_mm": 150,
+      "fleeLengthExp": 0.4
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.65,
+    "alertPenalty": 0.4
+  },
+  "encyclopedia": {
+    "description": "体の左側に両眼が並ぶ平たい魚（「左ヒラメに右カレイ」）。無眼側の右側を下にして海底に伏せる。体は長めの楕円形で、口が大きく、鋭い歯の並ぶあごは眼の下まで裂ける（小さな口のカレイとの見分けどころ）。背びれは上の眼より前から始まる。有眼側は褐色の地にまだらと白い小点、黒っぽい斑があり、底の色に合わせて濃さを変える。無眼側は白い。春から夏、全長数 cm の稚魚が砂浜や干潟の浅い砂底に着底し、砂をかぶって眼だけを出して潜み、上を通るアミや小魚に飛びつく。",
+    "habitatHint": "春から夏、波打ち際に近い砂底の浅場。砂から出た二つの眼と、驚いて飛び出す砂煙を探す。",
+    "behaviors": [
+      {
+        "id": "rest",
+        "ja": "伏せる",
+        "hint": "体を平たく底に伏せる"
+      },
+      {
+        "id": "buried",
+        "ja": "砂にもぐる",
+        "hint": "体を波打たせて砂をかぶり眼だけを出す"
+      },
+      {
+        "id": "forage",
+        "ja": "待ち伏せ",
+        "hint": "上を通る獲物を待つ"
+      },
+      {
+        "id": "strike",
+        "ja": "捕食",
+        "hint": "飛び上がって獲物に食いつく"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "砂煙を上げて泳ぎ去り、また伏せる"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

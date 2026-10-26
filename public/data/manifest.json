@@ -19,7 +19,15 @@
     "hemitrygon_akajei",
     "euprymna_morsei",
     "scopimera_globosa",
-    "portunus_trituberculatus"
+    "portunus_trituberculatus",
+    "lateolabrax_japonicus",
+    "girella_punctata",
+    "sillago_japonica",
+    "platycephalus_sp2",
+    "paralichthys_olivaceus",
+    "sardinella_zunasi",
+    "konosirus_punctatus",
+    "pennahia_argentata"
   ],
   "behaviors": [
     "fish_benthic",
@@ -36,7 +44,8 @@
     "ray_benthic",
     "squid_sand",
     "crab_burrow",
-    "swimming_crab"
+    "swimming_crab",
+    "fish_cruiser"
   ],
   "maps": [
     "kasai_west",

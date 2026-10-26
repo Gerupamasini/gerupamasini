@@ -21,6 +21,7 @@ import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
 import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 import { MimiikaDriver } from '../species/mimiika/MimiikaDriver';
 import { GazamiDriver } from '../species/gazami/GazamiDriver';
+import { FishDriver, GrowthDriver } from '../fish/FishDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -50,6 +51,11 @@ const SHRIMP_BODY: BodyBuild = { width: 0.22, height: 0.18, core: 0.8 };
 /** a clam: the shell lying on a valve; never pushed */
 const CLAM_BODY: BodyBuild = { width: 0.8, height: 0.45, fixed: true };
 
+/** the coastal fishes (fish/species.ts): one driver, their own tiers in the placeholder view */
+function fish(id: string, nearDistance: number, body: BodyBuild): DriverEntry {
+  return { create: () => new FishDriver(id), placeholder: () => FishDriver.makeModel(id), preview: () => FishDriver.makePreview(id), nearDistance, keep: (parent) => FishDriver.keep(id, parent), body };
+}
+
 /** The only place that needs a code change when a species gets a custom driver. */
 export const DRIVERS: Record<string, DriverEntry> = {
   mahaze: { create: () => new MahazeDriver(), body: { width: 0.17, height: 0.15, core: 0.85, ahead: 0.07 } },
@@ -66,7 +72,8 @@ export const DRIVERS: Record<string, DriverEntry> = {
   hermit: { create: () => new HermitDriver(), placeholder: () => HermitDriver.makeModel(), preview: (seed) => HermitDriver.makePreview(seed), body: { width: 0.6, height: 0.55 } },
   worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed), body: { width: 0.06, height: 0.05 } },
   // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
-  haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5, body: { width: 0.15, height: 0.18, core: 0.85, ahead: -0.05, flock: 'haku' } },
+  // (the adults, ボラ from 20 cm, swim with the coastal fishes' driver)
+  haku: { create: () => new GrowthDriver(() => new HakuDriver(), () => new FishDriver('bora'), 200), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5, body: { width: 0.15, height: 0.18, core: 0.85, ahead: -0.05, flock: 'haku' } },
   // アミメハギ: the small filefish of the eelgrass (its own tiers in the placeholder view; near within 4 m)
   amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4, body: { width: 0.14, height: 0.5, core: 0.75 } },
   // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
@@ -82,6 +89,15 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // contact body is the carapace with the legs spread (CW is its length)
   gazami: { create: () => new GazamiDriver(), placeholder: () => GazamiDriver.makeModel(), preview: (seed) => GazamiDriver.makePreview(seed), nearDistance: 4, keep: (parent) => GazamiDriver.keep(parent), body: { width: 1.2, height: 0.3, core: 0.9 } },
   akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent), body: { width: 0.41, height: 0.07, core: 0.38 } },
+  // スズキ, メジナ, シロギス, マゴチ, ヒラメ, サッパ, コノシロ, イシモチ: the coastal fishes (fish/), near within a few metres
+  suzuki: fish('suzuki', 8, { width: 0.12, height: 0.22, core: 0.85 }),
+  mejina: fish('mejina', 6, { width: 0.14, height: 0.4, core: 0.8 }),
+  kisu: fish('kisu', 6, { width: 0.11, height: 0.15, core: 0.85 }),
+  magochi: fish('magochi', 8, { width: 0.2, height: 0.09, core: 0.8, ahead: -0.04 }),
+  hirame: fish('hirame', 8, { width: 0.36, height: 0.08, core: 0.85, ahead: -0.06 }),
+  sappa: fish('sappa', 5, { width: 0.1, height: 0.27, core: 0.85, flock: 'sappa' }),
+  konoshiro: fish('konoshiro', 6, { width: 0.11, height: 0.33, core: 0.85, flock: 'konoshiro' }),
+  ishimochi: fish('ishimochi', 6, { width: 0.14, height: 0.28, core: 0.85 }),
   // コメツキガニ: the procedural crab of the Kasai flat, placed and driven by its colony (ScopimeraColony)
   kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview(), body: { width: 1.3, height: 0.5, core: 0.9 } },
 };

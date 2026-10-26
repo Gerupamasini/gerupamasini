@@ -1,0 +1,31 @@
+{
+  "id": "fish_cruiser",
+  "tickHz": { "near": 5, "mid": 2, "far": 0.5 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 2.5, "urgency": 1 }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_below", "args": { "m": "$minWater_m" } },
+      { "type": "action", "name": "move_to_deeper", "args": { "minDepth_m": "$deeper_m" } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.5 } },
+      { "type": "action", "name": "display", "args": { "param": "alert", "seconds": [3, 7] } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "time_is", "args": { "v": "night" } },
+      { "type": "random", "weights": [0.6, 0.4], "children": [
+        { "type": "action", "name": "rest", "args": { "seconds": 25 } },
+        { "type": "action", "name": "forage", "args": { "seconds": [10, 20] } }
+      ]}
+    ]},
+    { "type": "random", "weights": [0.35, 0.4, 0.15, 0.1], "children": [
+      { "type": "action", "name": "wander", "args": { "distance_m": "$cruiseDistance_m", "stayNearHome_m": 10 } },
+      { "type": "action", "name": "forage", "args": { "seconds": [8, 18] } },
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "cooldown", "seconds": 40, "child": { "type": "action", "name": "special", "args": { "param": "strike" } } }
+    ]}
+  ]}
+}

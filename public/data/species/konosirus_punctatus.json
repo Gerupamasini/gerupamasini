@@ -1,0 +1,165 @@
+{
+  "id": "konosirus_punctatus",
+  "names": {
+    "ja": "コノシロ",
+    "sci": "Konosirus punctatus",
+    "en": "Dotted gizzard shad"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Clupeidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "konoshiro",
+    "modelLength_mm": 200,
+    "viewDistance_m": 14,
+    "driver": "konoshiro",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 60,
+      "max": 250,
+      "mean": 150,
+      "sd": 45
+    },
+    "weightCoef": {
+      "a": 1.1e-05,
+      "b": 3.05
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "shinko",
+      "ja": "シンコ（幼魚）",
+      "maxLength_mm": 70
+    },
+    {
+      "id": "kohada",
+      "ja": "コハダ",
+      "maxLength_mm": 130
+    },
+    {
+      "id": "nakazumi",
+      "ja": "ナカズミ",
+      "maxLength_mm": 170
+    },
+    {
+      "id": "konoshiro",
+      "ja": "コノシロ"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "channel",
+        "deep",
+        "shallow"
+      ],
+      "substrate": [
+        "muddy_sand",
+        "mud",
+        "channel",
+        "sand"
+      ],
+      "depth_m": [
+        0.3,
+        3.5
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.8,
+      "group": [
+        8,
+        20
+      ],
+      "maxPopulation": 48,
+      "length_mm": [
+        60,
+        230
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_school",
+    "params": {
+      "fleeDistance_m": 2.4,
+      "restMean_s": 8,
+      "cruiseDistance_m": [
+        1.5,
+        3.5
+      ],
+      "fleeLengthRef_mm": 150,
+      "fleeLengthExp": 0.5,
+      "grazerFrom_mm": 9999,
+      "grazeChance": 0
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.7,
+    "alertPenalty": 0.5
+  },
+  "encyclopedia": {
+    "description": "内湾の奥や河口に多いニシンの仲間で、成長につれてシンコ、コハダ、ナカズミ、コノシロと呼び名が変わる出世魚。サッパより体高が高く、丸い吻が小さな口の上に張り出す。背びれの最後の軟条が糸のように長く伸びるのが特徴。えらぶたの後ろに大きな黒斑が 1 つあり、体側の上半分には黒い小点が鱗の列に沿って何本も並ぶ。頭は金色を帯び、ひれは黄色っぽい。群れで泳ぎ、ときどき群れ全体が波が伝わるように一斉に向きを変え、銀色の体側がきらめく。泥底の有機物やプランクトンを食べる。",
+    "habitatHint": "一年中、泥っぽい内湾の澪筋や深み。群れが一斉に向きを変えるきらめきを探す。",
+    "behaviors": [
+      {
+        "id": "swim",
+        "ja": "群泳",
+        "hint": "群れがそろって泳ぐ"
+      },
+      {
+        "id": "flash",
+        "ja": "一斉の方向転換",
+        "hint": "群れが波のように向きを変え銀色に光る"
+      },
+      {
+        "id": "forage",
+        "ja": "摂餌",
+        "hint": "口を開け閉めしながら泳ぐ"
+      },
+      {
+        "id": "escape",
+        "ja": "一斉逃避",
+        "hint": "驚くと群れが一瞬で散る"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

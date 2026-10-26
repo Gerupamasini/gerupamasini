@@ -1,0 +1,158 @@
+{
+  "id": "girella_punctata",
+  "names": {
+    "ja": "メジナ",
+    "sci": "Girella punctata",
+    "en": "Largescale blackfish"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Kyphosidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "mejina",
+    "modelLength_mm": 200,
+    "viewDistance_m": 14,
+    "driver": "mejina",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 40,
+      "max": 220,
+      "mean": 110,
+      "sd": 40
+    },
+    "weightCoef": {
+      "a": 1.6e-05,
+      "b": 3.0
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "幼魚",
+      "maxLength_mm": 100
+    },
+    {
+      "id": "young",
+      "ja": "若魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "pool",
+        "channel",
+        "deep",
+        "shallow"
+      ],
+      "substrate": [
+        "gravel",
+        "channel"
+      ],
+      "depth_m": [
+        0.2,
+        3
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.8,
+      "group": [
+        3,
+        8
+      ],
+      "maxPopulation": 24,
+      "length_mm": [
+        40,
+        200
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_cruiser",
+    "params": {
+      "fleeDistance_m": 2.2,
+      "restMean_s": 8,
+      "cruiseDistance_m": [
+        0.6,
+        2.0
+      ],
+      "minWater_m": 0.12,
+      "deeper_m": 0.4,
+      "fleeLengthRef_mm": 150,
+      "fleeLengthExp": 0.5
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.7,
+    "alertPenalty": 0.45
+  },
+  "encyclopedia": {
+    "description": "磯や岩礁にすむ、体高の高い卵形の魚。吻は短く丸く、小さな口が吻端につく。眼は大きい。背びれは一続きで、尾びれは浅く湾入する。体は暗いオリーブ灰色で、鱗の一枚一枚の付け根に黒い点があり、点が体に沿って列をなす（種小名 punctata の由来）。えらぶたの縁は黒い。幼魚は春から夏に磯の潮だまりや岩のあいだで小さな群れをつくり、岩の表面に体を傾けて口を押し当て、海藻や付着した小動物をついばむ。",
+    "habitatHint": "一年中、礫や岩の多い浅場と潮だまり。岩の表面をつつく群れを探す。",
+    "behaviors": [
+      {
+        "id": "swim",
+        "ja": "群れで泳ぐ",
+        "hint": "岩のまわりをゆっくり泳ぐ"
+      },
+      {
+        "id": "forage",
+        "ja": "ついばむ",
+        "hint": "体を傾け岩や底に口を押し当てる"
+      },
+      {
+        "id": "turn",
+        "ja": "方向転換",
+        "hint": "その場で向きを変える"
+      },
+      {
+        "id": "idle",
+        "ja": "定位",
+        "hint": "岩陰で胸びれを動かしてとどまる"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "驚くと岩陰へ散る"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

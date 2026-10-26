@@ -97,6 +97,46 @@
       "id": "portunus_trituberculatus",
       "name": "ガザミ",
       "file": "portunus_trituberculatus.jpg"
+    },
+    {
+      "id": "lateolabrax_japonicus",
+      "name": "スズキ",
+      "file": "lateolabrax_japonicus.jpg"
+    },
+    {
+      "id": "girella_punctata",
+      "name": "メジナ",
+      "file": "girella_punctata.jpg"
+    },
+    {
+      "id": "sillago_japonica",
+      "name": "シロギス",
+      "file": "sillago_japonica.jpg"
+    },
+    {
+      "id": "platycephalus_sp2",
+      "name": "マゴチ",
+      "file": "platycephalus_sp2.jpg"
+    },
+    {
+      "id": "paralichthys_olivaceus",
+      "name": "ヒラメ",
+      "file": "paralichthys_olivaceus.jpg"
+    },
+    {
+      "id": "sardinella_zunasi",
+      "name": "サッパ",
+      "file": "sardinella_zunasi.jpg"
+    },
+    {
+      "id": "konosirus_punctatus",
+      "name": "コノシロ",
+      "file": "konosirus_punctatus.jpg"
+    },
+    {
+      "id": "pennahia_argentata",
+      "name": "イシモチ（シログチ）",
+      "file": "pennahia_argentata.jpg"
     }
   ]
 }

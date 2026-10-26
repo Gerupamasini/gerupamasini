@@ -1,0 +1,159 @@
+{
+  "id": "sardinella_zunasi",
+  "names": {
+    "ja": "サッパ",
+    "sci": "Sardinella zunasi",
+    "en": "Japanese sardinella"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Clupeidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "sappa",
+    "modelLength_mm": 130,
+    "viewDistance_m": 14,
+    "driver": "sappa",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 50,
+      "max": 160,
+      "mean": 100,
+      "sd": 25
+    },
+    "weightCoef": {
+      "a": 9e-06,
+      "b": 3.1
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "young",
+      "ja": "若魚",
+      "maxLength_mm": 90
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "shallow",
+        "channel",
+        "deep"
+      ],
+      "substrate": [
+        "sand",
+        "muddy_sand",
+        "mud",
+        "channel"
+      ],
+      "depth_m": [
+        0.25,
+        3
+      ],
+      "season": [
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 1.2,
+      "group": [
+        10,
+        24
+      ],
+      "maxPopulation": 60,
+      "length_mm": [
+        50,
+        150
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_school",
+    "params": {
+      "fleeDistance_m": 2.2,
+      "restMean_s": 8,
+      "cruiseDistance_m": [
+        1.2,
+        3.0
+      ],
+      "fleeLengthRef_mm": 100,
+      "fleeLengthExp": 0.5,
+      "grazerFrom_mm": 9999,
+      "grazeChance": 0
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.65,
+    "alertPenalty": 0.5
+  },
+  "encyclopedia": {
+    "description": "内湾や河口に多い小型のニシンの仲間。ママカリとも呼ばれる。体は強く側扁し、腹の正中線には稜鱗が並んでとがる。口は小さくやや上向きで、眼は大きく脂瞼に覆われる。背びれは体の中央に 1 基、尾びれは深く二叉する。背は青緑色、体側は明るい銀白色。夏から秋に濁った浅場へ大きな群れで入り、群れ全体でそろって泳ぎながら口を開けてプランクトンをこし取る。",
+    "habitatHint": "夏から秋、河口や干潟の澪筋。銀色に光る群れが一斉に向きを変える。",
+    "behaviors": [
+      {
+        "id": "swim",
+        "ja": "群泳",
+        "hint": "群れがそろって泳ぐ"
+      },
+      {
+        "id": "forage",
+        "ja": "プランクトンをこし取る",
+        "hint": "口を開け閉めしながら泳ぐ"
+      },
+      {
+        "id": "idle",
+        "ja": "群れで定位",
+        "hint": "群れがゆるくまとまってとどまる"
+      },
+      {
+        "id": "escape",
+        "ja": "一斉逃避",
+        "hint": "驚くと群れが一瞬で向きを変える"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

@@ -33,6 +33,7 @@ import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
 import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
+import { FISH_DETAIL } from '../creatures/fish/rig';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { ToolDef } from '../data/schemas';
@@ -726,6 +727,8 @@ export class App {
     SAND_DUST.enabled = SAND_DUST.amount > 0;
     AKAEI_DETAIL.viewScale = field.viewScale;
     AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
+    FISH_DETAIL.viewScale = field.viewScale;
+    FISH_DETAIL.allowLod0 = field.lod1Count > 0 && field.hero;
   }
 
   private applyHeroSetting(): void {

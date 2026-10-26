@@ -1,0 +1,163 @@
+{
+  "id": "sillago_japonica",
+  "names": {
+    "ja": "シロギス",
+    "sci": "Sillago japonica",
+    "en": "Japanese sillago"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Sillaginidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "kisu",
+    "modelLength_mm": 200,
+    "viewDistance_m": 14,
+    "driver": "kisu",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 60,
+      "max": 230,
+      "mean": 140,
+      "sd": 40
+    },
+    "weightCoef": {
+      "a": 7e-06,
+      "b": 3.05
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "young",
+      "ja": "若魚",
+      "maxLength_mm": 120
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "shallow",
+        "channel",
+        "bare"
+      ],
+      "substrate": [
+        "sand",
+        "channel"
+      ],
+      "depth_m": [
+        0.15,
+        2.5
+      ],
+      "season": [
+        "spring",
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.7,
+      "group": [
+        2,
+        6
+      ],
+      "maxPopulation": 16,
+      "length_mm": [
+        60,
+        220
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_cruiser",
+    "params": {
+      "fleeDistance_m": 2.0,
+      "restMean_s": 6,
+      "cruiseDistance_m": [
+        0.8,
+        2.5
+      ],
+      "minWater_m": 0.1,
+      "deeper_m": 0.3,
+      "fleeLengthRef_mm": 150,
+      "fleeLengthExp": 0.5
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.6,
+    "alertPenalty": 0.4
+  },
+  "encyclopedia": {
+    "description": "きれいな砂底の浅場にすむ細長い魚。体はほぼ円筒形で、吻は長くとがり、小さな口が吻端のやや下に開く。眼は大きく頭の上寄り。棘のある三角形の第 1 背びれと、長い第 2 背びれ・しりびれをもつ。体は半透明の淡い砂色で腹は白く、ひれは黄色みを帯びて透ける。砂底すれすれを泳いで止まり、頭を下げて吻を砂に突っ込み、ゴカイや小さな甲殻類を砂ごと吸い込んで、えらから砂を吐き出す。驚くと砂にもぐることもある。",
+    "habitatHint": "春から秋、波の穏やかな砂底の浅場。底すれすれを泳ぎ、ときどき砂をつつく。",
+    "behaviors": [
+      {
+        "id": "swim",
+        "ja": "底すれすれを泳ぐ",
+        "hint": "砂の上を滑るように泳ぐ"
+      },
+      {
+        "id": "dig",
+        "ja": "砂をつつく",
+        "hint": "頭を下げて吻を砂に突っ込む"
+      },
+      {
+        "id": "forage",
+        "ja": "摂餌",
+        "hint": "止まっては底の小動物を吸い込む"
+      },
+      {
+        "id": "buried",
+        "ja": "砂にもぐる",
+        "hint": "驚くと砂にもぐる"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "砂煙を上げて逃げる"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

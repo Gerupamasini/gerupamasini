@@ -1,0 +1,191 @@
+{
+  "id": "pennahia_argentata",
+  "names": {
+    "ja": "イシモチ（シログチ）",
+    "sci": "Pennahia argentata",
+    "en": "Silver croaker"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Sciaenidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "ishimochi",
+    "modelLength_mm": 250,
+    "viewDistance_m": 14,
+    "driver": "ishimochi",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 60,
+      "max": 280,
+      "mean": 160,
+      "sd": 50
+    },
+    "weightCoef": {
+      "a": 1.2e-05,
+      "b": 3.0
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "young",
+      "ja": "若魚",
+      "maxLength_mm": 130
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "channel",
+        "deep"
+      ],
+      "substrate": [
+        "muddy_sand",
+        "mud",
+        "channel"
+      ],
+      "depth_m": [
+        0.4,
+        4
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.4,
+      "group": [
+        3,
+        8
+      ],
+      "maxPopulation": 18,
+      "length_mm": [
+        70,
+        260
+      ]
+    },
+    {
+      "tags": [
+        "shallow"
+      ],
+      "substrate": [
+        "muddy_sand",
+        "mud"
+      ],
+      "depth_m": [
+        0.3,
+        1.5
+      ],
+      "time": [
+        "dusk",
+        "night",
+        "dawn"
+      ],
+      "tide": "any",
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ],
+      "density_per_100m2": 0.3,
+      "group": [
+        2,
+        5
+      ],
+      "maxPopulation": 10,
+      "length_mm": [
+        60,
+        180
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "fish_cruiser",
+    "params": {
+      "fleeDistance_m": 2.4,
+      "restMean_s": 12,
+      "cruiseDistance_m": [
+        0.8,
+        2.5
+      ],
+      "minWater_m": 0.15,
+      "deeper_m": 0.5,
+      "fleeLengthRef_mm": 150,
+      "fleeLengthExp": 0.5
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.6,
+    "alertPenalty": 0.4
+  },
+  "encyclopedia": {
+    "description": "砂泥底の内湾にすむニベ科の魚で、標準和名はシログチ。頭の中に大きな耳石（石）があることからイシモチと呼ばれる。頭は大きく丸く、吻は短く、口はやや斜めに開く。眼は大きい。背びれは棘のある高い前半と長い後半のあいだが深く切れ込み、尾びれはくさび形。体は銀白色で淡い紅紫色の光沢があり、えらぶたの上端に黒い斑がある。口の中は白い。群れで底近くをゆっくり泳ぎ、頭を下げて底の小さなエビやゴカイをついばむ。浮き袋を震わせてグーグーと鳴く。",
+    "habitatHint": "一年中、砂泥底の澪筋や深み。夕方からは浅場にも入る。底近くの銀色の群れ。",
+    "behaviors": [
+      {
+        "id": "swim",
+        "ja": "底層を泳ぐ",
+        "hint": "底近くをゆっくり泳ぐ"
+      },
+      {
+        "id": "forage",
+        "ja": "ついばむ",
+        "hint": "頭を下げて底の小動物を拾う"
+      },
+      {
+        "id": "rest",
+        "ja": "底で休む",
+        "hint": "夜は底近くにとどまる"
+      },
+      {
+        "id": "turn",
+        "ja": "方向転換",
+        "hint": "その場で向きを変える"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "驚くと群れで深みへ逃げる"
+      }
+    ],
+    "placeholderModel": false
+  }
+}
