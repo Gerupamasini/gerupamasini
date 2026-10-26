@@ -2,7 +2,7 @@
 // The トビハゼ in the game: a tank at home (the hero tier with its own materials, the tank's lighting copies), then the
 // 葛西 flat at low tide on a June morning (JST): one fish on the mud a step ahead, one a little farther, one far off,
 // one in a puddle's shallow water; the near ones in lod1, the far one in lod2, the observed one in the hero tier; the
-// 図鑑's preview and the observation case. Checks the materials' runtime contract on every model it meets (each
+// 図鑑's preview and the observation case; then a fish going down its burrow and looking out of it. Checks the materials' runtime contract on every model it meets (each
 // instance its own copies of the shared materials, one program per role and tier, the blended fins writing depth and
 // casting their shadow by coverage, the driver's look read by the materials) and photographs each step, in headless
 // Chromium (SwiftShader). Fails on any page error, console error or broken check.
@@ -377,6 +377,131 @@ try {
   await shot('case');
   await page.evaluate(() => window.__higata.closeCase());
   await waitFrames(page, 2);
+
+  // ------------------------------------------------------------------------------------------------------ the burrow
+  // A fish by its own burrow on the low-tide mud (burrows.ts lays the spot's out, burrowLayer.ts draws them): the
+  // opening drawn on the mud where the behaviour has it; the fish sent down it (head first), hidden right under the
+  // opening, then looking out of it; the encyclopedia's 'burrow' heard by the observation. Photographed close.
+  const burrowFish = await page.evaluate((ids) => {
+    const a = window.__higata, cs = a.creatures, terrain = a.world.terrain, h = a.world.habitat;
+    const MUD = ['mud', 'muddy_sand', 'channel'];
+    const layer = cs.group.children.find((o) => o.name === 'TobihazeBurrows');
+    const out = { layer: !!layer, fish: null, holes: [], drawn: 0, misplaced: [] };
+    const m = new (layer?.matrix.constructor ?? Object)();
+    for (const name of ['mid', 'near', 'shallow', 'far']) {
+      const id = ids[name], d = id && cs.driverOf(id), b = d?.behaviour;
+      if (!b) continue;
+      for (const k of b.burrows) {
+        const ground = terrain.heightAt(k.x, k.z);
+        const hole = { name, kind: k.kind, x: +k.x.toFixed(4), z: +k.z.toFixed(4), r: k.r, sub: terrain.substrateAt(k.x, k.z), depth: +h.depthAt(k.x, k.z).toFixed(3), ground: +ground.toFixed(4), drawnY: null };
+        // its opening among the layer's instances: the quad's middle on the hole, on the ground
+        if (layer) for (let i = 0; i < layer.count; i++) {
+          layer.getMatrixAt(i, m);
+          const e = m.elements;
+          if (e[5] === 0 && e[4] === 0 && e[6] === 0) continue;
+          if (Math.hypot(e[12] - k.x, e[14] - k.z) < 0.003) { hole.drawnY = +e[13].toFixed(4); break; }
+        }
+        if (hole.drawnY !== null) out.drawn++;
+        if (!MUD.includes(hole.sub) || hole.drawnY === null || Math.abs(hole.drawnY - ground) > 0.01) out.misplaced.push(hole);
+        out.holes.push(hole);
+      }
+      if (!out.fish) { const own = b.burrows.find((k) => k.kind === 'own' && h.depthAt(k.x, k.z) < -0.02); if (own) out.fish = { name, id, hole: { x: own.x, z: own.z, r: own.r } }; }
+    }
+    return out;
+  }, byName);
+  console.log('burrows', JSON.stringify(burrowFish));
+  results.burrows = burrowFish;
+  check('the burrows are drawn (one instanced layer)', burrowFish.layer && burrowFish.drawn > 0, { drawn: burrowFish.drawn, holes: burrowFish.holes.length });
+  check('every burrow on mud, drawn at its place on the ground', burrowFish.holes.length > 0 && burrowFish.misplaced.length === 0, burrowFish.misplaced.slice(0, 4));
+  check('a fish with its own burrow on the exposed mud', !!burrowFish.fish);
+  if (burrowFish.fish) {
+    const bid = burrowFish.fish.id;
+    let hole = burrowFish.fish.hole;
+    // the fish 12 cm from its hole facing it, the player crouched a little way off; observed, the camera on the hole
+    await page.evaluate(([id, hole]) => {
+      const a = window.__higata, d = a.creatures.driverOf(id), ind = a.creatures.get(id);
+      const ang = 2.2, fx = hole.x - Math.sin(ang) * 0.12, fz = hole.z - Math.cos(ang) * 0.12;
+      d.holdAt(fx, fz, ang);
+      // (its brain held: what it does from here is what this step tells it)
+      ind.brain.done = false; ind.brain.busyUntil = Infinity;
+      d.setIntent({ id: 99000, kind: 'rest', urgency: 0, seconds: 600 });
+      const px = hole.x + Math.sin(ang + 1.9) * 1.2, pz = hole.z + Math.cos(ang + 1.9) * 1.2;
+      a.player.setPose(px, pz, Math.atan2(-(hole.x - px), -(hole.z - pz)));
+      a.player.lowView = true;
+      a.player.pitch = -0.45;
+      a.enterObserve(ind);
+    }, [bid, hole]);
+    await waitFrames(page, 6);
+    /** the observation's camera on the hole: dist (m) off, elev (rad) up, from azimuth az */
+    const aim = (dist, elev, az) => page.evaluate(([hole, dist, elev, az]) => {
+      const a = window.__higata, o = a.observation, c = o.controls, y = a.world.terrain.heightAt(hole.x, hole.z);
+      if (!c) return false;
+      o.zoom = false;
+      c.target.set(hole.x, y, hole.z);
+      a.camera.position.set(hole.x + Math.sin(az) * Math.cos(elev) * dist, y + Math.sin(elev) * dist, hole.z + Math.cos(az) * Math.cos(elev) * dist);
+      c.update();
+      return true;
+    }, [hole, dist, elev, az]);
+    const label = () => page.evaluate((id) => window.__higata.creatures.driverOf(id).debugLabel(), bid);
+    await aim(0.3, 0.75, 4.1);
+    await waitFrames(page, 10);
+    await aim(0.3, 0.75, 4.1);
+    await waitFrames(page, 2);
+    await shot('burrow-before');
+    await aim(0.13, 0.95, 4.1);
+    await waitFrames(page, 4);
+    await shot('burrow-close');
+    // down it, in slow motion (the head-first dive is under a second)
+    await page.evaluate((id) => { const a = window.__higata; a.observation.setSpeedIndex(0); a.creatures.driverOf(id).setIntent({ id: 99001, kind: 'burrow', urgency: 0.3, seconds: 12 }); }, bid);
+    await aim(0.3, 0.75, 4.1);
+    let entered = false, hiddenOk = null;
+    for (let i = 0; i < 400; i++) {
+      await waitFrames(page, 1);
+      const l = await label();
+      if (!entered && /BURROW\/enter/.test(l)) { entered = true; await shot('burrow-enter'); }
+      if (/\(穴\)/.test(l)) {
+        // (its own burrow's either opening, whichever was nearer: the one it went down from here on)
+        hiddenOk = await page.evaluate((id) => {
+          const a = window.__higata, ind = a.creatures.get(id), b = a.creatures.driverOf(id).behaviour;
+          let h = b.burrows[0];
+          for (const k of b.burrows) if (Math.hypot(k.x - ind.pos.x, k.z - ind.pos.z) < Math.hypot(h.x - ind.pos.x, h.z - ind.pos.z)) h = k;
+          return { kind: h.kind, hole: { x: h.x, z: h.z, r: h.r }, dx: +(ind.pos.x - h.x).toFixed(5), dz: +(ind.pos.z - h.z).toFixed(5), under: ind.pos.y < a.world.terrain.heightAt(h.x, h.z) };
+        }, bid);
+        hole = hiddenOk.hole;
+        break;
+      }
+    }
+    check('the fish went down its burrow (seen entering)', entered && hiddenOk !== null, { entered, hiddenOk });
+    check('down the burrow, right under the opening', !!hiddenOk && Math.hypot(hiddenOk.dx, hiddenOk.dz) < 0.002 && hiddenOk.under, hiddenOk);
+    await page.evaluate(() => window.__higata.observation.setSpeedIndex(3));
+    await aim(0.3, 0.75, 4.1);
+    await waitFrames(page, 3);
+    await shot('burrow-hidden');
+    // out it looks (3–30 s of the game, quicker at the fast speed)
+    let peek = null;
+    for (let i = 0; i < (hiddenOk ? 900 : 0) && !peek; i++) {
+      await waitFrames(page, 2);
+      const l = await label();
+      if (/BURROW\/peek/.test(l)) {
+        await page.evaluate(() => window.__higata.observation.setSpeedIndex(0));
+        peek = await page.evaluate(([id, hole]) => { const a = window.__higata, d = a.creatures.driverOf(id), c = d.anchor(); return { head: [+(c.x - hole.x).toFixed(4), +(c.y - a.world.terrain.heightAt(hole.x, hole.z)).toFixed(4), +(c.z - hole.z).toFixed(4)] }; }, [bid, hole]);
+      }
+    }
+    check('the fish looks out of its burrow', !!peek, peek);
+    if (peek) {
+      await aim(0.3, 0.6, 4.1);
+      await waitFrames(page, 3);
+      await shot('burrow-peek');
+      await aim(0.14, 0.5, 4.1);
+      await waitFrames(page, 3);
+      await shot('burrow-peek-close');
+      check('its head out of the opening (within 3 cm of the middle, above the mud)', Math.hypot(peek.head[0], peek.head[2]) < 0.03 && peek.head[1] > 0, peek);
+    }
+    const recorded = await page.evaluate(() => window.__higata.observation.state.value?.recorded ?? []);
+    check('the observation recorded the burrow', recorded.includes('burrow'), recorded);
+    await page.evaluate((id) => { const a = window.__higata, ind = a.creatures.get(id); if (ind) { ind.brain.busyUntil = 0; ind.brain.done = true; } a.observation.setSpeedIndex(2); a.exitObserve(); }, bid);
+    await waitFrames(page, 2);
+  }
   await browser.close();
 } catch (e) {
   console.error(e);

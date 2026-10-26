@@ -1,5 +1,6 @@
 import type { HabitatSample } from '../../../world/Habitat';
 import type { IntentKind } from '../../drivers/Driver';
+import { holeAt, planBurrows, remember, type TobiBurrow } from './burrows';
 
 /**
  * トビハゼ (Periophthalmus modestus): what it is doing and where its body goes, without any rendering. The driver
@@ -207,6 +208,8 @@ export interface TobiApi {
   readonly pos: { x: number; y: number; z: number };
   readonly heading: number;
   readonly rig: TobiRig;
+  /** the burrows it knows, each an opening in the mud (burrows.ts; the driver draws them where they are) */
+  readonly burrows: readonly TobiBurrow[];
   setIntent(intent: TobiIntent): void;
   update(dt: number, env: TobiEnv): TobiFrame;
   /** a new tier's extras (attach): the geometry tables change, the state does not */
@@ -905,9 +908,10 @@ interface St {
   /** foraging: scanning for prey, or swallowing what it caught */
   fPhase: 'scan' | 'swallow';
   fed: number;
-  /** burrows it knows (its own first) and the one it is using */
-  burrows: { x: number; z: number }[];
-  burrow: { x: number; z: number } | null;
+  /** burrows it knows (its own first: burrows.ts lays them out round the home on the first update) and the one it is
+   *  using (one of them) */
+  burrows: TobiBurrow[];
+  burrow: TobiBurrow | null;
   hidden: boolean;
   rollSide: number;
   /** micro: eyes, breathing, fins, skin, colour */
@@ -980,9 +984,10 @@ export function createTobihaze(o: TobiOptions): TobiApi {
   function newEye(): EyeState {
     return { yaw: TOBI.eyes.rest.yaw, pitch: TOBI.eyes.rest.pitch, gy: TOBI.eyes.rest.yaw, gp: TOBI.eyes.rest.pitch, hold: r(0.2, 2), lift: 0, liftGoal: 0, settle: 0, blink: 0, bt: -1, bdur: TOBI.eyes.blinkS, next: logNormal(rng, TOBI.eyes.medianS, TOBI.eyes.sigma), track: 0 };
   }
-  // its burrow where it starts, and a couple of crab burrows about (behaviour §3.8: it hides in its own or a crab's)
-  st.burrows.push({ x: home.x, z: home.z });
-  for (let i = 0; i < 2; i++) { const a = r(0, TAU), d = r(0.5, 1.8); st.burrows.push({ x: home.x + Math.sin(a) * d, z: home.z + Math.cos(a) * d }); }
+  // its burrow (a Y with two openings) at or near its home, and a couple of crab burrows about (behaviour §3.8: it
+  // hides in its own or a crab's): the spot's, laid out on the first update, where the ground can be asked (burrows.ts).
+  // (the four draws they once took from the individual's stream are still taken: its every other choice stays as it was)
+  for (let i = 0; i < 4; i++) rng();
 
   // ---------------------------------------------------------------------- frames of reference
 
@@ -1152,7 +1157,7 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     if (st.medium === 'land') {
       // a burrow within reach (and not past the danger), else the water, else just away (§3.10)
       const canDig = E.canBurrow !== false;
-      let best: { x: number; z: number } | null = null, bd = TOBI.threat.burrowM * st.quirk.bold;
+      let best: TobiBurrow | null = null, bd = TOBI.threat.burrowM * st.quirk.bold;
       if (canDig) for (const b of st.burrows) {
         const dx = b.x - x, dz = b.z - z, d = Math.hypot(dx, dz);
         if (d < bd && (d < 0.05 || (dx * ax + dz * az) / d > -0.2) && depthAt(b.x, b.z) < 0.3 * H()) { bd = d; best = b; }
@@ -1194,14 +1199,18 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     if (st.hidden) return;
     if (E.canBurrow === false || st.medium !== 'land') { beginRest(secs); st.busy = true; return; }
     const x = st.P[0], z = st.P[2];
-    let best = st.burrows[0], bd = Infinity;
+    let best: TobiBurrow | null = st.burrows[0] ?? null, bd = Infinity;
     for (const b of st.burrows) { const d = Math.hypot(b.x - x, b.z - z); if (d < bd && depthAt(b.x, b.z) < 0.3 * H()) { bd = d; best = b; } }
-    // more than a metre off, or under water: a crab's hole near where it is (they riddle the mud: 0.4–4 a m², §3.8)
+    // more than a metre off, or under water: a crab's hole near where it is (they riddle the mud: 0.4–4 a m², §3.8),
+    // on mud only; none: it rests where it is
     if (bd > 1) {
-      const a = st.heading + r(-0.8, 0.8), d = r(0.5, 3) * L;
-      best = { x: x + Math.sin(a) * d, z: z + Math.cos(a) * d };
-      st.burrows.push(best);
-      if (st.burrows.length > 6) st.burrows.splice(1, 1);
+      best = null;
+      for (let k = 0; k < 6 && !best; k++) {
+        const a = st.heading + r(-0.8, 0.8), d = r(0.5, 3) * L;
+        best = holeAt(x + Math.sin(a) * d, z + Math.cos(a) * d, E);
+      }
+      if (!best) { beginRest(secs); st.busy = true; return; }
+      remember(st.burrows, best, st.burrow);
     }
     st.burrow = best;
     setGoal(best.x, best.z, 'burrow', 0.35 * L);
@@ -1528,8 +1537,14 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     if (st.loco === 'emerge' || st.loco === 'burrowIn') return;
     if (st.actT > 30 && st.goal && st.loco === 'still' && !st.blend) { st.goal = null; st.burrow = null; }
     if (navigate(dt) && st.loco === 'still' && !st.blend) {
-      // (no way to its burrow: a crab's hole where it is)
-      if (st.blocked || !st.burrow) { st.burrow = { x: st.P[0] + fwdX(st.heading) * 0.5 * L, z: st.P[2] + fwdZ(st.heading) * 0.5 * L }; st.blocked = false; }
+      // (no way to its burrow: a crab's hole where it is, on mud; none, and it rests)
+      if (st.blocked || !st.burrow) {
+        st.blocked = false;
+        const h = holeAt(st.P[0] + fwdX(st.heading) * 0.5 * L, st.P[2] + fwdZ(st.heading) * 0.5 * L, E);
+        if (!h) { st.goal = null; st.burrow = null; toRest(r(2, 6)); return; }
+        remember(st.burrows, h, st.burrow);
+        st.burrow = h;
+      }
       startBurrowIn();
     }
   }
@@ -1994,32 +2009,45 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     const b = st.burrow!;
     const dur = st.act === 'flee' ? 0.45 : 0.9;
     const u = clamp(st.lt / dur, 0, 1);
-    // head first: pitched down into the hole and drawn in along its own axis, the tail last
-    const pitch = 50 * DEG * smooth(u / 0.4);
+    // head first: pitched down into the hole and drawn in along its own axis, the tail last. The axis turns about a
+    // point over the opening's middle that sinks from the body's height on the mud to the mud itself as it pitches, so
+    // the body goes down through the middle of the opening (burrows.ts: the hole is drawn there), the tail lifting
+    const k = smooth(u / 0.4), pitch = 50 * DEG * k;
     qYXZ(st.heading, pitch, 0, st.Q);
-    const gy = ground(b.x, b.z);
+    const gy = ground(b.x, b.z), pivotY = gy - s * rig.ground.rest * (1 - k);
     const along = lerp(-0.5 * L, 0.75 * L, smooth(u));
     const fx = Math.sin(st.heading) * Math.cos(pitch) * along, fz = Math.cos(st.heading) * Math.cos(pitch) * along;
-    set3(st.P, b.x + fx, gy - s * rig.ground.rest - Math.sin(pitch) * Math.max(0, along + 0.5 * L), b.z + fz);
-    if (u > 0.65) st.hidden = true;
-    if (u >= 1) {
-      st.loco = 'hidden'; st.lt = 0; st.actT = 0;
-      if (st.act === 'flee') st.actDur = r(5, 15);
-      else { st.act = 'burrow'; st.actDur = Math.max(st.actDur, 3); }
-    }
+    // (from where it stopped by the hole: the first fifth of the way)
+    const w = smooth(u / 0.2);
+    set3(st.P, lerp(st.sP0[0], b.x + fx, w), lerp(st.sP0[1], pivotY - Math.sin(pitch) * along, w), lerp(st.sP0[2], b.z + fz, w));
+    // (once all but the tail is in, out of sight: the rest of the way is under the mud)
+    if (u > 0.65) downTheHole(b);
+  }
+  /** down the hole, out of sight: right under the opening (the individual's place, where it peeks out from) */
+  function downTheHole(b: { x: number; z: number }): void {
+    set3(st.P, b.x, ground(b.x, b.z) - 0.3 * L, b.z);
+    st.hidden = true;
+    st.loco = 'hidden'; st.lt = 0; st.actT = 0;
+    if (st.act === 'flee') st.actDur = r(5, 15);
+    else { st.act = 'burrow'; st.actDur = Math.max(st.actDur, 3); }
   }
   function startPeek(): void {
     const b = st.burrow ?? { x: st.P[0], z: st.P[2] };
     st.loco = 'peek'; st.lt = 0; st.hidden = false;
-    // head and chest out at 60–80°, the rest down the hole (A046 → A047); a look of 3–10 s, longer with the observer near
-    qYXZ(st.heading, -70 * DEG, 0, st.Q);
-    set3(st.P, b.x, ground(b.x, b.z) - 0.12 * L, b.z);
+    // head and chest out at 60–80°, the rest down the hole (A046 → A047); a look of 3–10 s, longer with the observer near.
+    // The body's axis through the middle of the opening at the mud (the root 0.12 L under it, a little behind)
+    const PEEK = 70 * DEG, back = (0.12 * L) / Math.tan(PEEK);
+    qYXZ(st.heading, -PEEK, 0, st.Q);
+    set3(st.P, b.x - fwdX(st.heading) * back, ground(b.x, b.z) - 0.12 * L, b.z - fwdZ(st.heading) * back);
+    // (seen from outside, the burrow's: an observation that starts while it hides records it as it looks out)
+    emit('burrow');
     st.pose = 'rest'; st.blend = null;
     const p = E.player, near = p ? Math.hypot(p.x - b.x, p.z - b.z) < 1.5 : false;
     st.sDone = near ? r(8, 30) : r(3, 10);
   }
+  /** a peeking head ducks back down in a flash (it is half in already) */
   function duckIn(): void {
-    st.loco = 'burrowIn'; st.lt = 0.3; st.hidden = false;
+    downTheHole(st.burrow ?? { x: st.P[0], z: st.P[2] });
   }
   function emergeFromBurrow(): void {
     if (!st.hidden && st.loco !== 'peek' && st.loco !== 'hidden') return;
@@ -2240,7 +2268,7 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     setState(ns, ph);
     // a lasting state's id again now and then (an observation that starts late still sees it)
     const id = STATE_EVENT[st.state];
-    const lasting = st.state === 'IDLE' || st.state === 'LAND_REST' || st.state === 'SWIM' || st.state === 'SHALLOW_WATER' || st.state === 'LAND_CRAWL';
+    const lasting = st.state === 'IDLE' || st.state === 'LAND_REST' || st.state === 'SWIM' || st.state === 'SHALLOW_WATER' || st.state === 'LAND_CRAWL' || (st.state === 'BURROW' && st.phase === 'peek');
     if (lasting && st.t > 2.5 && st.clock - (st.lastEvt[id] ?? -1e9) > TOBI.reEmitS) emit(id);
   }
   // ---------------------------------------------------------------------- the frame
@@ -2367,6 +2395,7 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     events.length = 0;
     if (!started) {
       started = true;
+      if (!st.burrows.length) st.burrows = planBurrows(home, L, env);
       seat(st.P[0], st.P[2], st.heading);
       if (early) { const i = early; early = null; setIntent(i); }
     }
@@ -2385,6 +2414,7 @@ export function createTobihaze(o: TobiOptions): TobiApi {
     get pos() { return { x: st.P[0], y: st.P[1], z: st.P[2] }; },
     get heading() { return st.heading; },
     get rig() { return rig; },
+    get burrows() { return st.burrows; },
     setIntent,
     update,
     setRig(extras?: Record<string, unknown> | null) { rig = tobiRig(extras ?? null); s = L / rig.tl; },
