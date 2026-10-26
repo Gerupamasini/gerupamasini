@@ -2,6 +2,8 @@ import { Quaternion, Sphere, Vector3, type Box3, type Mesh, type Object3D, type 
 import type { Individual } from '../../Individual';
 import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import { createTobihaze, type TobiApi, type TobiEnv, type TobiFrame, type TobiIntent } from './behavior';
+import { burrowLayerFor, openingGround, type BurrowLayer } from './burrowLayer';
+import { MAX_BURROWS } from './burrows';
 import { applyPose, bindPose, createPose, crawlWelds, poseInto, poseRig, pointOf, worldOf, type PoseBinding, type PoseOut, type PoseRig, type PoseWorld } from './pose.js';
 
 /** Within this distance (m) of the player a crawling, hopping or striking トビハゼ is updated every frame (its welded
@@ -73,6 +75,13 @@ export class TobihazeDriver implements Driver {
   private welds: ReturnType<typeof crawlWelds> | null = null;
   everyFrame = false;
   busy = false;
+  /** the burrows' openings in the mud (burrowLayer.ts, one draw for all the fish under the same parent): the layer, a
+   *  slot per opening, and what they were last drawn from (x, z, r of each) */
+  private burrowLayer: BurrowLayer | null = null;
+  private readonly burrowSlots: number[] = [];
+  private readonly burrowDrawn = new Float64Array(MAX_BURROWS * 3);
+  private burrowCount = -1;
+  private readonly burrowN = new Vector3();
 
   constructor() {
     const floor = () => this.ctx?.floor;
@@ -90,6 +99,8 @@ export class TobihazeDriver implements Driver {
   attach(root: Object3D, individual: Individual, extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void {
     this.root = root;
     this.ind = individual;
+    // (the creature system's group: the burrows stay drawn there across a tier change, until the fish leaves)
+    if (this.burrowLayer && this.burrowLayer.mesh.parent !== root.parent) this.dropBurrows();
     this.look.id = individual.id;
     this.look.variation = individual.species.variation;
     let rig: PoseRig;
@@ -189,6 +200,45 @@ export class TobihazeDriver implements Driver {
     L.wet = f.skin.wet; L.mud = f.skin.mud; L.bars = f.colour.bars; L.dark = f.colour.dark; L.pupil = f.eyes.pupil; L.submerged = f.medium === 'water';
     L.waterY = ctx.floor.waterAt(f.root.x, f.root.z);
     if (ctx.locked || TOBIHAZE_DEBUG.welds) this.checkWelds(f, dt * ctx.simScale);
+    this.drawBurrows(b, ctx);
+  }
+
+  /**
+   * The burrows the behaviour knows (burrows.ts: the spot's, and the crab holes it found), each an opening in the mud
+   * exactly where the behaviour dives, hides and looks out (burrowLayer.ts). Only on the open flat (a habitat to ask,
+   * no walls): the tank and the case show none. Redrawn when the list changes (a hole found, a restore), else left.
+   */
+  private drawBurrows(b: TobiApi, ctx: DriverContext): void {
+    const root = this.root;
+    const open = !ctx.bounds && ctx.canBurrow !== false && !!ctx.floor.sampleAt;
+    if (!root || (!open && !this.burrowLayer)) return;
+    if (!this.burrowLayer && root.parent) this.burrowLayer = burrowLayerFor(root.parent);
+    const layer = this.burrowLayer;
+    if (!layer) return;
+    const list = open ? b.burrows : [];
+    if (list.length) layer.tick(ctx.nowMs / 1000, root);
+    const n = Math.min(list.length, MAX_BURROWS), D = this.burrowDrawn;
+    let same = n === this.burrowCount;
+    for (let i = 0; i < n && same; i++) same = D[i * 3] === list[i].x && D[i * 3 + 1] === list[i].z && D[i * 3 + 2] === list[i].r;
+    if (same) return;
+    for (let i = 0; i < n; i++) {
+      const h = list[i];
+      if (this.burrowSlots.length <= i) { const k = layer.claim(); if (k < 0) break; this.burrowSlots.push(k); }
+      const y = openingGround(ctx.floor, h.x, h.z, this.burrowN);
+      // (its own burrow's saucer holds a puddle more often than not)
+      layer.set(this.burrowSlots[i], h.x, y, h.z, this.burrowN, h.az, h.r, h.kind, h.seed, h.kind === 'own' && h.seed > 0.35 ? 1 : 0);
+      D[i * 3] = h.x; D[i * 3 + 1] = h.z; D[i * 3 + 2] = h.r;
+    }
+    while (this.burrowSlots.length > n) layer.release(this.burrowSlots.pop()!);
+    this.burrowCount = n;
+  }
+
+  private dropBurrows(): void {
+    const layer = this.burrowLayer;
+    if (layer) for (const k of this.burrowSlots) layer.release(k);
+    this.burrowSlots.length = 0;
+    this.burrowCount = -1;
+    this.burrowLayer = null;
   }
 
   /** the frame on the model: the root as the behaviour placed it, the tier's joints, Eye nodes and blend shapes */
@@ -295,6 +345,8 @@ export class TobihazeDriver implements Driver {
 
   dispose(): void {
     this.detach();
+    // (the burrows belong to the spot: they leave with the fish, and come back where they were with it)
+    this.dropBurrows();
     this.beh = null;
     this.frame = null;
     this.listeners.clear();

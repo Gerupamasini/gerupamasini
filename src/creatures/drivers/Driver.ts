@@ -58,6 +58,9 @@ export interface ScentProbe {
 export interface Floor {
   heightAt(x: number, z: number): number;
   waterAt(x: number, z: number): number;
+  /** the ground as drawn (the terrain's triangles, which can differ from heightAt's smooth field by millimetres): for
+   *  what is painted onto it (a burrow's opening); absent: heightAt */
+  surfaceAt?(x: number, z: number): number;
   sampleAt?(x: number, z: number): HabitatSample | null;
   /** the sediment's colour as it is drawn here (linear albedo, before the light); null where there is none (a bare
    *  tank). For what takes on the colour of the bottom: sand over a buried flatfish, a fish matching its background */
