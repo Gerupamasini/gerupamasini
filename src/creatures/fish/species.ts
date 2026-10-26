@@ -2,9 +2,12 @@ import { countershade, fbm, hex, noise, paint, rays, shade, spots, tint } from '
 import { smooth, type FinId, type FinOut, type FishSpec, type SkinOut, type SkinSample } from './spec';
 
 /**
- * The nine coastal fishes, each measured on lateral, dorsal and frontal photographs of live or fresh fish
- * (iNaturalist research-grade sets, aquarium photographs) and checked side / front / top / ¾ against them
- * (tools/models/fish/render.mjs). Proportions in shares of TL; what identifies each species at a glance is noted.
+ * The nine coastal fishes. Each outline is fitted to the mean silhouette of the species' photographs: 52–163 collected per
+ * species, all segmented and aligned (snout → peduncle level, TL = 1), 8–26 clean lateral (マゴチ: dorsal) views chosen
+ * and averaged, the dorsal / ventral tables corrected until the model's body follows them (tools/models/fish/measure/;
+ * the photographs used and the medians in docs/models/fish/reference.json). Eyes, mouth, gill cover, fins and marks
+ * were read off head close-ups set beside the model's. Proportions in shares of TL; what identifies each species at a
+ * glance is noted.
  */
 
 // ------------------------------------------------------------------------------------------------ fins
@@ -94,22 +97,22 @@ function eyeRim(p: SkinSample, s: number, y: number, r: number): number {
  */
 const SUZUKI: FishSpec = {
   id: 'suzuki', sizeClass: 'XL', modelTL: 0.4, depth: 0.22, pivot: 0.36, caudalBase: 0.8, headJoint: 0.2,
-  top: [[0, 0.015], [0.02, 0.035], [0.05, 0.05], [0.1, 0.075], [0.15, 0.09], [0.2, 0.105], [0.3, 0.11], [0.4, 0.105], [0.5, 0.09], [0.6, 0.075], [0.7, 0.05], [0.8, 0.036]],
-  bot: [[0, 0.015], [0.02, 0.028], [0.05, 0.04], [0.1, 0.065], [0.15, 0.08], [0.2, 0.09], [0.3, 0.1], [0.4, 0.1], [0.5, 0.095], [0.6, 0.075], [0.7, 0.05], [0.8, 0.038]],
+  top: [[0, 0.002], [0.02, 0.017], [0.05, 0.0334], [0.1, 0.059], [0.15, 0.0765], [0.2, 0.0929], [0.3, 0.1045], [0.4, 0.1008], [0.5, 0.0871], [0.6, 0.0734], [0.7, 0.0497], [0.8, 0.0333]],
+  bot: [[0, 0.0094], [0.02, 0.0235], [0.05, 0.0384], [0.1, 0.0656], [0.15, 0.0821], [0.2, 0.0936], [0.3, 0.1079], [0.4, 0.1135], [0.5, 0.1045], [0.6, 0.0908], [0.7, 0.0806], [0.8, 0.0395]],
   width: [[0, 0.01125], [0.02, 0.02363], [0.05, 0.0315], [0.1, 0.0434], [0.15, 0.051], [0.2, 0.05655], [0.3, 0.0588], [0.4, 0.05638], [0.5, 0.0481], [0.6, 0.036], [0.7, 0.021], [0.8, 0.01406]],
   nTop: [[0, 2.1], [0.3, 2.0], [0.8, 2.0]], nBot: [[0, 2.2], [0.3, 2.0], [0.8, 2.0]],
   snoutCap: 0.025,
-  eyes: [{ s: 0.07, y: 0.03, r: 0.02, bulge: 0.006, pupil: 0.55, iris: [0xd8cc98, 0x9a8a60], rim: 0x1e2020 }],
+  eyes: [{ s: 0.1, y: 0.024, r: 0.022, bulge: 0.007, pupil: 0.55, iris: [0xd8cc98, 0x9a8a60], rim: 0x1e2020 }],
   mouth: { corner: 0.105, gape: [[0, -0.002], [0.05, -0.012], [0.105, -0.03]], open: 0.6, inside: 0.75 },
   oper: { s: 0.27, sweep: 0.025, top: 0.085, bot: 0.09, step: 0.003 },
   fins: {
     median: [
       { id: 'd1', s0: 0.29, s1: 0.45, len: [[0, 0.04], [0.15, 0.1], [0.35, 0.11], [0.7, 0.06], [1, 0.025]], rake: [0.35, 0.6], rays: 12, spines: 12 },
       { id: 'd2', s0: 0.47, s1: 0.64, len: [[0, 0.07], [0.15, 0.08], [0.5, 0.065], [1, 0.035]], rake: [0.6, 0.95], rays: 13 },
-      { id: 'a', s0: 0.57, s1: 0.67, len: [[0, 0.035], [0.25, 0.068], [0.6, 0.055], [1, 0.03]], rake: [0.6, 0.95], rays: 10, spines: 3 },
+      { id: 'a', s0: 0.56, s1: 0.66, len: [[0, 0.03], [0.25, 0.05], [0.6, 0.042], [1, 0.025]], rake: [0.6, 0.95], rays: 10, spines: 3 },
     ],
-    caudal: { len: 0.205, centre: 0.6, tip: 1, p: 1.4, spread: 0.31, rays: 17, base: 1.05 },
-    pectoral: { s: 0.25, y: -0.03, base: 0.04, len: [[0, 0.12], [0.3, 0.14], [1, 0.06]], dirs: [0.12, -0.5], rest: 0.25, rays: 16 },
+    caudal: { len: 0.205, centre: 0.6, tip: 1, p: 1.4, spread: 0.22, rays: 17, base: 1.05 },
+    pectoral: { s: 0.275, y: -0.03, base: 0.04, len: [[0, 0.12], [0.3, 0.14], [1, 0.06]], dirs: [0.12, -0.5], rest: 0.25, rays: 16 },
     pelvic: { s: 0.27, y: 0, base: 0.03, len: [[0, 0.12], [1, 0.07]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
   scales: { along: 76, around: 40, depth: 0.35 },
@@ -125,7 +128,7 @@ const SUZUKI: FishSpec = {
     tint(o, 0x2e3438, 0.45 * lateralLine(p, 0.5, 0.06));
     // the crown and snout darker, the cheek silver
     tint(o, 0x3e464c, 0.4 * smooth(0.3, 0.8, p.h) * (1 - smooth(0.1, 0.25, p.s)));
-    tint(o, 0x24282a, 0.35 * eyeRim(p, 0.086, 0.034, 0.022));
+    tint(o, 0x24282a, 0.35 * eyeRim(p, 0.1, 0.024, 0.022));
   },
   fin: finPainter({
     def: { c: 0x8a9096, a: 0.55, ray: 0x5e666e, rayA: 0.85 },
@@ -142,29 +145,30 @@ const SUZUKI: FishSpec = {
 
 // ------------------------------------------------------------------------------------------------ メジナ
 /**
- * メジナ (Girella punctata), the young of the rocky shore pools: a deep oval body (depth 0.4 TL) with a short head, a
+ * メジナ (Girella punctata), the young of the rocky shore pools: a deep oval body (depth 0.36 TL, the back higher than
+ * the belly is deep, the long dorsal and anal fins a large share of the outline) with a short head, a
  * blunt rounded snout and a small terminal mouth, a large eye; one long dorsal (14 spines, then the soft), a slightly
  * forked tail on a deep peduncle; dark olive-grey with a dark dot at the base of every scale in rows (punctata), the
  * gill cover's free edge black, dusky fins.
  */
 const MEJINA: FishSpec = {
-  id: 'mejina', sizeClass: 'L', modelTL: 0.2, depth: 0.4, pivot: 0.38, caudalBase: 0.77, headJoint: 0.18,
-  top: [[0, 0.02], [0.02, 0.04], [0.05, 0.08], [0.1, 0.125], [0.15, 0.15], [0.2, 0.175], [0.3, 0.19], [0.4, 0.195], [0.5, 0.18], [0.6, 0.15], [0.7, 0.1], [0.77, 0.07]],
-  bot: [[0, 0.02], [0.02, 0.04], [0.05, 0.07], [0.1, 0.11], [0.15, 0.135], [0.2, 0.16], [0.3, 0.19], [0.4, 0.2], [0.5, 0.19], [0.6, 0.16], [0.7, 0.1], [0.77, 0.065]],
+  id: 'mejina', sizeClass: 'L', modelTL: 0.2, depth: 0.36, pivot: 0.38, caudalBase: 0.77, headJoint: 0.18,
+  top: [[0, 0.015], [0.02, 0.04], [0.05, 0.07], [0.1, 0.11], [0.15, 0.14], [0.2, 0.162], [0.3, 0.198], [0.4, 0.185], [0.5, 0.155], [0.6, 0.115], [0.7, 0.085], [0.77, 0.065]],
+  bot: [[0, 0.015], [0.02, 0.033], [0.05, 0.06], [0.1, 0.09], [0.15, 0.115], [0.2, 0.135], [0.3, 0.165], [0.4, 0.165], [0.5, 0.145], [0.6, 0.12], [0.7, 0.082], [0.77, 0.06]],
   width: [[0, 0.012], [0.02, 0.022], [0.05, 0.03375], [0.1, 0.047], [0.15, 0.05415], [0.2, 0.06197], [0.3, 0.0684], [0.4, 0.06912], [0.5, 0.06105], [0.6, 0.0465], [0.7, 0.027], [0.77, 0.01688]],
   nTop: [[0, 2.1], [0.5, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.085, y: 0.055, r: 0.03, bulge: 0.009, pupil: 0.55, iris: [0x6a8c8c, 0x2c3a3c], rim: 0x141818 }],
+  eyes: [{ s: 0.1, y: 0.035, r: 0.03, bulge: 0.009, pupil: 0.55, iris: [0x6a8c8c, 0x2c3a3c], rim: 0x141818 }],
   mouth: { corner: 0.045, gape: [[0, -0.012], [0.045, -0.02]], open: 0.5, inside: 0.35 },
-  oper: { s: 0.22, sweep: 0.03, top: 0.15, bot: 0.14, step: 0.004 },
+  oper: { s: 0.24, sweep: 0.03, top: 0.15, bot: 0.13, step: 0.004 },
   fins: {
     median: [
-      { id: 'd1', s0: 0.3, s1: 0.52, len: [[0, 0.04], [0.3, 0.074], [1, 0.07]], rake: [0.5, 0.75], rays: 14, spines: 14 },
-      { id: 'd2', s0: 0.52, s1: 0.72, len: [[0, 0.075], [0.3, 0.085], [1, 0.035]], rake: [0.75, 1.05], rays: 14 },
-      { id: 'a', s0: 0.54, s1: 0.71, len: [[0, 0.05], [0.2, 0.085], [1, 0.035]], rake: [0.7, 1.05], rays: 14, spines: 3 },
+      { id: 'd1', s0: 0.3, s1: 0.52, len: [[0, 0.03], [0.4, 0.045], [1, 0.06]], rake: [0.5, 0.75], rays: 14, spines: 14 },
+      { id: 'd2', s0: 0.52, s1: 0.72, len: [[0, 0.065], [0.4, 0.07], [1, 0.04]], rake: [0.75, 1.05], rays: 14 },
+      { id: 'a', s0: 0.54, s1: 0.71, len: [[0, 0.04], [0.5, 0.075], [1, 0.06]], rake: [0.7, 1.05], rays: 14, spines: 3 },
     ],
     caudal: { len: 0.235, centre: 0.78, tip: 1, p: 1.3, spread: 0.2, rays: 17, base: 1.0 },
-    pectoral: { s: 0.24, y: -0.02, base: 0.06, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.2, -0.6], rest: 0.3, rays: 18 },
+    pectoral: { s: 0.27, y: -0.03, base: 0.06, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.2, -0.6], rest: 0.3, rays: 18 },
     pelvic: { s: 0.3, y: 0, base: 0.03, len: [[0, 0.11], [1, 0.06]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
   scales: { along: 55, around: 46, depth: 0.4 },
@@ -177,9 +181,9 @@ const MEJINA: FishSpec = {
     const d = scaleDots(p, 55, 26, 0.32, 1) * smooth(0.2, 0.28, p.s) * (1 - smooth(-0.6, -0.9, p.h) * 0.6);
     tint(o, 0x1e2220, 0.4 * d * (0.6 + 0.4 * noise(p.s * 55, p.h * 13, 4)));
     // the gill cover's free margin black
-    const edge = 0.22 - 0.03 * p.h * p.h;
+    const edge = 0.24 - 0.03 * p.h * p.h;
     tint(o, 0x0e1010, 0.55 * (1 - smooth(0.0, 0.006, Math.abs(p.s - edge + 0.003))) * (Math.abs(p.h) < 0.75 ? 1 : 0));
-    tint(o, 0x1a1e1c, 0.3 * eyeRim(p, 0.092, 0.045, 0.03));
+    tint(o, 0x1a1e1c, 0.3 * eyeRim(p, 0.1, 0.035, 0.03));
   },
   fin: finPainter({
     def: { c: 0x2e3430, a: 0.75, ray: 0x1e2220, rayA: 0.95 },
@@ -199,14 +203,14 @@ const MEJINA: FishSpec = {
  */
 const KISU: FishSpec = {
   id: 'kisu', sizeClass: 'L', modelTL: 0.2, depth: 0.15, pivot: 0.38, caudalBase: 0.83, headJoint: 0.2,
-  top: [[0, 0.005], [0.02, 0.018], [0.05, 0.045], [0.1, 0.065], [0.2, 0.075], [0.3, 0.076], [0.4, 0.075], [0.5, 0.07], [0.6, 0.06], [0.7, 0.046], [0.83, 0.03]],
-  bot: [[0, 0.005], [0.02, 0.015], [0.05, 0.035], [0.1, 0.05], [0.2, 0.07], [0.3, 0.075], [0.4, 0.074], [0.5, 0.07], [0.6, 0.06], [0.7, 0.044], [0.83, 0.029]],
+  top: [[0, 0.0064], [0.02, 0.0146], [0.05, 0.0335], [0.1, 0.0533], [0.2, 0.0807], [0.3, 0.0903], [0.4, 0.0889], [0.5, 0.0856], [0.6, 0.073], [0.7, 0.0542], [0.83, 0.0258]],
+  bot: [[0, 0.0145], [0.02, 0.0207], [0.05, 0.0336], [0.1, 0.0422], [0.2, 0.0577], [0.3, 0.0646], [0.4, 0.0685], [0.5, 0.0626], [0.6, 0.0559], [0.7, 0.0503], [0.83, 0.037]],
   width: [[0, 0.009], [0.02, 0.02025], [0.05, 0.034], [0.1, 0.046], [0.2, 0.05655], [0.3, 0.05738], [0.4, 0.05513], [0.5, 0.049], [0.6, 0.0372], [0.7, 0.02475], [0.83, 0.01475]],
   nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.0], [0.4, 2.2]],
   snoutCap: 0.012,
-  eyes: [{ s: 0.125, y: 0.03, r: 0.026, bulge: 0.008, pupil: 0.55, iris: [0xe8e0c8, 0xa09880], rim: 0x2a2620 }],
+  eyes: [{ s: 0.115, y: 0.018, r: 0.019, bulge: 0.007, pupil: 0.55, iris: [0xe8e0c8, 0xa09880], rim: 0x2a2620 }],
   mouth: { corner: 0.05, gape: [[0, 0.0], [0.05, -0.008]], open: 0.5, inside: 0.6 },
-  oper: { s: 0.25, sweep: 0.02, top: 0.05, bot: 0.05, step: 0.002 },
+  oper: { s: 0.23, sweep: 0.02, top: 0.05, bot: 0.05, step: 0.002 },
   fins: {
     median: [
       { id: 'd1', s0: 0.3, s1: 0.42, len: [[0, 0.05], [0.2, 0.086], [0.5, 0.06], [1, 0.02]], rake: [0.35, 0.7], rays: 11, spines: 11 },
@@ -252,7 +256,7 @@ const MAGOCHI: FishSpec = {
   id: 'magochi', sizeClass: 'XL', modelTL: 0.45, depth: 0.09, pivot: 0.36, caudalBase: 0.86, headJoint: 0.22,
   top: [[0, 0.008], [0.03, 0.013], [0.1, 0.023], [0.18, 0.033], [0.3, 0.043], [0.4, 0.049], [0.5, 0.047], [0.6, 0.042], [0.7, 0.035], [0.8, 0.028], [0.86, 0.026]],
   bot: [[0, 0.006], [0.03, 0.01], [0.1, 0.017], [0.2, 0.027], [0.3, 0.036], [0.4, 0.041], [0.5, 0.04], [0.6, 0.035], [0.7, 0.028], [0.8, 0.024], [0.86, 0.022]],
-  width: [[0, 0.035], [0.02, 0.05], [0.05, 0.068], [0.1, 0.085], [0.18, 0.095], [0.25, 0.095], [0.32, 0.08], [0.42, 0.06], [0.55, 0.045], [0.7, 0.03], [0.86, 0.016]],
+  width: [[0, 0.02], [0.02, 0.04], [0.05, 0.06], [0.1, 0.08], [0.18, 0.095], [0.25, 0.1], [0.32, 0.09], [0.42, 0.075], [0.55, 0.062], [0.7, 0.04], [0.8, 0.028], [0.86, 0.02]],
   nTop: [[0, 3.0], [0.3, 2.7], [0.5, 2.1], [0.8, 2.0]], nBot: [[0, 3.2], [0.3, 3.0], [0.6, 2.1], [0.8, 2.0]],
   snoutCap: 0.02,
   eyes: [{ s: 0.128, y: 0.03, r: 0.016, bulge: 0.009, pupil: 0.5, iris: [0xbaa478, 0x5a4a32], rim: 0x2a2218, up: 0.75, fwd: 0.1 }],
@@ -265,7 +269,7 @@ const MAGOCHI: FishSpec = {
       { id: 'a', s0: 0.43, s1: 0.72, len: [[0, 0.04], [1, 0.03]], rake: [0.8, 1.05], rays: 13 },
     ],
     caudal: { len: 0.14, centre: 1.0, tip: 0.84, p: 2, spread: 0.55, rays: 15, base: 1.2 },
-    pectoral: { s: 0.31, y: -0.02, base: 0.04, len: [[0, 0.09], [0.4, 0.11], [1, 0.08]], dirs: [0.3, -0.9], rest: 0.3, roll: 1.3, rays: 19 },
+    pectoral: { s: 0.31, y: -0.02, base: 0.04, len: [[0, 0.055], [0.4, 0.075], [1, 0.055]], dirs: [0.3, -0.9], rest: 0.2, roll: 1.3, rays: 19 },
     pelvic: { s: 0.33, y: 0, base: 0.03, len: [[0, 0.12], [0.5, 0.13], [1, 0.09]], dirs: [0.65, 0.1], rest: 1.4, rays: 6 },
   },
   scales: { along: 85, around: 34, depth: 0.28 },
@@ -311,17 +315,17 @@ const HIRAME: FishSpec = {
   nTop: [[0, 1.8], [0.3, 1.55], [0.8, 1.6]], nBot: [[0, 1.8], [0.3, 1.55], [0.8, 1.6]],
   snoutCap: 0.03,
   eyes: [
-    { s: 0.09, y: -0.01, r: 0.02, bulge: 0.012, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
-    { s: 0.105, y: 0.04, r: 0.02, bulge: 0.012, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
+    { s: 0.088, y: -0.012, r: 0.02, bulge: 0.012, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
+    { s: 0.07, y: 0.035, r: 0.02, bulge: 0.012, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
   ],
   mouth: { corner: 0.11, gape: [[0, -0.004], [0.11, -0.035]], open: 0.65, inside: 0.7 },
   oper: { s: 0.24, sweep: 0.03, top: 0.11, bot: 0.1, step: 0.002 },
   fins: {
     median: [
       { id: 'd2', s0: 0.07, s1: 0.76, len: [[0, 0.028], [0.2, 0.058], [0.5, 0.074], [0.75, 0.06], [1, 0.03]], rake: [0.3, 0.7], rays: 76, ripple: 1 },
-      { id: 'a', s0: 0.24, s1: 0.76, len: [[0, 0.034], [0.3, 0.07], [0.6, 0.07], [1, 0.03]], rake: [0.3, 0.7], rays: 58, ripple: 1 },
+      { id: 'a', s0: 0.2, s1: 0.76, len: [[0, 0.04], [0.3, 0.085], [0.6, 0.085], [1, 0.035]], rake: [0.3, 0.7], rays: 58, ripple: 1 },
     ],
-    caudal: { len: 0.225, centre: 1.0, tip: 0.85, p: 2, spread: 0.16, rays: 18, base: 1.1 },
+    caudal: { len: 0.225, centre: 1.0, tip: 0.9, p: 2, spread: 0.2, rays: 18, base: 1.1 },
     pectoral: { s: 0.24, y: 0.0, base: 0.02, len: [[0, 0.08], [1, 0.04]], dirs: [0.3, -0.3], rest: 0.1, rays: 11 },
     pelvic: { s: 0.22, y: 0, base: 0.02, len: [[0, 0.05], [1, 0.03]], dirs: [0.4, 0.1], rest: 0.3, rays: 6 },
   },
@@ -361,22 +365,22 @@ const HIRAME: FishSpec = {
  */
 const BORA: FishSpec = {
   id: 'bora', sizeClass: 'XL', modelTL: 0.45, depth: 0.2, pivot: 0.36, caudalBase: 0.8, headJoint: 0.19,
-  top: [[0, 0.02], [0.02, 0.03], [0.05, 0.05], [0.1, 0.065], [0.15, 0.075], [0.2, 0.085], [0.3, 0.095], [0.4, 0.095], [0.5, 0.09], [0.6, 0.075], [0.7, 0.055], [0.8, 0.04]],
-  bot: [[0, 0.015], [0.02, 0.025], [0.05, 0.045], [0.1, 0.065], [0.15, 0.08], [0.2, 0.09], [0.3, 0.1], [0.4, 0.1], [0.5, 0.095], [0.6, 0.08], [0.7, 0.055], [0.8, 0.04]],
-  width: [[0, 0.0175], [0.02, 0.0275], [0.05, 0.04512], [0.1, 0.0585], [0.15, 0.06588], [0.2, 0.07175], [0.3, 0.0741], [0.4, 0.0702], [0.5, 0.06105], [0.6, 0.0465], [0.7, 0.0286], [0.8, 0.018]],
+  top: [[0, 0.0209], [0.02, 0.0306], [0.05, 0.0447], [0.1, 0.058], [0.15, 0.069], [0.2, 0.0734], [0.3, 0.0828], [0.4, 0.0816], [0.5, 0.083], [0.6, 0.064], [0.7, 0.0514], [0.8, 0.0413]],
+  bot: [[0, 0.0148], [0.02, 0.0242], [0.05, 0.0426], [0.1, 0.0622], [0.15, 0.0762], [0.2, 0.0892], [0.3, 0.1044], [0.4, 0.1105], [0.5, 0.1026], [0.6, 0.0828], [0.7, 0.055], [0.8, 0.0437]],
+  width: [[0, 0.018], [0.02, 0.026], [0.05, 0.04], [0.1, 0.05], [0.2, 0.058], [0.3, 0.06], [0.4, 0.058], [0.5, 0.05], [0.6, 0.04], [0.7, 0.03], [0.8, 0.021]],
   nTop: [[0, 2.8], [0.2, 2.4], [0.4, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.055, y: 0.016, r: 0.02, bulge: 0.007, pupil: 0.55, iris: [0xe0d8b8, 0x9a9278], rim: 0x26282a, lid: 0.45 }],
+  eyes: [{ s: 0.056, y: 0.016, r: 0.022, bulge: 0.007, pupil: 0.55, iris: [0xe0d8b8, 0x9a9278], rim: 0x26282a, lid: 0.45 }],
   mouth: { corner: 0.04, gape: [[0, -0.004], [0.04, -0.012]], open: 0.45, inside: 0.45 },
-  oper: { s: 0.18, sweep: 0.025, top: 0.075, bot: 0.085, step: 0.003 },
+  oper: { s: 0.205, sweep: 0.025, top: 0.075, bot: 0.085, step: 0.003 },
   fins: {
     median: [
       { id: 'd1', s0: 0.38, s1: 0.43, len: [[0, 0.09], [0.4, 0.078], [1, 0.032]], rake: [0.35, 0.7], rays: 4, spines: 4 },
       { id: 'd2', s0: 0.6, s1: 0.68, len: [[0, 0.08], [0.2, 0.074], [1, 0.03]], rake: [0.6, 0.95], rays: 9 },
       { id: 'a', s0: 0.6, s1: 0.69, len: [[0, 0.07], [0.2, 0.07], [1, 0.03]], rake: [0.6, 0.95], rays: 11, spines: 3 },
     ],
-    caudal: { len: 0.206, centre: 0.4, tip: 1.0, p: 1.1, spread: 0.42, rays: 16, base: 1.1 },
-    pectoral: { s: 0.19, y: 0.03, base: 0.025, len: [[0, 0.12], [0.3, 0.12], [1, 0.055]], dirs: [0.15, -0.4], rest: 0.2, rays: 16 },
+    caudal: { len: 0.206, centre: 0.4, tip: 1.0, p: 1.1, spread: 0.36, rays: 16, base: 1.1 },
+    pectoral: { s: 0.22, y: 0.03, base: 0.025, len: [[0, 0.12], [0.3, 0.12], [1, 0.055]], dirs: [0.15, -0.4], rest: 0.2, rays: 16 },
     pelvic: { s: 0.32, y: 0, base: 0.025, len: [[0, 0.09], [1, 0.05]], dirs: [0.3, 0.0], rest: 0.4, rays: 6 },
   },
   scales: { along: 42, around: 30, depth: 0.45 },
@@ -391,7 +395,7 @@ const BORA: FishSpec = {
     tint(o, 0x3a4448, 0.42 * st);
     // the blue-black spot at the pectoral's base
     tint(o, 0x1c2430, 0.8 * Math.exp(-(((p.s - 0.252) / 0.012) ** 2) - (((p.y - 0.034) / 0.012) ** 2)));
-    tint(o, 0x2e3438, 0.35 * eyeRim(p, 0.077, 0.022, 0.022));
+    tint(o, 0x2e3438, 0.35 * eyeRim(p, 0.056, 0.016, 0.022));
   },
   fin: finPainter({
     def: { c: 0x7c868a, a: 0.55, ray: 0x5a6468, rayA: 0.85 },
@@ -407,19 +411,19 @@ const BORA: FishSpec = {
 
 // ------------------------------------------------------------------------------------------------ サッパ
 /**
- * サッパ (Sardinella zunasi): a small, strongly compressed herring (depth 0.27 TL, width a third of that) with a keel
+ * サッパ (Sardinella zunasi): a small, strongly compressed herring (depth 0.23 TL, width a third of that) with a keel
  * of scutes along the belly, a small upturned mouth, a large eye with fatty eyelids, one dorsal at mid-body, a deeply
  * forked tail; blue-green back sharply over bright silver flanks; translucent fins, the tail yellowish with a dusky
  * edge.
  */
 const SAPPA: FishSpec = {
-  id: 'sappa', sizeClass: 'L', modelTL: 0.13, depth: 0.27, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
-  top: [[0, 0.015], [0.02, 0.025], [0.05, 0.04], [0.1, 0.065], [0.15, 0.085], [0.2, 0.1], [0.3, 0.12], [0.4, 0.125], [0.5, 0.115], [0.6, 0.09], [0.7, 0.06], [0.79, 0.036]],
-  bot: [[0, 0.01], [0.02, 0.023], [0.05, 0.04], [0.1, 0.065], [0.15, 0.08], [0.2, 0.095], [0.3, 0.105], [0.4, 0.11], [0.5, 0.1], [0.6, 0.08], [0.7, 0.05], [0.79, 0.034]],
+  id: 'sappa', sizeClass: 'L', modelTL: 0.13, depth: 0.23, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
+  top: [[0, 0.0191], [0.02, 0.0307], [0.05, 0.0471], [0.1, 0.0685], [0.15, 0.083], [0.2, 0.0916], [0.3, 0.1019], [0.4, 0.104], [0.5, 0.0928], [0.6, 0.0716], [0.7, 0.0556], [0.79, 0.0365]],
+  bot: [[0, 0.0111], [0.02, 0.0249], [0.05, 0.047], [0.1, 0.0766], [0.15, 0.0936], [0.2, 0.1097], [0.3, 0.1255], [0.4, 0.1254], [0.5, 0.1126], [0.6, 0.0904], [0.7, 0.0607], [0.79, 0.0373]],
   width: [[0, 0.0075], [0.02, 0.0132], [0.05, 0.0192], [0.1, 0.0273], [0.15, 0.033], [0.2, 0.039], [0.3, 0.04275], [0.4, 0.04347], [0.5, 0.0387], [0.6, 0.0289], [0.7, 0.0176], [0.79, 0.0105]],
   nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.0], [0.15, 1.4], [0.65, 1.4], [0.8, 2.0]],
   snoutCap: 0.022,
-  eyes: [{ s: 0.09, y: 0.008, r: 0.03, bulge: 0.008, pupil: 0.55, iris: [0xe8e0c8, 0xa8a080], rim: 0x26282a, lid: 0.35 }],
+  eyes: [{ s: 0.078, y: 0.012, r: 0.025, bulge: 0.008, pupil: 0.55, iris: [0xe8e0c8, 0xa8a080], rim: 0x26282a, lid: 0.35 }],
   mouth: { corner: 0.055, gape: [[0, 0.004], [0.055, -0.01]], open: 0.6, inside: 0.4 },
   oper: { s: 0.18, sweep: 0.02, top: 0.1, bot: 0.095, step: 0.002 },
   fins: {
@@ -454,21 +458,21 @@ const SAPPA: FishSpec = {
 
 // ------------------------------------------------------------------------------------------------ コノシロ
 /**
- * コノシロ (Konosirus punctatus): a gizzard shad, deeper than the サッパ (depth 0.33 TL), with a blunt rounded snout
+ * コノシロ (Konosirus punctatus): a gizzard shad, a little deeper than the サッパ (depth 0.26 TL), with a blunt snout
  * overhanging a small subterminal mouth, a keeled belly; the last dorsal ray drawn out into a long filament; a large
- * black spot behind the gill cover and rows of small dark dots along the upper flank; silver with a golden head,
- * yellowish fins and a deeply forked tail.
+ * black spot behind the gill cover above the lateral line and rows of small dark dots along the upper flank; silver
+ * with a golden head, yellowish fins and a deeply forked tail.
  */
 const KONOSHIRO: FishSpec = {
-  id: 'konoshiro', sizeClass: 'L', modelTL: 0.2, depth: 0.33, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
-  top: [[0, 0.02], [0.02, 0.03], [0.05, 0.04], [0.1, 0.07], [0.15, 0.1], [0.2, 0.125], [0.3, 0.15], [0.4, 0.16], [0.5, 0.15], [0.6, 0.12], [0.7, 0.075], [0.79, 0.04]],
-  bot: [[0, 0.02], [0.02, 0.03], [0.05, 0.04], [0.1, 0.07], [0.15, 0.095], [0.2, 0.115], [0.3, 0.14], [0.4, 0.15], [0.5, 0.14], [0.6, 0.11], [0.7, 0.065], [0.79, 0.036]],
+  id: 'konoshiro', sizeClass: 'L', modelTL: 0.2, depth: 0.26, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
+  top: [[0, 0.0196], [0.02, 0.0322], [0.05, 0.0468], [0.1, 0.0711], [0.15, 0.0912], [0.2, 0.1057], [0.3, 0.1197], [0.4, 0.1244], [0.5, 0.112], [0.6, 0.08], [0.7, 0.0563], [0.79, 0.0329]],
+  bot: [[0, 0.0218], [0.02, 0.0335], [0.05, 0.0472], [0.1, 0.0744], [0.15, 0.0928], [0.2, 0.1071], [0.3, 0.1288], [0.4, 0.1365], [0.5, 0.1208], [0.6, 0.0969], [0.7, 0.0626], [0.79, 0.0317]],
   width: [[0, 0.012], [0.02, 0.015], [0.05, 0.018], [0.1, 0.028], [0.15, 0.03705], [0.2, 0.0444], [0.3, 0.0522], [0.4, 0.05425], [0.5, 0.0493], [0.6, 0.0368], [0.7, 0.021], [0.79, 0.01064]],
   nTop: [[0, 2.1], [0.5, 2.0]], nBot: [[0, 2.0], [0.12, 1.35], [0.65, 1.35], [0.8, 2.0]],
   snoutCap: 0.035,
-  eyes: [{ s: 0.065, y: 0.012, r: 0.023, bulge: 0.007, pupil: 0.55, iris: [0xe0d098, 0x9a8a60], rim: 0x26261e, lid: 0.45 }],
+  eyes: [{ s: 0.075, y: 0.008, r: 0.021, bulge: 0.007, pupil: 0.55, iris: [0xe0d098, 0x9a8a60], rim: 0x26261e, lid: 0.45 }],
   mouth: { corner: 0.045, gape: [[0, -0.012], [0.045, -0.02]], open: 0.45, inside: 0.4 },
-  oper: { s: 0.19, sweep: 0.025, top: 0.13, bot: 0.125, step: 0.002 },
+  oper: { s: 0.21, sweep: 0.025, top: 0.1, bot: 0.11, step: 0.002 },
   fins: {
     median: [
       { id: 'd2', s0: 0.4, s1: 0.52, len: [[0, 0.09], [0.2, 0.09], [0.85, 0.04], [0.93, 0.08], [1, 0.25]], rake: [0.5, 1.2], rays: 16 },
@@ -491,7 +495,7 @@ const KONOSHIRO: FishSpec = {
     const rows = scaleDots(p, 52, 16, 0.28, 2) * smooth(0.05, 0.2, p.h) * (1 - smooth(0.8, 0.95, p.h)) * smooth(0.24, 0.3, p.s);
     tint(o, 0x2a3034, 0.55 * rows);
     // the black shoulder spot
-    tint(o, 0x14181a, 0.95 * Math.exp(-(((p.s - 0.235) / 0.02) ** 2) - (((p.y - 0.0) / 0.022) ** 2)));
+    tint(o, 0x14181a, 0.95 * Math.exp(-(((p.s - 0.235) / 0.016) ** 2) - (((p.y - 0.045) / 0.02) ** 2)));
     tint(o, 0xfafaf4, 0.35 * smooth(0.92, 0.99, -p.h) * (0.5 + 0.5 * Math.sin(p.s * 170)));
   },
   fin: finPainter({
@@ -511,15 +515,15 @@ const KONOSHIRO: FishSpec = {
  * cover, the lateral line arched high; the mouth white inside.
  */
 const ISHIMOCHI: FishSpec = {
-  id: 'ishimochi', sizeClass: 'L', modelTL: 0.25, depth: 0.28, pivot: 0.37, caudalBase: 0.79, headJoint: 0.2,
-  top: [[0, 0.025], [0.02, 0.035], [0.05, 0.05], [0.1, 0.09], [0.15, 0.12], [0.2, 0.14], [0.3, 0.16], [0.4, 0.155], [0.5, 0.13], [0.6, 0.1], [0.7, 0.06], [0.79, 0.044]],
-  bot: [[0, 0.02], [0.02, 0.028], [0.05, 0.04], [0.1, 0.06], [0.15, 0.08], [0.2, 0.095], [0.3, 0.1], [0.4, 0.1], [0.5, 0.09], [0.6, 0.075], [0.7, 0.05], [0.79, 0.04]],
+  id: 'ishimochi', sizeClass: 'L', modelTL: 0.25, depth: 0.27, pivot: 0.37, caudalBase: 0.79, headJoint: 0.2,
+  top: [[0, 0.0367], [0.02, 0.0528], [0.05, 0.0732], [0.1, 0.1019], [0.15, 0.1243], [0.2, 0.1396], [0.3, 0.1554], [0.4, 0.1489], [0.5, 0.143], [0.6, 0.1164], [0.7, 0.0675], [0.79, 0.0443]],
+  bot: [[0, 0.0347], [0.02, 0.0448], [0.05, 0.0596], [0.1, 0.07], [0.15, 0.0823], [0.2, 0.1026], [0.3, 0.1205], [0.4, 0.1283], [0.5, 0.1226], [0.6, 0.1117], [0.7, 0.0889], [0.79, 0.0407]],
   width: [[0, 0.01575], [0.02, 0.02048], [0.05, 0.027], [0.1, 0.04125], [0.15, 0.052], [0.2, 0.05875], [0.3, 0.0624], [0.4, 0.05865], [0.5, 0.0484], [0.6, 0.035], [0.7, 0.0198], [0.79, 0.01386]],
   nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.075, y: 0.05, r: 0.025, bulge: 0.008, pupil: 0.55, iris: [0xdcd4c0, 0x8a7e6c], rim: 0x221e1e }],
-  mouth: { corner: 0.09, gape: [[0, 0.0], [0.09, -0.035]], open: 0.55, inside: 0.9 },
-  oper: { s: 0.23, sweep: 0.03, top: 0.12, bot: 0.09, step: 0.003 },
+  eyes: [{ s: 0.093, y: 0.03, r: 0.027, bulge: 0.009, pupil: 0.55, iris: [0xdcd4c0, 0x8a7e6c], rim: 0x221e1e }],
+  mouth: { corner: 0.08, gape: [[0, -0.008], [0.08, -0.03]], open: 0.55, inside: 0.9 },
+  oper: { s: 0.26, sweep: 0.03, top: 0.12, bot: 0.1, step: 0.003 },
   fins: {
     median: [
       { id: 'd1', s0: 0.25, s1: 0.4, len: [[0, 0.06], [0.2, 0.11], [0.5, 0.08], [1, 0.022]], rake: [0.3, 0.7], rays: 10, spines: 10 },
@@ -527,7 +531,7 @@ const ISHIMOCHI: FishSpec = {
       { id: 'a', s0: 0.6, s1: 0.7, len: [[0, 0.05], [0.2, 0.075], [1, 0.035]], rake: [0.6, 0.95], rays: 9, spines: 2 },
     ],
     caudal: { len: 0.216, centre: 1.0, tip: 0.65, p: 1.3, spread: 0.12, rays: 17, base: 1.0 },
-    pectoral: { s: 0.24, y: -0.01, base: 0.03, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.15, -0.5], rest: 0.25, rays: 16 },
+    pectoral: { s: 0.26, y: -0.03, base: 0.03, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.15, -0.5], rest: 0.25, rays: 16 },
     pelvic: { s: 0.26, y: 0, base: 0.025, len: [[0, 0.1], [1, 0.05]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
   scales: { along: 52, around: 40, depth: 0.35 },
@@ -540,8 +544,8 @@ const ISHIMOCHI: FishSpec = {
     shade(o, 0.94 + 0.1 * mottle(p, 40, 12));
     tint(o, 0x6a6064, 0.45 * lateralLine(p, 0.62, 0.12, 0.028));
     // the black spot on the upper gill cover
-    tint(o, 0x161214, 0.92 * Math.exp(-(((p.s - 0.21) / 0.018) ** 2) - (((p.y - 0.06) / 0.02) ** 2)));
-    tint(o, 0x3a3436, 0.3 * eyeRim(p, 0.1, 0.036, 0.03));
+    tint(o, 0x161214, 0.92 * Math.exp(-(((p.s - 0.235) / 0.016) ** 2) - (((p.y - 0.035) / 0.02) ** 2)));
+    tint(o, 0x3a3436, 0.3 * eyeRim(p, 0.093, 0.03, 0.027));
   },
   fin: finPainter({
     def: { c: 0xd6d0bc, a: 0.4, ray: 0xbcb498, rayA: 0.65 },

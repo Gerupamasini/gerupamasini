@@ -22,7 +22,7 @@ export const BONE_COUNT = SPINE_N + 3;
 
 interface TierParams { rings: number; around: number; finU: number; finV: number; eye: number; mouth: boolean }
 export const TIERS: readonly TierParams[] = [
-  { rings: 112, around: 60, finU: 1, finV: 5, eye: 18, mouth: true },
+  { rings: 160, around: 84, finU: 1, finV: 6, eye: 22, mouth: true },
   { rings: 46, around: 26, finU: 0.45, finV: 3, eye: 9, mouth: true },
   { rings: 15, around: 10, finU: 0.18, finV: 1, eye: 0, mouth: false },
 ];

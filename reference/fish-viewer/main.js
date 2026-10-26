@@ -19,7 +19,7 @@ sun.position.set(0.4, 1, 0.5);
 scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x6a5a40, 0.6));
 
 let model = null;
-const state = { fish: 'suzuki', lod: 0, jaw: 0, amp: 0.0, phase: 0, curv: 0, head: 0, photo: 0 };
+const state = { fish: 'suzuki', lod: 0, jaw: 0, amp: 0.0, phase: 0, curv: 0, head: 0, photo: 0, mask: '', body: 0 };
 const params = new URLSearchParams(location.search);
 for (const k of Object.keys(state)) if (params.has(k)) state[k] = k === 'fish' ? params.get(k) : Number(params.get(k));
 
@@ -33,6 +33,8 @@ function build() {
   const p = restPose();
   p.jaw = state.jaw; p.amp = state.amp; p.phase = state.phase; p.curv = state.curv; p.pecL = p.pecR = 0.35;
   applyPose(model, p, state.lod);
+  // the body alone (its silhouette measured against the photographs' bodies)
+  if (state.body) model.frame.traverse((o) => { if (o.name === 'Fins') o.visible = false; });
   scene.updateMatrixWorld(true);
 }
 
@@ -66,6 +68,24 @@ function draw() {
   const W = canvas.clientWidth, H = canvas.clientHeight;
   renderer.setSize(W, H, false);
   scene.background.set(state.photo ? 0x87837b : 0x3a4a50);
+  if (state.mask) {
+    // a silhouette for measuring against the photographs: the fish over magenta, from the side ('side', head left,
+    // back up; a flatfish from above, its eyed side) or from above ('top', head left)
+    const spec = FISH_SPECS[state.fish], T = spec.modelTL;
+    scene.background.set(0xff00ff);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, W, H);
+    const half = 0.32 * T, a = W / H;
+    const cam = new THREE.OrthographicCamera(-half * a, half * a, half, -half, 0.001, 10);
+    const c = new THREE.Vector3(0, 0, (spec.pivot - 0.5) * T);
+    const fromAbove = (state.mask === 'top') !== !!spec.flat;
+    if (fromAbove) { cam.position.copy(c).add(new THREE.Vector3(0, T, 0)); cam.up.set(spec.flat ? -1 : 1, 0, 0); if (!spec.flat) cam.up.set(-1, 0, 0); }
+    else if (spec.flat) { cam.position.copy(c).add(new THREE.Vector3(-T, 0, 0)); cam.up.set(0, 1, 0); }
+    else { cam.position.copy(c).add(new THREE.Vector3(T, 0, 0)); cam.up.set(0, 1, 0); }
+    cam.lookAt(c);
+    renderer.render(scene, cam);
+    return;
+  }
   if (state.photo) {
     // the 図鑑's still: ¾ from the front and above, as the other species' stills
     const spec = FISH_SPECS[state.fish], T = spec.modelTL;
