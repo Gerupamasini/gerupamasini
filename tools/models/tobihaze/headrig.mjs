@@ -130,6 +130,18 @@ export function headWeights(pos, index, head, o = {}) {
   const suspJ = new Set(['J_suspL', 'J_suspR'].map((k) => idx[k]));
   const headOnly = new Set([idx.J_head]);
   const imjS = (HEAD_JOINTS.find((j) => j.name === 'J_imj')?.pivot[0] ?? 0.32) - (o.imjBack ?? 0.07);
+  // (round geoB1) the lower jaw's sides (head.mjs jaw.envelope): `jawSide` {suspS: the suspensoria kept off the jaw's
+  // skin in front of it, side: [from, to] past the dentary ramus' line (its half-width along s, jaw.ramus.path) over which
+  // the floor rule fades}; on only for a sculpt with the envelope (the hero's Head mesh at gapeFull, triangles stretched
+  // over 3× in area / 2.5× in edge: 307 / 294 → 155 / 173; T3 without the envelope 128 / 131)
+  const JS = o.jawSide ?? (o.K?.jaw?.envelope ? { suspS: 0.31, side: [-0.01, 0.02] } : null);
+  const RP = o.K?.jaw?.ramus?.path;
+  const zRamus = (x) => {
+    if (!RP) return Infinity;
+    if (x <= RP[0][0]) return RP[0][2];
+    for (let i = 0; i + 1 < RP.length; i++) if (x <= RP[i + 1][0]) return RP[i][2] + ((RP[i + 1][2] - RP[i][2]) * (x - RP[i][0])) / (RP[i + 1][0] - RP[i][0]);
+    return RP[RP.length - 1][2];
+  };
   // vertex normals (area-weighted), to tell the roof of the mouth (facing down) from its floor
   const vn = new Float32Array(n * 3);
   for (let t = 0; t < index.length; t += 3) {
@@ -185,6 +197,10 @@ export function headWeights(pos, index, head, o = {}) {
       // the palatines reach forward under the snout, but the snout's skin sheath is fixed to the skull: the
       // suspensoria move only the cheeks (behind the pads' front ends)
       if (suspJ.has(k)) d[k] += Math.max(0, 0.26 - x) * 2;
+      // (round geoB1, with head.mjs jaw.envelope: the lower jaw's own skin in front of the slit's end — its sides under
+      // the pads reach out past the suspensoria's palatines — stays off them up to the slit's end, so the full gape does
+      // not hold its shoulder back 6° against the jaw's 70°)
+      if (JS && suspJ.has(k) && lower) d[k] += Math.max(0, JS.suspS - x) * 2;
       // (round n17) in front of the intramandibular joint the lower jaw's flesh (the lip, the gum round the teeth, the
       // chin) is the dentary's: Meckel's cartilage, the articular's, runs forward inside the dentary under the tooth row
       // and took half the gum's weight, so the dentary's further 15° at the full gape sank the teeth into the gum (outside
@@ -201,7 +217,9 @@ export function headWeights(pos, index, head, o = {}) {
     // the lower jaw carries its own flesh (lips, chin, the rami's sides) and, in front of the hyoid, the intermandibular
     // skin slung between the rami (it swings down with them at the gape instead of tearing off them as a sliver); over
     // and behind the hyoid the floor belongs to the hyoid, which balloons it down in buccal pumping
-    const fl = FLOOR(x);
+    // (round geoB1, with head.mjs jaw.envelope: the mouth's floor is the skin between the rami; the jaw's own sides
+    // lateral of the ramus are not floor, so the hyoid's floor rule fades out across the ramus' line)
+    const fl = FLOOR(x) * (JS && lower ? 1 - smooth(zRamus(x) + JS.side[0], zRamus(x) + JS.side[1], Math.abs(z)) : 1);
     if (fl > 0 && d[idx.J_hyoid] < Infinity) for (const k of jawJ) if (d[k] < Infinity) d[k] += Math.max(0, d[k] - 0.03) * 2.5 * fl;
     let dm = Infinity;
     for (let k = 0; k < J; k++) dm = Math.min(dm, d[k]);
@@ -525,9 +543,24 @@ export function skinVertices(pos, nrm, skin, W) {
 //   'slave': each channel vertex at the mean of the lips within `reach` of it at rest, `keep` of its own offset kept, and
 //     the lips zipped: the slot a hairline too, but the channel shut on itself folds (+70 folds at the full blink, over
 //     the tear check's T3 + 10 %)
+// (round fl_eye1: `crease` null — the channel laid on the closed surface and relaxed with the rest of the skin, as
+// before fm_eye. Zipped half way ('transport', zip 0.5) the lips left the channel's floor open on the closed dome, and
+// its texels — the meniscus fill, the film, the crease's occlusion, baked on the bind's narrow channel — stretched ~30×
+// into a lens with a pale rim on every closed eye (b 0.9–1); zipped whole (zip 1 over several passes, the channel then
+// sunk under the lips' line) the lens went, but the carried zone kept the bind's spacing while the skin round it was
+// relaxed, and its edge showed in the baked maps as a hard-edged flap of stretched texels across the closed dome. Laid
+// with the rest, the channel's texels spread as the skin round them does: no lens on the closed dome (b 1, land lift:
+// the dome's ΔL* patches against 9977d95's at u1 / side 1453 / 832 px, the ship's 1781 / 1557; clay dark px 0 at u1,
+// side, low), and the full blink's new folds on Head_Orbit 374 (the ship's 376). The mid-blink slot the transport had
+// narrowed is taken out at the sculpt instead: the crease fades out before the turret's front foot (head.mjs
+// HEAD_SCULPT.cup.crease.front). Tried for the lid's edge and the seam's pale wedges mid-blink (the triangles between the
+// free rim and the tucked lining crossing the moving globe, the lining's texels on them) and left: `tuck` 0.008–0.02
+// (the fast head's lining px −11…−21 %, new folds +8…+45), `endsFree` back 0.7 / 0.85 (−26…−50 %, but Head_Orbit's
+// stretched triangles at b 0.25 336 → 467), `iters` 180 / 300, `rhoSmooth` 40, `hinge.offRim` [0.02, 0.05], `zipSeam`
+// smooth 60 / hops 12 (no change))
 export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.96, 0.995], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
   convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 },
-  crease: { mode: 'transport', eps: 0.0008, belowRim: 0.03, rings: 2, iters: 300, zip: 0.5, zipFill: true, reach: 0.015, keep: 0.08 } };
+  crease: null };
 export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const CO = { ...BLINK_CLOSE, ...(o.close ?? {}) };
   if (o.close && o.close.hinge !== undefined && o.close.hinge !== false) CO.hinge = { ...BLINK_CLOSE.hinge, ...o.close.hinge };
@@ -1393,7 +1426,7 @@ const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a
  * the gill cover's rim, the upper lip's pads, the rictal fold and its crease (the snout's sheath over the pads is the
  * face's own skin and stays). The inflation carries this smooth skin, and the features with
  * it (the margin and its shut slit ride out on the balloon, the pads' hind ends with the cheeks). */
-export function smoothSculpt(K) {
+export function smoothSculpt(K, o = {}) {
   const S = structuredClone(K);
   S.opercle.radius = S.opercle.radius.map(() => 0);
   // the gill cover's proud rim (head.mjs opercle.cover) rides on the balloon like the margin's fold: it keeps its step
@@ -1405,6 +1438,9 @@ export function smoothSculpt(K) {
   S.pad = { ...S.pad, radius: S.pad.radius.map(() => 1e-4), median: { ...S.pad.median, radius: S.pad.median.radius.map(() => 1e-4), blend: 0 }, seam: { r: 0, k: 0 }, web: undefined };
   S.rictal = { ...S.rictal, r: [1e-4, 1e-4, 1e-4], blend: 0 };
   S.rictalCrease = { ...S.rictalCrease, radius: S.rictalCrease.radius.map(() => 0) };
+  // (o.envelope false, round geoB1: without the lower jaw's envelope (head.mjs jaw.envelope), the skin the pads ride on
+  // in the inflation: inflateTargets o.smoothPad)
+  if (o.envelope === false && S.jaw?.envelope) S.jaw = { ...S.jaw, envelope: undefined };
   return S;
 }
 
@@ -1457,7 +1493,8 @@ export const INFLATE_TISSUE = {
  * @param smooth  the bind head without what rides on its skin (headSDF(smoothSculpt(K)))
  * @param target  the inflated head's field (head-inflated.mjs inflatedSDF)
  * @param o       { centreY: the sections' centre height (0.22), reach: the longest move (0.45 HL), K: the sculpt (its
- *                gape), tissue: INFLATE_TISSUE overrides }
+ *                gape), tissue: INFLATE_TISSUE overrides, smoothPad: the skin the pads ride on when it differs from
+ *                `smooth` (a sculpt with the lower jaw's envelope: headSDF(smoothSculpt(K, { envelope: false }))) }
  * @returns { d: Float32Array (HL, the displacement at full weight, the mask applied), mask: Float32Array (the share
  *   of the inflation: for the normals), premultiplied: true, projected: Uint8Array (the exactly projected skin) }
  */
@@ -1543,14 +1580,21 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
     let x = px, y = py, z = pz;
     // the skin under a feature: the nearest point of the smooth skin (the margin's fold stands on it, the slit's
     // pocket lies under it), which the feature rides with
-    let q = smooth(x, y, z);
+    // (o.smoothPad, round geoB1: the upper lip's pads, out to TI.pad.ride (0.02) from them, ride on the skin without
+    // the lower jaw's envelope (smoothSculpt envelope false): the envelope's shoulder under each pad was the nearest
+    // skin to the pad's lower half, which then went down with the jaw's side and stretched the pad's flank, area
+    // ×3–4.8 (the posed head's triangles over 3× in area in the inflated pose 169 → 93, T3 59, the pad's flank
+    // 86 → 11; the hero's Head mesh 40 / 9 / 39 → 26 / 0 / 30 over 3× in area / 2.5× in edge / new folds, T3 21 / 0 /
+    // 12); out to the whole iso (0.06) the throat behind the rictus took it too and tore there)
+    const sf = o.smoothPad && !lowF[v] && padU[v] < (TI.pad.ride ?? 0.02) ? o.smoothPad : smooth;
+    let q = sf(x, y, z);
     if (Math.abs(q) < 0.0015) proj[v] = 1;
     else if (Math.abs(q) < 0.07) {
       for (let k = 0; k < 4 && Math.abs(q) > 1e-5; k++) {
-        const e = 1e-4, gx = (smooth(x + e, y, z) - smooth(x - e, y, z)) / (2 * e), gy = (smooth(x, y + e, z) - smooth(x, y - e, z)) / (2 * e), gz = (smooth(x, y, z + e) - smooth(x, y, z - e)) / (2 * e);
+        const e = 1e-4, gx = (sf(x + e, y, z) - sf(x - e, y, z)) / (2 * e), gy = (sf(x, y + e, z) - sf(x, y - e, z)) / (2 * e), gz = (sf(x, y, z + e) - sf(x, y, z - e)) / (2 * e);
         const gg = gx * gx + gy * gy + gz * gz || 1;
         x -= (q * gx) / gg; y -= (q * gy) / gg; z -= (q * gz) / gg;
-        q = smooth(x, y, z);
+        q = sf(x, y, z);
       }
     } else { nFeat++; continue; }
     let dy = y - yc, dz = z, l = Math.hypot(dy, dz);
@@ -1559,7 +1603,7 @@ export function inflateTargets(pos, index, head, smooth, target, o = {}) {
     // hidden from outside along the ray (the mouth's inside, the nostrils): filled from round it
     let occluded = false;
     for (let t = 0.004, k = 0; t < 0.5 && k < 200; k++) {
-      const h = smooth(x, y + dy * t, z + dz * t);
+      const h = sf(x, y + dy * t, z + dz * t);
       if (h < -5e-4) { occluded = true; break; }
       t += Math.max(h, 0.002);
     }

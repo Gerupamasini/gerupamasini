@@ -127,7 +127,12 @@ export const HEAD_SCULPT = {
     // runs into the head without the dark slot its overhang made in front views (f_front: dark px under the
     // collar's lateral ends −24%; rounder (r 0.004 with the cups blended over 0.024) broke the crease into black
     // specks at the hero cell)
-    crease: { r: 0.005, k: 0.008, back: [0.03, 0.08], front: [0.0, 0.04] },
+    // (round fl_eye1: front [-0.05, 0.02], was [0, 0.04] — the crease gone from 0.02 HL in front of the centre (was 0.04)
+    // and at full depth only from 0.05 behind it (was at the centre), so it no longer runs under the turret's front foot:
+    // the blink, blending the bind and the closed shape linearly, turned that end's walls out into a dark slot with a
+    // pale lip under the dome mid-blink (clay slot px at the land lift, side / low: b 0.5 442 / 417 → 2 / 0, b 0.25 low
+    // 1513 → 87); further back, under the collar's overhang, it is as it was)
+    crease: { r: 0.005, k: 0.008, back: [0.03, 0.08], front: [-0.05, 0.02] },
   },
   // the skin between the two cups: the domes press together along the midline down to a shallow notch
   septum: { c: [0.33, 0.60], r: [0.10, 0.07, 0.045] },
@@ -147,8 +152,12 @@ export const HEAD_SCULPT = {
   // rear end hides more of it; widened from 0.25 the pocket's floor showed from below as a dark slot behind a lit tab
   // at each corner (under 102 slot px, now 58), and widened later than 0.27, or not at all, the thin end of the lower
   // lip under it folds in the posed mesh) (headrig.mjs gapeSide must carve with the same width: gapeHalf)
+  // (round geoB1: front.half 0.0095, was 0.004: the lower jaw's chin now sits up behind the median lip's lower edge,
+  // where a slit under 2 cells of the hero mesh (0.0112 HL) let the surface nets bridge the lips (157 triangles across
+  // the slit at 0.008, some left at 0.0075 at other grid offsets, none at 0.0095 at 4 offsets); from the front the slit
+  // is hidden behind the median lip, so its width does not show)
   gape: { yFront: 0.100, yBack: 0.092, half: 0.005, rictus: 0.290, close: 0.050, lean: 1.3, slitEnd: 0.290, endRound: 0.010, edge: 0.008,
-    front: { half: 0.004, s: [0.11, 0.15] }, back: { half: 0.0085, s: [0.265, 0.295] } },
+    front: { half: 0.0095, s: [0.11, 0.15] }, back: { half: 0.0085, s: [0.265, 0.295] } },
   // the upper lip (left half, mirrored): a swept roll from the thin median lip at the front midline along the
   // premaxilla's arm to the pad's rounded rear end over the maxilla's tip; a little taller than wide in section, its
   // rear end the fattest part; it hangs over the lower jaw's side (Murdy 1989: the upper lip overlaps both jaws when
@@ -170,7 +179,13 @@ export const HEAD_SCULPT = {
     // meets the pad (r 0.027 at z 0.118, its end 0.013 lower), so from the front the upper lip is one broad band whose
     // lower edge runs on into the pads' with no notch at the junction for the slit to show through (front ID at elev 6:
     // slit pixels beside the midline 255 → 0, jaw / upper lip at the midline 1.07 → 0.71; at elev 16 0.65 → 0.32))
-    median: { path: [[0.058, 0.081, 0.000], [0.060, 0.081, 0.040], [0.074, 0.083, 0.080], [0.098, 0.095, 0.118]], radius: [0.020, 0.020, 0.022, 0.027], blend: 0.045 },
+    // (round geoB1: fuller and lower at the front (r 0.022, its lower edge at y 0.049, was 0.061), so from the front
+    // the upper lip is a fuller band whose lower edge, the mouth line, runs lower, the lower jaw's chin tucked up behind
+    // it (jaw.envelope): front ID at the u5 camera (head elev 1), jaw / upper lip at the midline 1.233 → 0.778 on the
+    // head's mesh, 1.198 → 0.795 on the hero build, 1.909 → 0.791 on lod1)
+    // (round 1, from geoA1: fuller, r [0.024, 0.024, 0.025, 0.032] (geoB1 [0.022, 0.022, 0.023, 0.027]), each point's
+    // lower edge kept where geoB1 put it (0.049 at the midline), so the band over the mouth line is fuller from the front)
+    median: { path: [[0.058, 0.073, 0.000], [0.060, 0.073, 0.040], [0.074, 0.076, 0.080], [0.098, 0.0925, 0.118]], radius: [0.024, 0.024, 0.025, 0.032], blend: 0.045 },
     // the pad: a bean along the premaxilla's arm, its front end narrower and tucked under the bulb, its rear end the
     // fattest part, round, over the maxilla's tip at the rictus; sy: the section's vertical stretch
     // (side view 1.23 × 0.60 ED, aspect 2.0, widest at 0.57 of its length, its axis level, the front end 0.68 of the
@@ -182,9 +197,14 @@ export const HEAD_SCULPT = {
     // jaw (from above still 0.01 HL inside the snout's outline); side view 1.95 × its height, widest at 0.55 of its
     // length. The jaw seen under mid-pad, of the pad's visible height (ID raster of the bind head): 0.39 → 0.17 at elev 0,
     // 0.16 → 0.01 at elev 10, 0.13 → 0 at elev 12; B009's camera (62/12) 0.32 → 0.01)
-    path: [[0.098, 0.098, 0.117], [0.140, 0.105, 0.149], [0.188, 0.1146, 0.177], [0.240, 0.1136, 0.198], [0.284, 0.1116, 0.207]],
+    // (round geoB1, a slimmer bean: sy 1.08 (was 1.163) with the path lowered 0.0034–0.0048 so the lower edge stays
+    // where it was and the top comes down 0.005–0.010 HL, the side view 0.93 of its old height; the pad's visible
+    // height / length in the hero's ID raster 0.517 → 0.500 at u1's camera, 0.487 → 0.472 at B012's)
+    // (round 1, from geoA1: slimmer again, sy 1.01 with the path 0.009 lower than 8c598df's, the lower edge kept and the
+    // top down 0.017 HL (geoA1: visible h / l 0.476 on the ID raster at u1's camera); the envelope's carve reads it)
+    path: [[0.098, 0.089, 0.117], [0.140, 0.096, 0.149], [0.188, 0.1056, 0.177], [0.240, 0.1046, 0.198], [0.284, 0.1026, 0.207]],
     radius: [0.030, 0.049, 0.059, 0.063, 0.061],
-    sy: 1.163,
+    sy: 1.01,
     samples: 64,
     // the snout's skin sheath over the pad: a roll along its top carrying the face's side down onto it (from the front
     // the face runs on into the pads without a waist, B001, u5); slim, so the face above it stays one convex slope down
@@ -222,6 +242,7 @@ export const HEAD_SCULPT = {
   // (fuse: the blend of the jaw's tissue into the cheek and throat behind the rictus; at 0.05 its swell reached the
   // labial groove round the pad's rear end and pinched its bottom into a cusp)
   // (optional, off: fold, the lower lip's fold under each pad, see headSDF)
+  // (optional: envelope, the lower jaw's outer skin as one convex loft, see headSDF)
   jaw: {
     ramus: { path: [[0.094, 0.100, 0.000], [0.103, 0.100, 0.040], [0.138, 0.098, 0.084], [0.200, 0.092, 0.126], [0.276, 0.087, 0.158], [0.340, 0.084, 0.182]], radius: [0.012, 0.013, 0.015, 0.018, 0.022, 0.028] },
     floor: { c: [0.34, 0.060], r: [0.25, 0.060, 0.15] },
@@ -238,6 +259,28 @@ export const HEAD_SCULPT = {
     // hanging pad hides it from a little above (B009, B010) and from the front it is a narrow band under the mouth line
     // (u5, B002); the throat behind, the head's floor and the ground contacts are as before)
     under: { y: 0.021, s: [0.24, 0.32], k: 0.012 },
+    // (round geoB1) the low fuse of the jaw's tissue into the upper head fades out over y [0, 0.02] in front of the
+    // rictus (was [0.03, 0.06]): the pads' lower edges now reach down to y 0.045 over the jaw's envelope, and the wider
+    // fuse bridged the crease between them
+    fuseY: [0.0, 0.02],
+    // (round geoB1) the lower jaw's outer skin as one convex envelope (headSDF: a loft of superellipse sections, as the
+    // head's own loft, united with the jaw's tissue over k and ended behind the rictus by a rounded cut at end[0]),
+    // traced on the photos (B009, B012, B013 from the side, B010 at 3/4, u5 and B002 from the front): under each pad its
+    // widest point (w, yW) lies just inside the pad's lower edge (the pad's centre z + 0.008, its lowest point + 0.002),
+    // so the pad's lower part is a flap over the jaw's rounded shoulder (carve: the pad is cut back from the envelope by
+    // the gape's own slit, 2·half + g, its edge rounded by k) and below the flap the jaw's skin turns down and in at
+    // nL 1.5 to its underside (yB), one convex surface on into the throat behind the rictus; at the front a narrow
+    // rounded chin (s 0.074–0.10, nL 2) set back behind the median lip's lower edge and receding down and back
+    envelope: {
+      s: [0.076, 0.082, 0.090, 0.100, 0.120, 0.140, 0.160, 0.180, 0.200, 0.220, 0.240, 0.260, 0.280, 0.300, 0.320, 0.340, 0.370, 0.400],
+      w: [0.020, 0.048, 0.075, 0.098, 0.1416, 0.157, 0.1699, 0.1802, 0.193, 0.2033, 0.212, 0.2186, 0.2234, 0.220, 0.210, 0.200, 0.190, 0.180],
+      yW: [0.051, 0.053, 0.056, 0.060, 0.0548, 0.0492, 0.0484, 0.049, 0.0487, 0.0467, 0.0453, 0.0449, 0.0453, 0.048, 0.052, 0.055, 0.054, 0.050],
+      yT: [0.056, 0.063, 0.071, 0.078, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.086, 0.084, 0.080, 0.074],
+      yB: [0.048, 0.043, 0.039, 0.035, 0.028, 0.024, 0.0205, 0.0175, 0.0135, 0.009, 0.0055, 0.0055, 0.0075, 0.0075, 0.0075, 0.0075, 0.008, 0.010],
+      nU: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+      nL: [2, 2, 2, 2, 1.5, 1.5, 1.5, 1.45, 1.4, 1.3, 1.25, 1.25, 1.3, 1.4, 1.6, 1.8, 2, 2],
+      k: 0.012, end: [0.42, 0.03], carve: { g: 0.001, slit: true, k: 0.008 },
+    },
   },
   // the rictal fold: the web joining the pad's rear end to the lower lip at the corner, and its crease running on down
   // and back onto the cheek
@@ -508,6 +551,14 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
   // (under {y, s: [full, none], k}: the lower jaw's underside in front of the rictus held up at `y`, rounded by k, the
   // hold fading out over s, so behind the rictus the throat is the floor's as before)
   const UN = J.under;
+  // (envelope {s, w, yT, yB, yW, nU, nL, k, end: [s, round]}: the lower jaw's outer skin as one loft of superellipse
+  // sections like the head's own (loftSDF), ended behind the rictus by a rounded cut at end[0], and united with the
+  // jaw's tissue over k)
+  const ENV = J.envelope;
+  const envelope = ENV ? (() => {
+    const L = loftSDF(loftTables(ENV, 1024));
+    return (x, y, z) => (ENV.end ? smax(L(x, y, z), x - ENV.end[0], ENV.end[1]) : L(x, y, z));
+  })() : null;
   const jawTissue = (x, y, z) => {
     const za = Math.abs(z);
     let d = smin(ramus(x, y, za), jawFloor(x, y, z), J.blend);
@@ -515,6 +566,7 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     d = smin(d, lowerLip(x, y, za), J.blend * 0.5);
     if (lipFold) d = smin(d, lipFold(x, y, za), J.fold.blend);
     if (UN && x < UN.s[1] && y < UN.y + UN.k) { const wu = 1 - smoothstep(UN.s[0], UN.s[1], x); d += (smax(d, UN.y - y, UN.k) - d) * wu; }
+    if (envelope) d = smin(d, envelope(x, y, z), ENV.k);
     return d;
   };
   const cav = K.cavity;
@@ -528,7 +580,15 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
     let m = mass(x, y, z);
     if (sheath) m = smin(m, sheath(x, y, za), SH.k);
     if (w > 0) m += (smax(m, gapeY(x) - y, 0.008) - m) * w;
-    const p = pad(x, y, za);
+    let p = pad(x, y, za);
+    // (envelope.carve {g, k, slit}: the upper lip is cut back `g` (plus the slit's own width 2·half with `slit`) from the
+    // lower jaw's envelope, so the pad's lower part is a flap lying over the jaw's rounded shoulder and its lower edge a
+    // thin lip on the jaw, the slit between them as wide as the gape's)
+    // (carve.median false: only the pads are cut back, the median lip stays whole in front of the chin)
+    if (envelope && ENV.carve) {
+      const cut = ENV.carve.g + (ENV.carve.slit ? 2 * halfAt(x) : 0) - envelope(x, y, z);
+      p = ENV.carve.median === false ? smin(smax(bean(x, y, za), cut, ENV.carve.k), median(x, y, za), 0.02) : smax(p, cut, ENV.carve.k);
+    }
     // the labial groove along the pad's top and round its rear end (across the front the median lip runs on into the
     // snout without it); below the middle of the rear end it fades, and the pad runs into the cheek through the
     // rictal fold, a soft web (web: the s and y ranges where it takes over, its blend)
@@ -590,7 +650,9 @@ export function headSDF(K = HEAD_SCULPT, { cut = true, eyeDy = 0 } = {}) {
       if (wg > 0) j = smax(j, G.half * 2 * wg * wg * wg - u, G.edge ?? 0.002);
     }
     // behind the rictus, and everywhere low down on the throat, the jaw's tissue fuses into the head
-    const kf = J.fuse * Math.max(1 - w, 1 - smoothstep(0.03, 0.06, y));
+    // (fuseY: the heights over which the low fuse fades out in front of the rictus; [0.03, 0.06] by default)
+    const FY = J.fuseY ?? [0.03, 0.06];
+    const kf = J.fuse * Math.max(1 - w, 1 - smoothstep(FY[0], FY[1], y));
     let d = kf > 1e-4 ? smin(u, j, kf) : Math.min(u, j);
     if (crease && creaseOnSkin) d = CS ? d + crease(x, y, za) : ssub(d, crease(x, y, za), b.groove);
     return d;

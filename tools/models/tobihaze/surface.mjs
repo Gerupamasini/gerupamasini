@@ -175,7 +175,16 @@ export const HEAD_SKIN = {
   // within `dp` [full, none] (HL) of the lips' tubes, under the pad's axis (`y` [full, none]) and in front of the rictus
   // (`s` [full, none]), the occlusion floored at `floor` and the colour's crease darkening (ALBEDO_AO crease, fold) eased
   // by `ease`)
-  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 }, mouth: { dp: [0.012, 0.03], y: [0.105, 0.125], s: [0.32, 0.36], floor: 0.5, ease: 0.6 } },
+  // (round paint1: `dp` [0.03, 0.06] — the crease reaches the jaw's side deep under the pad's overhang, 0.02–0.05 off the
+  // tubes, where the colour's crease shade made the rictus end of the line near-black at u1 (L* 10) — and `y` [0.14, 0.17],
+  // `s` [0.36, 0.40] — the fold round the pad's rear end, the outline's near-black rear (u1 p10 L* 5–10) — the occlusion's
+  // floor 0.6 and the colour's crease eased by 0.85 there: the overhang's own shading draws the line and the outline;
+  // `band`: the jaw's skin under the pad, `dy` [from, full, full to, none] HL under the upper lip's lowest point (the pad's
+  // or the median lip's nearest section, ctx.lipEdge), off the lips by `off` [none, full] and in front of `s` [full, none],
+  // rougher by `rough` — its film too (the clearcoat's roughness is the ORM's G × the factor) — so the band's top, which
+  // faces up into the pad's underside, and its lower edge no longer catch the film's highlight (B013, q34, the low view;
+  // u1's band max at the silhouette 51 → 39); `under`: the jaw's lowest down-facing skin, see skinDetail)
+  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 }, mouth: { dp: [0.03, 0.06], y: [0.14, 0.17], s: [0.36, 0.40], floor: 0.6, ease: 0.85 }, band: { dy: [-0.002, 0.003, 0.045, 0.06], off: [0.002, 0.005], s: [0.30, 0.38], rough: 0.3 }, under: { ny: [0.6, 0.95], s: [0.34, 0.44], y: [0.024, 0.034], dp: [0.025, 0.04], ao: 0.6 } },
   lobe: { lines: 30, amp: 0.0042, ridges: 4, ridgeAmp: 0.009 },
   opercle: { period: 0.22, amp: 0.0018, band: 0.06 },           // gill cover margin wrinkles (band in HL)
   // eye collar folds: HL under the cup's rim, mm wide (round T2: four concentric folds, the eye finding's P9 — u1's
@@ -197,8 +206,11 @@ export const HEAD_SKIN = {
  * Pit organs of P. modestus (Lee, Choi & Ryu 1995, Fig. 4A, digitised: s back from the snout tip, height above the
  * head's lower outline, HL; the left side): the papillae rows on the snout, cheek, lower jaw, preopercle and opercle,
  * and the postorbital row onto the nape. Placed on the skin by a ray from the side at build time.
+ * (round paint1: the two of the mandibular row that the hanging pad now covers — Lee's (0.203, 0.074) and (0.225, 0.044),
+ * which a ray from the side lands on the pad's flank and underside — moved down onto the lower jaw's side under the band,
+ * (0.212, 0.016) and (0.236, 0.022): the pad carries no pit organs, u1's pad is smooth)
  */
-export const PIT_ORGANS = [[0.022, 0.132], [0.085, 0.153], [0.087, 0.029], [0.106, 0.018], [0.108, 0.169], [0.118, 0.417], [0.127, 0.291], [0.13, 0.046], [0.156, 0.225], [0.158, 0.045], [0.159, 0.383], [0.162, 0.308], [0.164, 0.463], [0.169, 0.271], [0.175, 0.037], [0.186, 0.375], [0.194, 0.028], [0.197, 0.25], [0.203, 0.074], [0.21, 0.432], [0.225, 0.044], [0.23, 0.473], [0.237, 0.107], [0.248, 0.03], [0.259, 0.076], [0.262, 0.114], [0.262, 0.151], [0.262, 0.251], [0.282, 0.09], [0.295, 0.032], [0.297, 0.064], [0.301, 0.13], [0.303, 0.198], [0.314, 0.099], [0.324, 0.075], [0.327, 0.271], [0.328, 0.246], [0.334, 0.214], [0.335, 0.376], [0.339, 0.044], [0.351, 0.139], [0.361, 0.323], [0.365, 0.273], [0.379, 0.167], [0.38, 0.012], [0.384, 0.043], [0.401, 0.129], [0.414, 0.318], [0.414, 0.542], [0.415, 0.075], [0.416, 0.039], [0.418, 0.019], [0.419, 0.106], [0.428, 0.241], [0.433, 0.731], [0.438, 0.627], [0.441, 0.679], [0.442, 0.651], [0.45, 0.025], [0.45, 0.054], [0.455, 0.281], [0.457, 0.689], [0.465, 0.109], [0.48, 0.076], [0.483, 0.638], [0.488, 0.161], [0.514, 0.227], [0.517, 0.024], [0.52, 0.646], [0.526, 0.058], [0.544, 0.019], [0.552, 0.653], [0.561, 0.049], [0.562, 0.076], [0.571, 0.114], [0.575, 0.019], [0.576, 0.158], [0.581, 0.053], [0.586, 0.328], [0.595, 0.034], [0.6, 0.444], [0.618, 0.023], [0.653, 0.442], [0.66, 0.016], [0.661, 0.037], [0.661, 0.644], [0.666, 0.056], [0.668, 0.383], [0.674, 0.079], [0.674, 0.238], [0.676, 0.327], [0.679, 0.108], [0.679, 0.163], [0.679, 0.192], [0.679, 0.266], [0.683, 0.134], [0.721, 0.165], [0.725, 0.647], [0.761, 0.168], [0.795, 0.645], [0.803, 0.172], [0.847, 0.663], [0.863, 0.412], [0.876, 0.385], [0.896, 0.35], [0.918, 0.682], [0.924, 0.308], [0.932, 0.657], [0.998, 0.713], [1.01, 0.693], [1.034, 0.689]];
+export const PIT_ORGANS = [[0.022, 0.132], [0.085, 0.153], [0.087, 0.029], [0.106, 0.018], [0.108, 0.169], [0.118, 0.417], [0.127, 0.291], [0.13, 0.046], [0.156, 0.225], [0.158, 0.045], [0.159, 0.383], [0.162, 0.308], [0.164, 0.463], [0.169, 0.271], [0.175, 0.037], [0.186, 0.375], [0.194, 0.028], [0.197, 0.25], [0.212, 0.016], [0.21, 0.432], [0.236, 0.022], [0.23, 0.473], [0.237, 0.107], [0.248, 0.03], [0.259, 0.076], [0.262, 0.114], [0.262, 0.151], [0.262, 0.251], [0.282, 0.09], [0.295, 0.032], [0.297, 0.064], [0.301, 0.13], [0.303, 0.198], [0.314, 0.099], [0.324, 0.075], [0.327, 0.271], [0.328, 0.246], [0.334, 0.214], [0.335, 0.376], [0.339, 0.044], [0.351, 0.139], [0.361, 0.323], [0.365, 0.273], [0.379, 0.167], [0.38, 0.012], [0.384, 0.043], [0.401, 0.129], [0.414, 0.318], [0.414, 0.542], [0.415, 0.075], [0.416, 0.039], [0.418, 0.019], [0.419, 0.106], [0.428, 0.241], [0.433, 0.731], [0.438, 0.627], [0.441, 0.679], [0.442, 0.651], [0.45, 0.025], [0.45, 0.054], [0.455, 0.281], [0.457, 0.689], [0.465, 0.109], [0.48, 0.076], [0.483, 0.638], [0.488, 0.161], [0.514, 0.227], [0.517, 0.024], [0.52, 0.646], [0.526, 0.058], [0.544, 0.019], [0.552, 0.653], [0.561, 0.049], [0.562, 0.076], [0.571, 0.114], [0.575, 0.019], [0.576, 0.158], [0.581, 0.053], [0.586, 0.328], [0.595, 0.034], [0.6, 0.444], [0.618, 0.023], [0.653, 0.442], [0.66, 0.016], [0.661, 0.037], [0.661, 0.644], [0.666, 0.056], [0.668, 0.383], [0.674, 0.079], [0.674, 0.238], [0.676, 0.327], [0.679, 0.108], [0.679, 0.163], [0.679, 0.192], [0.679, 0.266], [0.683, 0.134], [0.721, 0.165], [0.725, 0.647], [0.761, 0.168], [0.795, 0.645], [0.803, 0.172], [0.847, 0.663], [0.863, 0.412], [0.876, 0.385], [0.896, 0.35], [0.918, 0.682], [0.924, 0.308], [0.932, 0.657], [0.998, 0.713], [1.01, 0.693], [1.034, 0.689]];
 
 /**
  * The wetness model for the runtime (behaviour.md §2.5; the materials' extras tobihaze.wet): the maps hold the WET state
@@ -357,6 +369,25 @@ export function surfaceContext(fish, o = {}) {
   const bean = psy === 1 ? bean0 : (x, y, z) => bean0(x, pyc + (y - pyc) / psy, z) * Math.min(1, psy);
   const lowP = smoothPath(H.jaw.lip.path, H.jaw.lip.radius, 48), lowLip = tube(lowP.points, lowP.radii, 0.2);
   const pad = (x, y, z) => Math.min(smin(bean(x, y, z), median(x, y, z), 0.02), lowLip(x, y, z));
+  // (round paint1) the upper lip's lowest point over (x, y, z ≥ 0) HL as pattern.mjs's mouth line takes it — the nearest
+  // section of the pad (stretched by sy about its path's mean height) and of the median lip, their lowest points blended
+  // by nearness over 0.012 HL — { dy: HL under it, d: the nearer tube's distance }
+  const tubeNear = (q, T) => {
+    let best = { d: Infinity, cy: 0, r: 0 };
+    for (let i = 0; i + 1 < T.points.length; i++) {
+      const a = T.points[i], b = T.points[i + 1], ab0 = b[0] - a[0], ab1 = b[1] - a[1], ab2 = b[2] - a[2], ap0 = q[0] - a[0], ap1 = q[1] - a[1], ap2 = q[2] - a[2];
+      const t = clamp((ap0 * ab0 + ap1 * ab1 + ap2 * ab2) / (ab0 * ab0 + ab1 * ab1 + ab2 * ab2 || 1)), r = T.radii[i] + (T.radii[i + 1] - T.radii[i]) * t;
+      const d = Math.hypot(ap0 - ab0 * t, ap1 - ab1 * t, ap2 - ab2 * t) - r;
+      if (d < best.d) best = { d, cy: a[1] + ab1 * t, r };
+    }
+    return best;
+  };
+  const lipEdge = (x, y, z) => {
+    const b = tubeNear([x, pyc + (y - pyc) / psy, z], padP), m = tubeNear([x, y, z], medP);
+    const bd = b.d * Math.min(1, psy), byE = pyc + (b.cy - pyc) * psy - b.r * psy, myE = m.cy - m.r;
+    const wb = Math.exp(-Math.max(0, bd) / 0.012), wm = Math.exp(-Math.max(0, m.d) / 0.012);
+    return { dy: (wb * byE + wm * myE) / Math.max(1e-9, wb + wm) - y, d: Math.min(bd, m.d) };
+  };
   // the arm (HL, z ≥ 0) and its frame
   const arm = armField(K), PC = K.pectoral;
   const au = norm3(sub3(PC.wrist, PC.shoulder)), aL = len3(sub3(PC.wrist, PC.shoulder));
@@ -399,7 +430,7 @@ export function surfaceContext(fish, o = {}) {
     return Math.max((1 - sstep(JH.d[0], JH.d[1], pp.f)) * sstep(JH.j[0], JH.j[1], pp.j), und);
   } : null;
   return {
-    fish, K, H, size, tier: o.tier ?? 'hero', field: o.field !== false, relief: o.relief !== false, arcs, axisY, law, sOp, pad, arm, armFrame: { au, an, aw, aL, shoulder: PC.shoulder, radius: PC.radius }, jawHidden,
+    fish, K, H, size, tier: o.tier ?? 'hero', field: o.field !== false, relief: o.relief !== false, arcs, axisY, law, sOp, pad, lipEdge, arm, armFrame: { au, an, aw, aL, shoulder: PC.shoulder, radius: PC.radius }, jawHidden,
     pits, grid, gc, nostril, eyeC, eyeR, prof, keels, cup: H.cup, cupOpen: norm3(H.cup.open ?? [0, 0, 1]),
     // the band limits' footprint (mm a texel), ONE value for the whole map so the charts agree at their seams: the
     // coarsest of the skin's charts (fishmesh.mjs BODY_LAYOUT sizes the body's for 0.0019 HL a texel at 2048, the face's
@@ -1003,10 +1034,17 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
   const LMO = HEAD_SKIN.lip.mouth;
   const mouthW = LMO && part !== 'eyeSkin' && R.sh < LMO.s[1] && R.yh < LMO.y[1] ? (1 - sstep(LMO.dp[0], LMO.dp[1], ctx.pad(R.sh, R.yh, R.zh))) * (1 - sstep(LMO.y[0], LMO.y[1], R.yh)) * (1 - sstep(LMO.s[0], LMO.s[1], R.sh)) : 0;
   if (mouthW > 0) ao0 = Math.max(ao0, LMO.floor * mouthW);
+  // (round paint1: the lower jaw's and the chin's down-facing skin — HEAD_SKIN.lip.under: facing down by −n.y `ny` [none,
+  // full], in front of `s` [full, none] and under `y` [full, none] — sees the mud it stands over, not the sky: its occlusion
+  // × `ao`, so its film's grazing reflection of the sky (the clearcoat's indirect specular, which the occlusion scales)
+  // no longer draws a pale rim along the jaw's lower edge in a side view)
+  // (the occlusion map's only — the colour's crease shade below reads the sculpt's own occlusion, ao0)
+  const LU = HEAD_SKIN.lip.under;
+  const underAO = LU && part !== 'eyeSkin' && R.sh < LU.s[1] && R.yh < LU.y[1] ? 1 - (1 - LU.ao) * sstep(LU.ny[0], LU.ny[1], -nF[1]) * (1 - sstep(LU.s[0], LU.s[1], R.sh)) * (1 - sstep(LU.y[0], LU.y[1], R.yh)) * sstep(LU.dp[0], LU.dp[1], ctx.pad(R.sh, R.yh, R.zh)) : 1;
   // the fins' bases (their membranes are not in the field): a narrow contact shade along the keels' lines
   const finAO = finBaseShade(q, R, ctx);
   // (the relief's own cavities stay out of the occlusion: the normal map shades them; `cavity` carries them)
-  const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO);
+  const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO * underAO);
   // the colour's share (ALBEDO_AO): the creases (the macro occlusion with the fins' bases), the unbanded fine cavities,
   // the trunk's scale pockets about their mean
   const A = ALBEDO_AO, PK = A.pockets;
@@ -1053,6 +1091,12 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
   // (round T3: the meniscus at the turret's foot smoother, HEAD_SKIN.collar.menisc)
   if (MN) rough -= MN.rough * menisc;
   rough -= SHEET.crown * crown;
+  // (round paint1: the jaw's skin under the pad rougher, its film with it — HEAD_SKIN.lip.band)
+  const LB = HEAD_SKIN.lip.band;
+  if (LB && ctx.lipEdge && part !== 'eyeSkin' && R.sh < LB.s[1] && R.yh < 0.2) {
+    const E = ctx.lipEdge(R.sh, R.yh, R.zh);
+    rough += LB.rough * sstep(LB.dy[0], LB.dy[1], E.dy) * (1 - sstep(LB.dy[2], LB.dy[3], E.dy)) * sstep(LB.off[0], LB.off[1], E.d) * (1 - sstep(LB.s[0], LB.s[1], R.sh));
+  }
   // (round T3: a water bead's film a little rougher — PAPILLAE.bead.rough: the map's texel stands for the bead's many small
   // menisci, and a mirror-sharp lobe on a bead 4–6 texels wide misses the screen's pixels: the sun's glint on it would
   // flicker in and out with the view instead of sitting on the bead)

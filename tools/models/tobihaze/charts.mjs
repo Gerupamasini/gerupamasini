@@ -451,7 +451,7 @@ function triCharts(mesh) {
 
 /** The triangles a UV layout cannot keep: folded (against their chart's orientation), degenerate in UV while not in
  * 3D, or with a corner outside their chart's rect (beyond `tol`). Hidden charts (chart.hidden) are skipped. */
-export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, overlap = null, bleed = null } = {}) {
+export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, overlap = null, bleed = null, keep = null } = {}) {
   const { uv, indices: I, position: P } = mesh, triChart = triCharts(mesh);
   const orient = chartOrientation(mesh, charts.length);
   // the median texel stretch per chart (UV area per 3D area), to tell a collapsed triangle
@@ -481,9 +481,12 @@ export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, over
   // of another island of the same chart where the surface under the two lies more than `mm` apart — a projection's two
   // sheets side by side in the atlas, which a bake's dilation and mipmaps bleed into each other)
   if (bleed) {
-    const bl = bleedTriangles(mesh, charts, bleed);
+    const bl = bleedTriangles(mesh, charts, { ...bleed, keep });
     for (let t = 0; t < bad.length; t++) if (bl[t] && !bad[t]) bad[t] = 5;
   }
+  // (2026-10-26, keep: triangles whose layout is given — the decimation lock's held triangles on T3's own UVs, laid and
+  // checked by T3's build — never bad)
+  if (keep) for (let t = 0; t < bad.length; t++) if (keep[t]) bad[t] = 0;
   return bad;
 }
 
@@ -496,7 +499,7 @@ export function badTriangles(mesh, charts, { tol = 1e-6, degenerate = 0.02, over
  * chart cut by a few triangles sent elsewhere) are not flagged: a bake computes their texels from the same place.
  * @returns Uint8Array per triangle
  */
-export function bleedTriangles(mesh, charts, { size = 2048, gap = 3, mm = 0.3 } = {}) {
+export function bleedTriangles(mesh, charts, { size = 2048, gap = 3, mm = 0.3, keep = null } = {}) {
   const { uv, indices: I, position: P } = mesh, nt = I.length / 3, nv = P.length / 3, triChart = triCharts(mesh);
   const skip = (t) => { const C = charts[triChart[t]]; return !C || C.hidden || C.relay; };
   // islands per chart: triangles joined through their shared vertices (a vertex has one UV)
@@ -530,7 +533,8 @@ export function bleedTriangles(mesh, charts, { size = 2048, gap = 3, mm = 0.3 } 
         if (tq < 0 || isl[tq] === ip || triChart[tq] !== triChart[tp]) continue;
         const d2 = (pt[p * 3] - pt[q * 3]) ** 2 + (pt[p * 3 + 1] - pt[q * 3 + 1]) ** 2 + (pt[p * 3 + 2] - pt[q * 3 + 2]) ** 2;
         if (d2 <= mm2) continue;
-        // (the smaller island's triangle: it is the one a patch can take)
+        // (the smaller island's triangle: it is the one a patch can take; a kept triangle's neighbour across the gap first)
+        if (keep && keep[tp] !== keep[tq]) { out[keep[tp] ? tq : tp] = 1; continue; }
         if (count.get(ip) < count.get(isl[tq]) || (count.get(ip) === count.get(isl[tq]) && ip < isl[tq])) out[tp] = 1; else out[tq] = 1;
       }
     }
@@ -552,7 +556,9 @@ export function bleedTriangles(mesh, charts, { size = 2048, gap = 3, mm = 0.3 } 
  *               [other per-vertex arrays] }
  * @param charts the chart list; one of them named 'patch' (its rect, and its bins `rects` once spares are added)
  * @param o      { ring (2), minIsland (40), maxGrow (6), density: atlas share per mm, pad (atlas share), spare,
- *               maxPasses (3), overlap (badTriangles'), log }
+ *               maxPasses (3), overlap (badTriangles'), keep (2026-10-26: per triangle, those whose layout is given — the
+ *               decimation lock's held triangles on T3's UVs, tiers.restoreHeld —: never bad, never in an island, never
+ *               moved by a mend; the islands packed round the patch's kept ones, packAround), log }
  * @returns { mesh (new arrays, same triangle order), stats: { islands, singles, triangles, scale, passes, left, bins } }
  */
 export function repairFolds(mesh, charts, o = {}) {
@@ -574,7 +580,7 @@ export function repairFolds(mesh, charts, o = {}) {
     }
     // (then the small groups left mended inside the chart round them: relaxInChart)
     if (pass === 0 && o.relax !== false) {
-      const rx = relaxInChart(cur, charts, bad, { ...(o.relax ?? {}), size: o.overlap?.size ?? o.size ?? 2048 });
+      const rx = relaxInChart(cur, charts, bad, { ...(o.relax ?? {}), size: o.overlap?.size ?? o.size ?? 2048, keep: o.keep ?? null });
       if (rx.moved) { cur = rx.mesh; bad = badTriangles(cur, charts, o); stats.relaxed = rx.moved; stats.mended = rx.groups; }
     }
     const triChart = triCharts(cur);
@@ -683,7 +689,7 @@ function refitTriangles(mesh, charts, bad, { size = 2048 } = {}) {
  * stays for the patch. In `rounds` (a group whose neighbours were bad may find a chart once they are mended). Returns
  * { mesh, moved (triangles taken from the patch or a bad layout), groups (mended) }.
  */
-function relaxInChart(mesh, charts, bad, { rings = [2, 3, 4, 6], rounds = 3, maxTris = 60, maxRegion = 800, lo = 0.1, size = 2048 } = {}) {
+function relaxInChart(mesh, charts, bad, { rings = [2, 3, 4, 6], rounds = 3, maxTris = 60, maxRegion = 800, lo = 0.1, size = 2048, keep = null } = {}) {
   const { position: P, normal: N, indices: I0, source: src } = mesh, nt = I0.length / 3, nv = P.length / 3;
   const triChart = Int16Array.from(triCharts(mesh));
   const orient = chartOrientation(mesh, charts.length);
@@ -693,7 +699,7 @@ function relaxInChart(mesh, charts, bad, { rings = [2, 3, 4, 6], rounds = 3, max
   // working copies (new vertex copies appended)
   const I = Uint32Array.from(I0), uv = Array.from(mesh.uv), chart = Array.from(mesh.chart), depth = mesh.depth ? Array.from(mesh.depth) : null, from = [];
   // (the patch's own triangles too: a small piece of it inside one chart goes back to that chart if it fits)
-  const dead = Uint8Array.from(bad, (b, t) => ((b || charts[triChart[t]].relay) && !charts[triChart[t]].hidden ? 1 : 0));
+  const dead = Uint8Array.from(bad, (b, t) => ((b || charts[triChart[t]].relay) && !charts[triChart[t]].hidden && !keep?.[t] ? 1 : 0));
   // texels covered by the good triangles (counts)
   const occ = new Uint16Array(size * size);
   const good = (t) => !dead[t] && !charts[triChart[t]].hidden && !charts[triChart[t]].relay;
@@ -743,7 +749,7 @@ function relaxInChart(mesh, charts, bad, { rings = [2, 3, 4, 6], rounds = 3, max
           let front = new Set(g.flatMap((t) => [ws[t * 3], ws[t * 3 + 1], ws[t * 3 + 2]]));
           for (let r = 0; r < nr; r++) {
             const nf = new Set();
-            for (const w of front) for (const u of trisOf(w)) if (!inR.has(u) && triChart[u] === c && good(u)) { inR.add(u); for (let k = 0; k < 3; k++) nf.add(ws[u * 3 + k]); }
+            for (const w of front) for (const u of trisOf(w)) if (!inR.has(u) && triChart[u] === c && good(u) && !keep?.[u]) { inR.add(u); for (let k = 0; k < 3; k++) nf.add(ws[u * 3 + k]); }
             front = nf;
           }
           if (inR.size > maxRegion) break;
@@ -949,9 +955,10 @@ function relayIslands(mesh, charts, ci, bad, triChart, o) {
   // welded vertices (chart copies of a vertex are one); the triangles' edge neighbours through them
   const src = mesh.source, key = (v) => src[v];
   const nbr = triangleNeighbours(Uint32Array.from(I, (v) => key(v)), nt);
-  const hiddenT = (t) => charts[triChart[t]].hidden;
+  // (o.keep: triangles never taken into an island, as hidden ones)
+  const hiddenT = (t) => charts[triChart[t]].hidden || !!o.keep?.[t];
   const sel = new Uint8Array(nt);
-  for (let t = 0; t < nt; t++) if ((bad[t] && !hiddenT(t)) || triChart[t] === ci) sel[t] = 1;
+  for (let t = 0; t < nt; t++) if (((bad[t] || triChart[t] === ci) && !hiddenT(t))) sel[t] = 1;
   const count = () => sel.reduce((a, x) => a + x, 0), grownBy = [count()];
   // one ring of edge neighbours more round the triangles of `mask` (not already selected, not hidden)
   const growRing = (mask) => {
@@ -1020,8 +1027,12 @@ function relayIslands(mesh, charts, ci, bad, triChart, o) {
   const pad = o.pad ?? 4 / 2048;
   for (const pc of pieces) orientPiece(pc);
   let scale = dens;
+  // (2026-10-26: the kept triangles the patch already holds — the decimation lock's held ones on T3's own patch islands
+  // — stay where they are, and the islands are packed into the bins' texels they leave free: packAround)
+  const held = [];
+  if (o.keep) for (let t = 0; t < nt; t++) if (o.keep[t] && triChart[t] === ci) held.push(t);
   for (let tries = 0; tries < 40; tries++) {
-    if (shelfBins(pieces, scale, bins, pad)) break;
+    if (held.length ? packAround(pieces, scale, bins, pad, mesh.uv, I, held, o.overlap?.size ?? o.size ?? 2048) : shelfBins(pieces, scale, bins, pad)) break;
     scale *= 0.92;
   }
   // rebuild: each piece's welded vertices get new copies (one per welded vertex) with the packed UVs
@@ -1684,6 +1695,52 @@ function shelfBins(pieces, scale, bins, pad) {
     if (place(pc, w, h)) continue;
     if (place(pc, h, w)) { pc.rot = true; continue; }
     return false;
+  }
+  return true;
+}
+
+/**
+ * Pieces packed into the bins around triangles already there (2026-10-26): the texels those cover (their UV rect each,
+ * `pad` wider) taken, then each piece, the largest first, at the first place in the bins — scanned row by row, a texel
+ * of `size` at a time — whose rect with `pad` round it is free, turned 90° if that fits where the upright one does not.
+ * Sets pc.ox, pc.oy, pc.rot as shelfBins does; false if a piece finds no place.
+ */
+function packAround(pieces, scale, bins, pad, uv, I, tris, size) {
+  const N = size, occ = new Uint8Array(N * N);
+  const take = (x0, y0, x1, y1) => { for (let y = Math.max(0, y0); y < Math.min(N, y1); y++) occ.fill(1, Math.max(0, x0) + y * N, Math.min(N, x1) + y * N); };
+  // (texels outside every bin are taken: a piece must lie in one)
+  occ.fill(1);
+  for (const R of bins) for (let y = Math.max(0, Math.ceil(R[1] * N)); y < Math.min(N, Math.floor(R[3] * N)); y++) occ.fill(0, Math.max(0, Math.ceil(R[0] * N)) + y * N, Math.min(N, Math.floor(R[2] * N)) + y * N);
+  for (const t of tris) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let k = 0; k < 3; k++) { const v = I[t * 3 + k]; x0 = Math.min(x0, uv[v * 2]); x1 = Math.max(x1, uv[v * 2]); y0 = Math.min(y0, uv[v * 2 + 1]); y1 = Math.max(y1, uv[v * 2 + 1]); }
+    take(Math.floor((x0 - pad) * N), Math.floor((y0 - pad) * N), Math.ceil((x1 + pad) * N), Math.ceil((y1 + pad) * N));
+  }
+  // (a summed-area table, rebuilt after each placement)
+  const sat = new Int32Array((N + 1) * (N + 1));
+  const build = () => { for (let y = 0; y < N; y++) { let row = 0; for (let x = 0; x < N; x++) { row += occ[y * N + x]; sat[(y + 1) * (N + 1) + x + 1] = sat[y * (N + 1) + x + 1] + row; } } };
+  const busy = (x0, y0, x1, y1) => sat[y1 * (N + 1) + x1] - sat[y0 * (N + 1) + x1] - sat[y1 * (N + 1) + x0] + sat[y0 * (N + 1) + x0];
+  build();
+  const order = pieces.map((_, i) => i).sort((a, b) => Math.max(pieces[b].h, pieces[b].w) - Math.max(pieces[a].h, pieces[a].w) || pieces[b].h - pieces[a].h);
+  const gap = Math.ceil(pad * N);
+  const find = (w, h) => {
+    const W = Math.ceil(w * N) + 2 * gap, H = Math.ceil(h * N) + 2 * gap;
+    for (const R of bins) {
+      const bx0 = Math.ceil(R[0] * N), by0 = Math.ceil(R[1] * N), bx1 = Math.floor(R[2] * N), by1 = Math.floor(R[3] * N);
+      for (let y = by0; y + H <= by1; y++) for (let x = bx0; x + W <= bx1; x++) if (!busy(x, y, x + W, y + H)) return [x, y, W, H];
+    }
+    return null;
+  };
+  for (const i of order) {
+    const pc = pieces[i], w = pc.w * scale, h = pc.h * scale;
+    pc.rot = false;
+    let at = find(w, h);
+    if (!at) { at = find(h, w); if (at) pc.rot = true; }
+    if (!at) return false;
+    const [x, y, W, H] = at;
+    pc.ox = (x + gap) / N; pc.oy = (y + gap) / N;
+    for (let yy = y; yy < y + H; yy++) occ.fill(1, x + yy * N, x + W + yy * N);
+    build();
   }
   return true;
 }

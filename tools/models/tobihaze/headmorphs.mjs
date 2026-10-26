@@ -242,7 +242,8 @@ export function solveBindDelta(pos, skin, jointNames, W, E, o = {}) {
  *               iters 30, rings 2, lambda 0.5 }, run again once the seam is zipped), zip ({ gap 0.45, hops 2, iters 8,
  *               pair { gap 0.45, hops 3, passes 3 } }), clear (0.03 mm), unfold ({ reach 0.3, rounds 8, iters 20,
  *               rings 1 }), deep (0.12 mm) }
- * @returns { d: Float32Array (bind-frame displacement, mm), stats }
+ * @returns { d: Float32Array (bind-frame displacement, mm), at: { ids, w } (each wrapped vertex's closest target triangle and
+ *   weights at its final place; ids −1 elsewhere), stats }
  */
 export function wrapMorph(tier, target, o) {
   const n = tier.position.length / 3, I = tier.indices, names = tier.names, W = o.W;
@@ -517,7 +518,17 @@ export function wrapMorph(tier, target, o) {
     for (let k = 0; k < 3; k++) E[v * 3 + k] = (free[g] || (tuckedG[g] && (o.tuckMode === 'project' || gridB)) ? q[g * 3 + k] : Ps[v * 3 + k]) - bind[v * 3 + k];
   }
   const d = solveBindDelta(bind, tier.skin, names, W, E, { mask: sm });
-  return { d, stats: { wrapped: free.reduce((a, b) => a + b, 0), tucked, welded: m, iters, ...(okTri ? { collapsedTargetTris: okTri.count } : {}), ...(UT ? { untangleFlipped: untangle.flipped, ...(untangle.after ? { untangleAfterZip: untangle.after } : {}) } : {}), ...(ZP ? { seamZipped: zipped, seamPaired: paired } : {}), ...(CLR ? { cleared } : {}), ...(UF ? { unfold, unfoldShut: unfold.shut ?? 0 } : {}) } };
+  // (round fl_eye1: where each wrapped vertex finally lies on the target — its closest target triangle and the weights
+  // there, per tier vertex (ids −1 where not wrapped) — so the caller can shade the tier's closed skin with the target's
+  // own normals at those points)
+  const at = { ids: new Int32Array(n * 3).fill(-1), w: new Float32Array(n * 3) };
+  for (let v = 0; v < n; v++) {
+    const g = wid[v];
+    if (!(mask[v] > 0) || !free[g]) continue;
+    const c = closest([q[g * 3], q[g * 3 + 1], q[g * 3 + 2]]);
+    if (c) for (let k = 0; k < 3; k++) { at.ids[v * 3 + k] = c.ids[k]; at.w[v * 3 + k] = c.w[k]; }
+  }
+  return { d, at, stats: { wrapped: free.reduce((a, b) => a + b, 0), tucked, welded: m, iters, ...(okTri ? { collapsedTargetTris: okTri.count } : {}), ...(UT ? { untangleFlipped: untangle.flipped, ...(untangle.after ? { untangleAfterZip: untangle.after } : {}) } : {}), ...(ZP ? { seamZipped: zipped, seamPaired: paired } : {}), ...(CLR ? { cleared } : {}), ...(UF ? { unfold, unfoldShut: unfold.shut ?? 0 } : {}) } };
 }
 
 /** A small uniform grid over posed points for closest-point queries (transfer.mjs's vertexGrid, local copy so this
@@ -751,7 +762,9 @@ export async function headMorphs(sub, skin, o = {}) {
   if (needs('inflate') || needs('inflateMid')) {
     const IM = typeof o.inflated === 'object' && o.inflated ? o.inflated : await import(o.inflated ?? new URL('./head-inflated.mjs', import.meta.url).href);
     inflateField = IM.inflatedSDF(K, { cut: true, headSDF });
-    const inf = inflateTargets(head.position, head.indices, f, headSDF(smoothSculpt(K), { cut: true }), inflateField, { K, jawSplay: poseWorld(HEAD_POSES.inflated) });
+    // (smoothPad: with the lower jaw's envelope (head.mjs jaw.envelope) the pads ride on the skin without it)
+    const smoothPad = K.jaw?.envelope ? headSDF(smoothSculpt(K, { envelope: false }), { cut: true }) : undefined;
+    const inf = inflateTargets(head.position, head.indices, f, headSDF(smoothSculpt(K), { cut: true }), inflateField, { K, jawSplay: poseWorld(HEAD_POSES.inflated), smoothPad });
     // (the caller's override: parts that must stay off the balloon, e.g. the pectoral lobe's root and the pelvic base)
     if (o.inflateScale) for (let v = 0; v < inf.mask.length; v++) { const s = o.inflateScale[v]; if (s === 1) continue; inf.mask[v] *= s; for (let k = 0; k < 3; k++) inf.d[v * 3 + k] *= s; }
     inflate = inflateMorph(head.position, skin, poseWorld(HEAD_POSES.inflated), inf);

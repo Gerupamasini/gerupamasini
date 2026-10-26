@@ -131,12 +131,12 @@ import { vertexNormals, mergeParts, compactIndices } from '../../lib/gobyTiers.m
 import { HL, TL, SL, S0, EYE_MM, toObject, dirToObject } from './anatomy.mjs';
 import { HEAD_SCULPT, headSDF } from './head.mjs';
 import { BODY_SCULPT, trunkProfile } from './body.mjs';
-import { morphNormals, BLINK_DROP } from './headrig.mjs';
+import { morphNormals, BLINK_DROP, BLINK_CLOSE } from './headrig.mjs';
 import { bodyTierMesh, fishDense, tierField, morphAttrs, tierMorphAttrs, ready, BODY_LAYOUT, TIERS as MESH_TIERS, rectUVWH } from './fishmesh.mjs';
 // the atlas rects written in the extras as [u, v, w, h], rounded to 1e-4 (a fifth of a texel at 2048) so the contract
 // reads clean numbers (round T3)
 const uvwh = (r) => rectUVWH(r).map((x) => +x.toFixed(4));
-import { vertexTangents, tangentCheck, withDecimationLock } from './tiers.mjs';
+import { vertexTangents, tangentCheck, withDecimationLock, manifoldSkin } from './tiers.mjs';
 // (2026-10-25: lod1's and lod2's skin held to round T3's outside the eye and the mouth, decimlock.mjs)
 import { loadDecimationLock, changedCells, inFreeZone, FREE_ZONES } from './decimlock.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, finCard, finCardTargets, finTierParams } from './fins.mjs';
@@ -697,7 +697,17 @@ export async function heroData({ log = logDefault, cache = null, h = null } = {}
 export function lighterSkin(tierName, H, log = logDefault) {
   const TB = TIERS[tierName], T = MESH_TIERS[TB.mesh];
   const field = tierField(TB.mesh), shares = partShares(H.fish);
-  const dense = fishDense({ h: T.h, field, log });
+  let dense = fishDense({ h: T.h, field, log });
+  // (2026-10-26: the sealed skin kept 2-manifold where its dense mesh is not — tiers.manifoldSkin: a stray triangle
+  // doubled over a hole's cap dropped, sheets touching along an edge parted; the copies share their source, so
+  // bodyTierMesh keeps the parting as it keeps fishDense's own)
+  {
+    const ms = manifoldSkin(dense);
+    if (ms.dropped || ms.split) {
+      dense = { ...ms.mesh, stats: { ...dense.stats, split: (dense.stats?.split ?? 0) + ms.split, strays: ms.dropped } };
+      log(`${tierName}: dense skin made manifold: ${ms.dropped} stray triangles dropped, ${ms.split} vertices split (${ms.nonManifold} edges left with more than two triangles)`);
+    }
+  }
   const nD = dense.position.length / 3;
   const dcls = new Uint8Array(nD);
   for (let v = 0; v < nD; v++) dcls[v] = tissueClass([dense.position[v * 3], dense.position[v * 3 + 1], dense.position[v * 3 + 2]], { fish: H.fish, shares });
@@ -767,7 +777,7 @@ export function lighterSkin(tierName, H, log = logDefault) {
     // skin (headmorphs.wrapMorph); both eyes at once, split across the midline as the hero's blink is
     if (TB.morphs.includes('blinkL') && TB.morphs.includes('blinkR')) {
       const wr = lod1Blink(tier, skin, morphs.d.blinkL, morphs.d.blinkR, H);
-      morphs.d.blinkL = wr.L; morphs.d.blinkR = wr.R; morphs.blinkWrap = wr.stats;
+      morphs.d.blinkL = wr.L; morphs.d.blinkR = wr.R; morphs.blinkWrap = wr.stats; morphs.blinkNormal = wr.normal;
       log(`${tierName}: blinkL/R shrink-wrapped onto the hero's posed hood (${JSON.stringify(wr.stats)})`);
     }
     // the normals' deltas on the tier mesh welded by the dense vertex (HL positions and displacements)
@@ -775,7 +785,39 @@ export function lighterSkin(tierName, H, log = logDefault) {
     for (let v = 0; v < n; v++) { let j = weld.get(tier.source[v]); if (j === undefined) { j = weld.size; weld.set(tier.source[v], j); } wid[v] = j; }
     const nw = weld.size, WP = new Float32Array(nw * 3), WN = new Float32Array(nw * 3), WI = Uint32Array.from(tier.indices, (i) => wid[i]);
     for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) { WP[wid[v] * 3 + c] = tier.position[v * 3 + c] / HL; WN[wid[v] * 3 + c] = tier.normal[v * 3 + c]; }
+    // (round fl_eye1: the wrapped blink shaded as the hero's closed skin it lies on, as the hero's blink takes its closed
+    // surface's own normals (blinkTargets' normal and normalShare): at each wrapped vertex's final point on the hero's
+    // posed hood the hero's shading normal there (lod1Blink: its bind normal and both blinks' normal deltas, smooth over
+    // the closed dome), the delta to it from lod1's bind normal wherever the vertex moves (a share smoothstep(move[0],
+    // move[1], |move|) HL of both eyes' whole move, the shapes and the eye joints' drop) within the blink's region round
+    // the globes (BLINK_CLOSE.region); elsewhere (the tucked lining, the edge of the region) morphNormals' turned bind
+    // normal; split across the midline as the positions. Turned, the bind normals of lod1's cup lining and the crease's
+    // notch — 45–130° off their facets — shaded the closed dome with dark pits its geometry does not have; the posed lod1
+    // facets' own normals, coarse and crumpled at the seam, turned patches of it into flat mirrors of the sky)
+    const LBN = LOD1_BLINK_NORMALS, BNh = morphs.blinkNormal, blinkN = BNh && TB.morphs.includes('blinkL') && TB.morphs.includes('blinkR') && LBN ? (() => {
+      const WD = new Float32Array(nw * 3);
+      for (const nm of ['blinkL', 'blinkR']) { const jm = morphJointMove(nm, skin, TIER_JOINTS[tierName], n); for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) WD[wid[v] * 3 + c] += morphs.d[nm][v * 3 + c] / HL + (jm ? jm[v * 3 + c] : 0); }
+      const dn = morphNormals(WP, WN, WI, WD, { smooth: 2 });
+      const ec = EYE_MM.center.map((x) => x / HL), re = EYE_MM.radius / HL, [r0, r1] = BLINK_CLOSE.region, sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      // (the hero's normal per welded vertex: the mean over its tier vertices that have one)
+      const hn = new Float32Array(nw * 3), has = new Uint8Array(nw);
+      for (let v = 0; v < n; v++) if (BNh.has[v]) { has[wid[v]] = 1; for (let c = 0; c < 3; c++) hn[wid[v] * 3 + c] += BNh.N[v * 3 + c]; }
+      for (let j = 0; j < nw; j++) {
+        if (!has[j]) continue;
+        const r = Math.min(Math.hypot(WP[j * 3] - ec[0], WP[j * 3 + 1] - ec[1], WP[j * 3 + 2] - ec[2]), Math.hypot(WP[j * 3] - ec[0], WP[j * 3 + 1] - ec[1], WP[j * 3 + 2] + ec[2]));
+        const w = (1 - sm(re + r0, re + r1, r)) * sm(LBN.move[0], LBN.move[1], Math.hypot(WD[j * 3], WD[j * 3 + 1], WD[j * 3 + 2]));
+        if (!(w > 0)) continue;
+        const l = Math.hypot(hn[j * 3], hn[j * 3 + 1], hn[j * 3 + 2]) || 1;
+        for (let c = 0; c < 3; c++) dn[j * 3 + c] = (1 - w) * dn[j * 3 + c] + w * (hn[j * 3 + c] / l - WN[j * 3 + c]);
+      }
+      return dn;
+    })() : null;
     for (const nm of TB.morphs) {
+      if (blinkN && /^blink[LR]$/.test(nm)) {
+        const left = nm === 'blinkL';
+        morphs.n[nm] = Float32Array.from({ length: n * 3 }, (_, i) => { const v = (i / 3) | 0, z = tier.position[v * 3 + 2] / HL, tl = 0.5 + 0.5 * (Math.abs(z) < 0.03 ? Math.sin((z / 0.03) * Math.PI / 2) : Math.sign(z)); return blinkN[wid[v] * 3 + (i % 3)] * (left ? tl : 1 - tl); });
+        continue;
+      }
       // (round B4, tech P1: a shape posed by the eyes' translation (eyesUp, the wrapped blink) shaded on its whole move,
       // the eye joints' share of the lift or drop included: headmorphs.morphJointMove)
       const WD = new Float32Array(nw * 3), jm = morphJointMove(nm, skin, TIER_JOINTS[tierName], n);
@@ -788,6 +830,11 @@ export function lighterSkin(tierName, H, log = logDefault) {
   }
   return { tier, skin, cls, morphs };
 }
+
+/** lod1's wrapped blink's normals (lighterSkin, round fl_eye1): the hero's closed skin's shading normal where each wrapped
+ * vertex lies (lod1Blink), taken where the vertex moves more than move[0]…move[1] HL (a smoothstep share) within
+ * BLINK_CLOSE.region of a globe; null: morphNormals' turned bind normals as before */
+export const LOD1_BLINK_NORMALS = { move: [0.002, 0.012] };
 
 /**
  * lod1's blinkL / blinkR as a shrink-wrap of its hood onto the hero's posed blink (rig round B2, t_blink: 0 globe
@@ -816,7 +863,19 @@ function lod1Blink(tier, skin, dL, dR, H) {
     const z = tier.position[v * 3 + 2] / HL, tl = 0.5 + 0.5 * (Math.abs(z) < 0.03 ? Math.sin((z / 0.03) * Math.PI / 2) : Math.sign(z));
     for (let k = 0; k < 3; k++) { L[v * 3 + k] = wr.d[v * 3 + k] * tl; R[v * 3 + k] = wr.d[v * 3 + k] * (1 - tl); }
   }
-  return { L, R, stats: { ...wr.stats, masked: mask.reduce((a, b) => a + b, 0) } };
+  // (round fl_eye1: the hero's closed skin's shading normal where each wrapped vertex lies — its bind normal with both
+  // blinks' normal deltas, at the wrap's final target point — for lod1's blink normals, lighterSkin)
+  const N = new Float32Array(n * 3), has = new Uint8Array(n), HN = H.dense.normal, DL = H.DN.blinkL, DR = H.DN.blinkR;
+  for (let v = 0; v < n; v++) {
+    if (wr.at.ids[v * 3] < 0) continue;
+    const a = [0, 0, 0];
+    for (let k = 0; k < 3; k++) { const id = wr.at.ids[v * 3 + k], w = wr.at.w[v * 3 + k]; for (let c = 0; c < 3; c++) a[c] += w * (HN[id * 3 + c] + DL[id * 3 + c] + DR[id * 3 + c]); }
+    const l = Math.hypot(...a);
+    if (!(l > 1e-6)) continue;
+    for (let c = 0; c < 3; c++) N[v * 3 + c] = a[c] / l;
+    has[v] = 1;
+  }
+  return { L, R, normal: { N, has }, stats: { ...wr.stats, masked: mask.reduce((a, b) => a + b, 0) } };
 }
 
 // ------------------------------------------------------------------------------------------------ extras

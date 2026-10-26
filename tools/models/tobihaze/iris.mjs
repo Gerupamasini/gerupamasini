@@ -70,8 +70,10 @@ const mixTo = (c, k, a) => { if (a <= 0) return; if (a > 1) a = 1; c[0] += (k[0]
 export const EYE_PALETTE = {
   pupil: '#070f0f',        // the pupil's ground: near black, a hair teal (round T3; T2 #0b1414)
   pupilRuff: '#020303',    // the pupil's margin, a hair darker
-  ring: '#e0c45c',         // the gold ring (round fm_eye: gold, not cream — T3 #e6c47c rendered C* 25, h 85 at u1 against u1's
-                           // rim C* 35–50, h 88–95; T2 #f0cc70; u1 #dac28c, B010 #e8cda0 as photographed)
+  ring: '#ecc86a',         // the gold ring (round fm_eye: gold, not cream — T3 #e6c47c rendered C* 25, h 85 at u1 against u1's
+                           // rim C* 35–50, h 88–95; T2 #f0cc70; u1 #dac28c, B010 #e8cda0 as photographed; round fl_eye1:
+                           // fm_eye's #e0c45c rendered darker, more saturated and yellower than u1's rim (L* 62.7, C* 36.1,
+                           // h 90.5 against the photo's 75.0 / 31.6 / 88.2): lighter, warmer, a little less saturated)
   ringPale: '#e6d6a4',     // the ring's paler gold under the pupil (B010), run on over the lid margin (fm_eye: T3 #e6dcc2 cream)
   ringOrange: '#d9893a',   // the orange-copper variant (B020, B062): o.ring 'orange'
   iris: '#93774d',         // the olive-bronze iris outside the ring (A004 #927652, B010 #a68d65)
