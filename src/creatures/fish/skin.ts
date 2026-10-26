@@ -1,9 +1,12 @@
 import {
-  ClampToEdgeWrapping, DataTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshPhysicalMaterial,
+  ClampToEdgeWrapping, Color, DataTexture, DoubleSide, LinearFilter, LinearMipmapLinearFilter, MeshPhysicalMaterial,
   MeshStandardMaterial, NoColorSpace, RepeatWrapping, RGBAFormat, SRGBColorSpace, UnsignedByteType, Vector2,
   type IUniform, type Material, type Texture, type Wrapping,
 } from 'three';
-import { FIN_BAND_COUNT, profilesOf, sectionAt, sectionPoint, smooth, type FinId, type FinOut, type FishSpec, type SkinOut, type SkinSample } from './spec';
+import { bodyS } from './body';
+import { CAUSTIC_INJECT, ENV_INJECT, HAKU_UNIFORMS, HELPERS as UNDERWATER } from '../species/haku/materials';
+import { headRelief, type Relief } from './relief';
+import { FIN_BAND_COUNT, sectionAt, sectionPoint, smooth, type FinId, type FinOut, type FishSpec, type SkinOut, type SkinSample } from './spec';
 
 /**
  * 共通 PBR Material: what every fish is drawn with, painted per species once from its skin and fin functions.
@@ -56,6 +59,35 @@ export function spots(x: number, y: number, cell: number, r: number, seed = 0, r
     best = Math.max(best, 1 - smooth(rr * 0.75, rr, d));
   }
   return best;
+}
+
+/**
+ * The imbricate scale lattice at (x along, y round; one scale a unit, rows staggered by half a scale): of the scales that
+ * cover the point, the one whose centre is furthest forward lies on top (its exposed field overlaps the scale behind
+ * it). `d` is how far the point is from that scale's centre toward its free margin (1 at the margin), r1 and r2 the
+ * scale's own random numbers.
+ */
+export interface ScaleHit { d: number; r1: number; r2: number }
+export const SC: ScaleHit = { d: 0, r1: 0, r2: 0 };
+export function scaleAt(x: number, y: number, out: ScaleHit): ScaleHit {
+  const row0 = Math.floor(y);
+  let best = Infinity;
+  out.d = 1; out.r1 = 0.5; out.r2 = 0.5;
+  for (let rr = row0 - 1; rr <= row0 + 1; rr++) {
+    const off = rr & 1 ? 0.5 : 0;
+    const c0 = Math.floor(x - off);
+    for (let cc = c0 - 1; cc <= c0 + 1; cc++) {
+      const cx = cc + off + 0.5, cy = rr + 0.5;
+      // a scale reaches 0.95 back from its centre (where its margin lies) and less forward (into its pocket)
+      const dx = x - cx, dy = y - cy;
+      const d = Math.hypot(dx > 0 ? dx / 0.95 : dx / 0.6, dy / 0.78);
+      if (d < 1 && cx < best) {
+        best = cx; out.d = d;
+        out.r1 = hash(cc, rr, 11); out.r2 = hash(cc, rr, 29);
+      }
+    }
+  }
+  return out;
 }
 
 /** a ray pattern across a fin: 1 on a ray, 0 between (n rays over u ∈ [0, 1]) */
@@ -118,72 +150,64 @@ function shrink(src: Uint8Array, w: number, h: number, f: number): Uint8Array {
 
 const to8 = (x: number) => Math.max(0, Math.min(255, Math.round(x * 255)));
 
-/** the body's albedo and roughness/metalness, painted at w × h (u along the body, v round it) */
+/**
+ * The body's albedo (metalness in alpha) and normal map (roughness in alpha), painted at w × h: u along the body (the
+ * head given more of it, bodyS), v round it. The relief is in TL units: the scales (each a little tilted its own way,
+ * the glitter of a turning fish), the head's anatomy (relief.ts) and the creases' occlusion in the albedo.
+ */
 function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; normal: Uint8Array } {
-  const albedo = new Uint8Array(w * h * 4), rough = new Uint8Array(w * h), H = new Float32Array(w * h);
+  const albedo = new Uint8Array(w * h * 4), rough = new Uint8Array(w * h);
+  const H = new Float32Array(w * h), TX = new Float32Array(w * h), TY = new Float32Array(w * h);
+  const X = new Float32Array(w * h), Y = new Float32Array(w * h), Sx = new Float32Array(w);
   const eyes = spec.eyes.flatMap((e) => (e.side ? [{ e, side: e.side }] : [{ e, side: 1 }, { e, side: -1 }]));
   const iris: number[] = [0, 0, 0];
   const out: SkinOut = { r: 0, g: 0, b: 0, rough: 0.5, metal: 0 };
   const p: SkinSample = { s: 0, phi: 0, side: 1, h: 0, x: 0, y: 0 };
   const pt: [number, number] = [0, 0];
-  const len = spec.caudalBase + 0.03;
-  const oper = spec.oper;
-  const P = profilesOf(spec), gape = P.gape;
+  const rel: Relief = { h: 0, ao: 1 };
+  const oper = spec.oper, cb = spec.caudalBase;
   for (let i = 0; i < w; i++) {
-    const s = ((i + 0.5) / w) * len;
-    const sec = sectionAt(spec, Math.min(s, spec.caudalBase));
+    const s = bodyS(spec, (i + 0.5) / w);
+    Sx[i] = s;
+    const sec = sectionAt(spec, Math.min(s, cb));
     for (let j = 0; j < h; j++) {
       const phi = ((j + 0.5) / h) * 2 * Math.PI;
       sectionPoint(sec, phi, pt);
+      const o1 = j * w + i;
+      X[o1] = pt[0]; Y[o1] = pt[1];
       p.s = s; p.phi = phi; p.side = Math.sin(phi) >= 0 ? 1 : -1; p.x = pt[0]; p.y = pt[1];
       p.h = pt[1] >= 0 ? pt[1] / sec.top : pt[1] / sec.bot;
       out.rough = 0.45; out.metal = 0;
       spec.skin(p, out);
       let hgt = 0;
-      // the scales (behind the gill cover): a slight relief rising to each one's free margin, the margin a faint
-      // darker arc, every scale its own small difference of tone and sheen (the flicker of a turning fish)
-      // (the cheek's scales smaller and fainter, the snout and the crown bare)
-      const fade = (0.35 + 0.65 * smooth(oper.s - 0.02, oper.s + 0.01, s)) * smooth(oper.s - 0.13, oper.s - 0.09, s) * (1 - smooth(spec.caudalBase - 0.01, spec.caudalBase + 0.02, s));
+      // the scales (behind the gill cover, smaller and fainter on the cheek; the snout and the crown bare): a low relief
+      // rising to each one's free margin, the margin a faint darker arc, and every scale tilted a little its own way and
+      // a shade apart in tone and silver
+      const fade = (0.35 + 0.65 * smooth(oper.s - 0.02, oper.s + 0.01, s)) * smooth(oper.s - 0.13, oper.s - 0.09, s) * (1 - smooth(cb - 0.01, cb + 0.02, s));
       if (fade > 0) {
-        const sx = (s / spec.caudalBase) * spec.scales.along, sy = (phi / (2 * Math.PI)) * spec.scales.around;
-        const row = Math.floor(sy), fx = sx + (row & 1 ? 0.5 : 0), col = Math.floor(fx);
-        const cx = fx - col, cy = sy - row - 0.5;
-        const d = Math.min(1, Math.hypot(cx + 0.15, cy * 1.2) / 0.85);
-        const rnd = noise(col * 1.37, row * 2.11, 77);
-        hgt += fade * spec.scales.depth * (d * d - (d > 0.97 ? 1 : 0));
-        const k = 1 + fade * (-spec.scales.depth * 0.12 * (1 - smooth(0.02, 0.09, Math.abs(d - 0.9))) + 0.05 * (rnd - 0.5));
+        const sc = scaleAt((s / cb) * spec.scales.along, (phi / (2 * Math.PI)) * spec.scales.around, SC);
+        const d = sc.d, inner = 1 - d * d;
+        const size = 1 / spec.scales.along;
+        // the exposed field rises a little to the free margin, which steps down onto the scale behind
+        hgt += fade * spec.scales.depth * 0.06 * size * (d * d - smooth(0.9, 1.0, d));
+        // each scale tilted a little its own way (the glitter), most in its middle
+        TX[o1] = fade * 0.22 * (sc.r1 - 0.5) * inner;
+        TY[o1] = fade * 0.22 * (sc.r2 - 0.5) * inner;
+        // the margin's pigmented pocket, dark on the back, faint on the silver flank; each scale's own shade of tone and silver
+        const pig = (spec.scales.pigment ?? 0.3) * (0.25 + 0.75 * smooth(-0.3, 0.6, p.h));
+        const margin = smooth(0.72, 0.93, d) * (1 - smooth(0.97, 1.0, d));
+        const k = 1 + fade * (-pig * margin + 0.06 * (sc.r1 - 0.5));
         out.r *= k; out.g *= k; out.b *= k;
-        out.metal = Math.min(1, Math.max(0, out.metal + fade * 0.18 * (rnd - 0.5) * out.metal));
+        out.metal = Math.min(1, Math.max(0, out.metal * (1 + fade * (0.35 * (sc.r2 - 0.5) - 0.4 * margin))));
+        out.rough += fade * 0.08 * margin;
       }
-      // the gill cover's free edge: the plate stands proud of the body, a soft shadow under it
-      if (pt[1] < oper.top && pt[1] > -oper.bot) {
-        const hh = pt[1] >= 0 ? sec.top : sec.bot;
-        const edge = oper.s - oper.sweep * (pt[1] / hh) ** 2;
-        const side = Math.sin(phi) ** 2;
-        hgt += 0.5 * side * (1 - smooth(edge - 0.002, edge + 0.001, s)) * smooth(edge - 0.08, edge - 0.04, s);
-        const k = 1 - 0.16 * (1 - smooth(0.001, 0.007, s - edge)) * (s > edge ? 1 : 0) * side;
-        out.r *= k; out.g *= k; out.b *= k;
-      }
-      // the preopercle's margin: a fine line curving down and forward in front of the gill cover
-      if (pt[1] < oper.top * 0.8 && pt[1] > -oper.bot) {
-        const hh = pt[1] >= 0 ? sec.top : sec.bot, v = pt[1] / hh;
-        const pre = oper.s - 0.055 - 0.035 * Math.max(0, -v) ** 2 + 0.01 * v;
-        const line = (1 - smooth(0.0008, 0.003, Math.abs(s - pre))) * Math.sin(phi) ** 2;
-        hgt += 0.25 * line * (s < pre ? 1 : -0.3);
-        const k = 1 - 0.1 * line;
-        out.r *= k; out.g *= k; out.b *= k;
-      }
-      // the mouth: the lips' meeting a fine dark line, the maxilla's hind edge a shallow groove above it
-      const c = spec.mouth.corner;
-      if (s < c + 0.01) {
-        const g = gape(Math.min(s, c)) * (sec.top / Math.max(1e-4, P.top(Math.max(s, 0.6 * spec.snoutCap))));
-        const side = smooth(0.2, 0.5, Math.sin(phi) ** 2);
-        const lip = (1 - smooth(0.0008, 0.0028, Math.abs(pt[1] - g))) * side * smooth(0, 0.01, s) * (1 - smooth(c - 0.002, c + 0.006, s));
-        const mx = g + 0.016 * Math.min(1, s / c), groove = (1 - smooth(0.0006, 0.002, Math.abs(pt[1] - mx))) * side * smooth(0.25 * c, 0.6 * c, s) * (1 - smooth(c, c + 0.008, s));
-        hgt += 0.25 * lip - 0.2 * groove;
-        const k = 1 - 0.35 * lip - 0.12 * groove;
-        out.r *= k; out.g *= k; out.b *= k;
-      }
+      // living skin is never one flat tone: a fine mottle of pigment over it
+      const mot = 0.93 + 0.14 * fbm(s * 260, phi * 26, 13, 3);
+      out.r *= mot; out.g *= mot; out.b *= mot;
+      // the head's anatomy and the creases' shadows
+      headRelief(spec, s, pt[1], phi, sec, rel);
+      hgt += rel.h;
+      out.r *= rel.ao; out.g *= rel.ao; out.b *= rel.ao;
       // the eyes: the iris and pupil painted on the skin under each eye (the eye's cornea maps onto it; the far tier,
       // which has no eyeballs, shows them flat)
       for (const { e, side } of eyes) {
@@ -194,23 +218,23 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
         const t = 1 - smooth(1.0, 1.14, Math.hypot(dx, dy));
         out.r += (iris[0] - out.r) * t; out.g += (iris[1] - out.g) * t; out.b += (iris[2] - out.b) * t;
         out.metal *= 1 - t; out.rough += (0.3 - out.rough) * t;
-        hgt *= 1 - t;
+        hgt *= 1 - t; TX[o1] *= 1 - t; TY[o1] *= 1 - t;
       }
-      H[j * w + i] = hgt;
-      const o = (j * w + i) * 4;
-      albedo[o] = to8(out.r); albedo[o + 1] = to8(out.g); albedo[o + 2] = to8(out.b); albedo[o + 3] = to8(out.metal);
-      rough[j * w + i] = to8(out.rough);
+      H[o1] = hgt;
+      albedo[o1 * 4] = to8(out.r); albedo[o1 * 4 + 1] = to8(out.g); albedo[o1 * 4 + 2] = to8(out.b); albedo[o1 * 4 + 3] = to8(out.metal);
+      rough[o1] = to8(out.rough);
     }
   }
-  // the relief as a tangent-space normal map (u along the body, v round it)
+  // the relief as a tangent-space normal map: slopes over the real distances between texels (TL)
   const normal = new Uint8Array(w * h * 4);
-  const kx = 0.7, ky = 0.7;
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-    const hx = H[j * w + Math.min(w - 1, i + 1)] - H[j * w + Math.max(0, i - 1)];
-    const hy = H[((j + 1) % h) * w + i] - H[((j + h - 1) % h) * w + i];
-    const nx = -hx * kx, ny = -hy * ky, l = Math.hypot(nx, ny, 1);
-    const o = (j * w + i) * 4;
-    normal[o] = to8(0.5 + 0.5 * nx / l); normal[o + 1] = to8(0.5 + 0.5 * ny / l); normal[o + 2] = to8(0.5 + 0.5 / l); normal[o + 3] = rough[j * w + i];
+    const o1 = j * w + i;
+    const i0 = Math.max(0, i - 1), i1 = Math.min(w - 1, i + 1), j0 = (j + h - 1) % h, j1 = (j + 1) % h;
+    const du = Math.max(1e-5, Sx[i1] - Sx[i0]);
+    const dv = Math.max(1e-5, Math.hypot(X[j1 * w + i] - X[j0 * w + i], Y[j1 * w + i] - Y[j0 * w + i]));
+    const nx = -(H[j * w + i1] - H[j * w + i0]) / du + TX[o1], ny = -(H[j1 * w + i] - H[j0 * w + i]) / dv + TY[o1];
+    const l = Math.hypot(nx, ny, 1);
+    normal[o1 * 4] = to8(0.5 + 0.5 * nx / l); normal[o1 * 4 + 1] = to8(0.5 + 0.5 * ny / l); normal[o1 * 4 + 2] = to8(0.5 + 0.5 / l); normal[o1 * 4 + 3] = rough[o1];
   }
   return { albedo, normal };
 }
@@ -235,28 +259,35 @@ function paintFins(spec: FishSpec, w: number, bandH: number): Uint8Array {
   return data;
 }
 
-/** the eye's colour at (dx, dy) on its disc (radii): black pupil, a narrow fibrous metallic iris, a dark rim */
+/**
+ * The eye's colour at (dx, dy) on its disc (radii): a black pupil with a little depth, the iris a band of guanine silver
+ * or gold, fibrous, darker toward the rim and shadowed under the orbit's upper edge, the rim dark; no bright ring.
+ */
 function eyeColour(spec: FishSpec, dx: number, dy: number, c: number[]): void {
   const e = spec.eyes[0];
   const i0 = hex(e.iris[0]), i1 = hex(e.iris[1]), rim = hex(e.rim ?? 0x1a1a18);
-  const pupil = Math.max(e.pupil, 0.58);
   const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+  // (the pupil reaches a little further forward: the aphakic gap in front of the lens)
+  const pupil = Math.max(e.pupil, 0.6) * (1 + 0.1 * Math.max(0, -dx / Math.max(r, 1e-4)));
   if (r < pupil) {
-    const k = 0.015 + 0.04 * (1 - smooth(0, pupil, r));
-    c[0] = k * 0.8; c[1] = k * 0.95; c[2] = k * 1.2;
-  } else if (r < 0.9) {
-    const t = (r - pupil) / (0.9 - pupil);
-    const fib = 0.78 + 0.35 * noise(a * 14, t * 3, 3);
-    const ring = 1 - smooth(0, 0.25, t);
-    for (let k = 0; k < 3; k++) c[k] = (i0[k] * (0.55 + 0.45 * ring) + (i1[k] - i0[k]) * smooth(0.3, 1, t) * 0.8) * fib * (1 - 0.35 * smooth(0.6, 1, t));
+    const k = 0.012 + 0.03 * (1 - smooth(0, pupil, r));
+    c[0] = k * 0.8; c[1] = k * 0.95; c[2] = k * 1.15;
+  } else if (r < 0.92) {
+    const t = (r - pupil) / (0.92 - pupil);
+    const fib = 0.82 + 0.26 * noise(a * 18, t * 4, 3) + 0.08 * noise(a * 60, t * 2, 5);
+    for (let k = 0; k < 3; k++) c[k] = (i0[k] + (i1[k] - i0[k]) * smooth(0.15, 0.95, t)) * fib * 0.82;
+    // the upper iris in the orbit's shadow, the pupil's edge a thin dark line
+    const shade = 1 - 0.35 * smooth(0.0, 0.8, dy) * smooth(0.4, 1, t + 0.3);
+    const edge = 1 - 0.45 * (1 - smooth(0, 0.12, t));
+    for (let k = 0; k < 3; k++) c[k] *= shade * edge;
   } else {
-    const t = smooth(0.9, 1.0, r);
-    for (let k = 0; k < 3; k++) c[k] = i1[k] * 0.5 * (1 - t) + rim[k] * t;
+    const t = smooth(0.92, 1.0, r);
+    for (let k = 0; k < 3; k++) c[k] = i1[k] * 0.5 * (1 - t) + (rim[k] * 0.5 + i1[k] * 0.25) * t;
   }
   if (e.lid) {
     // the clear fatty eyelid clouds the front and back of the eye a little
-    const lid = e.lid * 0.6 * smooth(0.55, 0.95, Math.abs(dx));
-    for (let k = 0; k < 3; k++) c[k] += (0.55 - c[k]) * lid;
+    const lid = e.lid * 0.5 * smooth(0.55, 0.95, Math.abs(dx));
+    for (let k = 0; k < 3; k++) c[k] += (0.45 - c[k]) * lid;
   }
 }
 
@@ -266,19 +297,43 @@ export const FIN_TIME: IUniform<number> = { value: 0 };
 
 export interface FinRipple { amp: IUniform<number>; phase: IUniform<number> }
 
+/**
+ * A fin: a thin membrane between rays. The light that comes through it from behind (the sun over a fish seen from
+ * below or against the light) is added to the side that faces the eye, coloured by the membrane: fins glow, as thin
+ * tissue does, rather than going dark when the sun is behind them.
+ */
 function finMaterial(map: Texture, ripple: FinRipple): MeshStandardMaterial {
-  const m = new MeshStandardMaterial({ map, transparent: true, side: DoubleSide, depthWrite: false, alphaTest: 0.02, roughness: 0.42, metalness: 0 });
+  const m = new MeshStandardMaterial({ map, transparent: true, side: DoubleSide, depthWrite: false, alphaTest: 0.02, roughness: 0.34, metalness: 0 });
   m.name = 'fish-fin';
+  m.envMapIntensity = 0.25;
   m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, HAKU_UNIFORMS);
     sh.uniforms.uFinAmp = ripple.amp;
     sh.uniforms.uFinPhase = ripple.phase;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aFin;\nuniform float uFinAmp;\nuniform float uFinPhase;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += objectNormal * (aFin.y * uFinAmp * sin(aFin.x * 28.0 - uFinPhase));');
+      .replace('#include <common>', '#include <common>\nattribute vec2 aFin;\nuniform float uFinAmp;\nuniform float uFinPhase;\nvarying vec3 vWPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += objectNormal * (aFin.y * uFinAmp * sin(aFin.x * 28.0 - uFinPhase));')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', `${UNDERWATER}\nvoid main() {`)
+      .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT)
+      .replace('#include <lights_fragment_maps>', ENV_INJECT)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  // thin living tissue: it scatters the light it is bathed in, from in front and from behind (the sun through a fin
+  // seen against it most of all), so a fin reads milky and glows rather than going dark
+  vec3 nW = inverseTransformDirection(normal, viewMatrix);
+  vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
+  float back = pow(clamp(dot(vW, hkSunDir()), 0.0, 1.0), 3.0);
+  totalEmissiveRadiance += diffuseColor.rgb * ((hkUnderwater(nW, 1.0) + hkUnderwater(-nW, 1.0)) * 0.22 + hkSunCol() * back * 0.25 * (1.0 - 0.5 * diffuseColor.a));
+}`);
   };
-  m.customProgramCacheKey = () => 'fish-fin-v1';
+  m.customProgramCacheKey = () => 'fish-fin-v3';
   return m;
 }
+
+/** a gill cover's opening (0 shut … 1 flared) and the gill chamber's colour, written per fish before each body draw */
+export interface GillState { open: IUniform<number>; inside: IUniform<Color> }
 
 export interface FishLook {
   /** per tier */
@@ -286,6 +341,7 @@ export interface FishLook {
   fins: MeshStandardMaterial[];
   eyes: MeshPhysicalMaterial[];
   ripple: FinRipple;
+  gill: GillState;
   textureBytes: number[];
   dispose(): void;
 }
@@ -309,6 +365,7 @@ export function fishLook(spec: FishSpec): FishLook {
   const textures: Texture[] = [];
   const bytes: number[] = [];
   const ripple: FinRipple = { amp: { value: 0 }, phase: { value: 0 } };
+  const gill: GillState = { open: { value: 0 }, inside: { value: new Color(spec.inside ?? 0x5a1414) } };
   const body: MeshPhysicalMaterial[] = [], fins: MeshStandardMaterial[] = [], eyes: MeshPhysicalMaterial[] = [];
   for (let t = 0; t < 3; t++) {
     const S = SIZES[t], f = S0.bw / S.bw, ff = S0.fw / S.fw;
@@ -317,29 +374,65 @@ export function fishLook(spec: FishSpec): FishLook {
     const b = new MeshPhysicalMaterial({
       map, roughness: 1, metalness: 1,
       normalMap: normal, normalScale: new Vector2(1, 1),
-      clearcoat: spec.wet, clearcoatRoughness: 0.22, vertexColors: true,
+      // a film of water and mucus: a thin, sharp coat over the skin's own sheen
+      clearcoat: 0.45 * spec.wet, clearcoatRoughness: 0.1, vertexColors: true,
+      // both faces: where the skin opens (the gill covers, the mouth) the inside is drawn as the gill chamber
+      side: DoubleSide,
+      iridescence: spec.iridescence ?? 0, iridescenceIOR: 1.33, iridescenceThicknessRange: [180, 460],
+      specularIntensity: 0.8,
     });
     b.name = `fish-body-${spec.id}-${t}`;
     // roughness from the normal map's alpha, metalness (the silver) from the albedo's: three maps a tier in all
+    // under water the silver mirrors the water round it, the sunlit bed below and the sky only through Snell's window
+    // (the ハク's light field), and the ripples' caustics play over the back
+    b.envMapIntensity = 0.25;
     b.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, HAKU_UNIFORMS);
+      sh.uniforms.uGillOpen = gill.open;
+      sh.uniforms.uInside = gill.inside;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aGill;\nvarying float vGill;\nvarying vec3 vWPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGill = aGill;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float uGillOpen;\nuniform vec3 uInside;\nvarying float vGill;')
+        .replace('void main() {', `${UNDERWATER}\nvoid main() {`)
+        .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT)
+        .replace('#include <lights_fragment_maps>', ENV_INJECT)
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * texture2D( normalMap, vNormalMapUv ).a;')
-        .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = metalness * texture2D( map, vMapUv ).a;');
+        .replace('#include <metalnessmap_fragment>', `float metalnessFactor = metalness * texture2D( map, vMapUv ).a;
+  // the gill chamber: seen through the skin's open edges (back faces), and in the slit behind a flared gill cover
+  float chamber = gl_FrontFacing ? clamp(vGill * uGillOpen * 1.6, 0.0, 1.0) : 1.0;
+  diffuseColor.rgb = mix(diffuseColor.rgb, uInside, chamber);
+  metalnessFactor *= 1.0 - chamber;
+  roughnessFactor = mix(roughnessFactor, 0.55, chamber);`);
     };
-    b.customProgramCacheKey = () => 'fish-body-v1';
+    b.customProgramCacheKey = () => 'fish-body-v3';
     body.push(b);
     const finT = dataTexture(ff === 1 ? fins0 : shrink(fins0, S0.fw, S0.fh * FIN_BAND_COUNT, ff), S.fw, S.fh * FIN_BAND_COUNT, true);
     fins.push(finMaterial(finT, ripple));
     textures.push(map, normal, finT);
     bytes.push((S.bw * S.bh * 8 + S.fw * S.fh * FIN_BAND_COUNT * 4) * 4 / 3);
     if (S.eye) {
-      const e = new MeshPhysicalMaterial({ map, roughness: 0.35, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04 });
+      // the iris is guanine silver like the flank: it mirrors the water round the fish under the glossy cornea
+      const e = new MeshPhysicalMaterial({ map, roughness: 0.32, metalness: 0.75, clearcoat: 1, clearcoatRoughness: 0.03 });
       e.name = `fish-eye-${spec.id}-${t}`;
+      e.envMapIntensity = 0.25;
+      e.onBeforeCompile = (sh) => {
+        Object.assign(sh.uniforms, HAKU_UNIFORMS);
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+          .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('void main() {', `${UNDERWATER}\nvoid main() {`)
+          .replace('#include <lights_fragment_maps>', ENV_INJECT);
+      };
+      e.customProgramCacheKey = () => 'fish-eye-v1';
       eyes.push(e);
     }
   }
   const look: FishLook = {
-    body, fins, eyes, ripple, textureBytes: bytes,
+    body, fins, eyes, ripple, gill, textureBytes: bytes,
     dispose() {
       for (const m of [...body, ...fins, ...eyes] as Material[]) m.dispose();
       for (const t of textures) t.dispose();

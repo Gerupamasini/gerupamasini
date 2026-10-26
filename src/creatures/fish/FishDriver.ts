@@ -10,6 +10,7 @@ import { FishAgent, type FishEnv } from './motion';
 import { applyPose, buildFishModel, disposeFishModel, hookRipple, restPose, setLodDistances, type FishModel } from './rig';
 import { releaseSchool, schoolFor } from './school';
 import { FISH_SPECS } from './species';
+import { tickHakuMaterials } from '../species/haku/materials';
 import type { FishSpec } from './spec';
 
 function strHash(s: string): number {
@@ -176,6 +177,8 @@ export class FishDriver implements Driver {
     const a = this.agent, ind = this.ind, model = this.model, root = this.root;
     if (!a || !ind || !model || !root) return;
     this.player.copy(ctx.player);
+    // the underwater light field's clock (the caustics; shared with the ハク)
+    tickHakuMaterials(performance.now() / 1000);
     const sdt = Math.min(0.1, dt * ctx.simScale);
     const env: FishEnv = { floor: ctx.floor, bounds: ctx.bounds, minDepth: Math.max(0.02, ctx.minDepth ?? 0.02), canBurrow: ctx.canBurrow !== false };
     a.alarm = ind.alert;
@@ -189,7 +192,8 @@ export class FishDriver implements Driver {
       model.lod.autoUpdate = !this.locked;
       if (this.locked) model.lod.levels.forEach((l, i) => { l.object.visible = i === 0; });
     }
-    setLodDistances(model, this.scale, this.locked || ind.lod <= 1);
+    // (in a tank or the case nobody assigns the detail tiers: the distance decides alone)
+    setLodDistances(model, this.scale, this.locked || ind.lod <= 1 || !!ctx.bounds);
     a.detail = this.level;
     const steps = Math.max(1, Math.ceil(sdt * 30 - 1e-6));
     for (let i = 0; i < steps; i++) a.update(sdt / steps, env);

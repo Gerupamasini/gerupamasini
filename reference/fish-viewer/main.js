@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FISH_SPECS } from '../../src/creatures/fish/species';
 import { applyPose, buildFishModel, restPose } from '../../src/creatures/fish/rig';
+import { HAKU_UNIFORMS } from '../../src/creatures/species/haku/materials';
 
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -14,12 +15,12 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x3a4a50);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.55;
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(0.4, 1, 0.5);
-scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x6a5a40, 0.6));
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
+sun.position.set(0.35, 1, 0.25);
+scene.add(sun, new THREE.HemisphereLight(0xb8d8e0, 0x6a5a40, 0.7));
 
 let model = null;
-const state = { fish: 'suzuki', lod: 0, jaw: 0, amp: 0.0, phase: 0, curv: 0, head: 0, photo: 0, mask: '', body: 0 };
+const state = { fish: 'suzuki', lod: 0, jaw: 0, amp: 0.0, phase: 0, curv: 0, head: 0, photo: 0, mask: '', body: 0, water: 0, oper: 0 };
 const params = new URLSearchParams(location.search);
 for (const k of Object.keys(state)) if (params.has(k)) state[k] = k === 'fish' ? params.get(k) : Number(params.get(k));
 
@@ -31,7 +32,7 @@ function build() {
   model.lod.levels[0].object.visible = true;
   scene.add(model.frame);
   const p = restPose();
-  p.jaw = state.jaw; p.amp = state.amp; p.phase = state.phase; p.curv = state.curv; p.pecL = p.pecR = 0.35;
+  p.jaw = state.jaw; p.amp = state.amp; p.phase = state.phase; p.curv = state.curv; p.pecL = p.pecR = 0.35; p.oper = state.oper;
   applyPose(model, p, state.lod);
   // the body alone (its silhouette measured against the photographs' bodies)
   if (state.body) model.frame.traverse((o) => { if (o.name === 'Fins') o.visible = false; });
@@ -82,6 +83,21 @@ function draw() {
     if (fromAbove) { cam.position.copy(c).add(new THREE.Vector3(0, T, 0)); cam.up.set(spec.flat ? -1 : 1, 0, 0); if (!spec.flat) cam.up.set(-1, 0, 0); }
     else if (spec.flat) { cam.position.copy(c).add(new THREE.Vector3(-T, 0, 0)); cam.up.set(0, 1, 0); }
     else { cam.position.copy(c).add(new THREE.Vector3(T, 0, 0)); cam.up.set(0, 1, 0); }
+    cam.lookAt(c);
+    renderer.render(scene, cam);
+    return;
+  }
+  if (state.water) {
+    // under water, as in the tank or the shallows: one view, from the side and a little above, close
+    const spec = FISH_SPECS[state.fish], T = spec.modelTL;
+    scene.background.set(0x2c4a4e);
+    HAKU_UNIFORMS.uAir.value = 0;
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, W, H);
+    const c = new THREE.Vector3(0, 0, (spec.pivot - (state.water === 2 ? 0.16 : 0.5)) * T);
+    const cam = new THREE.PerspectiveCamera(30, W / H, 0.001, 20);
+    const off = state.water === 2 ? new THREE.Vector3(0.55, 0.12, 0.35) : spec.flat ? new THREE.Vector3(0.6, 1.4, 0.5) : new THREE.Vector3(1.9, 0.35, 0.45);
+    cam.position.copy(c).addScaledVector(off, T * (state.water === 2 ? 0.75 : 1.0));
     cam.lookAt(c);
     renderer.render(scene, cam);
     return;

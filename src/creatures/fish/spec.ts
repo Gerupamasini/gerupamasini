@@ -178,10 +178,16 @@ export interface FishSpec {
     pectoral: PairedFinSpec;
     pelvic: PairedFinSpec;
   };
-  /** the scales of the normal map: rows along the body and round it, and how deep */
-  scales: { along: number; around: number; depth: number };
+  /** the scales: rows along the body and round it, how deep their relief, how dark their margins' pockets on the back */
+  scales: { along: number; around: number; depth: number; pigment?: number };
   /** wetness (clearcoat) */
   wet: number;
+  /** the thin-film sheen of guanine silver (iridescence 0..1): the rainbow flicker of a herring's flank */
+  iridescence?: number;
+  /** how strongly the head's anatomy shows (relief.ts): lips, the maxilla's height (TL), the orbit's rim, the preopercle */
+  relief?: { lips?: number; maxilla?: number; orbit?: number; pre?: number; preDepth?: number };
+  /** the colour of what is behind the skin where it opens (the gill chamber under a flared gill cover) */
+  inside?: number;
   skin(p: SkinSample, out: SkinOut): void;
   fin(id: FinId, u: number, v: number, out: FinOut): void;
   swim: SwimSpec;

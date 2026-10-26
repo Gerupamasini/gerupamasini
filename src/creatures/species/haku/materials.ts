@@ -57,8 +57,8 @@ varying vec3 vFin;
 varying vec3 vWPos;
 `;
 
-/** helpers that need the light uniforms: placed just before main() */
-const HELPERS = /* glsl */ `
+/** helpers that need the light uniforms: placed just before main() (shared with the coastal fishes, fish/skin.ts) */
+export const HELPERS = /* glsl */ `
 uniform float uHakuTime;
 uniform vec3 uWaterTint;
 uniform vec3 uSandTint;
@@ -152,7 +152,7 @@ float hkCaustic(vec3 p) {
 `;
 
 /** what replaces the indirect lighting's environment: the underwater light field */
-const ENV_INJECT = /* glsl */ `
+export const ENV_INJECT = /* glsl */ `
 #include <lights_fragment_maps>
 {
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
@@ -168,7 +168,7 @@ const ENV_INJECT = /* glsl */ `
 `;
 
 /** caustics over the direct (sun) light, on the faces that look up */
-const CAUSTIC_INJECT = /* glsl */ `
+export const CAUSTIC_INJECT = /* glsl */ `
 #include <lights_fragment_begin>
 {
   float upW = inverseTransformDirection(normal, viewMatrix).y;

@@ -15,7 +15,7 @@ const all = ['suzuki', 'mejina', 'kisu', 'magochi', 'hirame', 'bora', 'sappa', '
 const only = arg('--only', null)?.split(',') ?? all;
 // --photo: the 図鑑's stills (public/data/photos/<species>.jpg, 640 × 400)
 const PHOTO = { suzuki: 'lateolabrax_japonicus', mejina: 'girella_punctata', kisu: 'sillago_japonica', magochi: 'platycephalus_sp2', hirame: 'paralichthys_olivaceus', bora: 'mugil_cephalus_adult', sappa: 'sardinella_zunasi', konoshiro: 'konosirus_punctatus', ishimochi: 'pennahia_argentata' };
-const lod = Number(arg('--lod', 0)), jaw = Number(arg('--jaw', 0)), head = Number(arg('--head', 0)), photo = args.includes('--photo'), mask = arg('--mask', ''), bodyOnly = args.includes('--body');
+const lod = Number(arg('--lod', 0)), jaw = Number(arg('--jaw', 0)), head = Number(arg('--head', 0)), photo = args.includes('--photo'), mask = arg('--mask', ''), bodyOnly = args.includes('--body'), water = Number(arg('--water', 0)), oper = Number(arg('--oper', 0));
 fs.mkdirSync(outDir, { recursive: true });
 const PORT = 5207;
 const url = `http://localhost:${PORT}/gerupamasini/reference/fish-viewer/index.html`;
@@ -37,7 +37,7 @@ try {
   await page.goto(`${url}?fish=${only[0]}&lod=${lod}`);
   await page.waitForFunction(() => window.view?.ready);
   for (const id of only) {
-    await page.evaluate(([id, lod, jaw, head, photo, mask, bodyOnly]) => window.view.set({ fish: id, lod, jaw, head, photo: photo ? 1 : 0, mask, body: bodyOnly ? 1 : 0, amp: photo ? 0.05 : 0, curv: photo ? 0.3 : 0, phase: 1.2 }), [id, lod, jaw, head, photo, mask, bodyOnly]);
+    await page.evaluate(([id, lod, jaw, head, photo, mask, bodyOnly, water, oper]) => window.view.set({ fish: id, lod, jaw, head, photo: photo ? 1 : 0, mask, water, oper, body: bodyOnly ? 1 : 0, amp: photo ? 0.05 : 0, curv: photo ? 0.3 : 0, phase: 1.2 }), [id, lod, jaw, head, photo, mask, bodyOnly, water, oper]);
     if (mask) {
       // a silhouette over magenta for tools/models/fish/measure (the comparison with the photographs)
       const f = path.join(outDir, `${id}_${mask}${bodyOnly ? 'body' : ''}.png`);
@@ -45,7 +45,7 @@ try {
       console.log(f);
       continue;
     }
-    const file = photo ? path.join(outDir, `${PHOTO[id]}.jpg`) : path.join(outDir, `${id}${lod ? `_lod${lod}` : ''}${jaw ? '_jaw' : ''}${head ? '_head' : ''}.jpg`);
+    const file = photo ? path.join(outDir, `${PHOTO[id]}.jpg`) : path.join(outDir, `${id}${lod ? `_lod${lod}` : ''}${jaw ? '_jaw' : ''}${head ? '_head' : ''}${water ? `_w${water}` : ''}.jpg`);
     await page.screenshot({ path: file, type: 'jpeg', quality: 85 });
     console.log(file);
   }

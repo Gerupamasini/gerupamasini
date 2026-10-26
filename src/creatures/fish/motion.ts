@@ -90,6 +90,10 @@ export class FishAgent {
   private escDir = 0;
   private wanderH = 0;
   private breath = 0;
+  private effort = 0;
+  private eyeT = 0;
+  private eyeYawT = 0;
+  private eyePitchT = 0;
   private tailPh = 0;
   private finPh = 0;
   private lastEvent = '';
@@ -405,10 +409,21 @@ export class FishAgent {
     const turn = clamp(this.yawRate / Math.max(rel, 1.2), -5, 5) * 0.8;
     p.curv = damp(p.curv, turn + curvKick, curvKick !== 0 ? 60 : 10, dt);
     p.headBend = damp(p.headBend, headBend, 6, dt);
-    // breathing: the jaw works a little, more after a burst
-    this.breath += TAU * (this.state === 'ESCAPE' ? 3 : 1.3) * dt;
-    const bj = 0.06 * (0.5 + 0.5 * Math.sin(this.breath));
+    // breathing, the buccal pump: the mouth opens to draw water in while the gill covers are shut, then closes as they
+    // swing out to drive it over the gills; faster and deeper after a burst, slower with size
+    this.effort = damp(this.effort, this.state === 'ESCAPE' || this.state === 'STRIKE' ? 1 : this.speed / (tl * B.burst), this.state === 'ESCAPE' ? 3 : 0.25, dt);
+    this.breath += TAU * (1.1 + 1.6 * this.effort) * Math.pow(0.2 / Math.max(0.05, tl), 0.3) * dt;
+    const bj = (0.05 + 0.12 * this.effort) * (0.5 + 0.5 * Math.sin(this.breath));
     p.jaw = damp(p.jaw, Math.max(jaw, bj), jaw > 0.3 ? 30 : 10, dt);
+    p.oper = damp(p.oper, (0.25 + 0.75 * this.effort) * Math.max(0, Math.sin(this.breath - 2.2)), 14, dt);
+    // the eyes: small saccades now and then, a held gaze between; toward the strike's aim
+    this.eyeT -= dt;
+    if (this.eyeT <= 0) {
+      this.eyeT = 0.6 + this.rnd() * 2.2;
+      this.eyeYawT = (this.rnd() - 0.5) * 0.35; this.eyePitchT = (this.rnd() - 0.5) * 0.2;
+    }
+    p.eyeYaw = damp(p.eyeYaw, this.state === 'STRIKE' ? 0.25 : this.eyeYawT, 25, dt);
+    p.eyePitch = damp(p.eyePitch, this.eyePitchT, 25, dt);
     // pectorals: spread when hovering or braking, pressed flat at speed
     const press = clamp(k - 0.8, 0, 1);
     const pw = pec * (1 - 0.8 * press);

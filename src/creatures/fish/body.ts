@@ -10,7 +10,9 @@ import {
  * eyes, and the fins as thin skinned sheets drawn through a fin atlas. Three tiers per species, built once and shared.
  *
  * Bones: S0 … S7 along the axis (S0 the head joint: in front of it the skull is rigid; S7 the caudal base), Jaw (a child
- * of S0 at the corner of the mouth), PecL / PecR (at the pectoral bases).
+ * of S0 at the corner of the mouth), PecL / PecR (at the pectoral bases), OperL / OperR (the gill covers, hinged in front:
+ * they swing out as the fish breathes and the red of the gill chamber shows behind them), Eye0 / Eye1 (each eyeball
+ * turns in its orbit), Caud (the caudal fin's rays bend behind the peduncle).
  */
 
 export type Lod = 0 | 1 | 2;
@@ -18,7 +20,12 @@ export const SPINE_N = 8;
 export const BONE_JAW = SPINE_N;
 export const BONE_PECL = SPINE_N + 1;
 export const BONE_PECR = SPINE_N + 2;
-export const BONE_COUNT = SPINE_N + 3;
+export const BONE_OPERL = SPINE_N + 3;
+export const BONE_OPERR = SPINE_N + 4;
+export const BONE_EYE0 = SPINE_N + 5;
+export const BONE_EYE1 = SPINE_N + 6;
+export const BONE_CAUD = SPINE_N + 7;
+export const BONE_COUNT = SPINE_N + 8;
 
 interface TierParams { rings: number; around: number; finU: number; finV: number; eye: number; mouth: boolean }
 export const TIERS: readonly TierParams[] = [
@@ -55,6 +62,22 @@ export function rigRest(spec: FishSpec): RigRest {
   const [px] = sectionPoint(sec, phiAtHeight(sec, pec.y));
   world.push(new Vector3(px * T, pec.y * T, zOf(spec, pec.s)), new Vector3(-px * T, pec.y * T, zOf(spec, pec.s)));
   parent.push(pk, pk);
+  // the gill covers swing about their front, high on the cheek
+  const o = operHinge(spec), P0 = new Vector3(), N0 = new Vector3();
+  for (const side of [1, -1]) {
+    skinPoint(spec, o.s, o.y, side, P0, N0);
+    world.push(P0.clone().addScaledVector(N0, -0.01 * T));
+    parent.push(0);
+  }
+  // the eyeballs turn about their centres
+  const eyes = eyeList(spec);
+  for (let k = 0; k < 2; k++) {
+    const e = eyes[Math.min(k, eyes.length - 1)];
+    world.push(eyeFrame(spec, e.e, e.side).c.clone());
+    parent.push(0);
+  }
+  world.push(new Vector3(0, 0, zOf(spec, spec.caudalBase + 0.45 * spec.fins.caudal.len)));
+  parent.push(SPINE_N - 1);
   const inverses = world.map((w) => new Matrix4().makeTranslation(-w.x, -w.y, -w.z));
   r = { sp, world, parent, inverses };
   RIGS.set(spec, r);
@@ -82,13 +105,14 @@ class Builder {
   si: number[] = [];
   sw: number[] = [];
   fin: number[] = [];
+  gill: number[] = [];
   idx: number[] = [];
   constructor(readonly withColour: boolean, readonly withFin: boolean) {}
   get count(): number { return this.pos.length / 3; }
   vertex(x: number, y: number, z: number, u: number, v: number, bones: readonly number[], weights: readonly number[], c = 1): number {
     this.pos.push(x, y, z);
     this.uv.push(u, v);
-    if (this.withColour) this.col.push(c, c, c);
+    if (this.withColour) { this.col.push(c, c, c); this.gill.push(0); }
     for (let i = 0; i < 4; i++) { this.si.push(bones[i] ?? 0); this.sw.push(weights[i] ?? 0); }
     if (this.withFin) this.fin.push(0, 0);
     return this.count - 1;
@@ -98,7 +122,10 @@ class Builder {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(this.pos, 3));
     g.setAttribute('uv', new Float32BufferAttribute(this.uv, 2));
-    if (this.withColour) g.setAttribute('color', new Float32BufferAttribute(this.col, 3));
+    if (this.withColour) {
+      g.setAttribute('color', new Float32BufferAttribute(this.col, 3));
+      g.setAttribute('aGill', new Float32BufferAttribute(this.gill, 1));
+    }
     if (this.withFin) g.setAttribute('aFin', new Float32BufferAttribute(this.fin, 2));
     g.setAttribute('skinIndex', new Uint16BufferAttribute(this.si, 4));
     g.setAttribute('skinWeight', new Float32BufferAttribute(this.sw, 4));
@@ -120,8 +147,26 @@ function stations(spec: FishSpec, n: number): number[] {
   return out;
 }
 
-/** body texture u for s (the body takes the texture's full width) */
-export const bodyU = (spec: FishSpec, s: number): number => s / (spec.caudalBase + 0.03);
+/** body texture u for s (the body takes the texture's full width; the head, with its detail, a larger share of it) */
+export const bodyU = (spec: FishSpec, s: number): number => Math.pow(Math.max(0, s) / (spec.caudalBase + 0.03), 0.7);
+/** s at body texture u (the painter's inverse of bodyU) */
+export const bodyS = (spec: FishSpec, u: number): number => (spec.caudalBase + 0.03) * Math.pow(Math.max(0, u), 1 / 0.7);
+
+/** where a gill cover is hinged (s, height; TL) */
+export function operHinge(spec: FishSpec): { s: number; y: number } {
+  return { s: spec.oper.s - 0.06, y: 0.55 * spec.oper.top };
+}
+
+/** how much a point of the skin (s, height y) follows its gill cover: 1 on the plate up to its free edge */
+export function operWeight(spec: FishSpec, s: number, y: number, top: number, bot: number): number {
+  const o = spec.oper;
+  if (y >= o.top || y <= -o.bot) return 0;
+  const hh = y >= 0 ? top : bot, v = y / Math.max(1e-4, hh);
+  const edge = o.s - o.sweep * v * v;
+  const pre = o.s - (spec.relief?.preDepth ?? 0.055) - 0.035 * Math.max(0, -v) ** 2 + 0.01 * v;
+  const fadeY = (1 - smooth(o.top * 0.7, o.top, y)) * (1 - smooth(o.bot * 0.7, o.bot, -y));
+  return smooth(pre, edge - 0.02, s) * (1 - smooth(edge - 0.0005, edge + 0.0005, s)) * fadeY;
+}
 
 export interface TierGeometry { body: BufferGeometry; fins: BufferGeometry; eyes: BufferGeometry | null; triangles: number }
 
@@ -197,9 +242,17 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
           const away = Math.min(1, Math.min(j, n - j) / (0.5 * n));
           wj = 1 - smooth(0.62 * m.corner, m.corner * (1 + 0.5 * away), s);
         }
-        bones[0] = w3[0]; bones[1] = w3[1]; bones[2] = BONE_JAW;
-        weights[0] = (1 - w3[2]) * (1 - wj); weights[1] = w3[2] * (1 - wj); weights[2] = wj;
-        b.vertex(x * T, y * T, zOf(spec, s), bodyU(spec, s), phi / (2 * Math.PI), bones, weights);
+        // the gill cover follows its own bone up to its free edge; just behind the edge, the gill chamber's red shows
+        // as the cover swings out (aGill)
+        const sideK = Math.sin(phi) ** 2;
+        const wo = tp.mouth ? sideK * operWeight(spec, s, pt[1], sec.top, sec.bot) : 0;
+        bones[0] = w3[0]; bones[1] = w3[1]; bones[2] = BONE_JAW; bones[3] = Math.sin(phi) >= 0 ? BONE_OPERL : BONE_OPERR;
+        const rest = 1 - wj - wo;
+        weights[0] = (1 - w3[2]) * rest; weights[1] = w3[2] * rest; weights[2] = wj; weights[3] = wo;
+        const k = b.vertex(x * T, y * T, zOf(spec, s), bodyU(spec, s), phi / (2 * Math.PI), bones, weights);
+        if (tp.mouth && pt[1] < oper.top * 0.8 && pt[1] > -oper.bot * 0.9) {
+          b.gill[k] = sideK * (s > edge ? 1 - smooth(edge + 0.002, edge + 0.008, s) : 0);
+        }
       }
     }
     // the mouth's lining: a cone inside the head behind the lips, on the same angles
@@ -218,8 +271,8 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
           const x = k * pt[0], y = g + k * (pt[1] - g);
           const away = Math.min(1, Math.min(j, n - j) / (0.5 * n));
           const wj = part === 1 ? 1 - smooth(0.62 * m.corner, m.corner * (1 + 0.5 * away), s) : 0;
-          bones[0] = 0; bones[1] = 0; bones[2] = BONE_JAW;
-          weights[0] = 1 - wj; weights[1] = 0; weights[2] = wj;
+          bones[0] = 0; bones[1] = 0; bones[2] = BONE_JAW; bones[3] = 0;
+          weights[0] = 1 - wj; weights[1] = 0; weights[2] = wj; weights[3] = 0;
           b.vertex(x * T, y * T, zOf(spec, si), bodyU(spec, s), phi / (2 * Math.PI), bones, weights, m.inside);
         }
       }
@@ -308,30 +361,38 @@ function eyeList(spec: FishSpec): { e: EyeSpec; side: number }[] {
   return out;
 }
 
+/** an eye's dome: its sphere's centre, the gaze, the frame across it, the sphere's radius and the dome's half angle */
+export function eyeFrame(spec: FishSpec, e: EyeSpec, side: number): { c: Vector3; g: Vector3; e1: Vector3; e2: Vector3; rS: number; thM: number; r: number } {
+  const T = spec.modelTL;
+  const P = new Vector3(), N = new Vector3();
+  skinPoint(spec, e.s, e.y, side, P, N);
+  // the gaze: the skin's normal, turned forward and (a flathead's) up
+  const g = N.clone();
+  g.applyAxisAngle(new Vector3(0, 1, 0), side * (e.fwd ?? 0.15));
+  if (e.up) g.lerp(new Vector3(0, 1, 0), e.up).normalize();
+  const r = e.r * T, bulge = e.bulge * T;
+  const rS = (r * r + bulge * bulge) / (2 * bulge);
+  const thM = Math.asin(Math.min(1, r / rS));
+  // (set into the orbit: the dome's rim a little under the skin)
+  const c = P.clone().addScaledVector(g, bulge - rS - 0.1 * r);
+  const e2 = new Vector3(0, 1, 0).addScaledVector(g, -g.y).normalize();
+  if (e2.lengthSq() < 0.5) e2.set(0, 0, 1).addScaledVector(g, -g.z).normalize();
+  const e1 = new Vector3().crossVectors(e2, g);
+  return { c, g, e1, e2, rS, thM, r };
+}
+
 function buildEyes(spec: FishSpec, seg: number): BufferGeometry {
   const T = spec.modelTL;
   const b = new Builder(false, false);
-  const P = new Vector3(), N = new Vector3();
-  for (const { e, side } of eyeList(spec)) {
-    skinPoint(spec, e.s, e.y, side, P, N);
-    // the gaze: the skin's normal, turned forward and (a flathead's) up
-    const g = N.clone();
-    g.applyAxisAngle(new Vector3(0, 1, 0), side * (e.fwd ?? 0.15));
-    if (e.up) g.lerp(new Vector3(0, 1, 0), e.up).normalize();
-    const r = e.r * T, bulge = e.bulge * T;
-    const rS = (r * r + bulge * bulge) / (2 * bulge);
-    const thM = Math.asin(Math.min(1, r / rS));
-    const c = P.clone().addScaledVector(g, bulge - rS - 0.12 * r);
-    // an eye frame: e1 toward the snout (in the gaze plane), e2 up
-    const e2 = new Vector3(0, 1, 0).addScaledVector(g, -g.y).normalize();
-    if (e2.lengthSq() < 0.5) e2.set(0, 0, 1).addScaledVector(g, -g.z).normalize();
-    const e1 = new Vector3().crossVectors(e2, g);
+  eyeList(spec).forEach(({ e, side }, k) => {
+    const { c, g, e1, e2, rS, thM, r } = eyeFrame(spec, e, side);
+    const bone = k === 0 ? BONE_EYE0 : BONE_EYE1;
     const rows = Math.max(3, Math.round(seg / 2)), cols = seg * 2;
     const base = b.count;
     for (let i = 0; i <= rows + 1; i++) {
       const th = i <= rows ? (thM * i) / rows : thM;
       const rr = i <= rows ? rS : rS * 1.08;
-      const sink = i <= rows ? 0 : 0.5 * r;
+      const sink = i <= rows ? 0 : 0.6 * r;
       for (let j = 0; j <= cols; j++) {
         const a = (2 * Math.PI * j) / cols;
         const lx = Math.sin(th) * Math.cos(a), ly = Math.sin(th) * Math.sin(a), lz = Math.cos(th);
@@ -339,15 +400,14 @@ function buildEyes(spec: FishSpec, seg: number): BufferGeometry {
         // the cornea maps onto the iris painted on the skin under it (the body's albedo)
         const ss = spec.pivot - p.z / T, yy = p.y / T, sec = sectionAt(spec, Math.max(0.001, ss));
         const ph = phiAtHeight(sec, Math.max(-sec.bot, Math.min(sec.top, yy)));
-        b.vertex(p.x, p.y, p.z, bodyU(spec, ss), (side > 0 ? ph : 2 * Math.PI - ph) / (2 * Math.PI), [0], [1]);
+        b.vertex(p.x, p.y, p.z, bodyU(spec, ss), (side > 0 ? ph : 2 * Math.PI - ph) / (2 * Math.PI), [bone], [1]);
       }
     }
-    void T;
     for (let i = 0; i <= rows; i++) for (let j = 0; j < cols; j++) {
       const a = base + i * (cols + 1) + j, bb = a + 1, cc = a + cols + 1, d = cc + 1;
       b.tri(a, cc, bb); b.tri(bb, cc, d);
     }
-  }
+  });
   return b.geometry();
 }
 
@@ -360,16 +420,32 @@ function buildFins(spec: FishSpec, tp: TierParams): BufferGeometry {
   const b = new Builder(false, true);
   const w3: [number, number, number] = [0, 0, 0];
   const nv = tp.finV;
-  const grid = (nu: number, at: (u: number, v: number, out: Vector3) => number, id: keyof typeof FIN_BANDS, bone: number | null, ripple = 0, rippleLen = 0) => {
+  const grid = (nu: number, at: (u: number, v: number, out: Vector3) => number, id: keyof typeof FIN_BANDS, bone: number | null, ripple = 0, rippleLen = 0, flex = false) => {
     const base = b.count;
-    const p = new Vector3();
+    // the sheet first, then pleated: each ray a ridge, the membrane between two rays a fold (every other column)
+    const pts: Vector3[] = [], ss: number[] = [];
+    for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) { const p = new Vector3(); ss.push(at(i / nu, j / nv, p)); pts.push(p); }
+    const P = (i: number, j: number) => pts[Math.max(0, Math.min(nu, i)) * (nv + 1) + Math.max(0, Math.min(nv, j))];
+    const du = new Vector3(), dv = new Vector3(), n = new Vector3();
     for (let i = 0; i <= nu; i++) {
       const u = i / nu;
       for (let j = 0; j <= nv; j++) {
         const v = j / nv;
-        const s = at(u, v, p);
+        const p = P(i, j).clone();
+        if (pleat && j > 0) {
+          du.subVectors(P(i + 1, j), P(i - 1, j));
+          dv.subVectors(P(i, j + 1), P(i, j - 1));
+          n.crossVectors(du, dv);
+          if (n.lengthSq() > 1e-16) {
+            n.normalize();
+            const gap = du.length() / ((i > 0 && i < nu ? 2 : 1));
+            p.addScaledVector(n, (i % 2 === 0 ? 1 : -1) * 0.22 * gap * Math.min(1, 0.4 + v));
+          }
+        }
+        const s = ss[i * (nv + 1) + j];
         let bones: number[], weights: number[];
-        if (bone !== null) { bones = [bone]; weights = [1]; } else {
+        if (flex) { const wv = smooth(0.15, 0.85, v); bones = [SPINE_N - 1, BONE_CAUD]; weights = [1 - wv, wv]; }
+        else if (bone !== null) { bones = [bone]; weights = [1]; } else {
           spineWeights(rig.sp, s, w3);
           bones = [w3[0], w3[1]]; weights = [1 - w3[2], w3[2]];
         }
@@ -383,7 +459,9 @@ function buildFins(spec: FishSpec, tp: TierParams): BufferGeometry {
       b.tri(a, c, bb); b.tri(bb, c, d);
     }
   };
-  const nuOf = (rays: number) => Math.max(2, Math.round(rays * 2 * tp.finU));
+  // the near tier has a column on every ray and one between each two (the pleats), the others fewer
+  const pleat = tp.finU >= 1;
+  const nuOf = (rays: number) => (pleat ? Math.max(2, 2 * (rays - 1)) : Math.max(2, Math.round(rays * 2 * tp.finU)));
   for (const f of spec.fins.median) {
     const len = curve(f.len);
     const up = f.id === 'a' ? -1 : 1;
@@ -409,7 +487,7 @@ function buildFins(spec: FishSpec, tp: TierParams): BufferGeometry {
     const s = cb + Math.cos(th) * L;
     out.set(0, (yb + Math.sin(th) * L) * T, zOf(spec, s));
     return s;
-  }, 'c', SPINE_N - 1);
+  }, 'c', SPINE_N - 1, 0, 0, true);
   // pectorals: a fan in the plane of the flank, on their own bones (the rest pose holds them out)
   const pec = spec.fins.pectoral, pl = curve(pec.len);
   const pw = rig.world[BONE_PECL];
