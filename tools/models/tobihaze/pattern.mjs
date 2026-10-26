@@ -383,7 +383,29 @@ export const LIP = {
   chin: { z: [0.04, 0.09], s: [0.14, 0.2], tone: 0.12, pale: 0.4 },
   throat: { s: [0.30, 0.38], far: [0.42, 0.58], y: [0.02, 0.04], dy: [0.012, 0.03] },
   rim: { dy: [0.0025, 0.004, 0.007, 0.0095], z: [0.05, 0.1], mix: 0.45 },
+  // (round 1, the integrator: with the lower jaw's envelope (head.mjs jaw.envelope, its carve) the slit between the pad's
+  // flap and the jaw's shoulder under it — the flap's underside and the shoulder's top, inside the raw pad by `u` [full,
+  // none] and within `j` [full, none] of the jaw's tissue, lower than `gy` [full, none] under the gape's line (the mouth's
+  // own slit above stays lining), over `s` [in, full, full, none] and off the midline by `z` [none, full] — is the outer
+  // skin in the crease's shade: the jaw's skin taken `shade` [shoulder, flap, j from, j to] toward lipShade — the flap's
+  // underside darker, the shoulder's top (the dropped jaw's rim when the mouth opens, B054: the skin's colour) less —,
+  // not the lining's pale pink (the lining's weight there × 1 − the slit's), which the side and low cameras saw as a pale
+  // sliver along the slit)
+  slit: { u: [-0.002, -0.0005], j: [0.016, 0.024], gy: [0.03, 0.015], s: [0.06, 0.09, 0.34, 0.38], z: [0.03, 0.06], shade: [0.15, 0.3, 0.003, 0.008] },
 };
+
+/** (round 1) The pad-to-jaw slit's weight at q (HL, z ≥ 0), LIP.slit; 0 without the jaw's envelope carve. */
+let _slitJ = 0;
+export function lipSlitAt(x, y, az) {
+  const L = LIP.slit, G = HEAD_SCULPT.gape;
+  if (!L || !HEAD_SCULPT.jaw.envelope?.carve || x < L.s[0] || x > L.s[3] || y > 0.14 || az < L.z[0]) return 0;
+  const gy = G.yFront + (G.yBack - G.yFront) * Math.min(1, Math.max(0, x / G.rictus));
+  const w0 = sstep(L.s[0], L.s[1], x) * (1 - sstep(L.s[2], L.s[3], x)) * sstep(L.z[0], L.z[1], az) * (1 - sstep(gy - L.gy[0], gy - L.gy[1], y));
+  if (w0 <= 0) return 0;
+  const pp = headParts(x, y, az);
+  _slitJ = pp.j;
+  return w0 * (1 - sstep(L.u[0], L.u[1], pp.u)) * (1 - sstep(L.j[0], L.j[1], pp.j));
+}
 
 /** Each layer's opacity (0..1; the calibrated look: region contrast against the photos, see the header).
  * patternContext's `strength` multiplies them (tests, morphs). */
@@ -702,7 +724,8 @@ export function skinColour(p, n, part, ctx) {
   // margins, the gill flap's edge, the cup's rim are the charts' seams with the outer skin), the lining's deeper in; a
   // patch island (part null) inside the mouth or a gill pocket is lining too, by the same depth
   if (part === 'interior' || ((part === null || part === undefined) && ((x < 0.5 && y < 0.26) || (x > 0.7 && x < 1.12 && y > 0.1 && y < 0.45)))) {
-    const [ic, w] = interiorColour(q, ctx, part === 'interior');
+    const [ic, w0] = interiorColour(q, ctx, part === 'interior');
+    const w = w0 * (1 - lipSlitAt(x, y, az));
     if (w > 0) {
       const ext = skinColour(p, n, 'skin', ctx).rgb;
       return { rgb: ext.map((e, i) => e + (ic[i] - e) * w), bars: 0 };
@@ -1067,6 +1090,9 @@ export function skinColour(p, n, part, ctx) {
     // on (u1: olive-grey, mottled, the band L* 25–33 rendered; B002: the chin mottled like the face), one even surface from
     // the line down to the throat, no pale lower edge)
     if (wJ > 0.01) blend(c, jawSkin(ctx, q, n, lf1, dy, _j), wJ * A.lipJaw);
+    // (round 1: the slit between the pad's flap and the jaw's shoulder, LIP.slit: the jaw's skin in the crease's shade)
+    const wS = lipSlitAt(x, y, az);
+    if (wS > 0.01) { jawSkin(ctx, q, n, lf1, dy, _j); const SS = LIP.slit.shade; blend(c, lerp3(_j, P.lipShade, SS[0] + (SS[1] - SS[0]) * sstep(SS[2], SS[3], _slitJ), _k), wS); }
     // (round mouthA: the lower lip's narrow paler rim right under the line, at the front only — under the median lip —
     // and the chin below it the face's darker skin, u5; round paint1: 0.002 HL lower, out of the median lip's shade, and
     // paler)

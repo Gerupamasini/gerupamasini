@@ -394,8 +394,7 @@ const GROUND_PAIRS: [PoseRef, PoseRef][] = [
 const CLEAR_STEPS = 16;
 const TRANSITION_POSE: Record<string, PoseRef> = { land: 'prop', reach: 'reach', rest: 'rest', water: 'water', swim: 'swim' };
 
-/** The hero's numbers (the tiers built 2026-10-21; the chin's contact from the 2026-10-25 tiers, whose upper lip hangs
- * lower over the jaw): the rig without a model (a placeholder), checked by the unit tests. */
+/** The hero's numbers (the tiers built 2026-10-21): the rig without a model (a placeholder), checked by the unit tests. */
 const HERO = {
   tl: 0.08, hl: 0.0161345, height: 0.1598, width: 0.1412,
   ground: { land: -0.0081644, reach: -0.0073286, rest: -0.0055853, water: -0.0057246, swim: -0.0078573, prop: -0.0081567, crawl: -0.0081567 },
@@ -404,13 +403,13 @@ const HERO = {
   soleL: [0.0103453, -0.0081639, 0.0229766] as V3,
   prop: [
     // raise, cup y, cup z, chin y, chin z, eye y, eye z (m)
-    [10, -0.0087806, 0.0191721, -0.0025391, 0.0367676, 0.0075289, 0.0335885],
-    [15, -0.0080692, 0.0197005, -0.000318, 0.036685, 0.0094347, 0.0326406],
-    [20, -0.0073756, 0.0201925, 0.0018264, 0.0364368, 0.0111895, 0.0315577],
-    [25, -0.0066381, 0.020636, 0.0039447, 0.0360165, 0.0128469, 0.0303399],
+    [10, -0.0087806, 0.0191721, -0.0027535, 0.0367489, 0.0075289, 0.0335885],
+    [15, -0.0080692, 0.0197005, -0.0005332, 0.0366851, 0.0094347, 0.0326406],
+    [20, -0.0073756, 0.0201925, 0.001612, 0.0364556, 0.0111895, 0.0315577],
+    [25, -0.0066381, 0.020636, 0.0037327, 0.0360539, 0.0128469, 0.0303399],
   ],
   restCup: [0, -0.0055289, 0.0168296] as V3,
-  waterChin: [0, -0.0045057, 0.0359664] as V3,
+  waterChin: [0, -0.0047075, 0.0359664] as V3,
   eye: { land: [0.00171, 0.0094347, 0.0326406], prop: [0.00171, 0.0094347, 0.0326406], crawl: [0.00171, 0.0094347, 0.0326406], reach: [0.00171, 0.0083405, 0.0334191],
     rest: [0.00171, 0.0050968, 0.0348213], water: [0.00171, 0.005486, 0.034676], swim: [0.00171, 0.005486, 0.034676] } as Record<PoseRef, V3>,
   eyeR: 0.0016699,

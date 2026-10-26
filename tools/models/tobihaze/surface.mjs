@@ -82,6 +82,7 @@ import { gapeSide } from './headrig.mjs';
 import { BODY_SCULPT, trunkProfile, armField } from './body.mjs';
 import { smoothPath, tube, smin } from './sdf.mjs';
 import { perlin3 } from '../../lib/noise.mjs';
+import { lipSlitAt } from './pattern.mjs';
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -184,7 +185,7 @@ export const HEAD_SKIN = {
   // rougher by `rough` — its film too (the clearcoat's roughness is the ORM's G × the factor) — so the band's top, which
   // faces up into the pad's underside, and its lower edge no longer catch the film's highlight (B013, q34, the low view;
   // u1's band max at the silhouette 51 → 39); `under`: the jaw's lowest down-facing skin, see skinDetail)
-  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 }, mouth: { dp: [0.03, 0.06], y: [0.14, 0.17], s: [0.36, 0.40], floor: 0.6, ease: 0.85 }, band: { dy: [-0.002, 0.003, 0.045, 0.06], off: [0.002, 0.005], s: [0.30, 0.38], rough: 0.3 }, under: { ny: [0.6, 0.95], s: [0.34, 0.44], y: [0.024, 0.034], dp: [0.025, 0.04], ao: 0.6 } },
+  lip: { stipple: { cell: 0.15, r: 0.07, amp: 0.003 }, wrinkle: { period: 0.2, amp: 0.0018 }, mouth: { dp: [0.03, 0.06], y: [0.14, 0.17], s: [0.36, 0.40], floor: 0.6, ease: 0.85 }, band: { dy: [-0.002, 0.003, 0.045, 0.06], off: [0.002, 0.005], s: [0.30, 0.38], rough: 0.3 }, under: { ny: [0.6, 0.95], s: [0.34, 0.44], y: [0.024, 0.034], dp: [0.025, 0.04], ao: 0.6 }, slit: { ao: 0.7, rough: 0.35 } },
   lobe: { lines: 30, amp: 0.0042, ridges: 4, ridgeAmp: 0.009 },
   opercle: { period: 0.22, amp: 0.0018, band: 0.06 },           // gill cover margin wrinkles (band in HL)
   // eye collar folds: HL under the cup's rim, mm wide (round T2: four concentric folds, the eye finding's P9 — u1's
@@ -1041,10 +1042,15 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
   // (the occlusion map's only — the colour's crease shade below reads the sculpt's own occlusion, ao0)
   const LU = HEAD_SKIN.lip.under;
   const underAO = LU && part !== 'eyeSkin' && R.sh < LU.s[1] && R.yh < LU.y[1] ? 1 - (1 - LU.ao) * sstep(LU.ny[0], LU.ny[1], -nF[1]) * (1 - sstep(LU.s[0], LU.s[1], R.sh)) * (1 - sstep(LU.y[0], LU.y[1], R.yh)) * sstep(LU.dp[0], LU.dp[1], ctx.pad(R.sh, R.yh, R.zh)) : 1;
+  // (round 1, the integrator: the slit between the pad's flap and the jaw's shoulder under it — pattern.mjs LIP.slit,
+  // lipSlitAt — its occlusion × `ao` and its film rougher by `rough`: the sky's grazing reflection and the sun's glint on
+  // the shoulder's lit top drew a white sliver along the slit in the side and low views)
+  const SLT = HEAD_SKIN.lip.slit;
+  const slitW = SLT && part !== 'eyeSkin' && R.sh < 0.37 && R.yh < 0.14 ? lipSlitAt(R.sh, R.yh, Math.abs(R.zh)) : 0;
   // the fins' bases (their membranes are not in the field): a narrow contact shade along the keels' lines
   const finAO = finBaseShade(q, R, ctx);
   // (the relief's own cavities stay out of the occlusion: the normal map shades them; `cavity` carries them)
-  const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO * underAO);
+  const ao = clamp(ao0 * (1 - 0.1 * cavD) * finAO * underAO * (1 - (1 - (SLT?.ao ?? 1)) * slitW));
   // the colour's share (ALBEDO_AO): the creases (the macro occlusion with the fins' bases), the unbanded fine cavities,
   // the trunk's scale pockets about their mean
   const A = ALBEDO_AO, PK = A.pockets;
@@ -1097,6 +1103,7 @@ export function skinDetail(p, n, part, ctx, fp, o = {}) {
     const E = ctx.lipEdge(R.sh, R.yh, R.zh);
     rough += LB.rough * sstep(LB.dy[0], LB.dy[1], E.dy) * (1 - sstep(LB.dy[2], LB.dy[3], E.dy)) * sstep(LB.off[0], LB.off[1], E.d) * (1 - sstep(LB.s[0], LB.s[1], R.sh));
   }
+  if (slitW > 0) rough += SLT.rough * slitW;
   // (round T3: a water bead's film a little rougher — PAPILLAE.bead.rough: the map's texel stands for the bead's many small
   // menisci, and a mirror-sharp lobe on a bead 4–6 texels wide misses the screen's pixels: the sun's glint on it would
   // flicker in and out with the view instead of sitting on the bead)

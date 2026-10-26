@@ -60,6 +60,13 @@
 //     simplifying only the rest (joined to the kept triangles along their edges) to T3's count there; the report's
 //     decimationLock says per region what it kept and why the rest was not. --no-decimation-lock simplifies afresh,
 //     --decimation-lock <file> holds another. The hero's tier mesh is not locked
+//     (2026-10-26, round 1: the lock also stores T3's per-corner UVs — tiers.restoreHeld puts every held triangle on
+//     them in T3's chart and charts.repairFolds keeps them as they are, so the arm's lobes and the rest outside the
+//     zones keep T3's texels —; lod1's median lip is simplified first at a finer error (decimlock FOCUS) and then held
+//     while the rest reaches its count; lighterSkin runs tiers.manifoldSkin on lod1's dense mesh (no stray or crowded
+//     edges: lod1 0 non-manifold edges). lod1 13,768 triangles, lod2 1,272; the hero's mouth is the lower jaw's
+//     envelope under a slimmer pad (head.mjs jaw.envelope) and the slit between them painted as the crease's skin
+//     (pattern.mjs LIP.slit))
 //
 // Meshes per tier — the draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two;
 // the caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by
@@ -78,7 +85,9 @@
 //         morph textures with their opaque primitives are 7.55 / 8.59 / 8.46 MB at 4096 / 8192 / 16384 rows (T2's
 //         7.73 / 7.73 / 7.92; T1's three split meshes 6.55 / 6.55 / 5.79, one more draw pair), the skin's three moving
 //         meshes 3.80 / 4.00 / 5.18 (the build report's gpu.meshes, 2026-10-25: Head_Orbit 1.97 / 2.36 / 3.15 on 10,184
-//         vertices, Head_Mouth 0.66 / 0.46 / 0.46 on 2,884, Head 1.18 / 1.18 / 1.57 on 11,895; T3's three 4.19 / 4.13 /
+//         vertices, Head_Mouth 0.66 / 0.46 / 0.46 on 2,884, Head 1.18 / 1.18 / 1.57 on 11,895; 2026-10-26 round 1, the jaw's
+//         envelope: Head_Orbit 1.97 / 2.36 / 3.15 on 9,904 (15,996 triangles), Head_Mouth 0.66 / 0.44 / 0.44 on 2,723
+//         (4,497), Head 1.18 / 1.18 / 1.57 on 11,972 (20,334), Body 37,272 with the teeth; T3's three 4.19 / 4.13 /
 //         5.31: Head_Orbit 2.36 / 2.36 / 3.15, Head_Mouth 0.66 / 0.59 / 0.59 on 3,688, Head 1.18 / 1.18 / 1.57 on 11,329;
 //         9977d95's two 4.65 / 4.98 / 5.77, one draw fewer); B4's split study (B3's geometry, B4's planned maps): the three head meshes as one
 //         (7 draws) 30.7 / 31.9 / 32.6 MB, the whole skin one mesh (6 draws) 36.0 / 36.6 / 37.4
@@ -108,9 +117,11 @@
 //   hero  body baseColor, normal and the film map at 2048 (5.59 MB each) and the fin atlas at 1024 (1.40): maps 18.17 MB;
 //         buffers 2.7; morph textures 11.46 / 12.44 / 13.65: total 32.4 / 33.3 / 34.6 MB of 40 (2026-10-25 shipped, 12
 //         draws: maps 18.18, buffers 2.73, morph textures 11.35 / 12.60 / 13.65: total 32.3 / 33.5 / 34.6 MB; 9977d95's
-//         11 draws 33.1 / 34.5 / 35.1; T3's 12 draws 32.7 / 33.6 / 34.7)
+//         11 draws 33.1 / 34.5 / 35.1; T3's 12 draws 32.7 / 33.6 / 34.7; 2026-10-26 round 1, 12 draws: maps 18.18,
+//         buffers 2.74, morph textures 11.35 / 12.57 / 13.62: total 32.26 / 33.49 / 34.54 MB)
 //   lod1  baseColor 1024 (1.40), normal 512 and the film map 512 (0.35 each), fin atlas 512 (0.35): maps 2.45 MB; buffers
-//         0.34; morph textures 2.53 / 2.99 / 2.39: total 5.31 / 5.77 / 5.18 MB of 6. The normal and the film map at 512
+//         0.34; morph textures 2.53 / 2.99 / 2.39: total 5.31 / 5.77 / 5.18 MB of 6 (2026-10-26 round 1, 13,768
+//         triangles: 5.33 / 5.79 / 5.21). The normal and the film map at 512
 //         because one skin mesh (4 draws) holds 1.2–1.8 MB of morph textures: at 1024 (+1.05) it fits only with lod1's
 //         skin shapes carrying no normal deltas (the rig's round-B4 shading of lod1's blink, eyes-up and cheeks lost) or a
 //         fifth draw. The 512 maps are 0.125 mm a texel on the body, finer than a screen pixel at lod1's distances
