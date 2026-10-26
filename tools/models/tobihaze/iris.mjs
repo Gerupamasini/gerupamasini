@@ -51,7 +51,7 @@
 // easing to the skin's), the glow mask (`glow`: the bake's baseColor A in the iris rect), the occlusion (1: the globe
 // turns, so no occlusion is baked on it). Supersampled per texel (anti-aliased at every size) and every detail finer than
 // about 1.5 texels faded to its mean, so lod1 (1024) and lod2 (256) keep the hero's read.
-import { windowBound, pupilEdge, eyeSurface, EYE_SCULPT } from './eye.mjs';
+import { windowBound, pupilEdge, eyeSurface, EYE_SCULPT, WINDOW_U_INSET, WINDOW_V_INSET } from './eye.mjs';
 import { EYE_MM } from './anatomy.mjs';
 import { perlin3, hash3i } from '../../lib/noise.mjs';
 
@@ -70,10 +70,13 @@ const mixTo = (c, k, a) => { if (a <= 0) return; if (a > 1) a = 1; c[0] += (k[0]
 export const EYE_PALETTE = {
   pupil: '#070f0f',        // the pupil's ground: near black, a hair teal (round T3; T2 #0b1414)
   pupilRuff: '#020303',    // the pupil's margin, a hair darker
-  ring: '#ecc86a',         // the gold ring (round fm_eye: gold, not cream — T3 #e6c47c rendered C* 25, h 85 at u1 against u1's
+  ring: '#ffd977',         // the gold ring (round fm_eye: gold, not cream — T3 #e6c47c rendered C* 25, h 85 at u1 against u1's
                            // rim C* 35–50, h 88–95; T2 #f0cc70; u1 #dac28c, B010 #e8cda0 as photographed; round fl_eye1:
                            // fm_eye's #e0c45c rendered darker, more saturated and yellower than u1's rim (L* 62.7, C* 36.1,
                            // h 90.5 against the photo's 75.0 / 31.6 / 88.2): lighter, warmer, a little less saturated)
+                           // (round fl_eye2: #ecc86a rendered L* 62.9, C* 32.9, h 86.8 at u1's camera, 10 under the photo:
+                           // #ffd977 with the rim's tone 1.0 (was 0.9) and its limbus line 0.3 (was 0.45) render L* 67.3,
+                           // C* 31.4, h 87.7 at u1, 67.8 / 30.8 / 88.6 at B010, 71.6 at the ends)
   ringPale: '#e6d6a4',     // the ring's paler gold under the pupil (B010), run on over the lid margin (fm_eye: T3 #e6dcc2 cream)
   ringOrange: '#d9893a',   // the orange-copper variant (B020, B062): o.ring 'orange'
   iris: '#93774d',         // the olive-bronze iris outside the ring (A004 #927652, B010 #a68d65)
@@ -104,7 +107,9 @@ export const EYE_PUPIL = {
 };
 
 /** Roughness (the ORM's G) of the eye's parts. */
-export const EYE_ROUGH = { pupil: 0.03, ring: 0.04, iris: 0.05, meniscus: 0.06, skin: 0.45 };
+// (round fl_eye2: the ring and the iris 0.10, were 0.04 / 0.05 — the photo light's glint on the rim's lighter gold read as a
+// white break in the rim's top)
+export const EYE_ROUGH = { pupil: 0.03, ring: 0.10, iris: 0.10, meniscus: 0.06, skin: 0.45 };
 
 /**
  * The Eye material's factors (glTF core + KHR extensions, three.js r186 MeshPhysicalMaterial), as the build writes them
@@ -168,7 +173,9 @@ export const EYE_MATERIAL = {
  * degrees round from the back edge, `width` degrees wide; never closer than `minRingED` to the window's edge.
  */
 export const EYE_PAINT = {
-  pupil: { follow: true, ring: { top: 0.026, end: 0.036, bottom: 0.038 }, dent: { at: 112, depth: 0.012, width: 24 }, minRingED: 0.012 },
+  // (round fl_eye2: the rim 0.030 / 0.038 / 0.040 ED, was 0.026 / 0.036 / 0.038 — u1's rim / H 0.075–0.09 all round, the
+  // render's top 0.065; the dent 0.008 deep, was 0.012)
+  pupil: { follow: true, ring: { top: 0.030, end: 0.038, bottom: 0.040 }, dent: { at: 112, depth: 0.008, width: 24 }, minRingED: 0.012 },
 };
 
 /**
@@ -320,12 +327,12 @@ function windowTexel(rho, ph, fp, P, o, PP) {
     const paleK = PP.follow ? 0.6 * sstep(0.3, 0.85, below) : sstep(0.15, 0.7, below);
     mixTo(ringC, P.ringPale, paleK * sstep(0.006, 0.03, dd) * 0.95);
     const r1 = PP.follow ? 1 - 0.15 * sstep(0.55 * w, w, dd) : Math.max(1 - sstep(ringW * 0.55, ringW * 1.15, dd), paleK * 0.95 * (1 - sstep(w - 0.02, w, dd) * 0.2));
-    const tone = 0.9 + 0.12 * perlin3(Math.cos(ph) * 14, Math.sin(ph) * 14, 3.3, 39) + 0.06 * fib * fine;
+    const tone = (PP.follow ? 1.0 : 0.9) + 0.12 * perlin3(Math.cos(ph) * 14, Math.sin(ph) * 14, 3.3, 39) + 0.06 * fib * fine;
     const band = irisT.slice();
     mixTo(band, ringC.map((v) => v * tone), r1);
     // the limbus: a dark line over the window's last 0.02 rad (round T3: faint under the pupil, where the pale zone runs
     // on over the lid; T2 0.4 all round; fin_eye: the thin dark line round the rim of u1 and B012, half as faint under)
-    if (PP.follow) mixTo(band, P.limbus, sstep(w - 0.022, w - 0.003, dd) * 0.45 * (1 - 0.5 * paleK));
+    if (PP.follow) mixTo(band, P.limbus, sstep(w - 0.022, w - 0.003, dd) * 0.3 * (1 - 0.5 * paleK));
     else mixTo(band, P.limbus, sstep(w - 0.03, w - 0.004, dd) * 0.4 * (1 - 0.9 * paleK));
     // the edge between the pupil and the ring (anti-aliased by the supersampling: a 0.004 rad ramp)
     const a = sstep(-0.004, 0.004, dd);
@@ -449,11 +456,12 @@ export function paintEye(rects, size, o = {}) {
         for (let sy = 0; sy < ss; sy++)
           for (let sx = 0; sx < ss; sx++) {
             const u = (px + (sx + 0.5) / ss - x0) / W, v = (py + (sy + 0.5) / ss - y0) / H;
-            let ph = u * 2 * Math.PI; // (wraps: the pad past either end continues round the azimuth)
+            // (wraps: the pad past either end continues round the azimuth; the window's u inset, eye.mjs WINDOW_U_INSET)
+            let ph = (part === 'window' ? (u - WINDOW_U_INSET) / (1 - 2 * WINDOW_U_INSET) : u) * 2 * Math.PI;
             let q;
             if (part === 'window') {
               // (above the axis row: ρ < 0 is the point on the other side of the axis; past the edge: the edge's colour)
-              let rho = v;
+              let rho = (v - WINDOW_V_INSET) / (1 - WINDOW_V_INSET);
               if (rho < 0) { rho = -rho; ph += Math.PI; }
               rho = Math.min(rho, 1);
               const fp = Math.max(1e-4, (thB(ph) / H) * 1.0); // radians a texel spans along ρ

@@ -156,7 +156,9 @@ export const HEAD_SCULPT = {
   // where a slit under 2 cells of the hero mesh (0.0112 HL) let the surface nets bridge the lips (157 triangles across
   // the slit at 0.008, some left at 0.0075 at other grid offsets, none at 0.0095 at 4 offsets); from the front the slit
   // is hidden behind the median lip, so its width does not show)
-  gape: { yFront: 0.100, yBack: 0.092, half: 0.005, rictus: 0.290, close: 0.050, lean: 1.3, slitEnd: 0.290, endRound: 0.010, edge: 0.008,
+  // (round geoB2: edge 0.012, was 0.008: the lower jaw's top edge along the slit rounded off, so from the front and the
+  // side it no longer catches the light as a sharp pale rim under the upper lip; no bridges at the hero cell)
+  gape: { yFront: 0.100, yBack: 0.092, half: 0.005, rictus: 0.290, close: 0.050, lean: 1.3, slitEnd: 0.290, endRound: 0.010, edge: 0.012,
     front: { half: 0.0095, s: [0.11, 0.15] }, back: { half: 0.0085, s: [0.265, 0.295] } },
   // the upper lip (left half, mirrored): a swept roll from the thin median lip at the front midline along the
   // premaxilla's arm to the pad's rounded rear end over the maxilla's tip; a little taller than wide in section, its
@@ -185,7 +187,11 @@ export const HEAD_SCULPT = {
     // head's mesh, 1.198 → 0.795 on the hero build, 1.909 → 0.791 on lod1)
     // (round 1, from geoA1: fuller, r [0.024, 0.024, 0.025, 0.032] (geoB1 [0.022, 0.022, 0.023, 0.027]), each point's
     // lower edge kept where geoB1 put it (0.049 at the midline), so the band over the mouth line is fuller from the front)
-    median: { path: [[0.058, 0.073, 0.000], [0.060, 0.073, 0.040], [0.074, 0.076, 0.080], [0.098, 0.0925, 0.118]], radius: [0.024, 0.024, 0.025, 0.032], blend: 0.045 },
+    // (round geoB2: fuller again, r [0.030, 0.030, 0.030, 0.034] with the path 0.006 lower (0.002 at its pad end), its
+    // lower edge at the midline y 0.037 (was 0.049): a curtain in front of the rounded chin, so from the in-game front
+    // camera (head elev −9) the mouth is one line under a fuller upper lip and the chin's top hides behind it
+    // (front ID jaw / upper lip at the midline, head mesh: 1.467 → 1.104 at elev −9, 0.778 → 0.477 at the u5 camera))
+    median: { path: [[0.058, 0.067, 0.000], [0.060, 0.067, 0.040], [0.074, 0.071, 0.080], [0.098, 0.0905, 0.118]], radius: [0.030, 0.030, 0.030, 0.034], blend: 0.045 },
     // the pad: a bean along the premaxilla's arm, its front end narrower and tucked under the bulb, its rear end the
     // fattest part, round, over the maxilla's tip at the rictus; sy: the section's vertical stretch
     // (side view 1.23 × 0.60 ED, aspect 2.0, widest at 0.57 of its length, its axis level, the front end 0.68 of the
@@ -202,9 +208,11 @@ export const HEAD_SCULPT = {
     // height / length in the hero's ID raster 0.517 → 0.500 at u1's camera, 0.487 → 0.472 at B012's)
     // (round 1, from geoA1: slimmer again, sy 1.01 with the path 0.009 lower than 8c598df's, the lower edge kept and the
     // top down 0.017 HL (geoA1: visible h / l 0.476 on the ID raster at u1's camera); the envelope's carve reads it)
-    path: [[0.098, 0.089, 0.117], [0.140, 0.096, 0.149], [0.188, 0.1056, 0.177], [0.240, 0.1046, 0.198], [0.284, 0.1026, 0.207]],
+    // (round geoB2: slimmer, sy 0.92 with the path 0.005 lower, the lower edge kept and the top down ~0.006 HL: the
+    // pad's visible height / length on the ID raster at u1's camera 0.472 → 0.449, a slim bean as in u1)
+    path: [[0.098, 0.084, 0.117], [0.140, 0.091, 0.149], [0.188, 0.1006, 0.177], [0.240, 0.0996, 0.198], [0.284, 0.0976, 0.207]],
     radius: [0.030, 0.049, 0.059, 0.063, 0.061],
-    sy: 1.01,
+    sy: 0.92,
     samples: 64,
     // the snout's skin sheath over the pad: a roll along its top carrying the face's side down onto it (from the front
     // the face runs on into the pads without a waist, B001, u5); slim, so the face above it stays one convex slope down
@@ -271,15 +279,25 @@ export const HEAD_SCULPT = {
     // the gape's own slit, 2·half + g, its edge rounded by k) and below the flap the jaw's skin turns down and in at
     // nL 1.5 to its underside (yB), one convex surface on into the throat behind the rictus; at the front a narrow
     // rounded chin (s 0.074–0.10, nL 2) set back behind the median lip's lower edge and receding down and back
+    // (round geoB2, approach B: the envelope re-traced. At the front a blunt rounded chin instead of a forward wedge:
+    // the front stations taller (yT 0.052–0.080 over yB 0.040–0.022 from s 0.070 to 0.106; the old ones were 0.008 HL
+    // tall at the tip, a knife edge seen from the front as a flat lens-shaped plate with a pale rim), its corners
+    // tucked inside the median lip's ends (w 0.115 / 0.148 at s 0.12 / 0.14, was 0.1416 / 0.157) and the underside a
+    // smooth descent with no step (yB 0.0205 / 0.019 at s 0.14 / 0.16). Under the pads the jaw's shoulder sits up inside
+    // the pad's flap, its widest point 0.016 HL medial of the flap's outer edge at the flap's own height (w = the pad's
+    // lowest outer z − 0.016, yW = its lowest point), so the slit opens downward under the flap: from the side and from
+    // low views the eye no longer looks into it (the lit sliver of the jaw's top along the slit is gone) and below the flap
+    // the jaw's skin turns down and in, one surface on into the throat. carve.k 0.012 (was 0.008) smooths the flap's
+    // inner edge. The underside behind s 0.22 (the chin contact's station, s 0.25) is as before.)
     envelope: {
-      s: [0.076, 0.082, 0.090, 0.100, 0.120, 0.140, 0.160, 0.180, 0.200, 0.220, 0.240, 0.260, 0.280, 0.300, 0.320, 0.340, 0.370, 0.400],
-      w: [0.020, 0.048, 0.075, 0.098, 0.1416, 0.157, 0.1699, 0.1802, 0.193, 0.2033, 0.212, 0.2186, 0.2234, 0.220, 0.210, 0.200, 0.190, 0.180],
-      yW: [0.051, 0.053, 0.056, 0.060, 0.0548, 0.0492, 0.0484, 0.049, 0.0487, 0.0467, 0.0453, 0.0449, 0.0453, 0.048, 0.052, 0.055, 0.054, 0.050],
-      yT: [0.056, 0.063, 0.071, 0.078, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.086, 0.084, 0.080, 0.074],
-      yB: [0.048, 0.043, 0.039, 0.035, 0.028, 0.024, 0.0205, 0.0175, 0.0135, 0.009, 0.0055, 0.0055, 0.0075, 0.0075, 0.0075, 0.0075, 0.008, 0.010],
-      nU: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-      nL: [2, 2, 2, 2, 1.5, 1.5, 1.5, 1.45, 1.4, 1.3, 1.25, 1.25, 1.3, 1.4, 1.6, 1.8, 2, 2],
-      k: 0.012, end: [0.42, 0.03], carve: { g: 0.001, slit: true, k: 0.008 },
+      s: [0.070, 0.076, 0.084, 0.094, 0.106, 0.120, 0.140, 0.160, 0.180, 0.200, 0.220, 0.240, 0.260, 0.280, 0.300, 0.320, 0.340, 0.370, 0.400],
+      w: [0.020, 0.045, 0.068, 0.085, 0.100, 0.115, 0.148, 0.172, 0.181, 0.194, 0.205, 0.215, 0.217, 0.220, 0.220, 0.210, 0.200, 0.190, 0.180],
+      yW: [0.046, 0.046, 0.047, 0.050, 0.053, 0.050, 0.049, 0.052, 0.048, 0.048, 0.048, 0.048, 0.048, 0.050, 0.048, 0.052, 0.055, 0.054, 0.050],
+      yT: [0.052, 0.060, 0.066, 0.072, 0.080, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.088, 0.086, 0.084, 0.080, 0.074],
+      yB: [0.040, 0.032, 0.027, 0.024, 0.022, 0.021, 0.0205, 0.019, 0.0175, 0.0135, 0.009, 0.0055, 0.0055, 0.0075, 0.0075, 0.0075, 0.0075, 0.008, 0.010],
+      nU: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+      nL: [2, 2, 2, 2, 2, 2, 1.5, 1.5, 1.45, 1.4, 1.3, 1.25, 1.25, 1.3, 1.4, 1.6, 1.8, 2, 2],
+      k: 0.012, end: [0.42, 0.03], carve: { g: 0.001, slit: true, k: 0.012 },
     },
   },
   // the rictal fold: the web joining the pad's rear end to the lower lip at the corner, and its crease running on down

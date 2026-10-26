@@ -135,6 +135,7 @@ export function headWeights(pos, index, head, o = {}) {
   // the floor rule fades}; on only for a sculpt with the envelope (the hero's Head mesh at gapeFull, triangles stretched
   // over 3× in area / 2.5× in edge: 307 / 294 → 155 / 173; T3 without the envelope 128 / 131)
   const JS = o.jawSide ?? (o.K?.jaw?.envelope ? { suspS: 0.31, side: [-0.01, 0.02] } : null);
+  const FF = o.floorFront ?? (o.K?.jaw?.envelope ? [0.22, 0.30] : null);
   const RP = o.K?.jaw?.ramus?.path;
   const zRamus = (x) => {
     if (!RP) return Infinity;
@@ -210,7 +211,11 @@ export function headWeights(pos, index, head, o = {}) {
       // the teeth's gum) rides on the jaw, so the lips stay sealed in buccal pumping; its middle is the mucosa over
       // the tongue and the hyoid, which the gape stretches into a slope from the lower lip back to the tongue,
       // opening the mouth's cavity instead of swinging the whole floor up as a plate
-      if (jawJ.has(k) && lower && ny > 0.3) d[k] += Math.max(0, d[k] - (o.rim ?? 0.022)) * 4;
+      // (round geoB2, `floorFront` [none, full]: in front of the hyoid the floor's mucosa between the dentaries' front
+      // ends is slung from them, so it rides the jaw there and the slope to the tongue starts behind; held back by the
+      // rim rule, the floor in front of s 0.17 stayed with the hyoid and the intermandibular joint at the full gape and
+      // jutted forward past the dropped jaw's skin as a flat triangular sheet)
+      if (jawJ.has(k) && lower && ny > 0.3) d[k] += Math.max(0, d[k] - (o.rim ?? 0.022)) * 4 * (FF ? smooth(FF[0], FF[1], x) : 1);
       if (fusePen > 0 && !headOnly.has(k)) d[k] += fusePen;
       if (flapPen > 0 && headOnly.has(k)) d[k] += flapPen;
     }
@@ -558,9 +563,21 @@ export function skinVertices(pos, nrm, skin, W) {
 // (the fast head's lining px −11…−21 %, new folds +8…+45), `endsFree` back 0.7 / 0.85 (−26…−50 %, but Head_Orbit's
 // stretched triangles at b 0.25 336 → 467), `iters` 180 / 300, `rhoSmooth` 40, `hinge.offRim` [0.02, 0.05], `zipSeam`
 // smooth 60 / hops 12 (no change))
+// (round fl_eye2, `dSmooth` and `hinge.ease`: the reviewers' blink, b 0.9–1 — the closed dome's skin drawn into vertical
+// streaks (Head_Orbit at b 1: 2124 triangles stretched over 3×, newFolds 366) and the lid's edge ragged across the cornea at
+// b 0.9 (clay, the low camera: rms 2.28 px, B010 2.19). Measured on the fast head (bm2.mjs, the dense mesh): the closed
+// dome's skin is the cup's lower wall (bind elevation under −45° round the globe) drawn ~3× up the dome and not widened
+// (singular values 3.0 / 0.96, s1 / s2 3.3 over the dome); the relaxation's passes (300), its region ([0.12, 0.25]) and the
+// hinge's depth (1.0, 1.3) and linear share (ease 1) left it at 3.0–3.5. The move smoothed after the relaxation and before
+// the seam's zip (dSmooth 100 passes, the lining's neighbours held) lets the cheek round the wall share the climb: the
+// dome's s1 / s2 3.34 → 2.90, its area stretched over 5× 8.4 → 5.2 mm², maxArea 375 → 233, folds 392 → 409 (fast head); the
+// hero (q34, Head_Orbit) b 1 stretch3 2124 → 1999, edge25 1815 → 1677, newFolds 366 → 394 (T3 364 + 10 % = 400), b 0.25
+// / 0.5 / 0.75 within T3 + 10 %; the lid's edge at b 0.9 (clay) low 2.28 → 0.79, B010 2.19 → 1.17, u1 1.04 → 0.86, side
+// 1.13 → 0.78 px rms; the closed dome's pale vertical band in front (the cup wall's streak) gone. Tried and left: the
+// relaxation at 300 passes with it (b 0.25 / 0.5 edge25 +21 / +25 % over T3), the smoothing after the zip (folds +190))
 export const BLINK_CLOSE = { k: 0.03, th: [0.008, 0.0005], el: [30, 2], tuckR: [0.022, 0.03], edgeK: 0.03, split: [0.12, 0.15], mu: 0.6, muS: [0.15, 0.30, 0.36, 0.46], iters: 90, lambda: 0.5, proj: 6, region: [0.07, 0.13], fall: [0, 0.07], rhoSmooth: 20, lobeK: 0.003, hinge: { ends: [0.96, 0.995], margin: 0.035, depth: 0.7, offRim: [0.026, 0.04] },
   convex: { off: 0.006, kMid: 0.02 }, endsFree: [0.85, 9, 0.02], zipSeam: { gap: 0.06, near: 0.035, w: 1, smooth: 30, hops: 8, along: 30 },
-  crease: null };
+  crease: null, dSmooth: { iters: 100, lambda: 0.5, hold: 1, after: true, relax: 0 } };
 export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   const CO = { ...BLINK_CLOSE, ...(o.close ?? {}) };
   if (o.close && o.close.hinge !== undefined && o.close.hinge !== false) CO.hinge = { ...BLINK_CLOSE.hinge, ...o.close.hinge };
@@ -720,7 +737,11 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       const above = smooth(thR + 0.03, thR + 0.2, th) * smooth(re + gap + HG.offRim[0], re + gap + HG.offRim[1], r);
       const wl = (1 - above) * smooth(thB - 0.3, thB, th) * (1 - smooth(thJ - 0.35, thJ - 0.12, th)) * (1 - smooth(re * HG.ends[0], re * HG.ends[1], Math.abs(w))) * (1 - smooth(re + reach * 0.7, re + reach, r));
       if (wl > 0) {
-        const t = Math.min(1, Math.max(0, (th - thB) / Math.max(0.05, thR - thB))), st = smooth(0, 1, t);
+        // (round fl_eye2, `hinge.ease`: the swing's share along the wall from its foot (t 0) to its rim (t 1), the
+        // smoothstep's (0) eased toward the linear share (1): the smoothstep kept the rim's band rigid and stretched the
+        // wall's middle ~1.5× the mean, a band of the cup's wall drawn ~5× up the closed dome in vertical streaks;
+        // linear, the wall's skin spreads evenly over the arc it closes)
+        const t = Math.min(1, Math.max(0, (th - thB) / Math.max(0.05, thR - thB))), st = smooth(0, 1, t) + (HG.ease ?? 0) * (t - smooth(0, 1, t));
         const vc = dy + drop, thc = Math.atan2(vc, dz), rhoc = Math.hypot(dz, vc);
         const th2 = smin1(thc + (th - thc + thT - thR) * st, thT, CO.edgeK);
         const tk = tuckOf(th, thR), Rs = shellR(t) + (re - tuck - shellR(t)) * tk;
@@ -883,7 +904,52 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       for (let k = 0; k < 3; k++) Q[S.v * 3 + k] = x[k] + off[k];
     }
   };
-  if (o.index && CO.iters > 0) {
+  let dSmoothN = 0;
+  // ---- (round fl_eye2, `dSmooth` { iters, lambda, hold, after, relax }: the closed shape's displacement from the bind
+  // smoothed over the free skin — each free vertex's move drawn `lambda` × wReg of the way to its free neighbours' mean move,
+  // `iters` passes, laid on the closed surface again each pass; the free skin next to the tucked lining or the hidden head
+  // (the seam's two edges) and `hold` rings round it held; before the relaxation, or after it (`after`, then `relax` passes
+  // of it again), and before the seam is zipped — so the move varies smoothly across the lid and its neighbours. The runtime blends the bind and the closed shape
+  // linearly, so mid-blink the lid is the bind's sheet plus that share of the move: a ragged move gave a ragged sheet,
+  // whose line across the globe read as a torn, saw-toothed lid edge (b 0.75–0.9), and the swing's move confined to the
+  // cup's wall stretched its texels ~3× up the closed dome; smoothed, the cheek round the wall shares the climb)
+  const DS = CO.dSmooth;
+  const dSmoothRun = () => {
+    const I = o.index, nb2 = new Map();
+    const isF = new Uint8Array(n); for (const v of free) isF[v] = 1;
+    for (let t = 0; t < I.length; t += 3) for (const [a, b] of [[I[t], I[t + 1]], [I[t + 1], I[t + 2]], [I[t + 2], I[t]]]) {
+      if (!nb2.has(a)) nb2.set(a, new Set()); if (!nb2.has(b)) nb2.set(b, new Set()); nb2.get(a).add(b); nb2.get(b).add(a);
+    }
+    // (held: the zipped seam (recomputed: free vertices next to tucked or hidden ones within the seam's reach) and `hold`
+    // rings round the tucked lining)
+    const held = new Uint8Array(n);
+    let front = [];
+    for (const v of free) { for (const u of nb2.get(v) ?? []) if (cls[u] === TUCK || cls[u] === HID) { held[v] = 1; front.push(v); break; } }
+    for (let h = 0; h < (DS.hold ?? 1); h++) { const nf = []; for (const v of front) for (const u of nb2.get(v) ?? []) if (isF[u] && !held[u]) { held[u] = 1; nf.push(u); } front = nf; }
+    const act = free.filter((v) => !held[v] && wReg[v] > 0);
+    const nbA = act.map((v) => Uint32Array.from([...(nb2.get(v) ?? [])].filter((u) => isF[u] || cls[u] === 0)));
+    const D = new Float64Array(n * 3);
+    for (let v = 0; v < n; v++) for (let k = 0; k < 3; k++) D[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k];
+    const nx = new Float64Array(act.length * 3);
+    for (let it = 0; it < DS.iters; it++) {
+      for (let i = 0; i < act.length; i++) {
+        const v = act[i], N = nbA[i], lam = (DS.lambda ?? 0.5) * wReg[v];
+        let x = 0, y = 0, z = 0, c = 0;
+        for (const u of N) { x += D[u * 3]; y += D[u * 3 + 1]; z += D[u * 3 + 2]; c++; }
+        if (!c) { nx[i * 3] = D[v * 3]; nx[i * 3 + 1] = D[v * 3 + 1]; nx[i * 3 + 2] = D[v * 3 + 2]; continue; }
+        nx[i * 3] = D[v * 3] + lam * (x / c - D[v * 3]); nx[i * 3 + 1] = D[v * 3 + 1] + lam * (y / c - D[v * 3 + 1]); nx[i * 3 + 2] = D[v * 3 + 2] + lam * (z / c - D[v * 3 + 2]);
+      }
+      for (let i = 0; i < act.length; i++) {
+        const v = act[i];
+        for (let k = 0; k < 3; k++) Q[v * 3 + k] = pos[v * 3 + k] + nx[i * 3 + k];
+        lay(v, 2);
+        for (let k = 0; k < 3; k++) D[v * 3 + k] = Q[v * 3 + k] - pos[v * 3 + k];
+      }
+    }
+    dSmoothN = act.length;
+  };
+  if (o.index && DS && DS.iters > 0 && !DS.after) dSmoothRun();
+  const relaxRun = (passes) => {
     const nb = new Map();
     const fs = new Uint8Array(n); for (const v of free) fs[v] = 1;
     const I = o.index;
@@ -893,7 +959,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
     }
     const nbA = free.map((v) => Uint32Array.from(nb.get(v) ?? []));
     const nx = new Float64Array(free.length * 3);
-    for (let it = 0; it < CO.iters; it++) {
+    for (let it = 0; it < passes; it++) {
       for (let i = 0; i < free.length; i++) {
         const v = free[i], N = nbA[i], lam = CO.lambda * wReg[v];
         // (positions, so the skin laid into a fold of the closed surface spreads out of it; `delta`: the displacements,
@@ -907,7 +973,11 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
       }
       for (let i = 0; i < free.length; i++) { const v = free[i]; Q[v * 3] = nx[i * 3]; Q[v * 3 + 1] = nx[i * 3 + 1]; Q[v * 3 + 2] = nx[i * 3 + 2]; lay(v, 2); }
     }
-  }
+  };
+  if (o.index && CO.iters > 0) relaxRun(CO.iters);
+  // (`dSmooth.after`: the move smoothed after the relaxation, then `relax` passes of it again, which take out the few
+  // facets the smoothing turns over where the moving lid meets the held lining)
+  if (o.index && DS && DS.iters > 0 && DS.after) { dSmoothRun(); if (DS.relax > 0) relaxRun(DS.relax); }
   // (the crease shut once the skin round it is relaxed: drawing the lips together inside the relaxation drew the skin
   // round them into the line too, a band packed so tight that lod1's shrink-wrap folded its coarse cells there)
   if (CRS && CRS.mode === 'transport') transportAll();
@@ -918,7 +988,7 @@ export function blinkTargets(pos, nrm, headSDF, K, o = {}) {
   // with its nearest partner across the seam and is laid again; then the skin within `hops` rings of the seam is relaxed
   // (`smooth` passes, the seam held), so the closed dome has one fine seam instead of a crack with torn edges
   const ZS = CO.zipSeam;
-  const stats = { zipped: 0, crease: slaves.length, creaseLips: zips.length, creaseZone: transportAll.zone ?? 0 };
+  const stats = { zipped: 0, crease: slaves.length, creaseLips: zips.length, creaseZone: transportAll.zone ?? 0, dSmooth: dSmoothN };
   if (o.index && ZS) {
     const I = o.index, nbAll = new Map();
     const isF = new Uint8Array(n); for (const v of free) isF[v] = 1;

@@ -20,17 +20,21 @@
 // iris on Iris). The clay round has no maps: the viewer paints the iris rect from `eyeClayAtlas` (the pupil's edge per
 // u, the window's rect) so the clay keeps its dark window and iris ring.
 import { EYE_MM, toObject, dirToObject } from './anatomy.mjs';
-import { eyeGlobe, pupilEdge } from './eye.mjs';
+import { eyeGlobe, pupilEdge, WINDOW_U_INSET, WINDOW_V_INSET } from './eye.mjs';
 import { BODY_LAYOUT } from './fishmesh.mjs';
 import { vertexTangents } from './tiers.mjs';
 
 /** The ring counts per tier (triangles = 2·nt·np − 2·np per globe: the two poles' fans, without the zero-area facets
- * eyeGlobe's pole rows make, compact): hero 4,992, lod1 704, lod2 96 (8 columns: an octagon from every side, where B1's
+ * eyeGlobe's pole rows make, compact): hero 4,992, lod1 1,056, lod2 96 (8 columns: an octagon from every side, where B1's
  * 6 showed a hexagon in the far renders).
  * (round fm_eye: lod1 32 columns, was 16 — the window's outline is a ring of the mesh, and at 16 sides its back end
  * was one hard corner at the states' default gaze, the pointed almond the owner named, on the tier the 図鑑's 'low'
  * preview, FieldCase, the net and the tanks show close; 32 round it as the hero's 64 do: +352 triangles a globe) */
-export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 32 }, lod2: { nt: 7, np: 8 } };
+// (round fl_eye2: lod1 48 columns, was 32 — the window's new outline (a flat top, a deep round bottom, the back end
+// tapered) as a 32-gon showed its corners along the flat top and at the tapered end (rTop / rBot at u1 0.98 against the
+// hero's 2.73) and a faceted kink in the hood's groove behind the window at the states' default gaze: +352 triangles a
+// globe, 1,056)
+export const EYE_TIERS = { hero: { nt: 40, np: 64 }, lod1: { nt: 12, np: 48, analytic: true }, lod2: { nt: 7, np: 8 } };
 
 /** eyeGlobe's uv (u = azimuth / 2π, v = ρ / 2: the window v ≤ 0.5, the skin 0.5 … 1) on the atlas: `part` 'window' maps
  * v ∈ [0, 0.5] onto the iris rect, 'skin' maps v ∈ [0.5, 1] onto the eyeSkin rect (v clamped into the part's range).
@@ -40,8 +44,10 @@ export function eyePartUV(uv, part, layout = BODY_LAYOUT, side = 1) {
   const cap = (side < 0 ? layout.eyeSkinR : layout.eyeSkinL) ?? layout.eyeSkin;
   const out = new Float32Array(uv.length), R = part === 'skin' ? cap : layout.iris;
   for (let i = 0; i < uv.length / 2; i++) {
-    const v = uv[i * 2 + 1], t = part === 'skin' ? Math.max(0, Math.min(1, (v - 0.5) / 0.5)) : Math.max(0, Math.min(1, v / 0.5));
-    out[i * 2] = R[0] + uv[i * 2] * (R[2] - R[0]);
+    const v = uv[i * 2 + 1], t = part === 'skin' ? Math.max(0, Math.min(1, (v - 0.5) / 0.5)) : WINDOW_V_INSET + (1 - WINDOW_V_INSET) * Math.max(0, Math.min(1, v / 0.5));
+    // (the window's u inset from the rect's edges, eye.mjs WINDOW_U_INSET)
+    const u = part === 'skin' ? uv[i * 2] : WINDOW_U_INSET + uv[i * 2] * (1 - 2 * WINDOW_U_INSET);
+    out[i * 2] = R[0] + u * (R[2] - R[0]);
     out[i * 2 + 1] = R[1] + t * (R[3] - R[1]);
   }
   return out;
@@ -84,8 +90,8 @@ function compact(P, N, UV, indices0, { tangents = true } = {}) {
  *   uv, indices, tangent }), triangles, and for the older callers position / normal / indices (all) with uv (the
  *   window's rings in the iris rect, the skin's in eyeSkin: the boundary ring in the iris rect) }
  */
-export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangents = true } = {}) {
-  const g = eyeGlobe(EYE_MM.radius * 0.001, { nt, np, side });
+export function eyeMeshForTier({ nt, np, side = 1, layout = BODY_LAYOUT, tangents = true, analytic = false } = {}) {
+  const g = eyeGlobe(EYE_MM.radius * 0.001, { nt, np, side, analytic });
   const n = g.position.length / 3, position = new Float32Array(n * 3), normal = new Float32Array(n * 3);
   // the globe's frame is the fish frame (s, y, z) about its centre: (s, y, z) → (z, y, −s), a rotation (windings stay)
   for (let i = 0; i < n; i++) {
@@ -140,7 +146,9 @@ function joinParts(list) {
 export function eyeClayAtlas(layout = BODY_LAYOUT, n = 32) {
   return {
     iris: layout.iris, eyeSkin: layout.eyeSkin,
-    pupilEdge: Array.from({ length: n + 1 }, (_, k) => +pupilEdge((k / n) * Math.PI * 2).toFixed(4)),
+    // (the window's insets, eye.mjs WINDOW_U_INSET / WINDOW_V_INSET: the edge at the rect's u = k / n is the mesh's at
+    // φ = 2π (u − inset) / (1 − 2 inset), at the rect's height inset + (1 − inset) ρ)
+    pupilEdge: Array.from({ length: n + 1 }, (_, k) => +(WINDOW_V_INSET + (1 - WINDOW_V_INSET) * pupilEdge(((k / n - WINDOW_U_INSET) / (1 - 2 * WINDOW_U_INSET)) * Math.PI * 2)).toFixed(4)),
     colours: { pupil: [0.23, 0.2, 0.16], iris: [0.54, 0.45, 0.28], roughness: { window: 0.12, skin: 0.6 } },
     note: 'clay only: paint the iris rect gold-brown with the pupil (v < pupilEdge at u, linear between the samples) dark and glossy; the rest of the atlas the body clay',
   };

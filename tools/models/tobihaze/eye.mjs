@@ -46,9 +46,21 @@ export const EYE_SCULPT = {
   // ends: ends 0.50 / 0.53 and radius 0.15–0.17 H at u1 looking into the lens, 0.36 and 0.12 H at the default gaze (the
   // pointed almond). The half-angles put the mesh pupil's centroid (rig.mjs EYE_REST) exactly where round T3 had it,
   // 71.7° out and 12.2° up (the runtime's rest gaze, src behaviour.ts), so the gaze channels keep their numbers.
+  // (round fl_eye2, the owner: 目の形 — the window above was a symmetric stadium, top and bottom equally flat and both ends
+  // equally round (u1 / B012 / B013 looking into the lens: rTop / rBot 1.5, the bottom's radius 1.7–1.8 H, the ends
+  // 0.41–0.44 H), where all four photos show the top pressed flat by the hood, a rounder, deeper bottom and one end
+  // tapering (u1 rTop / rBot 3.4, rBot 1.57, the tightest end 0.31 H against 0.42; B012 / B013 rBot 1.20 / 0.67, ends
+  // 0.33 / 0.43). Now the top quadrants long along (back-top 2.72, front-top 4.46: flat), the bottom ones near an
+  // ellipse's (front-bottom 2.46, back-bottom 1.63: round and deep), and the back end's across exponents and half-angle
+  // drawn in (1.9 / 2.34, the back-bottom's along under 2), so the back end tapers: rendered at the photos' cameras
+  // looking into the lens (u1 / B012 / B013, textured) h/w 0.597 / 0.596 / 0.602, the back end 0.33 / 0.33 / 0.35 H and
+  // the front 0.43 / 0.43 / 0.42 H, rBot 1.11 / 1.11 / 1.12, rTop / rBot 2.73 / 2.87 / 2.81, 0.30 of the globe's disc;
+  // at the default gaze the ends ≥ 0.19 H. The half-angles re-solved so the mesh pupil's centroid stays within 0.05° of
+  // 71.7° out and 12.2° up (EYE_REST). The cornea's apex 0.072 over its edge (was 0.060): with the window's top lower, the
+  // photo light's highlight on the cornea spread over the gold rim's top)
   // (windowCaps { k, caps: [{ at, r }] }: the older form, the smooth intersection of spherical caps, if given)
-  windowHalf: [47.438, 21.692, 30.308, 43.562],
-  windowPow: [[3, 2], [3.4, 2], [2.6, 2], [2.6, 2]],
+  windowHalf: [47.76, 19.57, 29.49, 42.15],
+  windowPow: [[2.72, 2.34], [4.46, 2.04], [2.46, 1.71], [1.63, 1.9]],
   windowRoll: 19,
   // the window's axis in the eye's rest frame (fish frame: forward is −s, up +y, lateral +z for the left eye): 19°
   // forward of lateral, 13° above the equator (the window's mass lies under its flat top, so with the axis there its
@@ -57,7 +69,7 @@ export const EYE_SCULPT = {
   // the skin's thickness: the cornea's edge lies this far under the skin round it
   skin: 0.055,
   // the cornea's apex above its edge
-  bulge: 0.060,
+  bulge: 0.072,
   // the lid margin round the window: a rounded roll proud of the skin (`swell`: [hood, under the window]), its inner
   // face rounding over `round` degrees from the window's edge and the roll dying out `width` degrees from it; the
   // swell follows a crescent over the window's upper front (`hood`: its centre, degrees round from the window's back
@@ -80,8 +92,19 @@ export const EYE_SCULPT = {
   // (round fin_eye: the mesh's pupil ring where the painted pupil now ends, iris.mjs EYE_PAINT — the window drawn in by
   // the thin rim, ρ 0.855 over it, 0.87 at the ends, 0.83 under it — with the paint's gentle dip; the clay shows the same
   // dark window with a thin rim)
-  pupil: { follow: [0.855, 0.87, 0.83], dent: 0.03, dentAt: 112, dentWidth: 24, ring: 0.04, half: [0.88, 0.66], lift: 0.14 },
+  pupil: { follow: [0.815, 0.862, 0.82], dent: 0.03, dentAt: 112, dentWidth: 24, ring: 0.04, half: [0.88, 0.66], lift: 0.14 },
 };
+
+/** (round fl_eye2) The window's azimuth inset in its atlas rect: u = WINDOW_U_INSET + (φ / 2π)(1 − 2 WINDOW_U_INSET), so the
+ * mesh's seam column (φ = 0 / 2π) samples the rect inside its edges, not on them (eyemesh.mjs eyePartUV, iris.mjs paintEye
+ * the inverse): sampled on the rect's edge, the clay atlas (painted at 1024 over a rect 0.15 wide) blended the body clay
+ * into the pupil there, a bright hairline from the window's centre to its back edge. 0.008 of the rect ≈ 1.2 texels at
+ * 1024, 2.5 at 2048; the bake paints the rect past its edges round the azimuth, so the textured eye is the same. */
+export const WINDOW_U_INSET = 0.008;
+/** (round fl_eye2) The same for the window's pole: its ρ (the rect's height from its top, v down) starts WINDOW_V_INSET
+ * down the rect, t = WINDOW_V_INSET + ρ (1 − WINDOW_V_INSET), so the pole is not on the rect's top edge (the clay's bright
+ * dot at the window's centre). */
+export const WINDOW_V_INSET = 0.015;
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -273,7 +296,7 @@ export function eyeSurface({ side = 1, K = EYE_SCULPT } = {}) {
  * nearly tangent, it emerges from the mesh at the crossing itself, not up to a sag lateral of it where its curl under
  * the skin has tilted it; the seam's columns and the poles move together)
  */
-export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = EYE_SCULPT, straddle = true } = {}) {
+export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = EYE_SCULPT, straddle = true, analytic = false } = {}) {
   const S = eyeSurface({ side, K });
   const { a, u, v, thB } = S;
   const nw = Math.round(nt * 0.3), no = nt - nw;
@@ -389,6 +412,31 @@ export function eyeGlobe(r = HEAD.eye.d / 2, { nt = 56, np = 96, side = 1, K = E
   }
   const Nf = new Float32Array(N.length);
   for (let i = 0; i < N.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1; Nf[i] = N[i] / l; Nf[i + 1] = N[i + 1] / l; Nf[i + 2] = N[i + 2] / l; }
+  // (round fl_eye2, `analytic`: the sculpted surface's own normal at each vertex — the cross product of its tangents along
+  // the polar angle and the azimuth, by central differences of S.R — instead of its facets': at lod1's ring count (12 rings,
+  // 4 of them in the window) the facets' mean flattened the cornea's bulge, so its highlight spread into a halo that ran
+  // over the gold rim's top, and kinked the hood's groove behind the window into a facet at the default gaze; the poles
+  // keep the facets' mean)
+  if (analytic) {
+    const at = (th, ph) => { const st = Math.sin(th), ct = Math.cos(th), rr = S.R(th, ph); return [0, 1, 2].map((k) => (st * Math.cos(ph) * u[k] + st * Math.sin(ph) * v[k] + ct * a[k]) * rr); };
+    const e = 1e-4;
+    for (let j = 1; j + 1 < nr; j++)
+      for (let i = 0; i <= np; i++) {
+        const ph = (i / np) * Math.PI * 2, th = cols[i][j][0];
+        if (th < 2e-3 || th > Math.PI - 2e-3) continue;
+        // (not across the window's edge and the lid's roll, where R steps by the skin's thickness: there the facets' mean)
+        const bd = (th - thB(ph)) / D2R;
+        if (bd > -1.5 && bd < (L.round ?? 4) + 1) continue;
+        const pa = at(th + e, ph), pb = at(th - e, ph), pc = at(th, ph + e), pd = at(th, ph - e);
+        const dt = [pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]], dp = [pc[0] - pd[0], pc[1] - pd[1], pc[2] - pd[2]];
+        let nn = [dt[1] * dp[2] - dt[2] * dp[1], dt[2] * dp[0] - dt[0] * dp[2], dt[0] * dp[1] - dt[1] * dp[0]];
+        const q = (j * (np + 1) + i) * 3, l = Math.hypot(...nn) || 1;
+        nn = nn.map((x) => x / l);
+        // (outward: the side the facets' mean normal faces)
+        if (nn[0] * Nf[q] + nn[1] * Nf[q + 1] + nn[2] * Nf[q + 2] < 0) nn = nn.map((x) => -x);
+        Nf[q] = nn[0]; Nf[q + 1] = nn[1]; Nf[q + 2] = nn[2];
+      }
+  }
   // (p, s, t) runs along the polar angle, then the azimuth: counter-clockwise seen from outside on the left eye, as its
   // (u, v, a) is right-handed (the right eye's mirrored frame is wound (p, t, s))
   return { position: new Float32Array(pos), normal: Nf, uv: new Float32Array(uv), skin: new Uint32Array(skin), cornea: new Uint32Array(cornea), pupil: new Uint32Array(pupil), iris: new Uint32Array(iris) };

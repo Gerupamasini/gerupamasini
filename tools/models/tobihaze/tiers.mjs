@@ -366,6 +366,103 @@ export function withDecimationLock(L, fn) {
   try { return fn(); } finally { DECIMATION_LOCK = prev; }
 }
 
+/** (2026-10-26, round 2) The decimation lock's floor (decimlock FLOOR, `L.tris.floor`: { inside(p mm) → bool, label }):
+ * each vertex of `position` (mm, in place) inside it that lies below the lock's skin there — the lowest lock triangle
+ * whose (s, z) projection holds the vertex's: the skin's underside — lifted onto it. Returns { lifted, max (mm) }. */
+export function floorToLock(position, L) {
+  const F = L?.tris?.floor;
+  if (!F) return { lifted: 0, max: 0 };
+  const LP = L.tris.position, LI = L.tris.indices, tris = [], B = F.box, m = 2;
+  for (let t = 0; t < LI.length / 3; t++) {
+    const p = [0, 1, 2].map((k) => [LP[LI[t * 3 + k] * 3], LP[LI[t * 3 + k] * 3 + 1], LP[LI[t * 3 + k] * 3 + 2]]);
+    // (the lock triangles near the box: a corner within `m` mm of it)
+    if (!p.some(([s, y, z]) => s >= B.s[0] - m && s <= B.s[1] + m && y >= B.y[0] - m && y <= B.y[1] + m && Math.abs(z) <= B.z + m)) continue;
+    tris.push(p);
+  }
+  let lifted = 0, max = 0;
+  for (let v = 0; v < position.length / 3; v++) {
+    const s = position[v * 3], y = position[v * 3 + 1], z = position[v * 3 + 2];
+    if (!F.inside([s, y, z])) continue;
+    let floor = -Infinity;
+    for (const [a, b, c] of tris) {
+      // (barycentric in the s–z plane)
+      const d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+      if (Math.abs(d) < 1e-12) continue;
+      const w0 = ((b[2] - c[2]) * (s - c[0]) + (c[0] - b[0]) * (z - c[2])) / d, w1 = ((c[2] - a[2]) * (s - c[0]) + (a[0] - c[0]) * (z - c[2])) / d, w2 = 1 - w0 - w1;
+      if (w0 < -1e-9 || w1 < -1e-9 || w2 < -1e-9) continue;
+      const yy = w0 * a[1] + w1 * b[1] + w2 * c[1];
+      if (floor === -Infinity || yy < floor) floor = yy;
+    }
+    if (floor > y + 1e-5 && floor - y <= (F.maxLift ?? Infinity)) { position[v * 3 + 1] = floor; lifted++; max = Math.max(max, floor - y); }
+  }
+  return { lifted, max };
+}
+
+/**
+ * (2026-10-26, round 2) Small islands of the slit's wall charts (mouthRoof, mouthFloor, by name) on the outer skin given
+ * back to the skin's chart: an edge-connected group of at most `maxTris` triangles in one of them, every triangle across
+ * its border in one other chart C (not hidden, not the patch), is laid in C by C's own projection (new vertex copies). The
+ * lips' margins facing down / up near the closed mouth's line go with the walls (fishmesh prefer, LIP.band 0.05 HL); the
+ * round 1 head turned a few faces at the notch where the median lip meets the pad (s 1 mm, y 1.7–2.0, z −1.1 to −1.4)
+ * down within that band, and lod1 kept them as a 5-triangle island of mouthRoof amid the face: baked as the mouth's
+ * interior, the dark "sawtooth" teeth on the pad's top in the front views. A group with a held triangle (`keep`) stays.
+ * Used under the decimation lock only (lod1, lod2). Returns { mesh, moved, groups }.
+ */
+export function slitIslandsToSkin(mesh, charts, { names = ['mouthRoof', 'mouthFloor'], maxTris = 12, keep = null } = {}) {
+  const I = Uint32Array.from(mesh.indices), S = mesh.source, nt = I.length / 3, nv = mesh.position.length / 3;
+  const wall = new Set(names.map((nm) => charts.findIndex((C) => C.name === nm)).filter((k) => k >= 0));
+  if (!wall.size) return { mesh, moved: 0, groups: 0 };
+  const triChart = Int16Array.from(mesh.triChart ?? Array.from({ length: nt }, (_, t) => mesh.chart[I[t * 3]]));
+  // (edge neighbours by dense vertex: across the charts' seams)
+  const ek = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`), byE = new Map();
+  for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) { const e = ek(S[I[t * 3 + k]], S[I[t * 3 + (k + 1) % 3]]); let a = byE.get(e); if (!a) byE.set(e, (a = [])); a.push(t); }
+  const nbrs = (t) => { const out = []; for (let k = 0; k < 3; k++) for (const u of byE.get(ek(S[I[t * 3 + k]], S[I[t * 3 + (k + 1) % 3]])) ?? []) if (u !== t) out.push(u); return out; };
+  const seen = new Uint8Array(nt), extra = [], copy = new Map();
+  let moved = 0, groups = 0;
+  for (let t0 = 0; t0 < nt; t0++) {
+    if (seen[t0] || !wall.has(triChart[t0])) continue;
+    const ch = triChart[t0], grp = [t0], border = new Set();
+    seen[t0] = 1;
+    for (let i = 0; i < grp.length && grp.length <= maxTris; i++) for (const u of nbrs(grp[i])) {
+      if (triChart[u] === ch) { if (!seen[u]) { seen[u] = 1; grp.push(u); } } else border.add(triChart[u]);
+    }
+    if (grp.length > maxTris || border.size !== 1 || (keep && grp.some((t) => keep[t]))) continue;
+    const c = [...border][0], C = charts[c];
+    if (C.hidden || C.relay || C.wrapV || wall.has(c)) continue;
+    for (const t of grp) {
+      for (let k = 0; k < 3; k++) {
+        const v = I[t * 3 + k], key = `${S[v]}:${c}`;
+        let w = copy.get(key);
+        if (w === undefined) {
+          // (the dense vertex's copy C already has, else a new one by C's projection)
+          for (let x = 0; x < nv && w === undefined; x++) if (S[x] === S[v] && mesh.chart[x] === c) w = x;
+          if (w === undefined) {
+            const p = [0, 1, 2].map((q) => mesh.position[v * 3 + q]), n = [0, 1, 2].map((q) => mesh.normal[v * 3 + q]);
+            let [a, b, d] = C.project(p, n);
+            if (C.crop) { a = (a - C.crop[0]) / (C.crop[2] - C.crop[0]); b = (b - C.crop[1]) / (C.crop[3] - C.crop[1]); }
+            w = nv + extra.length; extra.push({ from: v, uv: [C.rect[0] + a * (C.rect[2] - C.rect[0]), C.rect[1] + b * (C.rect[3] - C.rect[1])], d: d ?? 0, c });
+          }
+          copy.set(key, w);
+        }
+        I[t * 3 + k] = w;
+      }
+      triChart[t] = c; moved++;
+    }
+    groups++;
+  }
+  if (!moved) return { mesh, moved, groups };
+  const out = { ...mesh, indices: I, triChart };
+  for (const k of ['position', 'normal', 'uv', 'chart', 'source', 'depth']) {
+    const a = mesh[k];
+    if (!a) continue;
+    const w = a.length / nv, b = new a.constructor((nv + extra.length) * w);
+    b.set(a); extra.forEach((e, i) => { for (let q = 0; q < w; q++) b[(nv + i) * w + q] = a[e.from * w + q]; });
+    out[k] = b;
+  }
+  extra.forEach((e, i) => { const u = nv + i; out.uv[u * 2] = e.uv[0]; out.uv[u * 2 + 1] = e.uv[1]; out.chart[u] = e.c; if (out.depth) out.depth[u] = e.d; });
+  return { mesh: out, moved, groups };
+}
+
 /** Distance from p to triangle abc (closest point, Ericson). */
 function pointTriDist(p, a, b, c) {
   const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
@@ -452,7 +549,11 @@ export function frozenPlan(P, sub, wid, L, o = {}) {
     if (!L.changedCell) return false;
     const r = 0.87 * cell + m;
     for (let i = Math.floor((lo[0] - r) / cell); i <= Math.floor((hi[0] + r) / cell); i++) for (let j = Math.floor((lo[1] - r) / cell); j <= Math.floor((hi[1] + r) / cell); j++) for (let k = Math.floor((lo[2] - r) / cell); k <= Math.floor((hi[2] + r) / cell); k++) {
-      if (!L.changedCell(`${i},${j},${k}`)) continue;
+      const key = `${i},${j},${k}`;
+      if (!L.changedCell(key)) continue;
+      // (2026-10-26, round 2: a fringe cell's own moved points where the lock has them, decimlock.changedCells)
+      const mv = T.cells?.moved?.get(key);
+      if (mv) { for (let q = 0; q < mv.length; q += 3) if (pointTriDist([mv[q], mv[q + 1], mv[q + 2]], pc[0], pc[1], pc[2]) <= m) return true; continue; }
       if (pointTriDist([(i + 0.5) * cell, (j + 0.5) * cell, (k + 0.5) * cell], pc[0], pc[1], pc[2]) <= r) return true;
     }
     return false;
@@ -762,6 +863,27 @@ export function simplifyRegions(mesh, regionOf, regions, o = {}) {
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) for (const v of place.get(`${i0 + a},${j0 + b},${k0 + c}`) ?? []) if (Math.max(Math.abs(P[v * 3] - p[0]), Math.abs(P[v * 3 + 1] - p[1]), Math.abs(P[v * 3 + 2] - p[2])) < 2e-4) hit.add(wid(v));
       if (hit.size === 1) lockW[i] = [...hit][0];
     }
+    // (2026-10-26, round 2: a lock vertex outside the zones not found at its place takes the one welded vertex within the
+    // lock's tolerance of it, its nearest — the zones' sculpt moved the skin next to them by up to 0.009 mm, decimlock
+    // FRINGE_MM)
+    const tol = o.frozen.tris.tol ?? 0;
+    if (tol > 0) {
+      const G = Math.max(tol, Q) * 2, coarse = new Map();
+      for (const a of place.values()) for (const v of a) { const k = `${Math.floor(P[v * 3] / G)},${Math.floor(P[v * 3 + 1] / G)},${Math.floor(P[v * 3 + 2] / G)}`; let b = coarse.get(k); if (!b) coarse.set(k, (b = [])); b.push(v); }
+      let snapped = 0;
+      for (let i = 0; i < lockW.length; i++) {
+        if (lockW[i] >= 0) continue;
+        const p = [LP[i * 3], LP[i * 3 + 1], LP[i * 3 + 2]];
+        if (o.frozen.free?.(p)) continue;
+        const i0 = Math.floor(p[0] / G), j0 = Math.floor(p[1] / G), k0 = Math.floor(p[2] / G), best = new Map();
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) for (const v of coarse.get(`${i0 + a},${j0 + b},${k0 + c}`) ?? []) {
+          const d = Math.hypot(P[v * 3] - p[0], P[v * 3 + 1] - p[1], P[v * 3 + 2] - p[2]);
+          if (d <= tol) { const w = wid(v); best.set(w, Math.min(best.get(w) ?? Infinity, d)); }
+        }
+        if (best.size) { lockW[i] = [...best].sort((x, y) => x[1] - y[1])[0][0]; snapped++; }
+      }
+      if (snapped) log(`  decimation lock: ${snapped} lock vertices outside the zones found within ${tol} mm of their place`);
+    }
     const nL = LI.length / 3, chartIdx = (t) => (o.frozen.tris.chart?.[t] ? o.chartIndex?.(o.frozen.tris.chart[t]) ?? -1 : -1);
     lockRegion = new Int16Array(nL).fill(-1);
     for (let t = 0; t < nL; t++) {
@@ -882,7 +1004,41 @@ export function tierMesh(f, box, o) {
     for (let t = 0; t < out.length; t++) out[t] = o.forceTri([0, 1, 2].map((q) => (P[I[t * 3] * 3 + q] + P[I[t * 3 + 1] * 3 + q] + P[I[t * 3 + 2] * 3 + q]) / 3));
     return out;
   };
-  let tier, charted, region, simp, keepTri = null;
+  let tier, charted, region, simp, keepTri = null, repair = null;
+  // after the simplification: the held triangles on T3's UVs (decimation lock `L`), triangles without area dropped,
+  // the repair
+  const finish = (L) => {
+    keepTri = null; repair = null;
+    // (2026-10-26, the decimation lock: the held triangles on T3's own UVs, kept as they are by the repair — restoreHeld)
+    if (simp.held?.length && L) {
+      const r = restoreHeld(tier, simp.held, L, o.charts, { spare: o.repair?.spare ?? [] });
+      tier = r.mesh; keepTri = r.keep;
+      log(`  held on T3's UVs: ${r.kept} of ${simp.held.length} held triangles kept as they are through the repair (${r.moved} of them on ${r.copies} new vertex copies: T3's mends and patch islands, where this charting differs)${r.relayed ? `; ${r.relayed} across two charts sent to the patch` : ''}`);
+    }
+    log(`  simplified: ${chartTally(tier.triChart, o.charts)}`);
+    // (triangles with two corners on one dense vertex — chart copies of it, or the same index — have no area, no tangent
+    // frame and no edges of the welded skin: dropped, the skin stays closed)
+    {
+      const d = dropZeroArea(tier);
+      if (d.dropped) { tier = d.mesh; region = Uint8Array.from(d.keep, (t) => region[t]); if (keepTri) keepTri = Uint8Array.from(d.keep, (t) => keepTri[t]); log(`  dropped ${d.dropped} triangles with no area or doubled (${d.duplicates})`); }
+    }
+    // (2026-10-26, round 2: the slit's wall charts' small islands on the outer skin back to the skin's chart)
+    if (L && o.repair !== false) {
+      const sl = slitIslandsToSkin(tier, o.charts, { keep: keepTri });
+      if (sl.moved) { tier = sl.mesh; log(`  ${sl.moved} triangles in ${sl.groups} islands of the slit's walls amid the skin laid in the skin's chart`); }
+    }
+    if (o.repair !== false) {
+      const r = repairFolds(tier, o.charts, { ...(o.repair ?? {}), log, ...(keepTri ? { keep: keepTri } : {}) });
+      tier = r.mesh; repair = r.stats;
+      // (and once more after the repair: a face that folds in the skin's chart the repair's refit lays in a wall chart
+      // whose plane maps it the right way round — the notch's 4 at s 1 mm. In the skin's chart such a triangle, a texel
+      // or two, samples the face round it; in the wall's it took the mouth's interior)
+      if (L) {
+        const sl = slitIslandsToSkin(tier, o.charts, { keep: keepTri });
+        if (sl.moved) { tier = sl.mesh; log(`  after the repair: ${sl.moved} triangles in ${sl.groups} islands of the slit's walls amid the skin laid in the skin's chart`); }
+      }
+    }
+  };
   if (o.simplifyFirst) {
     const ident = Uint32Array.from({ length: nD }, (_, i) => i);
     const A = attrsFor(dense.normal, null, ident, nD);
@@ -903,6 +1059,11 @@ export function tierMesh(f, box, o) {
       if (rf.removed) { simp.indices = rf.indices; simp.region = rf.region; log(`  refilled ${rf.removed} hidden triangles with ${rf.added}`); }
     }
     const c = compactMesh(dense, simp.indices, ['position', 'normal']);
+    // (2026-10-26, round 2: the lock's floor — lod2's chin no lower than T3's, decimlock FLOOR)
+    if (DECIMATION_LOCK?.tris?.floor) {
+      const f = floorToLock(c.position, DECIMATION_LOCK);
+      log(`  floor (${DECIMATION_LOCK.tris.floor.label}): ${f.lifted} vertices lifted onto the lock's skin, at most ${f.max.toFixed(3)} mm`);
+    }
     const m1 = { position: c.position, normal: c.normal, indices: c.indices };
     const pf = (p, n, v) => o.prefer(p, n, c.map[v]);
     charted = o.resolve ? chartResolve(m1, o.charts, pf, { ...o.resolve, force: forceFor(m1), log }) : chartMesh(m1, o.charts, pf, { force: forceFor(m1) });
@@ -910,6 +1071,7 @@ export function tierMesh(f, box, o) {
     for (let i = 0; i < source.length; i++) source[i] = c.map[charted.source[i]];
     tier = { position: charted.position, normal: charted.normal, uv: charted.uv, depth: charted.depth, indices: charted.indices, chart: charted.chart, source, triChart: charted.triChart };
     region = simp.region;
+    finish(DECIMATION_LOCK);
   } else {
     const force = o.force ?? forceFor(dense);
     charted = o.resolve ? chartResolve(dense, o.charts, o.prefer, { ...o.resolve, force, log }) : chartMesh(dense, o.charts, o.prefer, { force });
@@ -921,31 +1083,38 @@ export function tierMesh(f, box, o) {
     let lock = null;
     if (o.lockDense) { lock = new Uint8Array(n); for (let i = 0; i < n; i++) lock[i] = o.lockDense[charted.source[i]]; }
     const tc = charted.triChart;
-    simp = simplifyRegions(charted, regionOfTri(charted, (t) => tc[t]), regions, { ...A, lock, weld: charted.source, log, frozen: DECIMATION_LOCK, chartOf: charted.chart, chartIndex: (nm) => o.charts.findIndex((c) => c.name === nm), uv: charted.uv });
-    // the kept triangles' charts: the corners' chart (every corner of a charted triangle has its chart)
-    const c = compactMesh(charted, simp.indices, ['position', 'normal', 'uv', 'chart', 'source', 'depth']);
-    const triChart = new Int16Array(c.indices.length / 3);
-    for (let t = 0; t < triChart.length; t++) triChart[t] = c.chart[c.indices[t * 3]];
-    tier = { position: c.position, normal: c.normal, uv: c.uv, depth: c.depth, indices: c.indices, chart: c.chart, source: c.source, triChart };
-    region = simp.region;
-  }
-  // (2026-10-26, the decimation lock: the held triangles on T3's own UVs, kept as they are by the repair — restoreHeld)
-  if (simp.held?.length && DECIMATION_LOCK) {
-    const r = restoreHeld(tier, simp.held, DECIMATION_LOCK, o.charts, { spare: o.repair?.spare ?? [] });
-    tier = r.mesh; keepTri = r.keep;
-    log(`  held on T3's UVs: ${r.kept} of ${simp.held.length} held triangles kept as they are through the repair (${r.moved} of them on ${r.copies} new vertex copies: T3's mends and patch islands, where this charting differs)${r.relayed ? `; ${r.relayed} across two charts sent to the patch` : ''}`);
-  }
-  let repair = null;
-  log(`  simplified: ${chartTally(tier.triChart, o.charts)}`);
-  // (triangles with two corners on one dense vertex — chart copies of it, or the same index — have no area, no tangent
-  // frame and no edges of the welded skin: dropped, the skin stays closed)
-  {
-    const d = dropZeroArea(tier);
-    if (d.dropped) { tier = d.mesh; region = Uint8Array.from(d.keep, (t) => region[t]); if (keepTri) keepTri = Uint8Array.from(d.keep, (t) => keepTri[t]); log(`  dropped ${d.dropped} triangles with no area or doubled (${d.duplicates})`); }
-  }
-  if (o.repair !== false) {
-    const r = repairFolds(tier, o.charts, { ...(o.repair ?? {}), log, ...(keepTri ? { keep: keepTri } : {}) });
-    tier = r.mesh; repair = r.stats;
+    const rOf = regionOfTri(charted, (t) => tc[t]);
+    // (2026-10-26, round 2: the decimation lock's focus kept out of the patch. The focus's fine triangles where the
+    // chart's projection turns edge-on — the notch where the median lip meets the pad, the lip's lower edge — folded,
+    // the mend in their chart failed, and the repair laid them as islands of 4–9 triangles (17–30 texels) in the patch:
+    // the bake's dilation and the sampler's filtering bled the neighbouring islands into them, dark teeth along the
+    // pad's top on the front views (round 1: two islands at s 1.14 mm, y 1.8, |z| 1.3–1.4; T3, and the focus off: none).
+    // So a patch triangle whose centroid lies in the focus leaves the focus off round it (a ball of `r`, 0.25 mm; the
+    // balls add up pass by pass) and the free part is simplified again, at most o.focusPasses (6) more times)
+    const F0 = DECIMATION_LOCK ? DECIMATION_LOCK.focus ?? DECIMATION_LOCK.tris?.focus ?? null : null;
+    const avoid = [], passes = o.focusPasses ?? 6;
+    for (let pass = 0; ; pass++) {
+      const L = F0 && avoid.length ? { ...DECIMATION_LOCK, focus: { ...F0, inside: (p) => F0.inside(p) && !avoid.some(([x, y, z, r]) => (p[0] - x) ** 2 + (p[1] - y) ** 2 + (p[2] - z) ** 2 < r * r) } } : DECIMATION_LOCK;
+      simp = simplifyRegions(charted, rOf, regions, { ...A, lock, weld: charted.source, log, frozen: L, chartOf: charted.chart, chartIndex: (nm) => o.charts.findIndex((c) => c.name === nm), uv: charted.uv });
+      // the kept triangles' charts: the corners' chart (every corner of a charted triangle has its chart)
+      const c = compactMesh(charted, simp.indices, ['position', 'normal', 'uv', 'chart', 'source', 'depth']);
+      const triChart = new Int16Array(c.indices.length / 3);
+      for (let t = 0; t < triChart.length; t++) triChart[t] = c.chart[c.indices[t * 3]];
+      tier = { position: c.position, normal: c.normal, uv: c.uv, depth: c.depth, indices: c.indices, chart: c.chart, source: c.source, triChart };
+      region = simp.region;
+      finish(L);
+      if (!F0 || o.repair === false || pass >= passes) break;
+      const pi = o.charts.findIndex((C) => C.relay), P = tier.position, I = tier.indices, hits = [];
+      for (let t = 0; t < I.length / 3; t++) {
+        if (keepTri?.[t] || tier.chart[I[t * 3]] !== pi) continue;
+        const q = [0, 1, 2].map((k) => (P[I[t * 3] * 3 + k] + P[I[t * 3 + 1] * 3 + k] + P[I[t * 3 + 2] * 3 + k]) / 3);
+        if (F0.inside(q)) hits.push(q);
+      }
+      if (!hits.length) break;
+      const r = 0.25;
+      for (const q of hits) avoid.push([...q, r]);
+      log(`  focus: ${hits.length} of its triangles laid in the patch — the focus off within ${r.toFixed(2)} mm of them, the free part simplified again (pass ${pass + 2})`);
+    }
   }
   // per-vertex tangents (meshopt's are per corner: vertices whose corners disagree are split, every per-vertex array
   // carried to the copies, so `source` still maps each to its dense vertex)

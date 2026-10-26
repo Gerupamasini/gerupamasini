@@ -7,7 +7,8 @@
 // tail). With the lock, tiers.mjs (frozenPlan) keeps every T3 triangle that lies outside the zones on dense skin the sculpt
 // did not change (its corners found at the same place in the new dense mesh, no changed dense cell under it) as it was —
 // its vertices locked — and simplifies only the rest: the new dense triangles of the zones, joined to the kept ones by
-// a fan along each kept edge, to T3's triangle count there. The new tier's vertices outside the zones are T3's, exactly.
+// a fan along each kept edge, to T3's triangle count there. The new tier's vertices outside the zones are T3's (exactly, but
+// those next to the zones found within MOVE_TOL_MM, round 2).
 // Stored per tier (lod1, lod2): T3's skin triangles (fish mm), each one's atlas chart (by its UV's rect: the chart the
 // charted simplification gives its corners, lod1), each one's corner UVs as T3's GLB holds them (2026-10-26), and the
 // dense mesh's cells (CELL_MM) each with a hash of the dense vertices in it, so the build knows where the sculpt changed
@@ -21,6 +22,14 @@
 // Now: every held triangle on T3's UVs (outside the zones the atlas is T3's to the texel), the repair 62 at 1.00 in the
 // zones, the seams outside them 216 mm. FOCUS: lod1's median lip simplified to a finer error than the rest of the free
 // part (tiers.simplifyRegions), so lod1 keeps the hero's lip on the front views.
+// 2026-10-26, round 2 (the reviews of round 1): (a) the focus kept out of the patch — its fine triangles at the notch
+// where the median lip meets the pad folded in the head chart and went to the patch as islands of 4–9 triangles, which
+// the bake bled dark (the "sawtooth" along the pad's top on lod1's front view); tiers.tierMesh now leaves the focus off
+// round any of its triangles the repair lays in the patch and simplifies again (none left on the base, geoA2 and geoB2
+// heads). (b) The fringe (FRINGE_MM, MOVE_TOL_MM): the lock keeps the dense vertices next to the zones, so skin the
+// zones' sculpt moved by less than 0.01 mm there counts as unchanged — lod1 holds 63 more of T3's triangles at s 6–9 mm
+// and lod2 the big ones out to s 12 (round 1 put a new vertex 0.235 mm off T3's skin at fish [10.91, −0.11, −3.40]).
+// (c) FLOOR: lod2's chin no lower than T3's (its contact had sunk 0.14 mm into the ground).
 //   node tools/models/tobihaze/decimlock.mjs --from-git e6079e5 --dense-tree <a checkout of the same commit's tools/>
 //   node tools/models/tobihaze/decimlock.mjs --from-dir <dir with tobihaze.{lod1,lod2}.glb> [--dense-tree <dir>]
 // (--dense-tree: the tree whose fishmesh.mjs meshes the dense skin the GLBs were simplified from; default this tree. build.mjs
@@ -57,11 +66,29 @@ export const inFreeZone = ([s, y, z]) => FREE_ZONES.some((Z) => s >= Z.s[0] && s
  * the mesh's extent) 34.2 / 30.2 and 0.019 mm, for 79 triangles more. The box reaches over the snout above the lip (y
  * to 0.19), so its top edge, where the finer focus meets the coarser rest, lies on smooth skin; it stops short of the
  * pad's sides (|z| 0.10): there the mouth line's finer triangles folded under the inflation (26 new folds against
- * 11) and the gape stretched more of them (72 over 3× against 48), for no gain on the front views. */
+ * 11) and the gape stretched more of them (72 over 3× against 48), for no gain on the front views. (Round 2) `also`: the
+ * pad's top over the snout's front (s < 0.16, y 0.09–0.13, |z| < 0.14 HL), the notch where the median lip meets the pad
+ * included — the mouth review asked for it on lod1's front view; with it the focus's notch triangles no longer fold
+ * into the patch (one simplification pass, no retry) and lod1's gapes stretch fewer triangles than round 1's (gapeHalf
+ * 59 / gapeFull 66 over 3× against 62 / 68; inflated 6 new folds, T3's 6; |z| < 0.16 made it 8). */
 export const FOCUS = {
-  lod1: { label: 'the median lip', error: 1e-3, s: [-Infinity, 0.25], y: [0.03, 0.19], z: 0.10 },
+  lod1: { label: 'the median lip', error: 1e-3, s: [-Infinity, 0.25], y: [0.03, 0.19], z: 0.10, also: [{ s: [-Infinity, 0.16], y: [0.09, 0.13], z: 0.14 }] },
 };
-const focusOf = (F) => F && { label: F.label, error: F.error, box: { s: F.s.map((x) => x * HL), y: F.y.map((x) => x * HL), z: F.z * HL }, inside: ([s, y, z]) => s >= F.s[0] * HL && s <= F.s[1] * HL && y >= F.y[0] * HL && y <= F.y[1] * HL && Math.abs(z) <= F.z * HL };
+/** (2026-10-26, round 2) The part of a free zone whose skin a tier keeps no lower than the lock's (fish mm; per tier):
+ * lod2's chin. The chin's contact is a ray down at s 0.25 HL on the midline (rig.contactsFor), and the states' ground
+ * heights are held at T3's (poselock): T3's lod2 had no vertex on the chin's midline (its lowest there 0.255 mm up, at
+ * |z| 0.99), the round 1 jaw's dense skin put one 0.13 mm lower, and lod2's chin sank 0.14 mm into the ground in every
+ * state (J_head y −6.542 → −6.682). Each free vertex in the box lying below the lock's lower surface there (the lowest
+ * lock triangle over its s, z) is lifted onto it (tiers.floorToLock), so the chin's skin and its contact stay where T3's
+ * were whatever the jaw's sculpt does (at lod2's distance the lift, ≤ 0.15 mm, is not seen). The box: round the contact's
+ * station (the ray meets the triangles of the midline's vertices); a vertex more than maxLift below is left (the jaw's
+ * front, where the round 1 envelope lies 0.4–1.2 mm under T3's lod2: new skin, not a simplification's error). */
+export const FLOOR = {
+  lod2: { label: 'the chin', s: [3.0, 6.5], y: [-Infinity, 1.0], z: 1.2, maxLift: 0.25 },
+};
+const floorOf = (F) => F && { label: F.label, maxLift: F.maxLift ?? Infinity, box: { s: F.s, y: F.y, z: F.z }, inside: ([s, y, z]) => s >= F.s[0] && s <= F.s[1] && y >= F.y[0] && y <= F.y[1] && Math.abs(z) <= F.z };
+const inBoxHL = (B, [s, y, z]) => s >= B.s[0] * HL && s <= B.s[1] * HL && y >= B.y[0] * HL && y <= B.y[1] * HL && Math.abs(z) <= B.z * HL;
+const focusOf = (F) => F && { label: F.label, error: F.error, box: { s: F.s.map((x) => x * HL), y: F.y.map((x) => x * HL), z: F.z * HL }, inside: (p) => inBoxHL(F, p) || (F.also ?? []).some((B) => inBoxHL(B, p)) };
 
 // ------------------------------------------------------------------------------------------------ the dense cells
 
@@ -78,11 +105,56 @@ export function cellHashes(position, cell = CELL_MM) {
   }
   return out;
 }
-/** The cells whose hash differs between the lock's dense mesh and this one (either side missing counts): a Set of keys. */
+/** (2026-10-26, round 2) The fringe: the cells outside the zones whose centre lies within FRINGE_MM (and half a cell's
+ * diagonal) of one, those across a zone's edge too. The lock keeps its dense vertices there (`fringe`), and a fringe cell whose vertices all moved by no
+ * more than MOVE_TOL_MM (each new vertex with an old one that near, and each old one with a new one) is not changed;
+ * a lock vertex outside the zones with no vertex of the new mesh at its place but one within MOVE_TOL_MM takes that
+ * one (tiers.simplifyRegions). The zones' sculpt reaches a little past their boxes: the round 1 jaw moved the dense
+ * skin at s 7–8 mm (the cells next to the mouth zone's back edge) by 0.0002–0.0088 mm, and with the exact test that
+ * freed T3's triangles there and every big triangle they touch — lod1 141 (s 6–9 mm), lod2 23 out to s 12, where the
+ * new free part put a vertex 0.235 mm off T3's skin on one side only (fish [10.91, −0.11, −3.40]). */
+export const FRINGE_MM = 1.5;
+export const MOVE_TOL_MM = 0.01;
+const zoneDist = ([s, y, z]) => Math.min(...FREE_ZONES.map((Z) => Math.hypot(Math.max(0, Z.s[0] - s, s - Z.s[1]), Math.max(0, Z.y[0] - y, y - Z.y[1]), Math.max(0, Math.abs(z) - Z.z))));
+// (a cell not wholly inside the zones — a corner outside them: one across a zone's edge counts, its outer part may hold
+// a held triangle — near one)
+const inFringe = (key, cell = CELL_MM) => {
+  const ijk = key.split(',').map(Number), c = ijk.map((x) => (x + 0.5) * cell);
+  if (zoneDist(c) > FRINGE_MM + 0.87 * cell) return false;
+  for (let q = 0; q < 8; q++) if (!inFreeZone(ijk.map((x, a) => (x + ((q >> a) & 1)) * cell))) return true;
+  return false;
+};
+const cellKey = (P, v, cell) => `${Math.floor(P[v * 3] / cell)},${Math.floor(P[v * 3 + 1] / cell)},${Math.floor(P[v * 3 + 2] / cell)}`;
+const byCellOf = (P, cell) => { const m = new Map(); for (let v = 0; v < P.length / 3; v++) { const k = cellKey(P, v, cell); let a = m.get(k); if (!a) m.set(k, (a = [])); a.push(v); } return m; };
+/** The cells whose hash differs between the lock's dense mesh and this one (either side missing counts): a Set of keys.
+ * With the lock's fringe (lockCells.fringe, loadDecimationLock), a fringe cell whose vertices moved within its tolerance
+ * is left out. */
 export function changedCells(lockCells, position, cell = CELL_MM) {
   const now = cellHashes(position, cell), out = new Set();
   for (const [k, h] of now) if (lockCells.get(k) !== h) out.add(k);
   for (const k of lockCells.keys()) if (!now.has(k)) out.add(k);
+  const F = lockCells.fringe;
+  if (F && out.size) {
+    const NB = byCellOf(position, cell), tol2 = F.tol * F.tol;
+    const near = (P, by, x, y, z) => {
+      const i0 = Math.floor(x / cell), j0 = Math.floor(y / cell), k0 = Math.floor(z / cell);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) for (const v of by.get(`${i0 + a},${j0 + b},${k0 + c}`) ?? []) if ((P[v * 3] - x) ** 2 + (P[v * 3 + 1] - y) ** 2 + (P[v * 3 + 2] - z) ** 2 <= tol2) return true;
+      return false;
+    };
+    // (a fringe cell still changed: its moved points — new vertices with no old one within the tolerance, and old ones
+    // with no new one — kept on the lock's cells as `moved` (key → [x, y, z, …]), so tiers.frozenPlan tests a held
+    // triangle against them instead of against the whole cell: a cell across the mouth zone's edge changed in its zone
+    // part only)
+    const moved = new Map();
+    for (const k of [...out]) {
+      if (!inFringe(k, cell)) continue;
+      const a = F.byCell.get(k) ?? [], b = NB.get(k) ?? [], O = F.position, pts = [];
+      for (const v of b) if (!near(O, F.byCell, position[v * 3], position[v * 3 + 1], position[v * 3 + 2])) pts.push(position[v * 3], position[v * 3 + 1], position[v * 3 + 2]);
+      for (const i of a) if (!near(position, NB, O[i * 3], O[i * 3 + 1], O[i * 3 + 2])) pts.push(O[i * 3], O[i * 3 + 1], O[i * 3 + 2]);
+      if (pts.length) moved.set(k, pts); else out.delete(k);
+    }
+    lockCells.moved = moved;
+  }
   return out;
 }
 
@@ -109,7 +181,16 @@ export function loadDecimationLock(file = DECIMATION_LOCK_FILE) {
       uv: T.uv ? Float32Array.from(fromB64(T.uv, Uint16Array), (x) => x / 65535) : null,
       // (the tier's focus, FOCUS: not the lock's data, the build's rule for its free part)
       focus: focusOf(FOCUS[t]) ?? null,
-      cells: (() => { const K = fromB64(T.cellKeys, Int16Array), H = fromB64(T.cellHashes, Uint32Array), m = new Map(); for (let i = 0; i < H.length; i++) m.set(`${K[i * 3]},${K[i * 3 + 1]},${K[i * 3 + 2]}`, H[i]); return m; })(), cell: T.cellMM,
+      // (the tier's floor, FLOOR: the build's rule as well)
+      floor: floorOf(FLOOR[t]) ?? null,
+      cells: (() => {
+        const K = fromB64(T.cellKeys, Int16Array), H = fromB64(T.cellHashes, Uint32Array), m = new Map(); for (let i = 0; i < H.length; i++) m.set(`${K[i * 3]},${K[i * 3 + 1]},${K[i * 3 + 2]}`, H[i]);
+        // (2026-10-26, round 2: the fringe's dense vertices, FRINGE_MM; a lock without them has the exact test only)
+        if (T.fringe) { const position = fromB64(T.fringe, Float32Array); m.fringe = { position, byCell: byCellOf(position, T.cellMM), tol: T.fringeTolMM ?? MOVE_TOL_MM }; }
+        return m;
+      })(), cell: T.cellMM,
+      // (a lock vertex outside the zones found within this of a vertex of the new mesh, tiers.simplifyRegions; 0: exactly)
+      tol: T.fringe ? T.fringeTolMM ?? MOVE_TOL_MM : 0,
       // (the regions' triangle targets the lock's tier was simplified to: a region's free part takes any change of its
       // target since — tiers.simplifyRegions)
       targets: T.targets ?? null,
@@ -164,7 +245,10 @@ async function denseCells(tree, tier) {
   const FM = await import(pathToFileURL(path.join(tree, 'tools/models/tobihaze/fishmesh.mjs')).href);
   await FM.ready;
   const T = FM.TIERS[tier], dense = FM.fishDense({ h: T.h, field: FM.tierField(tier) });
-  return { cells: cellHashes(dense.position), layout: T.layout ?? FM.BODY_LAYOUT, spare: FM.SPARE_CHARTS, targets: T.regions ? { ...T.regions } : { all: T.target } };
+  // (the fringe's dense vertices, round 2: those in the cells next to the zones, FRINGE_MM)
+  const P = dense.position, keep = [];
+  for (let v = 0; v < P.length / 3; v++) if (inFringe(cellKey(P, v, CELL_MM))) keep.push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]);
+  return { cells: cellHashes(dense.position), fringe: Float32Array.from(keep), layout: T.layout ?? FM.BODY_LAYOUT, spare: FM.SPARE_CHARTS, targets: T.regions ? { ...T.regions } : { all: T.target } };
 }
 
 /** The lock's JSON from the tiers' GLBs (Buffers by tier) and a tree to mesh their dense skins with. */
@@ -183,9 +267,9 @@ export async function decimationLockFromGLBs(glbs, source, tree) {
     }
     const cells = [...D.cells].sort((a, b) => (a[0] < b[0] ? -1 : 1)), nv = S.position.length / 3;
     const cellKeys = Int16Array.from(cells.flatMap(([k]) => k.split(',').map(Number))), cellH = Uint32Array.from(cells.map(([, h]) => h));
-    tiers[t] = { triangles: ci.length, vertices: nv, position: b64(S.position), indices: b64(nv < 65536 ? Uint16Array.from(S.indices) : S.indices), chartNames, chart: b64(ci), uv: b64(S.cornerUV), targets: D.targets, cellMM: CELL_MM, cellCount: cells.length, cellKeys: b64(cellKeys), cellHashes: b64(cellH) };
+    tiers[t] = { triangles: ci.length, vertices: nv, position: b64(S.position), indices: b64(nv < 65536 ? Uint16Array.from(S.indices) : S.indices), chartNames, chart: b64(ci), uv: b64(S.cornerUV), targets: D.targets, cellMM: CELL_MM, cellCount: cells.length, cellKeys: b64(cellKeys), cellHashes: b64(cellH), fringeMM: FRINGE_MM, fringeTolMM: MOVE_TOL_MM, fringeCount: D.fringe.length / 3, fringe: b64(D.fringe) };
   }
-  return { format: 'tobihaze-decimation-lock/1', source, about: 'lod1\'s and lod2\'s skin as round T3 simplified it (decimlock.mjs): positions fish mm (Float32), triangles (Uint16 under 65 536 vertices, else Uint32), a chart per triangle (Uint8 into chartNames, 255 none), each triangle\'s corner UVs as the GLB held them (uv: Uint16 normalized, u v per corner), the dense cells (Int16 i, j, k at cellMM) and their hashes (Uint32); every block raw-deflated and base64', zones: FREE_ZONES, tiers };
+  return { format: 'tobihaze-decimation-lock/1', source, about: 'lod1\'s and lod2\'s skin as round T3 simplified it (decimlock.mjs): positions fish mm (Float32), triangles (Uint16 under 65 536 vertices, else Uint32), a chart per triangle (Uint8 into chartNames, 255 none), each triangle\'s corner UVs as the GLB held them (uv: Uint16 normalized, u v per corner), the dense cells (Int16 i, j, k at cellMM) and their hashes (Uint32), the fringe\'s dense vertices (fringe: Float32, fish mm; the cells outside the zones within fringeMM of one, whose vertices may move by fringeTolMM); every block raw-deflated and base64', zones: FREE_ZONES, tiers };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

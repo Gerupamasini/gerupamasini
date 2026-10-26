@@ -67,6 +67,16 @@
 //     edges: lod1 0 non-manifold edges). lod1 13,768 triangles, lod2 1,272; the hero's mouth is the lower jaw's
 //     envelope under a slimmer pad (head.mjs jaw.envelope) and the slit between them painted as the crease's skin
 //     (pattern.mjs LIP.slit))
+//     (2026-10-26, round 2: the eye's window shape (eye.mjs windowHalf/windowPow: a flat top, a rounder deeper bottom,
+//     a tapered back end; eyemesh's window UV inset; lod1's globe 48 columns with the sculpt's own normals, `analytic`),
+//     the blink's closed shape smoothed over the free skin (headrig BLINK_CLOSE.dSmooth), the rim '#ffd977'; the mouth:
+//     a blunt rounded chin and the jaw's shoulder tucked up inside the pad's flap (head.mjs jaw.envelope), a fuller
+//     median lip, the mouth floor's front free of the rim rule (headrig floorFront), the lip paint on the slimmer pad
+//     (pattern.mjs LIP, surface.mjs HEAD_SKIN.lip, no throat bib); the lock: lod1's pad top in FOCUS, the notch's
+//     wall-chart islands back to skin (tiers.slitIslandsToSkin), lod2's chin floor (decimlock FLOOR), the zones'
+//     fringe. hero 119,085 triangles (Head_Orbit 14,923, Head_Mouth 4,552, Head 21,253, Body 37,371), lod1 14,430
+//     (Body 8,936, the eyes 1,056 each), lod2 1,274; the chin's contact against T3 hero 0.014 mm, lod1 0.036, lod2
+//     0.031)
 //
 // Meshes per tier — the draws (round T2: three's real draw calls in the main pass, a double-sided BLEND primitive two;
 // the caps hero 12, lod1 5, lod2 2; materials 4 / 3 / 2 against CLAUDE.md's class M 6 / 4 / 2). The skin is split by
@@ -87,7 +97,9 @@
 //         meshes 3.80 / 4.00 / 5.18 (the build report's gpu.meshes, 2026-10-25: Head_Orbit 1.97 / 2.36 / 3.15 on 10,184
 //         vertices, Head_Mouth 0.66 / 0.46 / 0.46 on 2,884, Head 1.18 / 1.18 / 1.57 on 11,895; 2026-10-26 round 1, the jaw's
 //         envelope: Head_Orbit 1.97 / 2.36 / 3.15 on 9,904 (15,996 triangles), Head_Mouth 0.66 / 0.44 / 0.44 on 2,723
-//         (4,497), Head 1.18 / 1.18 / 1.57 on 11,972 (20,334), Body 37,272 with the teeth; T3's three 4.19 / 4.13 /
+//         (4,497), Head 1.18 / 1.18 / 1.57 on 11,972 (20,334), Body 37,272 with the teeth; round 2: Head_Orbit 1.97 /
+//         2.36 / 3.15 on 9,277 (14,923), Head_Mouth 0.66 / 0.45 / 0.45 on 2,830 (4,552), Head 1.38 / 1.57 / 1.57 on
+//         12,380 (21,253), Body 37,371; T3's three 4.19 / 4.13 /
 //         5.31: Head_Orbit 2.36 / 2.36 / 3.15, Head_Mouth 0.66 / 0.59 / 0.59 on 3,688, Head 1.18 / 1.18 / 1.57 on 11,329;
 //         9977d95's two 4.65 / 4.98 / 5.77, one draw fewer); B4's split study (B3's geometry, B4's planned maps): the three head meshes as one
 //         (7 draws) 30.7 / 31.9 / 32.6 MB, the whole skin one mesh (6 draws) 36.0 / 36.6 / 37.4
@@ -118,10 +130,11 @@
 //         buffers 2.7; morph textures 11.46 / 12.44 / 13.65: total 32.4 / 33.3 / 34.6 MB of 40 (2026-10-25 shipped, 12
 //         draws: maps 18.18, buffers 2.73, morph textures 11.35 / 12.60 / 13.65: total 32.3 / 33.5 / 34.6 MB; 9977d95's
 //         11 draws 33.1 / 34.5 / 35.1; T3's 12 draws 32.7 / 33.6 / 34.7; 2026-10-26 round 1, 12 draws: maps 18.18,
-//         buffers 2.74, morph textures 11.35 / 12.57 / 13.62: total 32.26 / 33.49 / 34.54 MB)
+//         buffers 2.74, morph textures 11.35 / 12.57 / 13.62: total 32.26 / 33.49 / 34.54 MB; round 2: buffers 2.73,
+//         morph textures 11.55 / 12.98 / 13.64: total 32.45 / 33.89 / 34.55 MB)
 //   lod1  baseColor 1024 (1.40), normal 512 and the film map 512 (0.35 each), fin atlas 512 (0.35): maps 2.45 MB; buffers
 //         0.34; morph textures 2.53 / 2.99 / 2.39: total 5.31 / 5.77 / 5.18 MB of 6 (2026-10-26 round 1, 13,768
-//         triangles: 5.33 / 5.79 / 5.21). The normal and the film map at 512
+//         triangles: 5.33 / 5.79 / 5.21; round 2, 14,430: 5.34 / 5.80 / 5.21). The normal and the film map at 512
 //         because one skin mesh (4 draws) holds 1.2–1.8 MB of morph textures: at 1024 (+1.05) it fits only with lod1's
 //         skin shapes carrying no normal deltas (the rig's round-B4 shading of lod1's blink, eyes-up and cheeks lost) or a
 //         fifth draw. The 512 maps are 0.125 mm a texel on the body, finer than a screen pixel at lod1's distances

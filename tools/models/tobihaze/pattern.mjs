@@ -138,12 +138,13 @@ export const PALETTE = {
   dashPale: '#ebe5d6',      // the upper flank's white dashes (u1, B010)
   crescent: '#cfc6ab',      // the pale crescent under the eye
   collar: '#6e614e',        // the cup's rim under the globe: dark olive-brown (u1 L 32 C 13 h 92 rendered in shade)
-  lip: '#83775c',           // lip pads: olive-tan (u1 L 49 C 18 h 92 in shade, B010); round M: u1's pad under the photo
+  lip: '#7d7158',           // lip pads: olive-tan (u1 L 49 C 18 h 92 in shade, B010); round M: u1's pad under the photo
                             // light L* 57.5 a −1.0 b 13.4 (T3 '#958465' rendered 52.8 / 2.1 / 15.3, ΔE2000 6.0: warmer); round paint1:
                             // the face's tone beside it (u1: the pad 57.1 / −0.7 / 15.0 against the face over it 55.5 / 0.7 / 16.6,
                             // ΔE00 2.5; the render's face over the pad lies in the groove's fillet, L* 48–51 at u1's camera, and
                             // '#968e73' rendered 5.5–9.8 ΔE00 off it on the three mouths tried; '#83775c' 1.3 / 4.9), darker and
-                            // less green
+                            // less green; round paint2 '#7d7158' (−3 L*): the face over the pad's top sits in the groove's shade, L* 42–49
+                            // rendered at u1 on the slimmer pads (sy 0.92), ΔE00 to the pad 7.6–11.4 with '#83775c'
   lipStipple: '#6c6352',    // the lip's fine dark stipple
   lipLine: '#4c4437',       // round M: the labial groove's fine line along the pad's top (u1 L* 27 in the photo); round mouthA darker (was #6a604d: L* 41–44 rendered at u1, a 1-texel line washed out)
   lipShade: '#60574a',      // the mouth line — the lower jaw's skin in the upper lip's shade, olive (round mouthB: darker,
@@ -223,6 +224,32 @@ const medNear = (q) => { const T = lipTubes(); return tubeNear(q, T.med.points, 
  * headSDF(...).parts, built once) — on the skin j − f ≈ 0 is the lower jaw's own skin. */
 let _headParts = null;
 const headParts = (x, y, z) => (_headParts ??= headSDF(HEAD_SCULPT, { cut: true }).parts)(x, y, z);
+
+/** (round paint2) The upper lip's actual lowest skin point over z (HL, z ≥ 0) at the front, from the sculpt (headSDF with
+ * the cut): for each z the lowest y over s 0.02–0.14 where the head's surface is the upper head's (u ≤ j there) — the
+ * gape's carve and the smooth unions move it off the median tube's bottom (cy − r) by up to 0.005 HL, so the lower lip's
+ * rim and the front's line, which a front camera reads from the lip's visible edge, follow the sculpt (u5, B002); a table
+ * every 0.005 HL of z, linear between. */
+let _frontEdge = null;
+function frontEdgeY(az) {
+  if (!_frontEdge) {
+    const P = (x, y, z) => headParts(x, y, z), T = [];
+    for (let z = 0; z <= 0.1501; z += 0.005) {
+      let best = 1;
+      for (let x = 0.02; x <= 0.1401; x += 0.002) {
+        let y = -0.01; while (y < 0.12 && P(x, y, z).f > 0) y += 0.001;
+        if (y >= 0.12 || y >= best) continue;
+        let lo = y - 0.001; while (lo < y && P(x, lo, z).f > 0) lo += 0.00025;
+        const pp = P(x, lo + 0.0005, z);
+        if (pp.u <= pp.j) best = Math.min(best, lo);
+      }
+      T.push(best);
+    }
+    _frontEdge = T;
+  }
+  const t = Math.min(_frontEdge.length - 1.0001, Math.max(0, az / 0.005)), i = Math.floor(t);
+  return _frontEdge[i] + (_frontEdge[i + 1] - _frontEdge[i]) * (t - i);
+}
 
 /** Distance (HL) from q to a swept tube (polyline `path` with radii, y stretched by `sy` about the axis). */
 function tubeDist(q, path, radius, sy = 1) {
@@ -376,13 +403,24 @@ const SPOTS = {
 // groove faded behind `rear` [from, to] s to its share and no narrower than `wTex` texels (lod1); the jaw's feather over
 // the dropped jaw's lateral face wider (`jaw` [0.04, 0.18]: no U-shaped contour from below with the mouth open); the lower
 // lip's rim 0.002 HL lower, out of the upper lip's shade, the chin under it the jaw's darker skin (u5, B002))
+// (round paint2, the masks on the sculpt as the geometry keys reshape it: `skin.chroma` the band in the face's hue (b* 14 →
+// 17), its pale clouds and pale micro-flecks cut (the face's dark speck and blotch carried on, not inverted to pale flecks
+// on a dark ground); `mouth.own` [cover from, full, lip off from, full] of headParts u − j: the jaw's shoulder inside the
+// pad's raw tube (the slit's carve) is the jaw's skin, not the pad's colour or the face's cream (a pale line and a pale
+// second roll along the jaw's top under the pad); the lower lip's tube (jaw.lip) paints only at the front; the rim and the
+// front line under the median lip measured from the lip's VISIBLE edge (frontEdgeY), `front` its dark line's dy;
+// `throat`: the jaw's underside in front of `s`, down-facing skin (n.y over `down` [2, 3]) out to `down` [0, 1] taken
+// toward the cheek's pale half by up to `fade` (no edge, no bib), and the throat's front-facing strip behind the chin
+// (−n.s over `front`, within `j` of the jaw's tissue, in front of `far`) in a mid olive (`mid`): no cream under the chin
+// from the front (u5) and no dark crescent of its own from below; the groove × `k`, its rear share `rear[2]`; `slit` from
+// the median lip's ends (s 0.03) to the rictus, its shade lighter)
 export const LIP = {
-  groove: { at: 0.004, w: 0.0027, wTex: 1.2, above: [-0.45, -0.1], z: [0.11, 0.15], rear: [0.24, 0.30, 0.8] },
-  mouth: { below: [-0.006, 0.002], off: [0.001, 0.004], reach: [0.004, 0.012], jaw: [0.04, 0.18], side: [0.02, 0.07], down: [-0.85, -0.95], d: 0.14, back: [0.34, 0.415], edgeSoft: 0.012, front: [0.5, 0.03, 0.06, 0.002, 0.005], rictus: [0.24, 0.30, 0.3], top: { dj: [0.002, 0.008], dy: [-0.045, -0.03] } },
-  skin: { tone: 0.58, blotch: 0.8, cloud: 0.25, cluster: 0.6, speck: 0.9, microDark: 0.6, microPale: 0.3, midline: [0.006, 0.016], down: [0.45, 0.9, 0.12], edge: [0.004, 0.012, -0.15] },
+  groove: { at: 0.004, w: 0.0027, wTex: 1.2, k: 0.62, kLow: [0.045, 0.06, 1.0], above: [-0.45, -0.1], z: [0.11, 0.15], rear: [0.26, 0.31, 0.95] },
+  mouth: { below: [-0.006, 0.002], off: [0.001, 0.004], reach: [0.004, 0.012], jaw: [0.04, 0.18], side: [0.02, 0.07], down: [-0.85, -0.95], d: 0.14, back: [0.34, 0.415], edgeSoft: 0.012, front: [0.5, 0.03, 0.06, 0.0015, 0.0032], rictus: [0.24, 0.30, 0.3], own: [-0.003, -0.0008, -0.0005, 0.002], top: { dj: [0.002, 0.008], dy: [-0.045, -0.03] } },
+  skin: { tone: 0.58, chroma: 1.22, blotch: 0.8, cloud: 0.1, cluster: 0.7, speck: 1.0, microDark: 0.7, microPale: 0.1, midline: [0.006, 0.016], down: [0.45, 0.9, 0.12], edge: [0.004, 0.012, -0.15] },
   chin: { z: [0.04, 0.09], s: [0.14, 0.2], tone: 0.12, pale: 0.4 },
-  throat: { s: [0.30, 0.38], far: [0.42, 0.58], y: [0.02, 0.04], dy: [0.012, 0.03] },
-  rim: { dy: [0.0025, 0.004, 0.007, 0.0095], z: [0.05, 0.1], mix: 0.45 },
+  throat: { s: [0.30, 0.38], down: [0.32, 0.46, -0.3, -0.7], fade: 0.6, front: [-0.1, 0.06], j: [0.025, 0.04], far: [0.47, 0.52], dy: [0.012, 0.03], mid: 0.5 },
+  rim: { dy: [0.0028, 0.0042, 0.006, 0.0082], z: [0.05, 0.1], mix: 0.52 },
   // (round 1, the integrator: with the lower jaw's envelope (head.mjs jaw.envelope, its carve) the slit between the pad's
   // flap and the jaw's shoulder under it — the flap's underside and the shoulder's top, inside the raw pad by `u` [full,
   // none] and within `j` [full, none] of the jaw's tissue, lower than `gy` [full, none] under the gape's line (the mouth's
@@ -391,7 +429,7 @@ export const LIP = {
   // underside darker, the shoulder's top (the dropped jaw's rim when the mouth opens, B054: the skin's colour) less —,
   // not the lining's pale pink (the lining's weight there × 1 − the slit's), which the side and low cameras saw as a pale
   // sliver along the slit)
-  slit: { u: [-0.002, -0.0005], j: [0.016, 0.024], gy: [0.03, 0.015], s: [0.06, 0.09, 0.34, 0.38], z: [0.03, 0.06], shade: [0.15, 0.3, 0.003, 0.008] },
+  slit: { u: [-0.002, -0.0005], j: [0.016, 0.024], gy: [0.03, 0.015], s: [0.03, 0.05, 0.34, 0.38], z: [0.0, 0.015], shade: [0.08, 0.2, 0.003, 0.008] },
 };
 
 /** (round 1) The pad-to-jaw slit's weight at q (HL, z ≥ 0), LIP.slit; 0 without the jaw's envelope carve. */
@@ -687,6 +725,9 @@ function jawSkin(ctx, q, n, lf1, dy, out) {
   const ch = C ? (1 - sstep(C.z[0], C.z[1], Math.abs(z))) * (1 - sstep(C.s[0], C.s[1], x)) : 0, pale = 1 - (1 - (C?.pale ?? 1)) * ch;
   const dn = (S.down && n ? S.down[2] * sstep(S.down[0], S.down[1], -n[1]) : 0) + (S.edge ? S.edge[2] * (1 - sstep(S.edge[0], S.edge[1], dy)) : 0);
   lerp3(P.cheek, P.cheekOlive, 0.5 * sat(0.5 + lf1), out); lerp3(out, P.lipShade, Math.min(1, Math.max(0, S.tone + (C?.tone ?? 0) * ch + dn)), out);
+  // (round paint2: the face's hue — the band rendered a* 1.2 b* 14 against the face's 1.4 / 17: the chroma × `chroma`
+  // about the luminance)
+  if (S.chroma && S.chroma !== 1) { const lum = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]; for (let i = 0; i < 3; i++) out[i] = Math.max(0, lum + (out[i] - lum) * S.chroma); }
   const mt = sstep(0.05, 0.45, fbm(x * 11, y * 11, z * 11, 3, ctx.seed + 13) + 0.25 * _w[0]);
   blend(out, P.headBlotch, mt * A.mottle * S.blotch);
   const cl = sstep(0.0, 0.45, fbm(x * 7.5, y * 7.5, z * 7.5, 3, ctx.seed + 17) + 0.2 * _w[1]);
@@ -1022,13 +1063,24 @@ export function skinColour(p, n, part, ctx) {
     const nb = padNear(qa), nm = medNear(qa);
     const dPad = Math.min(nb.d, nm.d);
     const dLow = tubeDist(qa, J.lip.path, J.lip.radius);
-    const wl = Math.max(1 - sstep(0.005, 0.02, dPad), (1 - sstep(0.002, 0.008, dLow)) * 0.85) * A.lip;
+    // (round paint2: the lower lip's tube only at the front, under the median lip (|z| under 0.04–0.08): along the sides
+    // the jaw's upper edge tucked under the pad took the pad's colour from it — a pale line along the jaw's top, a second
+    // lip roll under the pad in the side and low views (u1, B012, B013: under the pad only the jaw's skin))
+    // (round paint2: and none on the jaw's own skin inside the pad's tube — its shoulder under the flap, which the slit's
+    // carve leaves inside the raw pad: nearer the jaw's tissue than the upper lip's, headParts u − j over `mouth.own`
+    // [2, 3] [none, full] — there the jaw's skin, below, covering from u − j over [0, 1], so the contact line between the
+    // two is never the face's cream showing through: a pale line along the jaw's top)
+    const LO = LIP.mouth.own;
+    let jawS = 0;
+    let jawC = 0;
+    if (LO && dPad < 0.02 && x < 0.36 && y < Math.max(nb.cy, nm.cy)) { const pp = headParts(x, y, az); jawS = sstep(LO[2], LO[3], pp.u - pp.j); jawC = sstep(LO[0], LO[1], pp.u - pp.j); }
+    const wl = Math.max(1 - sstep(0.005, 0.02, dPad), (1 - sstep(0.002, 0.008, dLow)) * 0.85 * (1 - sstep(0.04, 0.08, az))) * A.lip * (1 - jawS);
     if (wl > 0) {
       blend(c, lerp3(P.lip, P.cheekLow, 0.15 * sat(0.5 + lf2), _k), wl);
       // (round paint1: the stipple fine and faint — the head's finest flecks at half density, not its 0.017 HL dark flecks
       // scaled down, which on the smooth pad read as a sprinkle of specks: u1's pad is smooth, finely granular)
       const st = spotsAt(ctx, 'speckFine', q, _w, 0.45, null);
-      blend(c, P.lipStipple, st * A.lipStipple * 0.6 * wl);
+      blend(c, P.lipStipple, st * A.lipStipple * 0.3 * wl);
     }
     // (round M, the lips' overlap) where the upper lip meets the face and where it overlaps the lower jaw — the labial
     // groove a fine soft line along the pad's top (u1: L* 27 against the pad's 45 and the face's 49 over 0.1 of the pad's
@@ -1044,7 +1096,10 @@ export function skinColour(p, n, part, ctx) {
     // blur the render read as no outline (u1's groove L* 40 at lod1))
     const gw = Math.max(LG.w, (LG.wTex ?? 0) * ctx.texHL);
     const wg = Math.exp(-(((nb.d - LG.at) / gw) ** 2)) * sstep(LG.above[0], LG.above[1], (y - nb.cy) / Math.max(1e-4, nb.r)) * (LG.z ? sstep(LG.z[0], LG.z[1], az) : 1) * (LG.rear ? 1 - (1 - LG.rear[2]) * sstep(LG.rear[0], LG.rear[1], x) : 1);
-    if (wg > 0.01) blend(c, P.lipLine, wg * A.lipLine * (0.85 + 0.3 * sat(0.5 + lf2)));
+    // (round paint2: × `k` — the top's outline rendered L* 17–22 at u1 against the photo's 24–30 — and `kLow` [texel mm
+    // from, full, k] on the coarser tiers' maps, whose decimated groove has no crease of its own (lod1: L* 31–45 at the top,
+    // 51–58 round the rear end at u1))
+    if (wg > 0.01) blend(c, P.lipLine, wg * A.lipLine * (LG.kLow ? (LG.k ?? 1) + (LG.kLow[2] - (LG.k ?? 1)) * sstep(LG.kLow[0], LG.kLow[1], ctx.texHL * HL) : LG.k ?? 1) * (0.85 + 0.3 * sat(0.5 + lf2)));
     // (the mouth line: below the upper lip's lowest point there — the nearest section of the pad or the median lip —
     // `below` [from, full] HL under it, fading by `reach` [full, none] further down; off the lip itself, and within `d`
     // of it, so it stops at the rictus; and the lower jaw's skin under it, to `jaw` [full, none] below the line, the
@@ -1077,38 +1132,67 @@ export function skinColour(p, n, part, ctx) {
       const pp = headParts(x, y, az);
       wtop = (1 - sstep(TP.dj[0], TP.dj[1], pp.j - pp.f)) * sstep(TP.dy[0], TP.dy[1], dy) * sstep(LM.off[0], LM.off[1], dPad) * (1 - sstep(LM.d * 0.6, LM.d, dPad)) * (LM.back ? 1 - sstep(LM.back[0], LM.back[1], x) : 1);
     }
+    if (jawC > 0) wtop = Math.max(wtop, jawC * (LM.back ? 1 - sstep(LM.back[0], LM.back[1], x) : 1));
     const wj = Math.max(wo, wtop) * (1 - sstep(LM.jaw[0], LM.jaw[1], dy)) * (1 - down), wm = wo * (1 - sstep(LM.reach[0], LM.reach[1], dy));
     // (round paint1: the lower jaw's skin carried under the chin onto the throat's front, LIP.throat: in front of `s`
     // [full, none], and on the underside (under `y`) to `far` [full, none] — the edges broken by the low-frequency noise —
     // from `dy` [none, full] under the upper lip's edge, off the lips; the down-facing skin too: the chin's underside and
     // the intermandibular skin a front camera sees under the jaw (a ring of paint by the normal drew a U round the dropped
     // jaw from below))
+    // (round paint2: the carry onto the throat's underside behind the mouth — `far` to s 0.58 under `y` — left a dark bib
+    // with hard edges on the Body's throat from below and in the low 3/4 views; now only the jaw's underside in front of
+    // `s` [full, none] and the throat's FRONT-facing strip just behind the chin, which a front camera sees under the jaw
+    // (u5: the throat's cream showed there): facing forward by −n.s `front` [none, full], within `j` [full, none] HL of
+    // the jaw's tissue (head.mjs headSDF parts' j — under the jaw's floor, as the sculpt has it), in front of `far`
+    // [full, none]; the down-facing throat keeps its cream)
     const LT = LIP.throat;
-    const xt = x + 0.03 * lf2, wt = LT ? Math.max(1 - sstep(LT.s[0], LT.s[1], xt), (1 - sstep(LT.far[0], LT.far[1], xt)) * (1 - sstep(LT.y[0], LT.y[1], y))) * sstep(LT.dy[0], LT.dy[1], dy) * sstep(LM.off[0], LM.off[1], dPad) : 0;
+    let wt = 0, wtF = 0, wtU = 0;
+    if (LT) {
+      const xt = x + 0.03 * lf2, LD2 = LT.down, under = Math.max(1 - sstep(LT.s[0], LT.s[1], xt), LD2 && n ? (1 - sstep(LD2[0], LD2[1], xt)) * sstep(LD2[2], LD2[3], n[1]) : 0), k = sstep(LT.dy[0], LT.dy[1], dy) * sstep(LM.off[0], LM.off[1], dPad);
+      if (n && LT.front && xt < LT.far[1] && -n[0] > LT.front[0]) { const pp = headParts(x, y, az); wtF = k * sstep(LT.front[0], LT.front[1], -n[0]) * (1 - sstep(LT.j[0], LT.j[1], pp.j + 0.004 * lf2)) * (1 - sstep(LT.far[0], LT.far[1], xt)); }
+      wtU = under * k; wt = Math.max(wtU, wtF);
+    }
     const wJ = Math.max(wj, wt);
     // (round paint1: the jaw's skin, jawSkin — the face's olive-grey in the pad's shade with the face's own mottle carried
     // on (u1: olive-grey, mottled, the band L* 25–33 rendered; B002: the chin mottled like the face), one even surface from
     // the line down to the throat, no pale lower edge)
     if (wJ > 0.01) blend(c, jawSkin(ctx, q, n, lf1, dy, _j), wJ * A.lipJaw);
+    // (round paint2: the throat's front strip behind the jaw — where it is only that — the jaw's skin taken `mid` toward the
+    // cheek's pale lower half: a mid olive, no cream under the chin from the front (u5) and no dark band of its own from
+    // below (the low 3/4 view: the regress finding's bib))
+    // and the jaw's underside where it fades out behind the jaw (`s`), taken toward it by up to `fade` as it goes, so the
+    // chin's olive runs out into the throat's cream over 0.14 HL with no edge and no cream gap before the front strip
+    if (LT && wt > wj + 0.01) {
+      const xt = x + 0.03 * lf2, toward = wtF > wtU ? LT.mid ?? 0 : (LT.fade ?? 0) * sstep(LT.down?.[0] ?? LT.s[0], LT.down?.[1] ?? LT.s[1], xt);
+      if (toward > 0) blend(c, P.cheekLow, toward * (wt - wj) * A.lipJaw);
+    }
     // (round 1: the slit between the pad's flap and the jaw's shoulder, LIP.slit: the jaw's skin in the crease's shade)
     const wS = lipSlitAt(x, y, az);
     if (wS > 0.01) { jawSkin(ctx, q, n, lf1, dy, _j); const SS = LIP.slit.shade; blend(c, lerp3(_j, P.lipShade, SS[0] + (SS[1] - SS[0]) * sstep(SS[2], SS[3], _slitJ), _k), wS); }
     // (round mouthA: the lower lip's narrow paler rim right under the line, at the front only — under the median lip —
     // and the chin below it the face's darker skin, u5; round paint1: 0.002 HL lower, out of the median lip's shade, and
     // paler)
-    const LR = LIP.rim;
+    // (round paint2: the rim and the front's line measured under the upper lip's VISIBLE lowest point, frontEdgeY — the
+    // tube's bottom sat 0.0035 HL under it on a mouth whose carve trims the median lip's underside, and the rim landed
+    // 0.008 under the line there, in the line's shade on the others; the rim's film is rough, surface.mjs)
+    const LR = LIP.rim, FR = LM.front, offW = sstep(LM.off[0], LM.off[1], dPad);
+    const dyA = az < 0.15 && (LR || FR) ? frontEdgeY(az) - y : dy;
     if (LR && A.lipRim) {
-      const wr = wo * sstep(LR.dy[0], LR.dy[1], dy) * (1 - sstep(LR.dy[2], LR.dy[3], dy)) * (1 - sstep(LR.z[0], LR.z[1], az));
+      const wr = offW * sstep(LR.dy[0], LR.dy[1], dyA) * (1 - sstep(LR.dy[2], LR.dy[3], dyA)) * (1 - sstep(LR.z[0], LR.z[1], az)) * (LM.back ? 1 - sstep(LM.back[0], LM.back[1], x) : 1);
       if (wr > 0.01) blend(c, lerp3(P.lip, P.cheekLow, LR.mix, _k), wr * A.lipRim);
+    }
+    // (the front's one dark line right under the median lip, `front` [share, z full, z none, dyA full, dyA none])
+    if (FR && offW > 0) {
+      const wf = FR[0] * offW * (1 - sstep(FR[1], FR[2], az)) * sstep(-0.001, 0.0003, dyA) * (1 - sstep(FR[3], FR[4], dyA));
+      if (wf > 0.01) blend(c, P.lipShade, wf);
     }
     // (the mouth line: a fine shade under the upper lip's edge; round paint1: stronger under the median lip (`front`: u5's
     // one dark line), faded at the rictus end (`rictus` [from, to] s, its share left: the overhang's own shade is dark
     // enough there), and under the pads no paler `lift` — the jaw's skin runs up into the crease, whose darkness is the
     // overhang's shading, eased in the colour by surface.mjs HEAD_SKIN.lip.mouth)
     if (wm > 0.01) {
-      const FR = LM.front, RC = LM.rictus;
-      const kf = FR ? FR[0] * (1 - sstep(FR[1], FR[2], az)) * (1 - sstep(FR[3], FR[4], dy)) / Math.max(1e-6, 1 - sstep(LM.reach[0], LM.reach[1], dy)) : 0;
-      blend(c, P.lipShade, wm * (A.lipShade + Math.min(kf, 1 - A.lipShade)) * (RC ? 1 - (1 - RC[2]) * sstep(RC[0], RC[1], x) : 1));
+      const RC = LM.rictus;
+      blend(c, P.lipShade, wm * A.lipShade * (RC ? 1 - (1 - RC[2]) * sstep(RC[0], RC[1], x) : 1));
     }
   }
 
