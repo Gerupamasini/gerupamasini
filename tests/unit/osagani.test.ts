@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Group, Vector3 } from 'three';
-import { CHELA_MALE, CW_MM, EYE, WALKING, chelaFor, legSpecs } from '../../src/creatures/species/osagani/anatomy';
+import { CHELA_MALE, CW_MM, articleAxis, EYE, WALKING, chelaFor, legSpecs } from '../../src/creatures/species/osagani/anatomy';
 import { LODS, outline } from '../../src/creatures/species/osagani/geometry';
 import { osaganiGeometry, osaganiRig } from '../../src/creatures/species/osagani/model';
 import { applyPose, createBones, legKey, legTip, planarOf } from '../../src/creatures/species/osagani/rig';
@@ -100,14 +100,27 @@ describe('ヤマトオサガニ: the body plan', () => {
   });
 
   it("the mature male's chela large (propodus ≈ 0.95 CW) with deflexed fingers; the female's small", () => {
-    // from the palm's joint to the closed fingertip, the fixed finger ≈ 32° and the dactylus ≈ 50° below the palm's axis
-    // (the scan's chela laid on its outer face)
+    // the fixed finger ≈ 34° below the palm's axis, the dactylus leaving the palm at ≈ 52° and curving in to its tip
+    // (the scan's palm laid on its outer face, the fingers from A45, B33, B34)
     expect(Math.hypot(...CHELA_MALE.tip) / CW_MM).toBeGreaterThan(0.85);
     expect(CHELA_MALE.fingerAngle).toBeLessThan(-0.5);
     expect(CHELA_MALE.fingerAngle).toBeGreaterThan(-0.9);
     expect(CHELA_MALE.daAngle).toBeLessThan(CHELA_MALE.fingerAngle);
-    // the palm long, the fingers short: the fixed finger well under half the palm's length (the scan, A45, B33, B34)
-    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeLessThan(0.5);
+    // the fixed finger ≈ 0.5 and the dactylus ≈ 0.75 of the palm's length along its curve (A45, B33, B34), meeting at
+    // their tips
+    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeGreaterThan(0.5);
+    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeLessThan(0.7);
+    expect(CHELA_MALE.da.length / CHELA_MALE.palm.length).toBeGreaterThan(0.65);
+    expect(CHELA_MALE.da.length / CHELA_MALE.palm.length).toBeLessThan(0.85);
+    const ftip = [CHELA_MALE.fingerAt[0] + Math.cos(CHELA_MALE.fingerAngle) * CHELA_MALE.finger.length, CHELA_MALE.fingerAt[1] + Math.sin(CHELA_MALE.fingerAngle) * CHELA_MALE.finger.length];
+    const q = articleAxis(CHELA_MALE.da, CHELA_MALE.da.length, 1), c = Math.cos(CHELA_MALE.daAngle), s = Math.sin(CHELA_MALE.daAngle);
+    const dtip = [CHELA_MALE.hinge[0] + q.x * c - q.y * s, CHELA_MALE.hinge[1] + q.x * s + q.y * c];
+    expect(Math.hypot(ftip[0] - dtip[0], ftip[1] - dtip[1])).toBeLessThan(0.6);
+    // the dactylus a narrow band (≈ 3.4 mm across, an eighth of the palm's length: A45, B33), curving in to its tip;
+    // the fingers flatter than they are broad at their bases, the palm's outer face running on onto them
+    expect(Math.max(...CHELA_MALE.da.sections.map((k) => k.hy)) * 2 / CHELA_MALE.palm.length).toBeLessThan(0.16);
+    expect(q.a).toBeLessThan(-0.5);
+    for (const f of [CHELA_MALE.finger, CHELA_MALE.da]) expect(f.sections[1].hz).toBeLessThan(f.sections[1].hy);
     // the palm stout: thicker than half its height through its proximal half (the scan)
     const mid = CHELA_MALE.palm.sections.find((k) => k.t > 0.4)!;
     expect(mid.hz / mid.hy).toBeGreaterThan(0.55);

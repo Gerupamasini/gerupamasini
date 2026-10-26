@@ -172,7 +172,7 @@ float osGranules(vec2 p, float cell, float fw, float seed) {
  */
 const SURFACE = /* glsl */ `
 vec3 osCol = uBase;
-float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0;
+float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0, osDry = 0.0;
 {
   vec3 P = vRest;
   int part = int(vPart + 0.5);
@@ -275,7 +275,8 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0;
     bool male = vAux.y > 4.5 && vAux.y < 5.5;
     bool finger = part == 6 || part == 15;
     float tipK = finger ? smoothstep(0.5, 1.0, t) : 0.0;
-    float edge = part == 6 ? smoothstep(-0.5, -0.9, upper) : part == 15 ? smoothstep(0.5, 0.9, upper) : 0.0;
+    // (the cutting edges' brown band reaching round onto the outer face a little: a dark line along the slit, A45)
+    float edge = part == 6 ? smoothstep(0.0, -0.5, upper) : part == 15 ? smoothstep(0.0, 0.5, upper) : 0.0;
     if (male) {
       osCol = uPalm * (0.86 + 0.2 * osFbm(mm * 0.4 + sd));
       // the palm's surface: a fine reticulate granulation in faint grey (A45, B33: the "crazed" white enamel), the upper
@@ -285,8 +286,14 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0;
       osCol *= 0.9 + 0.1 * smoothstep(0.15, 0.45, ret);
       osCol = mix(osCol, uLeg * 1.4, part == 5 ? smoothstep(0.55, 0.95, upper) * 0.65 + smoothstep(0.12, 0.0, t) * 0.5 : 0.0);
       osCol = mix(osCol, uDark * 2.0, part == 5 ? osSpeckle(mm, 0.3, 0.35, fwL, sd.y) * smoothstep(0.3, 0.9, upper) * 0.6 : 0.0);
-      osCol = mix(osCol, uEdge, edge * 0.85);
-      osCol = mix(osCol, uFingerTip, tipK * 0.75 * (1.0 - edge * 0.5));
+      osCol = mix(osCol, uEdge, edge);
+      // (the brown edges matt, not glazed by the water film: they read dark even where the slit is seen glancingly)
+      osSpec = 1.0 - 0.6 * edge;
+      osDry = edge * 0.8;
+      // (the fingers white to their tips, the very tips a little amber: A45, B33, B34; the gape's base, the palm's end
+      // between the fingers, in shadow and brown with the cutting edges)
+      osCol = mix(osCol, uFingerTip, smoothstep(0.82, 1.0, t) * (finger ? 0.35 : 0.0) * (1.0 - edge * 0.5));
+      osCol = mix(osCol, uEdge * 0.5, part == 5 ? step(0.999, t) * 0.9 : 0.0);
       osHgt += osGranules(mm, 0.22, fwL, sd.x) * 0.35;
       osRough = 0.3;
     } else {
@@ -326,7 +333,7 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0;
   osHgt *= 1.0 - osMud * 0.7;
   osRough = mix(osRough, 0.88, osMud);
   // a wet shell: a film of water over it (glossy), the matt mud drinks it in; dry, the shell dulls
-  osCoat = 0.75 * uWet * (1.0 - osMud * 0.75);
+  osCoat = 0.75 * uWet * (1.0 - osMud * 0.75) * (1.0 - osDry);
   osRough = mix(osRough + 0.15, osRough, uWet);
   diffuseColor.rgb = osCol;
 }

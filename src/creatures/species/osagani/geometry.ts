@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import {
   ABDOMEN, BIND, CARAPACE, CHELA_FEMALE, CHELA_MALE, EYE, MXP3, OUTLINE, dorsalHeight, dorsalRelief, legSpecs, marginHeight, sternumY, wallRadius,
-  type ArticleName, type ArticleSpec, type LegId, type LegSpec, type V2,
+  articleAxis, type ArticleName, type ArticleSpec, type LegId, type LegSpec, type V2,
 } from './anatomy';
 import { GeoBuilder, knotLerp, noise2, smooth } from '../gazami/mesh';
 import { Rng } from '../../../core/Rng';
@@ -478,7 +478,7 @@ const angDist = (a: number, b: number) => { let d = Math.abs(a - b) % (2 * Math.
 
 interface ArticleOut {
   /** the article's surface at (t, a) in its local frame (for spines, teeth, setae) */
-  surface(t: number, a: number): { p: Vector3; n: Vector3 };
+  surface(t: number, a: number): { p: Vector3; n: Vector3; along: Vector3 };
 }
 
 /**
@@ -497,22 +497,33 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   });
   const twistAt = (t: number) => (spec.twist ? knotLerp(spec.twist.map(([tt, v]) => ({ t: tt, v })), Math.max(0, t), (k) => k.v) : 0);
   const rEnd = Math.min(knotLerp(spec.sections, 1, (k) => k.hy), knotLerp(spec.sections, 1, (k) => k.hz));
-  const endLobe = (a: number) => (last ? 0 : rEnd * (0.45 * Math.max(0, Math.cos(a)) - 0.22 * Math.max(0, -Math.cos(a))));
+  const endLobe = (a: number) => (last || spec.flush ? 0 : rEnd * (0.45 * Math.max(0, Math.cos(a)) - 0.22 * Math.max(0, -Math.cos(a))));
+  // (a curved axis: the straight article's x laid along it, its y along the curve's normal)
+  const axis = spec.bend ? Array.from({ length: 65 }, (_, i) => articleAxis(spec, L, i / 64)) : null;
+  const onAxis = (t: number, p: Vector3) => {
+    if (!axis || t <= 0) return p;
+    const f = Math.min(1, t) * 64, i = Math.min(63, Math.floor(f)), u = f - i;
+    const A = axis[i], B = axis[i + 1];
+    const ax = A.x + (B.x - A.x) * u, ay = A.y + (B.y - A.y) * u, an = A.a + (B.a - A.a) * u;
+    const c = Math.cos(an), si = Math.sin(an), dx = p.x - t * L;
+    return p.set(ax + dx * c - p.y * si, ay + dx * si + p.y * c, p.z);
+  };
   const radial = (t: number, a: number) => {
     const s = sec(t);
     const ca = Math.cos(a), sa = Math.sin(a);
     const pw = 2 / n, pz = 2 / (spec.nz ?? n);
-    // (a teardrop: boxier on the ventral side, the breadth drawn in towards the dorsal keel)
-    const pv = spec.tear && ca < 0 ? pw / (1 + 0.6 * spec.tear) : pw;
+    // (a teardrop: boxier on the ventral side, the breadth drawn in towards the dorsal keel; turned over, the keel below)
+    const tear = Math.abs(spec.tear ?? 0), tc = (spec.tear ?? 0) < 0 ? -ca : ca;
+    const pv = tear && tc < 0 ? pw / (1 + 0.6 * tear) : pw;
     let y = s.hy * Math.sign(ca) * Math.pow(Math.abs(ca), pv);
     let z = s.hz * Math.sign(sa) * Math.pow(Math.abs(sa), pz);
-    if (spec.tear) z *= 1 - spec.tear * smooth(-0.35, 1.05, ca);
+    if (tear) z *= 1 - tear * smooth(-0.35, 1.05, tc);
     let k = 1;
     if (spec.tri) k *= 1 + spec.tri[0] * Math.cos(3 * (a - spec.tri[1]));
     // the neck inside the parent's socket (a clear waist: B65, B70) and the rim at the distal end
     if (neck > 0) k *= 0.8 + 0.2 * smooth(0.0, neck, t);
     else if (t < 0.02) k *= 0.85 + 7.5 * Math.max(0, t);
-    if (!last && t > 0.95) k *= 1 + 0.05 * Math.sin(Math.PI * Math.min(1, (t - 0.95) / 0.05));
+    if (!last && !spec.flush && t > 0.95) k *= 1 + 0.05 * Math.sin(Math.PI * Math.min(1, (t - 0.95) / 0.05));
     y *= k; z *= k;
     let rid = 0;
     if (spec.costae) for (const [ac, h, w] of spec.costae) rid += h * Math.exp(-((angDist(a, ac) / w) ** 2));
@@ -521,7 +532,7 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
     if (th) { const c = Math.cos(th), si = Math.sin(th); const y2 = y * c + z * si; z = -y * si + z * c; y = y2; }
     // the distal end cut obliquely: a dorsal lobe overhanging the next article, the flexor side open (where the
     // articular membrane is) — articles that overlap at their joints, not tubes on rings
-    return new Vector3(t * L + endLobe(a) * smooth(0.82, 1.0, t), s.cy + y, s.cz + z);
+    return onAxis(t, new Vector3(t * L + endLobe(a) * smooth(0.82, 1.0, t), s.cy + y, s.cz + z));
   };
   const angAt = (j: number, t: number) => j / nA - twistAt(t) / (Math.PI * 2);
   // stations along the article (finer at the neck and the tip)
@@ -559,7 +570,8 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   const lastRow = rows[rows.length - 1];
   const s1 = sec(1);
   if (last) {
-    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(L + 0.02, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0, flag));
+    const e = onAxis(1, new Vector3(L + 0.02, s1.cy, s1.cz)), an = axis ? axis[64].a : 0;
+    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(e.x, e.y, e.z, Math.cos(an), Math.sin(an), 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0, flag));
   } else {
     let prevRow = lastRow;
     // (the distal end cut square with a narrow rim: the next article's neck sits in it, no sausage end)
@@ -587,7 +599,7 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
       const eps = 0.01;
       const pa = radial(t, a + eps), pt = radial(Math.min(1, t + eps), a), pm = radial(Math.max(0, t - eps), a);
       const ta = pa.sub(p), tt = pt.sub(pm);
-      return { p, n: new Vector3().crossVectors(ta, tt).normalize() };
+      return { p, n: new Vector3().crossVectors(ta, tt).normalize(), along: tt.normalize() };
     },
   };
 }
@@ -694,20 +706,20 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
       if (leg.id === 'P1' && (pc.finger || spec.name === 'da')) {
         const male = flag === FLAG.MALE_CHELA;
         const fixed = !!pc.finger;
-        const [t0, t1] = fixed ? [0.32, 0.93] : [0.12, 0.92];
-        const count = lod.fingerTeeth ? (male ? 15 : 11) : 0;
+        const [t0, t1] = fixed ? [0.4, 0.95] : [0.18, 0.94];
+        const count = lod.fingerTeeth ? (male ? 24 : 11) : 0;
         const a = fixed ? 0 : Math.PI;
         for (let k = 0; k < count; k++) {
           const t = t0 + ((t1 - t0) * (k + 0.5)) / count;
-          const { p, n } = art.surface(t, a);
-          const size = (male ? 0.34 : 0.2) * (1 - 0.4 * ((k + 0.5) / count));
-          const dir = n.clone().multiplyScalar(0.95).addScaledVector(AX, 0.3).normalize();
+          const { p, n, along } = art.surface(t, a);
+          const size = (male ? 0.28 : 0.2) * (1 - 0.4 * ((k + 0.5) / count));
+          const dir = n.clone().multiplyScalar(0.95).addScaledVector(along, 0.3).normalize();
           cone(gb, p.addScaledVector(n, -0.08), dir, 0.55 * size, 0.9 * size, 4, bone, PART.TOOTH, undefined, flag);
         }
         if (male && fixed && lod.tier < 2) {
           // the wedge: a broad triangular tooth on the fixed finger's cutting edge
-          const { p, n } = art.surface(CHELA_MALE.tooth.t, 0);
-          cone(gb, p.addScaledVector(n, -0.25), n.clone().addScaledVector(AX, 0.2).normalize(), 1.0, CHELA_MALE.tooth.h, lod.fingerTeeth ? 6 : 3, bone, PART.TOOTH, AX.clone().multiplyScalar(0.3), flag);
+          const { p, n, along } = art.surface(CHELA_MALE.tooth.t, 0);
+          cone(gb, p.addScaledVector(n, -0.25), n.clone().addScaledVector(along, 0.2).normalize(), 1.0, CHELA_MALE.tooth.h, lod.fingerTeeth ? 6 : 3, bone, PART.TOOTH, along.clone().multiplyScalar(0.3), flag);
         }
       }
       // setae (top tier): the meri's posterior margins, the propodi's lower margins, the dactyli, the cheliped's merus
@@ -781,12 +793,14 @@ function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
   // the chelae: a palm and the two fingers each (the male's long, the female's small)
   for (const [ch, flag, daBone] of [[CHELA_MALE, FLAG.MALE_CHELA, 'da'], [CHELA_FEMALE, FLAG.FEMALE_CHELA, 'daF']] as const) {
     const L = ch.palm.length, h = Math.max(...ch.palm.sections.map((k) => k.hy)) * 0.75;
-    const fa = ch.fingerAngle, fl = ch.finger.length;
-    const fx = ch.fingerAt[0] + Math.cos(fa) * fl, fy = ch.fingerAt[1] + Math.sin(fa) * fl;
     const cy = ch.palm.sections[ch.palm.sections.length - 1].cy ?? 0;
     tube([P('pr'), P('pr', L * 0.45, cy * 0.7), P('pr', L, cy)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
-    tube([P('pr', ch.fingerAt[0], ch.fingerAt[1]), P('pr', ch.fingerAt[0] + Math.cos(fa) * fl * 0.5, ch.fingerAt[1] + Math.sin(fa) * fl * 0.5), P('pr', fx, fy)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
-    tube([P(daBone), P(daBone, ch.da.length * 0.5, -0.3), P(daBone, ch.da.length, -1.0)], [h * 0.36, h * 0.28, 0.1], PART.FINGER, flag);
+    // (the fingers along their axes, the dactylus's from its hinge)
+    const fa = ch.fingerAngle, c = Math.cos(fa), s = Math.sin(fa);
+    const fp = (t: number) => { const q = articleAxis(ch.finger, ch.finger.length, t); return P('pr', ch.fingerAt[0] + q.x * c - q.y * s, ch.fingerAt[1] + q.x * s + q.y * c); };
+    const dp = (t: number) => { const q = articleAxis(ch.da, ch.da.length, t); return P(daBone, q.x, q.y); };
+    tube([fp(0), fp(0.5), fp(1)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
+    tube([dp(0), dp(0.5), dp(1)], [h * 0.36, h * 0.28, 0.1], PART.FINGER, flag);
   }
 }
 
