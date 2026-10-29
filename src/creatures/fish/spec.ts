@@ -81,6 +81,8 @@ export interface EyeSpec {
   lid?: number;
   /** a fringed lappet of the iris over the top of the pupil (the flathead's, the flounder's) */
   lappet?: number;
+  /** an eye on the top of a flat head: its centre this far (TL, along the skin) from the dorsal midline, not at `y` */
+  across?: number;
 }
 
 export interface MouthSpec {
@@ -314,3 +316,23 @@ export const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** model z (forward +Z, metres) of a point at s */
 export const zOf = (spec: FishSpec, s: number): number => (spec.pivot - s) * spec.modelTL;
+
+/** φ (left flank) reached going `arc` (TL) along a section from φ0: up toward the back (+) or down (−) */
+export function phiAlong(sec: Section, phi0: number, arc: number): number {
+  const dir = arc > 0 ? -1 : 1, target = Math.abs(arc), step = 0.004;
+  const p: [number, number] = [0, 0], q: [number, number] = [0, 0];
+  let phi = phi0, a = 0;
+  sectionPoint(sec, phi, p);
+  for (let k = 0; k < 1500 && a < target; k++) {
+    sectionPoint(sec, phi + dir * step, q);
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (a + d >= target) { phi += (dir * step * (target - a)) / Math.max(d, 1e-9); break; }
+    a += d; phi += dir * step; p[0] = q[0]; p[1] = q[1];
+  }
+  return Math.min(Math.PI - 1e-3, Math.max(1e-3, phi));
+}
+
+/** where on a section (φ, left flank) an eye's centre lies: at its height, or `across` from the dorsal midline */
+export function eyePhi(e: EyeSpec, sec: Section): number {
+  return e.across !== undefined ? phiAlong(sec, 0, -e.across) : phiAtHeight(sec, e.y);
+}

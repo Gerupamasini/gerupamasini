@@ -103,7 +103,7 @@ const SUZUKI: FishSpec = {
   nTop: [[0, 1.9], [0.12, 1.95], [0.25, 2.2], [0.45, 2.3], [0.8, 2.1]], nBot: [[0, 1.8], [0.12, 1.75], [0.22, 2.0], [0.4, 2.1], [0.8, 2.0]],
   wide: [[0, -0.1], [0.12, -0.15], [0.25, 0], [0.4, 0.12], [0.6, 0.1], [0.8, 0]],
   snoutCap: 0.025,
-  eyes: [{ s: 0.1, y: 0.024, r: 0.022, bulge: 0.0022, pupil: 0.52, iris: [0xe2ddc8, 0x9a8a60], rim: 0x1e2020 }],
+  eyes: [{ s: 0.1, y: 0.024, r: 0.022, bulge: 0.0022, pupil: 0.52, iris: [0xd2bc84, 0x7a6236], rim: 0x1e2020 }],
   mouth: { corner: 0.105, gape: [[0, -0.002], [0.05, -0.012], [0.105, -0.03]], open: 0.6, inside: 0.75, jut: 0.012 },
   oper: { s: 0.27, sweep: 0.025, top: 0.085, bot: 0.09, step: 0.0015 },
   fins: {
@@ -123,7 +123,7 @@ const SUZUKI: FishSpec = {
   iridescence: 0.25,
   relief: { maxilla: 0.022, pre: 1.3 },
   skin(p, o) {
-    countershade(o, p.h, 0x56636c, 0xbfc6ca, 0xeef0ee, 0.42, -0.4, 0.2);
+    countershade(o, p.h, 0x4c5357, 0xa4aaa7, 0xdcdedb, 0.42, -0.4, 0.2);
     o.metal = 0.25 + 0.45 * (1 - smooth(0.3, 0.7, p.h)) * smooth(-0.9, -0.3, p.h);
     o.rough = 0.34 + 0.12 * smooth(0.3, 0.8, p.h);
     shade(o, 0.92 + 0.16 * mottle(p, 40, 1));
@@ -164,7 +164,7 @@ const MEJINA: FishSpec = {
   nTop: [[0, 2.0], [0.12, 2.0], [0.3, 2.35], [0.6, 2.2], [0.77, 2.0]], nBot: [[0, 1.9], [0.12, 1.9], [0.3, 2.25], [0.77, 2.0]],
   wide: [[0, -0.05], [0.1, -0.1], [0.25, 0.05], [0.4, 0.1], [0.77, 0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.1, y: 0.035, r: 0.03, bulge: 0.003, pupil: 0.5, iris: [0x5e8cb0, 0x223646], rim: 0x1a2020 }],
+  eyes: [{ s: 0.104, y: 0.045, r: 0.03, bulge: 0.003, pupil: 0.5, iris: [0x5e8cb0, 0x223646], rim: 0x1a2020 }],
   mouth: { corner: 0.045, gape: [[0, -0.012], [0.045, -0.02]], open: 0.5, inside: 0.35 },
   oper: { s: 0.24, sweep: 0.03, top: 0.15, bot: 0.13, step: 0.002 },
   fins: {
@@ -184,8 +184,8 @@ const MEJINA: FishSpec = {
   relief: { maxilla: 0.008, pre: 0.8 },
   skin(p, o) {
     // olive grey with a bronze sheen over the back, paler and silvery grey below (alive it is no darker than the rocks)
-    countershade(o, p.h, 0x3e4840, 0x66706a, 0xa4aca6, 0.35, -0.5, 0.35);
-    tint(o, 0x7e7650, 0.12 * smooth(-0.1, 0.6, p.h));
+    countershade(o, p.h, 0x3a3c35, 0x5c5e55, 0x8e9088, 0.35, -0.5, 0.35);
+    tint(o, 0x7a6a48, 0.14 * smooth(-0.1, 0.6, p.h));
     o.metal = 0.14 + 0.16 * (1 - smooth(-0.3, 0.5, p.h)); o.rough = 0.42;
     shade(o, 0.9 + 0.2 * mottle(p, 30, 2));
     // a dark dot at the base of each scale, in rows along the body
@@ -197,9 +197,9 @@ const MEJINA: FishSpec = {
     tint(o, 0x1a1e1c, 0.3 * eyeRim(p, 0.1, 0.035, 0.03));
   },
   fin: finPainter({
-    def: { c: 0x2e3430, a: 0.75, ray: 0x1e2220, rayA: 0.95 },
-    p: { c: 0x8a9088, a: 0.35, rayA: 0.6 },
-    c: { c: 0x3e4640, a: 0.65, edge: 0x1c201e, edgeW: 0.1 },
+    def: { c: 0x424a44, a: 0.55, ray: 0x242a26, rayA: 0.9 },
+    p: { c: 0x8a9088, a: 0.3, rayA: 0.55 },
+    c: { c: 0x48504a, a: 0.5, edge: 0x1c201e, edgeW: 0.1 },
   }, { d1: 14, d2: 14, a: 14, c: 17, p: 18, v: 6 }, { d1: 14, a: 3 }),
   swim: { lambda: 1.05, env: [0.2, -0.6, 1.3], amp: 0.07, stride: 0.6, stiff: 0.6, pecSwim: 0.6 },
   behavior: { habit: 'reef', forage: 'pick', cruise: 0.8, burst: 7, level: 0.3, minLift: 0.25, school: 0.45, spacing: 1.6, extras: [] },
@@ -240,12 +240,13 @@ const KISU: FishSpec = {
   iridescence: 0.35,
   relief: { maxilla: 0.008, pre: 0.8 },
   skin(p, o) {
-    countershade(o, p.h, 0xa8916a, 0xd2c8b0, 0xf2efe6, 0.35, -0.35, 0.3);
+    countershade(o, p.h, 0x9c8664, 0xcdc2aa, 0xefebe2, 0.35, -0.35, 0.3);
     o.metal = 0.15 + 0.35 * (1 - smooth(0.2, 0.6, p.h)) * smooth(-0.9, -0.2, p.h);
     o.rough = 0.38;
     shade(o, 0.94 + 0.1 * mottle(p, 50, 3));
     // a faint silvery band along the mid-flank and the lateral line
-    tint(o, 0xf0ece0, 0.25 * (1 - smooth(0.05, 0.2, Math.abs(p.h - 0.05))) * smooth(0.25, 0.35, p.s));
+    tint(o, 0xeeeee6, 0.38 * (1 - smooth(0.05, 0.2, Math.abs(p.h - 0.05))) * smooth(0.25, 0.35, p.s));
+    o.metal = Math.max(o.metal, 0.55 * (1 - smooth(0.06, 0.2, Math.abs(p.h - 0.05))) * smooth(0.25, 0.35, p.s));
     tint(o, 0xa89470, 0.35 * lateralLine(p, 0.55, 0.05, 0.025));
     tint(o, 0x9a8460, 0.3 * smooth(0.5, 0.9, p.h) * (1 - smooth(0.02, 0.1, p.s)));
   },
@@ -276,7 +277,7 @@ const MAGOCHI: FishSpec = {
   nTop: [[0, 3.0], [0.3, 2.7], [0.5, 2.2], [0.8, 2.1]], nBot: [[0, 3.2], [0.3, 3.0], [0.6, 2.2], [0.8, 2.0]],
   wide: [[0, -0.1], [0.3, -0.1], [0.5, 0], [0.86, 0]],
   snoutCap: 0.02,
-  eyes: [{ s: 0.128, y: 0.03, r: 0.016, bulge: 0.0026, pupil: 0.48, iris: [0xbaa478, 0x5a4a32], rim: 0x2a2218, up: 0.75, fwd: 0.1, lappet: 0.35 }],
+  eyes: [{ s: 0.128, y: 0.03, r: 0.016, bulge: 0.0026, pupil: 0.48, iris: [0xbaa478, 0x5a4a32], rim: 0x2a2218, up: 0.75, fwd: 0.1, lappet: 0.35, across: 0.024 }],
   mouth: { corner: 0.11, gape: [[0, 0.008], [0.05, 0.0], [0.11, -0.006]], open: 0.55, inside: 0.6, jut: 0.012 },
   oper: { s: 0.3, sweep: 0.03, top: 0.035, bot: 0.03, step: 0.0015 },
   fins: {
@@ -286,7 +287,7 @@ const MAGOCHI: FishSpec = {
       { id: 'a', s0: 0.43, s1: 0.72, len: [[0, 0.04], [1, 0.03]], rake: [0.8, 1.05], rays: 13 },
     ],
     caudal: { len: 0.14, centre: 1.0, tip: 0.84, p: 2, spread: 0.55, rays: 15, base: 1.2 },
-    pectoral: { s: 0.31, y: -0.02, base: 0.04, len: [[0, 0.055], [0.4, 0.075], [1, 0.055]], dirs: [0.3, -0.9], rest: 0.2, roll: 1.3, rays: 19 },
+    pectoral: { s: 0.3, y: -0.02, base: 0.05, len: [[0, 0.085], [0.4, 0.112], [1, 0.08]], dirs: [0.25, -1.0], rest: 0.25, roll: 1.3, rays: 19 },
     pelvic: { s: 0.33, y: 0, base: 0.03, len: [[0, 0.12], [0.5, 0.13], [1, 0.09]], dirs: [0.65, 0.1], rest: 1.4, rays: 6 },
   },
   scales: { along: 85, around: 34, depth: 0.28, pigment: 0.12, type: 'ctenoid', head: 0.1, loss: 0.005 },
@@ -413,13 +414,13 @@ const BORA: FishSpec = {
   iridescence: 0.3,
   relief: { maxilla: 0.006, pre: 0.6 },
   skin(p, o) {
-    countershade(o, p.h, 0x4a585e, 0xbcc4c6, 0xeceeec, 0.45, -0.45, 0.2);
+    countershade(o, p.h, 0x465056, 0xa6aeb0, 0xdcdfdd, 0.45, -0.45, 0.2);
     o.metal = 0.2 + 0.5 * (1 - smooth(0.35, 0.75, p.h)) * smooth(-0.9, -0.3, p.h);
     o.rough = 0.32 + 0.15 * smooth(0.4, 0.8, p.h);
     shade(o, 0.93 + 0.12 * mottle(p, 36, 8));
     // dark stripes along the scale rows, strongest on the upper flank
     const st = Math.pow(0.5 + 0.5 * Math.cos(p.h * Math.PI * 7.5), 3) * smooth(-0.45, 0.0, p.h) * smooth(0.22, 0.3, p.s);
-    tint(o, 0x3a4448, 0.42 * st);
+    tint(o, 0x343c40, 0.55 * st);
     // the blue-black spot at the pectoral's base
     tint(o, 0x1c2430, 0.8 * Math.exp(-(((p.s - 0.252) / 0.012) ** 2) - (((p.y - 0.034) / 0.012) ** 2)));
     tint(o, 0x2e3438, 0.35 * eyeRim(p, 0.056, 0.016, 0.022));
@@ -469,12 +470,14 @@ const SAPPA: FishSpec = {
   iridescence: 0.5,
   relief: { maxilla: 0.012, pre: 0.4 },
   skin(p, o) {
-    countershade(o, p.h, 0x2e525a, 0xd2d8dc, 0xf2f4f2, 0.5, -0.55, 0.1);
+    countershade(o, p.h, 0x3e5650, 0xc2c8c8, 0xeceeec, 0.5, -0.55, 0.1);
     o.metal = 0.2 + 0.65 * (1 - smooth(0.4, 0.62, p.h));
     o.rough = 0.24 + 0.14 * smooth(0.45, 0.7, p.h);
     shade(o, 0.95 + 0.1 * mottle(p, 40, 9));
     // a faint gold band where the back meets the silver
-    tint(o, 0xc8c088, 0.25 * (1 - smooth(0.02, 0.1, Math.abs(p.h - 0.42))) * smooth(0.2, 0.3, p.s));
+    tint(o, 0xc4ac6c, 0.42 * (1 - smooth(0.02, 0.12, Math.abs(p.h - 0.42))) * smooth(0.2, 0.3, p.s));
+    // the small dark spot behind the gill cover's upper corner
+    tint(o, 0x202628, 0.7 * Math.exp(-(((p.s - 0.195) / 0.008) ** 2) - (((p.y - 0.05) / 0.008) ** 2)));
     // the scutes along the keel
     tint(o, 0xfafaf4, 0.4 * smooth(0.92, 0.99, -p.h) * (0.5 + 0.5 * Math.sin(p.s * 160)));
   },
@@ -520,7 +523,8 @@ const KONOSHIRO: FishSpec = {
   iridescence: 0.5,
   relief: { maxilla: 0.01, pre: 0.4 },
   skin(p, o) {
-    countershade(o, p.h, 0x3e5a66, 0xcfd3d4, 0xf2f2ee, 0.5, -0.55, 0.15);
+    countershade(o, p.h, 0x44565a, 0xbec3c1, 0xebece8, 0.5, -0.55, 0.15);
+    tint(o, 0xb09a6a, 0.16 * smooth(-0.3, 0.3, p.h) * (1 - smooth(0.4, 0.7, p.h)));
     o.metal = 0.2 + 0.6 * (1 - smooth(0.4, 0.65, p.h));
     o.rough = 0.26 + 0.12 * smooth(0.45, 0.7, p.h);
     shade(o, 0.95 + 0.1 * mottle(p, 40, 10));
@@ -577,8 +581,8 @@ const ISHIMOCHI: FishSpec = {
   iridescence: 0.4,
   relief: { maxilla: 0.02, pre: 1.0 },
   skin(p, o) {
-    countershade(o, p.h, 0x8a8088, 0xd6d2d2, 0xf6f2ea, 0.45, -0.5, 0.3);
-    tint(o, 0xe6c4c4, 0.25 * smooth(-0.3, 0.1, p.h) * (1 - smooth(0.3, 0.6, p.h)));
+    countershade(o, p.h, 0x7a7872, 0xc4c6c2, 0xeeece4, 0.45, -0.5, 0.3);
+    tint(o, 0xe2cfc0, 0.1 * smooth(-0.3, 0.1, p.h) * (1 - smooth(0.3, 0.6, p.h)));
     o.metal = 0.15 + 0.5 * (1 - smooth(0.3, 0.7, p.h)) * smooth(-0.95, -0.4, p.h);
     o.rough = 0.34;
     shade(o, 0.94 + 0.1 * mottle(p, 40, 12));

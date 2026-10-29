@@ -12,7 +12,7 @@ import {
   FIN_NORMAL, FIN_VERT, FIN_VERT_PARS,
 } from './shaders';
 import {
-  FIN_BAND_COUNT, mix, newSection, sectionAt, sectionPoint, smooth,
+  FIN_BAND_COUNT, mix, newSection, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth,
   type FinId, type FinOut, type FishSpec, type SkinOut, type SkinSample,
 } from './spec';
 
@@ -230,6 +230,17 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
       HALF[i] = a;
     }
   }
+  // each eye's centre height as an arc on the skin, column by column (the eyes are laid out along the skin: body.ts eyeDisc)
+  const EARC = eyes.map(({ e, side }) => {
+    const out = new Float32Array(w);
+    for (let i = 0; i < w; i++) {
+      if (e.across !== undefined) { out[i] = e.across; continue; }
+      const jl = (phiAtHeight(sectionAt(spec, Math.min(Sx[i], cb), sec), e.y) / (2 * Math.PI)) * h - 0.5;
+      const jf = side > 0 ? jl : h - 1 - jl, j0 = Math.max(0, Math.min(h - 1, Math.floor(jf))), j1 = Math.min(h - 1, j0 + 1), t = jf - j0;
+      out[i] = ARC[j0 * w + i] * (1 - t) + ARC[j1 * w + i] * t;
+    }
+    return out;
+  });
   const scr = [scratches(spec, 1, 9, 0.12), scratches(spec, -1, 9, 0.12)];
   const headS = sc.head ?? oper.s - 0.11;
   const ctenoid = sc.type === 'ctenoid', loss = sc.loss ?? 0.01, depth = sc.depth;
@@ -274,7 +285,7 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
         }
         // each scale tilted a little its own way (the glitter of a turning fish), less on a mirror-silver flank, where
         // the least tilt already throws a scale from bright to dark
-        const tilt = 0.12 * (1 - 0.7 * out.metal) * inner * fade;
+        const tilt = 0.12 * (1 - 0.75 * out.metal) * inner * fade;
         tx += tilt * (SCH.r1 - 0.5); ty += tilt * (SCH.r2 - 0.5);
         // the margin's pigmented pocket, dark on the back, faint on the silver flank, darkest along the hind arc; each
         // scale's own shade of tone and silver
@@ -282,8 +293,8 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
         const margin = (0.35 + 0.65 * post) * smooth(0.74, 0.94, d) * (1 - smooth(0.97, 1.0, d));
         shade(out, 1 + fade * show * (-pig * margin + 0.07 * (SCH.r1 - 0.5)));
         out.metal = Math.min(1, Math.max(0, out.metal * (1 + fade * show * (0.18 * (SCH.r2 - 0.5) - 0.25 * margin))));
-        out.rough += fade * (0.08 * margin + 0.05 * (SCH.r3 - 0.5));
-        ao *= 1 - 0.12 * margin * fade;
+        out.rough += fade * show * (0.08 * margin + 0.05 * (SCH.r3 - 0.5));
+        ao *= 1 - 0.12 * margin * fade * show;
         if (lost) {
           // a lost scale: the bare pocket, grey and dull where the silver came away with it
           const k = fade * (1 - smooth(0.85, 1, d));
@@ -320,6 +331,15 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
         out.g *= 1 + a * (fbm(s * 7, arc * 7, 57) - 0.5);
         out.b *= 1 + a * (fbm(s * 7, arc * 7, 63) - 0.5) + 0.05 * smooth(0.1, 0.6, hh);
       }
+      // the upper jaw and the snout carry the head's pigment; the lower jaw stays pale
+      {
+        const m = spec.mouth, P = profilesOf(spec);
+        if (s < m.corner + 0.02) {
+          const g = P.gape(Math.min(s, m.corner)) * (sec.top / Math.max(1e-4, P.top(Math.max(s, 0.6 * spec.snoutCap))));
+          const up = smooth(g - 0.002, g + 0.004, Y[o1]) * (1 - smooth(m.corner - 0.005, m.corner + 0.02, s)) * (1 - smooth(0.3, 0.7, hh));
+          shade(out, 1 - 0.22 * up);
+        }
+      }
       // the head: skin over bone, glossy; the gill cover's plate the glossiest
       headRelief(spec, s, Y[o1], phi, sec, rel);
       hgt += rel.h;
@@ -341,9 +361,10 @@ function paintBody(spec: FishSpec, w: number, h: number): { albedo: Uint8Array; 
       }
       // the eyes: the iris and pupil painted on the skin under each eye (the far tier has no eyeballs and shows them
       // flat; the near tiers' corneas sit over them, and the orbit round them shows)
-      for (const { e, side: es } of eyes) {
+      for (let q = 0; q < eyes.length; q++) {
+        const { e, side: es } = eyes[q];
         if (es !== side) continue;
-        const dx = (s - e.s) / e.r, dy = (Y[o1] - e.y) / e.r;
+        const dx = (s - e.s) / e.r, dy = (EARC[q][i] - arc) / e.r;
         if (dx * dx + dy * dy > 1.22) continue;
         eyeColour(spec, dx, dy, iris);
         const t = 1 - smooth(0.96, 1.1, Math.hypot(dx, dy));

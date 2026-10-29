@@ -1,4 +1,6 @@
-import { profilesOf, smooth, type FishSpec, type Section } from './spec';
+import { eyePhi, profilesOf, sectionPoint, smooth, type FishSpec, type Section } from './spec';
+
+const PT: [number, number] = [0, 0], PX: [number, number] = [0, 0];
 
 /**
  * The head's anatomy drawn into the skin's normal map and its tone (the far tiers and the hero alike): the lips rolled
@@ -41,13 +43,18 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
   // the orbit and the nostrils, about each eye on this side
   for (const e of spec.eyes) {
     if (e.side && e.side !== sideSign) continue;
-    const d = Math.hypot(s - e.s, y - e.y) / e.r;
+    // (measured across the skin: the eye's centre on this section, not only its height, so an eye on top of a flat
+    // head is ringed round as one on a flank)
+    const pc = eyePhi(e, sec), c = sectionPoint(sec, pc, PT);
+    const x = sectionPoint(sec, phi, PX)[0] * sideSign;
+    const across = Math.hypot(x - c[0], y - c[1]) * ((phi < Math.PI ? phi : 2 * Math.PI - phi) <= pc ? 1 : -1);
+    const d = Math.hypot(s - e.s, across) / e.r;
     if (d < 3) {
       const k = (r.orbit ?? 1) * e.r;
       out.h += side * 0.035 * k * g2(d - 1.3, 0.3);
       out.ao *= 1 - side * 0.1 * g2(d - 1.04, 0.12);
       for (const [ds, dyy] of [[-1.55, 0.35], [-2.15, 0.18]]) {
-        const pit = g2(Math.hypot(s - (e.s + ds * e.r), y - (e.y + dyy * e.r)), 0.16 * e.r);
+        const pit = g2(Math.hypot(s - (e.s + ds * e.r), across - dyy * e.r), 0.16 * e.r);
         out.h -= side * 0.03 * e.r * pit;
         out.ao *= 1 - side * 0.18 * pit;
       }

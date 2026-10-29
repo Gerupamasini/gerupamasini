@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Uint16BufferAttribute, Vector3 } from 'three';
 import {
-  FIN_BAND_COUNT, FIN_BANDS, curve, mix, newSection, nose, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, wideAt, zOf,
+  FIN_BAND_COUNT, FIN_BANDS, curve, eyePhi, mix, newSection, nose, phiAlong, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, wideAt, zOf,
   type EyeSpec, type FishSpec, type MedianFinSpec, type PairedFinSpec, type Section,
 } from './spec';
 import { headWidth } from './relief';
@@ -355,12 +355,11 @@ function buildBody(spec: FishSpec, tp: TierParams): BufferGeometry {
   return g;
 }
 
-/** a point on the skin of the left (side +1) or right flank at (s, y), its outward normal (model frame, metres) */
-export function skinPoint(spec: FishSpec, s: number, y: number, side: number, outP: Vector3, outN: Vector3): void {
+/** a point on the skin of the left (side +1) or right flank at (s, φ of the left flank), its outward normal (model frame, metres) */
+export function skinPointPhi(spec: FishSpec, s: number, phiL: number, side: number, outP: Vector3, outN: Vector3): void {
   const T = spec.modelTL;
   const sec = sectionAt(spec, s);
-  const phi0 = phiAtHeight(sec, y);
-  const phi = side > 0 ? phi0 : 2 * Math.PI - phi0;
+  const phi = side > 0 ? phiL : 2 * Math.PI - phiL;
   // (with the head's larger forms, as the loft has them)
   const at = (q: Section, s0: number, a: number): [number, number] => { const r = sectionPoint(q, a); r[0] *= headWidth(spec, s0, r[1], q); return r; };
   const p = at(sec, s, phi);
@@ -373,6 +372,20 @@ export function skinPoint(spec: FishSpec, s: number, y: number, side: number, ou
   const ts = new Vector3((ps[0] - p[0]) * T, (ps[1] - p[1]) * T, zOf(spec, s + 0.004) - zOf(spec, s));
   outN.crossVectors(ts, ta).normalize();
   if (outN.x * side < 0 && Math.abs(p[0]) > 1e-6) outN.negate();
+}
+
+/** a point on the skin at (s, height y) of the left (side +1) or right flank, its outward normal (model frame, metres) */
+export function skinPoint(spec: FishSpec, s: number, y: number, side: number, outP: Vector3, outN: Vector3): void {
+  skinPointPhi(spec, s, phiAtHeight(sectionAt(spec, s), y), side, outP, outN);
+}
+
+/**
+ * A point of an eye's disc, laid on the skin: (dx back, dy up) in eye radii, measured along the skin (so an eye on the
+ * top of a flat head is as round as one on a flank): its s and φ (left flank)
+ */
+export function eyeDisc(spec: FishSpec, e: EyeSpec, dx: number, dy: number): { s: number; phi: number } {
+  const s = e.s + dx * e.r, sec = sectionAt(spec, s);
+  return { s, phi: phiAlong(sec, eyePhi(e, sec), dy * e.r) };
 }
 
 function eyeList(spec: FishSpec): { e: EyeSpec; side: number }[] {
@@ -388,7 +401,7 @@ function eyeList(spec: FishSpec): { e: EyeSpec; side: number }[] {
 export function eyeFrame(spec: FishSpec, e: EyeSpec, side: number): { c: Vector3; g: Vector3; e1: Vector3; e2: Vector3; rS: number; thM: number; r: number } {
   const T = spec.modelTL;
   const P = new Vector3(), N = new Vector3();
-  skinPoint(spec, e.s, e.y, side, P, N);
+  skinPointPhi(spec, e.s, eyePhi(e, sectionAt(spec, e.s)), side, P, N);
   // the gaze: the skin's normal, turned forward and (a flathead's) up
   const g = N.clone();
   g.applyAxisAngle(new Vector3(0, 1, 0), side * (e.fwd ?? 0.15));
@@ -428,11 +441,12 @@ function buildEyes(spec: FishSpec, seg: number): BufferGeometry {
       for (let j = 0; j <= cols; j++) {
         const a = (2 * Math.PI * j) / cols;
         const dx = rho * Math.cos(a), dy = rho * Math.sin(a);
-        const s = e.s + dx * e.r, y = e.y + dy * e.r;
-        skinPoint(spec, s, y, side, P, N);
+        const q = eyeDisc(spec, e, dx, dy);
+        skinPointPhi(spec, q.s, q.phi, side, P, N);
         // the frame across the eye here: back along the skin, up along it, out of it
-        skinPoint(spec, s + 0.1 * e.r, y, side, Pa, Na);
-        skinPoint(spec, s, y + 0.1 * e.r, side, Pb, Na);
+        const qa = eyeDisc(spec, e, dx + 0.1, dy), qb = eyeDisc(spec, e, dx, dy + 0.1);
+        skinPointPhi(spec, qa.s, qa.phi, side, Pa, Na);
+        skinPointPhi(spec, qb.s, qb.phi, side, Pb, Na);
         et.subVectors(Pa, P).normalize(); eb.subVectors(Pb, P).normalize();
         const lift = rho <= 1 ? e.bulge * (1 - rho * rho) + 0.0006 * e.r : -0.04 * e.r;
         P.addScaledVector(N, lift * T);
