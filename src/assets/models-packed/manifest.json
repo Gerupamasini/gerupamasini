@@ -439,6 +439,30 @@
    "bytes": 6374400,
    "images": 0,
    "minPsnr": null
+  },
+  "tobihaze/tobihaze.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "78716e8ddd303cb0bca3e78b4f70041b0c3ff6e84bdaa88e9cfdf4b0aa1e2325",
+   "masterBytes": 21142868,
+   "bytes": 15507596,
+   "images": 4,
+   "minPsnr": 46.17
+  },
+  "tobihaze/tobihaze.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "9dfcaee084c5854c3d445c67ff660ca95c0e5e333a863a87cb032ce5a084ebb9",
+   "masterBytes": 4236424,
+   "bytes": 2479848,
+   "images": 4,
+   "minPsnr": 43.05
+  },
+  "tobihaze/tobihaze.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "fffcaaf52a5df32e2a85de2c4673de03d8fe17fc6ddf9be86568f5c10543ad22",
+   "masterBytes": 281880,
+   "bytes": 224544,
+   "images": 2,
+   "minPsnr": 36.97
   }
  }
 }

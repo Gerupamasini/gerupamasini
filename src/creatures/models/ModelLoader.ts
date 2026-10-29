@@ -7,6 +7,7 @@ import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { gobyLook, gobyLookReady, isGobyBody, isMergedGobyFins, keepGobyEyeColour, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
 import { morphPick, type MorphTable } from '../species/mahaze/colourMorph.js';
+import { instanceTobihaze, prepareTobihazeMaterials } from '../species/tobihaze/material';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -78,14 +79,18 @@ export function preloadModel(rel: string): Promise<GLTF> {
 /** Tier-dependent material adjustments on the shared (cached) materials; resolves when the maps they add are in. */
 function prepareMaterials(gltf: GLTF, tier: Tier): Promise<unknown> {
   const pending: Promise<void>[] = [];
+  const all = new Set<Material>();
   gltf.scene.traverse((o) => {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) pending.push(prepareMaterial(m, tier, gltf.parser));
+    for (const m of mats) { pending.push(prepareMaterial(m, tier, gltf.parser)); all.add(m); }
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
+  // the トビハゼ's materials (extras.tobihaze): their runtime contract, a file at a time (a material's rules may refer to
+  // its siblings'); any other file's are left alone
+  prepareTobihazeMaterials([...all], tier);
   return Promise.all(pending);
 }
 
@@ -156,5 +161,7 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
   box.getSize(size);
   const radius = Math.max(size.x, size.y, size.z) * 0.6 || 0.05;
   const extras = (root.children.find((c) => c.userData && Object.keys(c.userData).length)?.userData ?? gltf.scene.userData) as Record<string, unknown>;
+  // (the トビハゼ: the instance's own copies of its materials, for its individual's uniforms; a no-op for the others)
+  instanceTobihaze(meshes, (extras.tobihaze as { tlMM?: number } | undefined)?.tlMM, variant);
   return { tier, root, bones, meshes, clips: gltf.animations, extras, radius, parser: gltf.parser };
 }

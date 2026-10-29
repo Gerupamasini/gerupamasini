@@ -22,6 +22,7 @@ import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 import { MimiikaDriver } from '../species/mimiika/MimiikaDriver';
 import { GazamiDriver } from '../species/gazami/GazamiDriver';
 import { FishDriver, GrowthDriver } from '../fish/FishDriver';
+import { TobihazeDriver } from '../species/tobihaze/TobihazeDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -98,6 +99,9 @@ export const DRIVERS: Record<string, DriverEntry> = {
   sappa: fish('sappa', 5, { width: 0.1, height: 0.27, core: 0.85, flock: 'sappa' }),
   konoshiro: fish('konoshiro', 6, { width: 0.11, height: 0.33, core: 0.85, flock: 'konoshiro' }),
   ishimochi: fish('ishimochi', 6, { width: 0.14, height: 0.28, core: 0.85 }),
+  // トビハゼ: the mudskipper of the upper flat (GLB tiers posed by its pose module; its contact body is the trunk without
+  // the arms and fins, as the GLB's extras footprint measures it: TL shares, the core SL, its centre 0.08 TL ahead)
+  tobihaze: { create: () => new TobihazeDriver(), body: { width: 0.141, height: 0.16, core: 0.84, ahead: 0.08 } },
   // コメツキガニ: the procedural crab of the Kasai flat, placed and driven by its colony (ScopimeraColony)
   kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview(), body: { width: 1.3, height: 0.5, core: 0.9 } },
 };

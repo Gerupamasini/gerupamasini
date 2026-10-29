@@ -66,6 +66,15 @@ const AQUATIC_DIST = 14;
 /** below this length (mm) an animal's shadow is a few pixels on the bed: its parts are not drawn again for the shadows */
 const SHADOWLESS_MM = 80;
 
+/**
+ * Whether a model takes the gobies' volumetric hero materials (HeroInstance.apply: meshes whose material extras carry
+ * the マハゼ family's roles, `mahaze`); other species' hero tiers keep their own materials (トビハゼ: material.ts),
+ * without the fallback's warning.
+ */
+export function takesGobyHero(model: LoadedModel): boolean {
+  return model.meshes.some((m) => !!m.userData.mahaze);
+}
+
 /** Owns every live individual on the flat: spawning, brains, drivers, model tiers and targeting. */
 export class CreatureSystem {
   readonly events = new EventBus<{ behavior: BehaviorEvent; spawn: Individual; despawn: Individual }>();
@@ -109,6 +118,7 @@ export class CreatureSystem {
     this.spawner = new Spawner(habitat, data.species.values(), removed);
     this.floor = {
       heightAt: (x, z) => terrain.heightAt(x, z),
+      surfaceAt: (x, z) => terrain.surfaceAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
       sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
       colorAt: (x, z, out) => terrain.colorAt(x, z, out),
@@ -353,7 +363,8 @@ export class CreatureSystem {
       }
       if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
       let hero: HeroInstance | null = null;
-      if (tier === 'hero' && this.heroApply) {
+      // (the volumetric hero materials are the gobies'; a model without their roles keeps its own: トビハゼ's)
+      if (tier === 'hero' && this.heroApply && takesGobyHero(model)) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
         if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
         if (!this.heroApply) { hero?.dispose(); hero = null; }

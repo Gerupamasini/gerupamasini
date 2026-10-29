@@ -27,7 +27,8 @@
     "paralichthys_olivaceus",
     "sardinella_zunasi",
     "konosirus_punctatus",
-    "pennahia_argentata"
+    "pennahia_argentata",
+    "periophthalmus_modestus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -45,7 +46,8 @@
     "squid_sand",
     "crab_burrow",
     "swimming_crab",
-    "fish_cruiser"
+    "fish_cruiser",
+    "mudskipper_flat"
   ],
   "maps": [
     "kasai_west",
