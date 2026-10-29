@@ -19,7 +19,8 @@
     "hemitrygon_akajei",
     "euprymna_morsei",
     "scopimera_globosa",
-    "portunus_trituberculatus"
+    "portunus_trituberculatus",
+    "periophthalmus_modestus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -36,7 +37,8 @@
     "ray_benthic",
     "squid_sand",
     "crab_burrow",
-    "swimming_crab"
+    "swimming_crab",
+    "mudskipper_flat"
   ],
   "maps": [
     "kasai_west",

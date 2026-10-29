@@ -7,3 +7,6 @@ dist/
 .vite/
 tests/smoke/out/
 *.log
+
+# トビハゼ build scratch (clay renders, intermediate GLBs)
+tools/models/tobihaze/out/

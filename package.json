@@ -26,6 +26,8 @@
     "model:edohaze-gravid": "GOBY_GRAVID=1 node tools/models/edohaze/build.mjs",
     "model:himehaze": "node tools/models/himehaze/build.mjs",
     "model:himehaze-male": "node tools/models/himehaze/build.mjs --male",
+    "model:tobihaze": "node tools/models/tobihaze/build.mjs",
+    "model:tobihaze-ship": "node tools/models/tobihaze/clips.mjs tools/models/tobihaze/out/tiers/tobihaze.hero.glb src/assets/models/tobihaze/tobihaze.hero.glb && node tools/models/tobihaze/clips.mjs tools/models/tobihaze/out/tiers/tobihaze.lod1.glb src/assets/models/tobihaze/tobihaze.lod1.glb && node -e \"require('fs').copyFileSync('tools/models/tobihaze/out/tiers/tobihaze.lod2.glb', 'src/assets/models/tobihaze/tobihaze.lod2.glb')\" && npm run models:pack -- tobihaze",
     "model:nets": "node tools/models/nets/build.mjs",
     "render:nets": "node tools/models/nets/render.mjs",
     "render:oyster": "node tools/models/oyster/render.mjs",

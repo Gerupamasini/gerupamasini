@@ -15,6 +15,7 @@ import { generateIndividual, type Individual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import type { BehaviorEvent } from '../creatures/drivers/Driver';
 import type { LoadedModel } from '../creatures/models/ModelLoader';
+import { takesGobyHero } from '../creatures/CreatureSystem';
 import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
@@ -591,16 +592,18 @@ export class TankScene {
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
     const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
-    const useHero = this.preset.modelTier === 'hero' && !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
+    // (one hero-tier animal a tank, whichever materials it takes: the gobies' volumetric ones or its own)
+    const useHero = this.preset.modelTier === 'hero' && !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero || o.root.userData.heroTier);
     const rel = this.preset.modelTier === 'lod2' ? files.lod2 ?? (entry.placeholder ? undefined : files.lod1) : useHero ? files.hero : files.lod1 ?? files.lod2 ?? (entry.placeholder ? undefined : files.hero);
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
       for (const m of meshes) m.castShadow = this.preset.shadows;
-      if (useHero && this.heroApply) {
+      if (useHero && this.heroApply && takesGobyHero(model)) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
         if (!this.heroApply) { hero?.dispose(); hero = null; }
       }
+      if (useHero) root.userData.heroTier = true;
       if (!hero) this.lightMeshesByCaustics(meshes as Mesh[]);
     } else if (entry.placeholder) {
       const ph = entry.placeholder();
