@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3, type BufferGeometry } from 'three';
 import {
   ABDOMEN, BIND, CARAPACE, CHELA_FEMALE, CHELA_MALE, EYE, MXP3, OUTLINE, dorsalHeight, dorsalRelief, legSpecs, marginHeight, sternumY, wallRadius,
-  articleAxis, type ArticleName, type ArticleSpec, type LegId, type LegSpec, type V2,
+  articleAxis, type ArticleName, type ArticleSpec, type ChelaSpec, type LegId, type LegSpec, type V2,
 } from './anatomy';
 import { GeoBuilder, knotLerp, noise2, smooth } from '../gazami/mesh';
 import { Rng } from '../../../core/Rng';
@@ -499,14 +499,19 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   const rEnd = Math.min(knotLerp(spec.sections, 1, (k) => k.hy), knotLerp(spec.sections, 1, (k) => k.hz));
   const endLobe = (a: number) => (last || spec.flush ? 0 : rEnd * (0.45 * Math.max(0, Math.cos(a)) - 0.22 * Math.max(0, -Math.cos(a))));
   // (a curved axis: the straight article's x laid along it, its y along the curve's normal)
-  const axis = spec.bend ? Array.from({ length: 65 }, (_, i) => articleAxis(spec, L, i / 64)) : null;
+  // (the article's x laid along it, its y along the normal in the article's plane, its z square to both)
+  const axis = spec.bend || spec.bendZ ? Array.from({ length: 65 }, (_, i) => articleAxis(spec, L, i / 64)) : null;
+  const axisFrame = (t: number) => {
+    const f = Math.min(1, Math.max(0, t)) * 64, i = Math.min(63, Math.floor(f)), u = f - i;
+    const A = axis![i], B = axis![i + 1];
+    const an = A.a + (B.a - A.a) * u, bn = A.b + (B.b - A.b) * u;
+    const ca = Math.cos(an), sa = Math.sin(an), cb = Math.cos(bn), sb = Math.sin(bn);
+    return { o: new Vector3(A.x + (B.x - A.x) * u, A.y + (B.y - A.y) * u, A.z + (B.z - A.z) * u), d: new Vector3(cb * ca, cb * sa, sb), n: new Vector3(-sa, ca, 0), m: new Vector3(-sb * ca, -sb * sa, cb) };
+  };
   const onAxis = (t: number, p: Vector3) => {
     if (!axis || t <= 0) return p;
-    const f = Math.min(1, t) * 64, i = Math.min(63, Math.floor(f)), u = f - i;
-    const A = axis[i], B = axis[i + 1];
-    const ax = A.x + (B.x - A.x) * u, ay = A.y + (B.y - A.y) * u, an = A.a + (B.a - A.a) * u;
-    const c = Math.cos(an), si = Math.sin(an), dx = p.x - t * L;
-    return p.set(ax + dx * c - p.y * si, ay + dx * si + p.y * c, p.z);
+    const F = axisFrame(t), dx = p.x - t * L, y = p.y, z = p.z;
+    return p.copy(F.o).addScaledVector(F.d, dx).addScaledVector(F.n, y).addScaledVector(F.m, z);
   };
   const radial = (t: number, a: number) => {
     const s = sec(t);
@@ -570,8 +575,8 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   const lastRow = rows[rows.length - 1];
   const s1 = sec(1);
   if (last) {
-    const e = onAxis(1, new Vector3(L + 0.02, s1.cy, s1.cz)), an = axis ? axis[64].a : 0;
-    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(e.x, e.y, e.z, Math.cos(an), Math.sin(an), 0, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0, flag));
+    const e = onAxis(1, new Vector3(L + 0.02, s1.cy, s1.cz)), dn = axis ? axisFrame(1).d : new Vector3(1, 0, 0);
+    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(e.x, e.y, e.z, dn.x, dn.y, dn.z, bone, 1, parent, part, 1, angAt(j + 0.5, 1), 0, flag));
   } else {
     let prevRow = lastRow;
     // (the distal end cut square with a narrow rim: the next article's neck sits in it, no sausage end)
@@ -668,14 +673,16 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
   const m = new Matrix4();
   for (const leg of rig.legs) {
     if (lod.tier === 2) { buildLegTube(gb, leg, rig); continue; }
-    const pieces: { spec: ArticleSpec; bone: string; L: number; flag: number; da: boolean; local?: Matrix4; finger?: boolean }[] = leg.spec.articles.map((spec, ai) => ({ spec, bone: legBone(leg.id, leg.side, spec.name), L: leg.lengths[ai], flag: 0, da: spec.name === 'da' }));
+    const pieces: { spec: ArticleSpec; bone: string; L: number; flag: number; da: boolean; local?: Matrix4; finger?: boolean; fixedFrom?: number }[] = leg.spec.articles.map((spec, ai) => ({ spec, bone: legBone(leg.id, leg.side, spec.name), L: leg.lengths[ai], flag: 0, da: spec.name === 'da' }));
     if (leg.id === 'P1') {
-      for (const [ch, flag, daBone] of [[CHELA_MALE, FLAG.MALE_CHELA, 'da'], [CHELA_FEMALE, FLAG.FEMALE_CHELA, 'daF']] as const) {
+      for (const ch of [CHELA_MALE, CHELA_FEMALE] as ChelaSpec[]) {
+        const flag = ch === CHELA_MALE ? FLAG.MALE_CHELA : FLAG.FEMALE_CHELA;
         const pr = legBone('P1', leg.side, 'pr');
-        pieces.push({ spec: ch.palm, bone: pr, L: ch.palm.length, flag, da: false });
-        // (the fixed finger: its own piece set at the palm's lower corner and bent down)
-        pieces.push({ spec: ch.finger, bone: pr, L: ch.finger.length, flag, da: true, finger: true, local: new Matrix4().makeRotationZ(ch.fingerAngle).setPosition(ch.fingerAt[0], ch.fingerAt[1], 0) });
-        pieces.push({ spec: ch.da, bone: legBone('P1', leg.side, daBone), L: ch.da.length, flag, da: true });
+        // (the male's palm carries its fixed finger, drawn down to its point; the female's is its own piece set at the
+        // palm's lower corner and bent down)
+        pieces.push({ spec: ch.palm, bone: pr, L: ch.palm.length, flag, da: ch.fixedFrom !== undefined, fixedFrom: ch.fixedFrom });
+        if (ch.finger) pieces.push({ spec: ch.finger, bone: pr, L: ch.finger.length, flag, da: true, finger: true, local: new Matrix4().makeRotationZ(ch.fingerAngle!).setPosition(ch.fingerAt![0], ch.fingerAt![1], 0) });
+        pieces.push({ spec: ch.da, bone: legBone('P1', leg.side, ch === CHELA_MALE ? 'da' : 'daF'), L: ch.da.length, flag, da: true });
       }
     }
     for (const pc of pieces) {
@@ -703,10 +710,11 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
         }
       }
       // the fingers' cutting edges: small teeth along both, and the male's big wedge on the fixed finger (Wada 2018)
-      if (leg.id === 'P1' && (pc.finger || spec.name === 'da')) {
+      if (leg.id === 'P1' && (pc.finger || pc.fixedFrom !== undefined || spec.name === 'da')) {
         const male = flag === FLAG.MALE_CHELA;
-        const fixed = !!pc.finger;
-        const [t0, t1] = fixed ? [0.4, 0.95] : [0.18, 0.94];
+        const fixed = spec.name !== 'da';
+        const ff = pc.fixedFrom;
+        const [t0, t1] = ff !== undefined ? [ff + 0.08 * (1 - ff), 0.96] : fixed ? [0.4, 0.95] : [0.18, 0.94];
         const count = lod.fingerTeeth ? (male ? 24 : 11) : 0;
         const a = fixed ? 0 : Math.PI;
         for (let k = 0; k < count; k++) {
@@ -756,7 +764,7 @@ export function buildLegs(gb: GeoBuilder, hb: GeoBuilder | null, lod: Lod, rig: 
  */
 function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
   const bone = rig.byName[legBone(leg.id, leg.side, 'me')];
-  const P = (name: ArticleName | 'daF', x = 0, y = 0) => new Vector3(x, y, 0).applyMatrix4(rig.defs[rig.byName[legBone(leg.id, leg.side, name)]].matrix);
+  const P = (name: ArticleName | 'daF', x = 0, y = 0, z = 0) => new Vector3(x, y, z).applyMatrix4(rig.defs[rig.byName[legBone(leg.id, leg.side, name)]].matrix);
   const part = leg.id === 'P1' ? PART.CHELA_ARM : PART.LEG;
   const tube = (pts: Vector3[], radii: number[], prt: number, flag = 0, deep = false) => {
     const sides = 4;
@@ -790,16 +798,27 @@ function buildLegTube(gb: GeoBuilder, leg: LegRig, rig: RigDef): void {
     return;
   }
   tube([P('cx'), P('me'), P('ca'), P('ca', leg.lengths[3])], [1.8, 2.4, 2.9, 2.7], part);
-  // the chelae: a palm and the two fingers each (the male's long, the female's small)
-  for (const [ch, flag, daBone] of [[CHELA_MALE, FLAG.MALE_CHELA, 'da'], [CHELA_FEMALE, FLAG.FEMALE_CHELA, 'daF']] as const) {
+  // the chelae: a palm and the two fingers each (the male's long, its fixed finger drawn down from the palm; the
+  // female's small)
+  for (const ch of [CHELA_MALE, CHELA_FEMALE] as ChelaSpec[]) {
+    const flag = ch === CHELA_MALE ? FLAG.MALE_CHELA : FLAG.FEMALE_CHELA, daBone = ch === CHELA_MALE ? 'da' : 'daF';
     const L = ch.palm.length, h = Math.max(...ch.palm.sections.map((k) => k.hy)) * 0.75;
-    const cy = ch.palm.sections[ch.palm.sections.length - 1].cy ?? 0;
-    tube([P('pr'), P('pr', L * 0.45, cy * 0.7), P('pr', L, cy)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
-    // (the fingers along their axes, the dactylus's from its hinge)
-    const fa = ch.fingerAngle, c = Math.cos(fa), s = Math.sin(fa);
-    const fp = (t: number) => { const q = articleAxis(ch.finger, ch.finger.length, t); return P('pr', ch.fingerAt[0] + q.x * c - q.y * s, ch.fingerAt[1] + q.x * s + q.y * c); };
-    const dp = (t: number) => { const q = articleAxis(ch.da, ch.da.length, t); return P(daBone, q.x, q.y); };
-    tube([fp(0), fp(0.5), fp(1)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
+    // (along the palm piece's axis, at the middle of its sections)
+    const pp = (t: number) => {
+      const q = articleAxis(ch.palm, L, t), cy = knotLerp(ch.palm.sections, t, (k) => k.cy ?? 0);
+      return P('pr', q.x - Math.sin(q.a) * cy, q.y + Math.cos(q.a) * cy, q.z);
+    };
+    const dp = (t: number) => { const q = articleAxis(ch.da, ch.da.length, t); return P(daBone, q.x, q.y, q.z); };
+    if (ch.fixedFrom !== undefined) {
+      const hy = (t: number) => knotLerp(ch.palm.sections, t, (k) => k.hy) * 0.7;
+      tube([0, 0.25, 0.5, 0.68, 0.85, 1].map(pp), [hy(0), hy(0.25), hy(0.5), hy(0.68) * 0.8, hy(0.85), 0.1], PART.PALM, flag, true);
+    } else {
+      tube([pp(0), pp(0.45), pp(1)], [h * 0.45, h * 0.9, h * 0.85], PART.PALM, flag);
+      // (the fingers along their axes, the dactylus's from its hinge)
+      const fa = ch.fingerAngle!, c = Math.cos(fa), s = Math.sin(fa);
+      const fp = (t: number) => { const q = articleAxis(ch.finger!, ch.finger!.length, t); return P('pr', ch.fingerAt![0] + q.x * c - q.y * s, ch.fingerAt![1] + q.x * s + q.y * c); };
+      tube([fp(0), fp(0.5), fp(1)], [h * 0.4, h * 0.3, 0.1], PART.FIXED, flag);
+    }
     tube([dp(0), dp(0.5), dp(1)], [h * 0.36, h * 0.28, 0.1], PART.FINGER, flag);
   }
 }

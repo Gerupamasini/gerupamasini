@@ -100,34 +100,37 @@ describe('ヤマトオサガニ: the body plan', () => {
   });
 
   it("the mature male's chela large (propodus ≈ 0.95 CW) with deflexed fingers; the female's small", () => {
-    // the fixed finger ≈ 34° below the palm's axis, the dactylus leaving the palm at ≈ 52° and curving in to its tip
-    // (the scan's palm laid on its outer face, the fingers from A45, B33, B34)
-    expect(Math.hypot(...CHELA_MALE.tip) / CW_MM).toBeGreaterThan(0.85);
-    expect(CHELA_MALE.fingerAngle).toBeLessThan(-0.5);
-    expect(CHELA_MALE.fingerAngle).toBeGreaterThan(-0.9);
-    expect(CHELA_MALE.daAngle).toBeLessThan(CHELA_MALE.fingerAngle);
-    // the fixed finger ≈ 0.5 and the dactylus ≈ 0.75 of the palm's length along its curve (A45, B33, B34), meeting at
-    // their tips
-    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeGreaterThan(0.5);
-    expect(CHELA_MALE.finger.length / CHELA_MALE.palm.length).toBeLessThan(0.7);
-    expect(CHELA_MALE.da.length / CHELA_MALE.palm.length).toBeGreaterThan(0.65);
-    expect(CHELA_MALE.da.length / CHELA_MALE.palm.length).toBeLessThan(0.85);
-    const ftip = [CHELA_MALE.fingerAt[0] + Math.cos(CHELA_MALE.fingerAngle) * CHELA_MALE.finger.length, CHELA_MALE.fingerAt[1] + Math.sin(CHELA_MALE.fingerAngle) * CHELA_MALE.finger.length];
-    const q = articleAxis(CHELA_MALE.da, CHELA_MALE.da.length, 1), c = Math.cos(CHELA_MALE.daAngle), s = Math.sin(CHELA_MALE.daAngle);
-    const dtip = [CHELA_MALE.hinge[0] + q.x * c - q.y * s, CHELA_MALE.hinge[1] + q.x * s + q.y * c];
-    expect(Math.hypot(ftip[0] - dtip[0], ftip[1] - dtip[1])).toBeLessThan(0.6);
-    // the dactylus a narrow band (≈ 3.4 mm across, an eighth of the palm's length: A45, B33), curving in to its tip;
-    // the fingers flatter than they are broad at their bases, the palm's outer face running on onto them
-    expect(Math.max(...CHELA_MALE.da.sections.map((k) => k.hy)) * 2 / CHELA_MALE.palm.length).toBeLessThan(0.16);
-    expect(q.a).toBeLessThan(-0.5);
-    for (const f of [CHELA_MALE.finger, CHELA_MALE.da]) expect(f.sections[1].hz).toBeLessThan(f.sections[1].hy);
+    const C = CHELA_MALE, P = C.palm;
+    // the propodus with its fixed finger ≈ 0.97 CW (Wada 2018), the palm and the fixed finger one piece
+    expect(P.length / CW_MM).toBeGreaterThan(0.9);
+    expect(P.length / CW_MM).toBeLessThan(1.05);
+    expect(C.finger).toBeUndefined();
+    // the fingers deflexed, hanging from the palm's end (B23, B29 side-on): the axis turned down > 65° in the palm's
+    // plane, the closed tips below the lower margin and short of the palm's distal end; and turned in towards the
+    // other claw out of that plane (B12, B25 from the front)
+    expect(P.bend![P.bend!.length - 1][1]).toBeLessThan(-1.1);
+    expect(Math.max(...P.bendZ!.map((k) => k[1]))).toBeGreaterThan(0.4);
+    const f = articleAxis(P, P.length, 1);
+    expect(f.y).toBeLessThan(-9);
+    expect(f.x).toBeLessThan(C.hinge[0] + 1);
+    expect(f.z).toBeGreaterThan(2);
+    // the dactylus from its hinge at the upper distal corner meeting the fixed finger at its tip, a narrow band (≈ 3 mm
+    // across: B23, B29)
+    const q = articleAxis(C.da, C.da.length, 1), c = Math.cos(C.daAngle), s = Math.sin(C.daAngle);
+    const dtip = [C.hinge[0] + q.x * c - q.y * s, C.hinge[1] + q.x * s + q.y * c, q.z];
+    expect(Math.hypot(f.x - dtip[0], f.y - dtip[1], f.z - dtip[2])).toBeLessThan(0.6);
+    expect(Math.hypot(...C.tip) - Math.hypot(f.x, f.y, f.z)).toBeLessThan(0.6);
+    expect(Math.max(...C.da.sections.map((k) => k.hy)) * 2).toBeLessThan(3.6);
+    // the fingers flatter than they are broad along their proximal halves
+    const at = (spec: typeof P, t: number) => spec.sections.reduce((a, k) => (Math.abs(k.t - t) < Math.abs(a.t - t) ? k : a));
+    for (const k of [at(C.da, 0.45), at(P, C.fixedFrom! + 0.3 * (1 - C.fixedFrom!))]) expect(k.hz).toBeLessThan(k.hy);
     // the palm stout: thicker than half its height through its proximal half (the scan)
-    const mid = CHELA_MALE.palm.sections.find((k) => k.t > 0.4)!;
+    const mid = P.sections.find((k) => k.t > 0.3)!;
     expect(mid.hz / mid.hy).toBeGreaterThan(0.55);
-    // the palm tallest distally, where the fingers spring from it
-    const hy = CHELA_MALE.palm.sections.map((s) => s.hy);
-    expect(hy[hy.length - 1]).toBeGreaterThanOrEqual(Math.max(...hy));
-    expect(hy[hy.length - 1] * 2 / CHELA_MALE.palm.length).toBeGreaterThan(0.5);
+    // the palm tallest distally, where it turns down into the fixed finger
+    const straight = P.sections.filter((k) => k.t <= P.bend![1][0] + 1e-6).map((k) => k.hy);
+    expect(straight[straight.length - 1]).toBeGreaterThanOrEqual(Math.max(...straight));
+    expect(straight[straight.length - 1] * 2 / CW_MM).toBeGreaterThan(0.3);
     expect(chelaFor('f', 35).male).toBe(false);
     expect(chelaFor('m', 35).male).toBe(true);
     expect(chelaFor('m', 14).male).toBe(false);
@@ -295,7 +298,8 @@ describe('ヤマトオサガニ: behaviour round the burrow', () => {
     const b = mk(11);
     b.forage(10);
     let maxL = -9, minL = 9;
-    for (let i = 0; i < 120; i++) { b.update(1 / 40, 0); maxL = Math.max(maxL, b.pose.legs.P1L.lev); minL = Math.min(minL, b.pose.legs.P1L.lev); }
+    // (the male's claw lifted to the mouth at the wrist)
+    for (let i = 0; i < 120; i++) { b.update(1 / 40, 0); maxL = Math.max(maxL, b.pose.legs.P1L.cp); minL = Math.min(minL, b.pose.legs.P1L.cp); }
     expect(b.state.mode).toBe('FORAGE');
     expect(maxL - minL).toBeGreaterThan(0.15);
     expect(b.pose.mxp).toBeGreaterThan(0);
@@ -314,7 +318,8 @@ describe('ヤマトオサガニ: behaviour round the burrow', () => {
       seen.add(`${b.state.mode}/${b.state.phase}`);
       applyPose(root, bones, rig, b.pose, arm);
       for (const s of ['L', 'R']) {
-        tip.set(CHELA_MALE.tip[0] / 1000, CHELA_MALE.tip[1] / 1000, 0).applyMatrix4(bones[`J_P1${s}_pr`].matrixWorld);
+        // (the right claw built mirrored across its bone's z)
+        tip.set(CHELA_MALE.tip[0] / 1000, CHELA_MALE.tip[1] / 1000, ((s === 'L' ? 1 : -1) * CHELA_MALE.tip[2]) / 1000).applyMatrix4(bones[`J_P1${s}_pr`].matrixWorld);
         low = Math.min(low, tip.y - ground(tip.x));
       }
     };

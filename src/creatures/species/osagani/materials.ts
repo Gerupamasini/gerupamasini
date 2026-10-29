@@ -1,4 +1,5 @@
 import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial, MeshStandardMaterial, Vector2, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
+import { CHELA_MALE } from './anatomy';
 import type { OsaganiLookLike } from './model';
 
 /**
@@ -170,6 +171,7 @@ float osGranules(vec2 p, float cell, float fw, float seed) {
  * The colour and surface at this fragment: osCol, osRough, osCoat (the water film's share), osHgt (mm, relief for the
  * shading), osMud (the mud film).
  */
+const TPF = CHELA_MALE.fixedFrom!.toFixed(3);
 const SURFACE = /* glsl */ `
 vec3 osCol = uBase;
 float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0, osDry = 0.0;
@@ -275,8 +277,12 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0, osDry
     bool male = vAux.y > 4.5 && vAux.y < 5.5;
     bool finger = part == 6 || part == 15;
     float tipK = finger ? smoothstep(0.5, 1.0, t) : 0.0;
-    // (the cutting edges' brown band reaching round onto the outer face a little: a dark line along the slit, A45)
-    float edge = part == 6 ? smoothstep(0.0, -0.5, upper) : part == 15 ? smoothstep(0.0, 0.5, upper) : 0.0;
+    // (the male's palm runs on into its fixed finger: from fixK on, t along the finger is ft)
+    float fixK = male && part == 5 ? smoothstep(${TPF} - 0.03, ${TPF} + 0.01, t) : 0.0;
+    float ft = male && part == 5 ? clamp((t - ${TPF}) / (1.0 - ${TPF}), 0.0, 1.0) : t;
+    // (the cutting edges' brown band reaching round onto the outer face a little: a dark line along the slit, A45; the
+    // palm's distal face behind the dactylus dark with it)
+    float edge = part == 6 ? smoothstep(0.0, -0.5, upper) : part == 15 ? smoothstep(0.0, 0.5, upper) : fixK * smoothstep(0.0, 0.5, upper);
     if (male) {
       osCol = uPalm * (0.86 + 0.2 * osFbm(mm * 0.4 + sd));
       // the palm's surface: a fine reticulate granulation in faint grey (A45, B33: the "crazed" white enamel), the upper
@@ -284,16 +290,15 @@ float osRough = 0.5, osHgt = 0.0, osMud = 0.0, osCoat = 1.0, osSpec = 1.0, osDry
       vec2 rid;
       float ret = osCells(mm * 1.6 + sd, rid);
       osCol *= 0.9 + 0.1 * smoothstep(0.15, 0.45, ret);
-      osCol = mix(osCol, uLeg * 1.4, part == 5 ? smoothstep(0.55, 0.95, upper) * 0.65 + smoothstep(0.12, 0.0, t) * 0.5 : 0.0);
-      osCol = mix(osCol, uDark * 2.0, part == 5 ? osSpeckle(mm, 0.3, 0.35, fwL, sd.y) * smoothstep(0.3, 0.9, upper) * 0.6 : 0.0);
+      float palmK = part == 5 ? 1.0 - fixK : 0.0;
+      osCol = mix(osCol, uLeg * 1.4, palmK * (smoothstep(0.55, 0.95, upper) * 0.65 + smoothstep(0.1, 0.0, t) * 0.5));
+      osCol = mix(osCol, uDark * 2.0, palmK * osSpeckle(mm, 0.3, 0.35, fwL, sd.y) * smoothstep(0.3, 0.9, upper) * 0.6);
       osCol = mix(osCol, uEdge, edge);
       // (the brown edges matt, not glazed by the water film: they read dark even where the slit is seen glancingly)
       osSpec = 1.0 - 0.6 * edge;
       osDry = edge * 0.8;
-      // (the fingers white to their tips, the very tips a little amber: A45, B33, B34; the gape's base, the palm's end
-      // between the fingers, in shadow and brown with the cutting edges)
-      osCol = mix(osCol, uFingerTip, smoothstep(0.82, 1.0, t) * (finger ? 0.35 : 0.0) * (1.0 - edge * 0.5));
-      osCol = mix(osCol, uEdge * 0.5, part == 5 ? step(0.999, t) * 0.9 : 0.0);
+      // (the fingers white to their tips, the tips orange: B23, B29, A45)
+      osCol = mix(osCol, uFingerTip, smoothstep(0.68, 1.0, ft) * (finger ? 0.8 : 0.8 * fixK) * (1.0 - edge * 0.4));
       osHgt += osGranules(mm, 0.22, fwL, sd.x) * 0.35;
       osRough = 0.3;
     } else {

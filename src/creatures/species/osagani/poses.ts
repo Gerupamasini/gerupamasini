@@ -11,21 +11,25 @@ import { emptyPose, legKey, planarOf, solveLeg, type LegPose, type Pose } from '
 export type Partial4 = Partial<LegPose>;
 
 /**
- * standing: the chelae held before the front, the palms running in and down from the carpi, their outer faces to the
- * front, the fingers pointing down to the mud with their tips near the midline, a gap between the claws (A45, B12, A51,
- * B25: the "Λ" of the male's claws). FK fitted on the scan's long arm (A45): the carpi out beyond the front corners
- * ≈ 0.75 CW apart and ≈ 14 mm over the mud, the palms ≈ 12° down and ≈ 37° forward of across, the fixed fingers' tips
- * on the mud ≈ 5 mm either side of the midline.
+ * standing: the chelae held before the front, the palms running in from the carpi, their outer faces to the front, the
+ * fingers hanging from the palms' ends with their tips on the mud near the midline, a gap between the claws (A45, B12,
+ * A51, B25, B8). The palms' lie from the claws' outline in B12 projected through the render's front camera (the palm
+ * ≈ 29° forward of across, ≈ 4° up), the outer face turned square to the front between that and the photographs from
+ * above (B8, B25); the arm solved for it: the carpi out beyond the front corners, the fixed fingers' tips on the mud
+ * ≈ 6 mm either side of the midline and ≈ 1 mm in front of the face.
  */
-export const CHELA_STAND: Partial4 = { promo: -0.33, pitch: -0.1, lev: 0.41, roll: 0.29, meYaw: 0.07, mcYaw: -1.25, mc: -0.36, cp: 0.39, cpRoll: 0.9, cpYaw: -1.07, pd: 0 };
+export const CHELA_STAND: Partial4 = { promo: -0.78, pitch: -0.31, lev: 0.23, roll: 0.57, meYaw: 0.48, mcYaw: -0.81, mc: 0.45, cp: 0.26, cpRoll: 0.27, cpYaw: -2.34, pd: 0 };
+/** where the male's closed fingertip is in `CHELA_STAND` at the standing lift (body frame, mm, the left claw): the claws'
+ *  clearance of the mud */
+export const CHELA_STAND_TIP: [number, number, number] = [5.9, -8.4, 10.5];
 /** the female's small chelae standing: before the mouth, the fingertips down on the mud, the inner faces to the body (A47,
  *  B4; FK fitted on her arm) */
 export const CHELA_STAND_F: Partial4 = { promo: 1.15, pitch: -0.1, lev: 0.17, roll: 0.14, meYaw: 1.03, mcYaw: -1.49, mc: -0.85, cp: 0.17, cpRoll: -0.04, cpYaw: -0.39, pd: 0 };
 /** the female's folded at rest across the front under the eyes, the fingers in towards the midline (A28, B32, A1) */
 export const CHELA_FOLDED: Partial4 = { promo: 0.99, pitch: -0.1, lev: 0.57, roll: -0.09, meYaw: 1.31, mcYaw: -1.68, mc: 0.09, cp: -0.31, cpRoll: -1.09, cpYaw: -1.13, pd: 0 };
-/** the threat and the waving display: raised high over the carapace, the palm upright, the fingers gaping (A39, B56; FK
- *  fitted on the scan's arm) */
-export const CHELA_RAISED: Partial4 = { promo: -0.36, pitch: -0.1, lev: 1.12, roll: -0.25, meYaw: 0.23, mcYaw: -0.17, mc: 0.19, cp: 0.33, cpRoll: -1.63, cpYaw: -1.42, pd: 0.4 };
+/** the threat and the waving display: raised high over the carapace and apart, the palms upright and leaning in, their
+ *  outer faces to the front, the fingers at the top turned in and gaping (A39, B56; the arm solved for the palm's lie) */
+export const CHELA_RAISED: Partial4 = { promo: 0.46, pitch: -0.56, lev: 1.12, roll: -0.3, meYaw: 0.53, mcYaw: 0.17, mc: 0.55, cp: 0.31, cpRoll: -1.31, cpYaw: -1.08, pd: 0.4 };
 
 /**
  * Where the walking legs stand (body frame, mm at CW 35): the foot's direction from the coxa (rad from straight out,

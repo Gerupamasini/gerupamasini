@@ -3,7 +3,7 @@ import type { LegId } from './anatomy';
 import { MODEL_CW } from './anatomy';
 import type { LegRig, RigDef } from './geometry';
 import {
-  CHELA_FOLDED, CHELA_RAISED, CHELA_STAND, CHELA_STAND_F, DACTYL_ANGLE, LIFT, blendLeg, isWalking, neutralFoot, type Partial4,
+  CHELA_FOLDED, CHELA_RAISED, CHELA_STAND, CHELA_STAND_F, CHELA_STAND_TIP, DACTYL_ANGLE, LIFT, blendLeg, isWalking, neutralFoot, type Partial4,
 } from './poses';
 import { bindLeg, copyLeg, emptyPose, legKey, planarOf, solveLeg, type DistalMode, type LegPose, type PlanarLeg, type Pose } from './rig';
 
@@ -639,15 +639,15 @@ export function createCrabBehavior(o: CrabOptions) {
       case 'IDLE': blendLeg(G, st.phase === 'mouth' ? REST : STAND, 1, G); break;
       case 'WALK': case 'ESCAPE':
         blendLeg(G, STAND, 1, G);
-        // carried clear of the mud while it runs
-        add({ lev: 0.12, mc: 0.08 });
+        // carried clear of the mud while it runs (the palm turned up at the wrist)
+        add({ cp: 0.14 });
         break;
       case 'BURROW_ENTRY': case 'BURROW_EXIT': {
         blendLeg(G, STAND, 1, G);
         const k = smooth((st.burrow - 0.3) / 0.4);
         // drawn up against the front as it goes down (the arms fold, the claws close)
         add({ lev: 0.3 * k, mc: 0.3 * k, promo: -0.3 * k });
-        if (st.mode === 'BURROW_ENTRY' && st.phase === 'approach') add({ lev: 0.12 * clamp(speedGoal / 4, 0, 1) });
+        if (st.mode === 'BURROW_ENTRY' && st.phase === 'approach') add({ cp: 0.14 * clamp(speedGoal / 4, 0, 1) });
         break;
       }
       case 'DEFEND': {
@@ -669,16 +669,22 @@ export function createCrabBehavior(o: CrabOptions) {
           if (active) {
             const down = ph < 0.35 ? smooth(ph / 0.35) : ph < 0.5 ? 1 : 1 - smooth((ph - 0.5) / 0.3);
             const up = ph > 0.55 ? Math.sin(((ph - 0.55) / 0.45) * Math.PI) : 0;
-            add({ lev: -0.08 * down + 0.3 * up, mc: -0.06 * down + 0.25 * up, promo: 0.12 * down + 0.15 * up, cpYaw: 0.25 * up });
+            // (the male's fingers hang from the palm's end: the wrist lifts them to the mouth)
+            if (male) add({ cp: -0.03 * down + 0.55 * up, cpYaw: -0.25 * up, promo: 0.05 * up });
+            else add({ lev: -0.08 * down + 0.3 * up, mc: -0.06 * down + 0.25 * up, promo: 0.12 * down + 0.15 * up, cpYaw: 0.25 * up });
             G.pd = ph < 0.3 ? 0.3 : ph < 0.45 ? 0.02 : 0.04;
           }
         }
         break;
       }
     }
-    // the male's fingers kept at the mud's surface however low the body sits (resting by the burrow, feeding): the palm
-    // turned up at the wrist, ≈ 30 mm of fingertip height a radian of `cp` in the standing pose
-    if (male && st.mode !== 'DEFEND') G.cp += Math.max(0, LIFT.stand * 1.12 - st.lift) / 30;
+    // the male's fingers kept at the mud's surface however low the body sits and whatever the mud's shape under them
+    // (resting by the burrow, feeding, over the bumps): where the fingertip of the standing claw would be, the palm turned
+    // up at the wrist by as much as it would go in, ≈ 25 mm of fingertip height a radian of `cp`
+    if (male && st.mode !== 'DEFEND') {
+      bodyToWorld(tmp.set(leg.sg * CHELA_STAND_TIP[0], CHELA_STAND_TIP[1], CHELA_STAND_TIP[2]), tmp);
+      G.cp += Math.max(0, 1.0 - (tmp.y - W.ground(tmp.x, tmp.z)) / MM) / 25;
+    }
   }
 
   // ------------------------------------------------------------ the pose

@@ -360,25 +360,29 @@ export interface ArticleSpec {
   /** the axis curved in the article's own plane (x, y): its direction turned by (t, rad) from the base's, the sections
    *  square to it (a chela's fingers: crescents) */
   bend?: [number, number][];
+  /** the axis turned out of that plane towards +z (t, rad): a chela's fingers turned in towards the other claw */
+  bendZ?: [number, number][];
 }
 
-/** a point on an article's axis (`bend`'s curve, `length` long along it) and the axis's direction there (rad) */
-export function articleAxis(spec: ArticleSpec, length: number, t: number): { x: number; y: number; a: number } {
-  const turn = (u: number) => {
-    const b = spec.bend!;
-    if (u <= b[0][0]) return b[0][1];
-    for (let i = 1; i < b.length; i++) if (u <= b[i][0]) return b[i - 1][1] + ((b[i][1] - b[i - 1][1]) * (u - b[i - 1][0])) / (b[i][0] - b[i - 1][0]);
-    return b[b.length - 1][1];
+/** a point on an article's axis (`bend`'s and `bendZ`'s curve, `length` long along it) and the axis's direction there
+ *  (`a` its turn in the article's plane, `b` its turn out of it) */
+export function articleAxis(spec: ArticleSpec, length: number, t: number): { x: number; y: number; z: number; a: number; b: number } {
+  const turn = (k: [number, number][] | undefined, u: number) => {
+    if (!k) return 0;
+    if (u <= k[0][0]) return k[0][1];
+    for (let i = 1; i < k.length; i++) if (u <= k[i][0]) return k[i - 1][1] + ((k[i][1] - k[i - 1][1]) * (u - k[i - 1][0])) / (k[i][0] - k[i - 1][0]);
+    return k[k.length - 1][1];
   };
-  if (!spec.bend || t <= 0) return { x: t * length, y: 0, a: 0 };
+  if ((!spec.bend && !spec.bendZ) || t <= 0) return { x: t * length, y: 0, z: 0, a: 0, b: 0 };
   const n = Math.max(2, Math.ceil(t * 48));
-  let x = 0, y = 0;
+  let x = 0, y = 0, z = 0;
   for (let i = 0; i < n; i++) {
-    const a = turn(((i + 0.5) / n) * t);
-    x += (Math.cos(a) * t * length) / n;
-    y += (Math.sin(a) * t * length) / n;
+    const u = ((i + 0.5) / n) * t, a = turn(spec.bend, u), b = turn(spec.bendZ, u), ds = (t * length) / n;
+    x += Math.cos(b) * Math.cos(a) * ds;
+    y += Math.cos(b) * Math.sin(a) * ds;
+    z += Math.sin(b) * ds;
   }
-  return { x, y, a: turn(t) };
+  return { x, y, z, a: turn(spec.bend, t), b: turn(spec.bendZ, t) };
 }
 
 export type LegId = 'P1' | 'P2' | 'P3' | 'P4' | 'P5';
@@ -490,66 +494,66 @@ export function legSpecs(): LegSpec[] {
 }
 
 /** a chela on the cheliped's propodus bone (x along the palm, y its height, z its thickness): the palm, the fixed
- *  finger set at the palm's distal lower corner and bent down by `fingerAngle`, the dactylus on its own hinge at the
- *  palm's distal upper corner, at rest closed onto the fixed finger (`daAngle`) */
+ *  finger (its own piece set at the palm's distal lower corner and bent down by `fingerAngle`, or the palm's own distal
+ *  part: `fixedFrom`), the dactylus on its own hinge at the palm's distal upper corner, at rest closed onto the fixed
+ *  finger (`daAngle`) */
 export interface ChelaSpec {
   palm: ArticleSpec;
-  finger: ArticleSpec;
-  fingerAt: V2;
-  fingerAngle: number;
+  finger?: ArticleSpec;
+  fingerAt?: V2;
+  fingerAngle?: number;
+  /** where along the palm piece the fixed finger begins, when the palm carries it (its axis turning down into it) */
+  fixedFrom?: number;
   da: ArticleSpec;
   hinge: V2;
   daAngle: number;
   /** the fingertip (closed) in the propodus bone's frame, for the poses' fitting */
-  tip: V2;
+  tip: V3;
 }
 
 /**
- * The mature male's chela, from the CC0 scan's left chela (a mature male: its PL 0.70 of its CW, on Wada's (2018) curve
- * for its size) laid flat on its outer face and measured every 0.75–1.5 mm along the palm and every tenth of each
- * finger, then 1.38 times to the PL of a male of CW 35 (Wada 2018: log PL = −1.719 + 2.105 log CW, 0.97 CW). The palm
- * long and stout — 25 mm, its height rising from 5 mm at the carpus to 14 mm where the fingers spring from it, its upper
- * margin straight from a third of the way along and its lower margin falling distally; 7.3 mm thick through its
- * proximal half (thicker than the photographs' foreshortened palms suggested), thinning to 3 mm at the fingers. The
- * fingers drawn from the photographs (A45, B33, B34; the scan's fingers are blunt lumps): outlined on the palm's outer
- * face, a cutting line from the palm's end (2 mm above its axis) to the closed tips, a fine slit along it opening a
- * little at its base, and each finger's edges either side. The fixed finger the palm's lower half running on, ≈ 34°
- * below the palm's axis, its lower edge the palm's lower margin's, broad and tapering, thin below and full along its
- * cutting edge, with the large wedge-shaped tooth two-fifths of the way out (Wada 2018). The dactylus a narrow band,
- * 3.4 mm across, leaving the palm's whole distal margin above the slit at ≈ 52° and curving in round the fixed finger's
- * tip, its outer edge rounding in to the point (its axis curved: `bend`). Both fingers flatter than they are broad,
- * their outer faces running on from the palm's, and turned in towards the other claw at their tips (the tips meet
- * before the face: A45, B33, B34). The cutting edges finely toothed and dark brown (B33, B34, A45, B12, B29).
+ * The mature male's chela. The palm from the CC0 scan's left chela (a mature male: its PL 0.70 of its CW, on Wada's
+ * (2018) curve for its size) laid flat on its outer face and measured every 0.75–1.5 mm along it, then 1.38 times to
+ * the PL of a male of CW 35 (Wada 2018: log PL = −1.719 + 2.105 log CW, 0.97 CW): long and stout — 25 mm, its height
+ * rising from 5 mm at the carpus to 13 mm, its upper margin straight from a third of the way along; 7.3 mm thick
+ * through its proximal half, thinning to 3 mm distally. The fingers from the photographs of mature males' claws (the
+ * scan's lie open and less deflexed): seen side-on (B23 closed, B29 open) strongly deflexed, hanging straight down from
+ * the palm's end; from the front (B12, the claws' outline projected through the render's camera: the fit is best with
+ * them turned in) and from above (B25) reaching in towards the other claw, turned 25° out of the palm's plane towards
+ * its inner face, the tips ≈ 3 mm in (`bendZ`). The fixed finger the palm's lower distal corner drawn down — its
+ * proximal edge the lower margin turning down without a break, its cutting edge facing distally — short and broad-
+ * based, tapering to its point 7 mm below the palm's lower margin, with a large tooth on its cutting edge (Wada 2018);
+ * the palm and the fixed finger one surface, its axis turning down round the corner (`bend`, `fixedFrom`). The dactylus
+ * hinged at the palm's upper distal corner, a band ≈ 3 mm across hanging in front of the palm's distal face and on down
+ * beside the fixed finger, its tip curving back to meet the fixed finger's; its outer edge convex. Between them a fine
+ * slit, opening a little at its base. Both fingers flatter than they are broad, their outer faces running on from the
+ * palm's. The cutting edges finely toothed and dark brown, the tips orange (B12, B23, B29, B33, B34, A45).
  */
 export const CHELA_MALE: ChelaSpec & { tooth: { t: number; h: number } } = {
   palm: {
-    name: 'pr', length: 25.2, n: 2.25, neck: 0.035, flush: true,
-    sections: [S(0, 2.2, 1.7, 0, 0.15), S(0.055, 3.45, 2.01, 0.71, -0.21), S(0.11, 3.62, 2.5, 0.88, -0.26), S(0.164, 3.97, 2.85, 1.22, -0.31), S(0.247, 4.83, 3.21, 1.74, 0), S(0.33, 5.18, 3.45, 2.09, 0.36), S(0.41, 5.52, 3.49, 2.43, 0.48), S(0.49, 5.69, 3.63, 2.6, 0.39), S(0.575, 6.04, 3.49, 2.6, 0.36), S(0.66, 6.21, 3.27, 2.78, 0), S(0.74, 6.38, 3.03, 2.6, -0.25), S(0.82, 6.38, 2.6, 2.6, -0.47), S(0.9, 6.73, 2.22, 2.26, -0.63), S(1, 6.9, 1.58, 1.74, -0.9)],
-    // the palm's upper margin a blunt crest, its lower margin rounded (B33)
+    // the scan's palm (to t ≈ 0.52), the corner (the axis turning down by 76°) and the fixed finger (from t ≈ 0.77,
+    // turning in); the palm's upper margin a blunt crest, its lower margin rounded (B33)
+    name: 'pr', length: 32.52, n: 2.05, neck: 0.03,
+    sections: [S(0, 2.2, 1.7, 0, 0.15), S(0.043, 3.39, 2.01, 0.66, -0.21), S(0.085, 3.62, 2.5, 0.88, -0.26), S(0.127, 3.98, 2.85, 1.22, -0.31), S(0.192, 4.81, 3.21, 1.74, 0), S(0.256, 5.18, 3.45, 2.09, 0.36), S(0.318, 5.51, 3.49, 2.42, 0.48), S(0.38, 5.69, 3.63, 2.59, 0.39), S(0.446, 6.04, 3.49, 2.6, 0.36), S(0.511, 6.21, 3.27, 2.77, -0), S(0.523, 6.24, 3.23, 2.75, -0.05), S(0.553, 6.36, 2.87, 2.83, -0.32), S(0.584, 6.68, 2.45, 3.17, -0.53), S(0.614, 6.78, 2.11, 3.36, -0.69), S(0.645, 5.33, 1.95, 2.08, -0.76), S(0.675, 4.09, 1.83, 1.1, -0.82), S(0.706, 3.22, 1.73, 0.57, -0.87), S(0.737, 2.55, 1.63, 0.27, -0.91), S(0.767, 2.04, 1.55, 0.02, -0.95), S(0.794, 1.84, 1.52, 0.01, -0.93), S(0.823, 1.69, 1.46, -0.01, -0.87), S(0.858, 1.5, 1.35, -0.02, -0.75), S(0.894, 1.27, 1.22, -0.03, -0.57), S(0.929, 1, 1.07, -0.04, -0.34), S(0.958, 0.75, 0.93, -0.04, -0.11), S(0.981, 0.44, 0.57, -0.03, 0.11), S(0.993, 0.18, 0.5, -0.01, 0.23), S(1, 0.12, 0.12, 0, 0.3)],
+    bend: [[0, 0], [0.523, 0], [0.767, -1.33]],
+    bendZ: [[0, 0], [0.728, 0], [0.766, 0.11], [0.805, 0.32], [0.846, 0.44], [1, 0.44]],
     costae: [[0.0, 0.3, 0.2], [Math.PI, 0.16, 0.32]],
   },
-  finger: {
-    // the palm's lower half running on, its lower edge the palm's lower margin's, tapering to the point; its cutting
-    // edge across a fine slit from the dactylus's (B33, B34, A45). Its root sunk in the palm
-    name: 'pr', length: 13.09, n: 2.3, tear: -0.45,
-    sections: [S(0, 3.09, 1.5, 2.07, -0.98), S(0.1, 3.38, 1.48, 1.37, -0.97), S(0.2, 2.95, 1.44, 1.33, -0.93), S(0.3, 2.57, 1.38, 1.4, -0.86), S(0.4, 2.13, 1.31, 1.4, -0.78), S(0.5, 1.73, 1.23, 1.27, -0.66), S(0.6, 1.4, 1.14, 1.06, -0.52), S(0.7, 1.06, 1.03, 0.82, -0.35), S(0.8, 0.71, 0.92, 0.56, -0.16), S(0.9, 0.36, 0.55, 0.25, 0.06), S(0.96, 0.15, 0.35, 0.1, 0.2), S(1, 0.12, 0.12, 0, 0.3)],
-    costae: [[Math.PI, 0.12, 0.3]],
-  },
-  fingerAt: [21, -1.5],
-  fingerAngle: -0.601,
+  fixedFrom: 0.735,
   da: {
-    // a narrow band from the palm's distal margin above the slit (its root in the palm's upper distal corner), its
-    // outer edge parallel to the cutting line and rounding in to the tip over the fixed finger's (A45, B33, B34)
-    name: 'da', length: 19.23, n: 2.3, neck: 0.03,
-    sections: [S(0, 1.61, 1.3, 0, -1.18), S(0.1, 1.61, 1.28, 0, -1.17), S(0.2, 1.6, 1.25, 0, -1.12), S(0.3, 1.58, 1.2, 0.05, -1.05), S(0.4, 1.65, 1.13, 0.04, -0.94), S(0.5, 1.7, 1.06, 0, -0.81), S(0.6, 1.7, 0.98, 0, -0.65), S(0.7, 1.61, 0.9, -0.01, -0.45), S(0.8, 1.39, 0.8, -0.05, -0.23), S(0.9, 0.93, 0.7, -0.12, 0.02), S(0.96, 0.48, 0.35, -0.17, 0.18), S(1, 0.12, 0.12, 0, 0.3)],
-    bend: [[0, 0], [0.2, -0], [0.3, 0.02], [0.5, -0.07], [0.6, -0.12], [0.7, -0.21], [0.8, -0.33], [0.9, -0.53], [0.96, -0.85]],
+    // a band from its hinge at the palm's upper distal corner, hanging in front of the palm's distal face, its tip
+    // curving back to the fixed finger's; its outer edge convex (B23, B29)
+    name: 'da', length: 19.81, n: 2.3, neck: 0.03,
+    sections: [S(0, 0.8, 1.45, 0, -1.03), S(0.049, 0.9, 1.45, 0.37, -1.03), S(0.117, 1.16, 1.43, 0.31, -1.01), S(0.195, 1.32, 1.4, 0.18, -0.98), S(0.292, 1.51, 1.36, 0.09, -0.91), S(0.39, 1.57, 1.3, 0.04, -0.82), S(0.487, 1.56, 1.23, 0.02, -0.7), S(0.586, 1.51, 1.15, 0.01, -0.55), S(0.687, 1.37, 1.05, 0.04, -0.38), S(0.791, 1.08, 0.95, 0.11, -0.18), S(0.875, 0.7, 0.87, 0.17, -0), S(0.937, 0.35, 0.5, 0.21, 0.15), S(0.969, 0.17, 0.35, 0.14, 0.22), S(1, 0.12, 0.12, 0, 0.3)],
+    bend: [[0, 0], [0.195, -0.11], [0.292, -0.2], [0.39, -0.29], [0.487, -0.35], [0.586, -0.4], [0.687, -0.46], [0.791, -0.56], [0.875, -0.76], [0.937, -1.02]],
+    bendZ: [[0, 0], [0.447, 0], [0.513, 0.06], [0.58, 0.18], [0.648, 0.31], [0.718, 0.36], [1, 0.36]],
     costae: [[0.0, 0.18, 0.22]],
   },
-  hinge: [22.96, 7.4],
-  daAngle: -0.9,
-  tip: [31.8, -8.9],
-  /** the wedge tooth on the fixed finger (t along the finger, its height mm) */
-  tooth: { t: 0.48, h: 1.0 },
+  hinge: [25.55, 7.15],
+  daAngle: -1.242,
+  tip: [24.5, -11.3, 3.16],
+  /** the large tooth on the fixed finger's cutting edge (t along the palm piece, its height mm) */
+  tooth: { t: 0.846, h: 0.8 },
 };
 
 /**
@@ -575,7 +579,7 @@ export const CHELA_FEMALE: ChelaSpec = {
   },
   hinge: [9.2, 1.6],
   daAngle: -0.5,
-  tip: [16.9, -3.8],
+  tip: [16.9, -3.8, 0],
 };
 
 /**
