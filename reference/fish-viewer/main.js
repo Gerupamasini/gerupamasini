@@ -94,10 +94,19 @@ function draw() {
     HAKU_UNIFORMS.uAir.value = 0;
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, W, H);
-    const c = new THREE.Vector3(0, 0, (spec.pivot - (state.water === 2 ? 0.16 : 0.5)) * T);
+    // 1 side, 2 the head close, 3 the fins of the hind body close, 4 ¾ from the front, 5 head-on, 6 from above
+    const w = state.water;
+    const at = { 1: 0.5, 2: 0.16, 3: 0.66, 4: 0.42, 5: 0.4, 6: 0.45 }[w] ?? 0.5;
+    const c = new THREE.Vector3(0, 0, (spec.pivot - at) * T);
     const cam = new THREE.PerspectiveCamera(30, W / H, 0.001, 20);
-    const off = state.water === 2 ? new THREE.Vector3(0.55, 0.12, 0.35) : spec.flat ? new THREE.Vector3(0.6, 1.4, 0.5) : new THREE.Vector3(1.9, 0.35, 0.45);
-    cam.position.copy(c).addScaledVector(off, T * (state.water === 2 ? 0.75 : 1.0));
+    const flat = !!spec.flat;
+    const offs = {
+      1: flat ? [0.6, 1.4, 0.5] : [1.9, 0.35, 0.45], 2: [0.55, 0.12, 0.35], 3: flat ? [0.35, 0.75, -0.2] : [0.7, 0.22, -0.25],
+      4: flat ? [0.6, 0.9, 1.0] : [1.1, 0.35, 1.1], 5: flat ? [0.05, 0.4, 1.6] : [0.02, 0.05, 1.7], 6: flat ? [0.02, 1.8, 0.05] : [0.02, 1.9, 0.05],
+    };
+    const o = offs[w] ?? offs[1];
+    cam.position.copy(c).addScaledVector(new THREE.Vector3(o[0], o[1], o[2]), T * (w === 2 ? 0.75 : w === 3 ? 0.8 : 1.0));
+    if (w === 6) cam.up.set(0, 0, 1);
     cam.lookAt(c);
     renderer.render(scene, cam);
     return;

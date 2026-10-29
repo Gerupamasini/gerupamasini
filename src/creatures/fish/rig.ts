@@ -182,6 +182,12 @@ export function hookRipple(m: FishModel, pose: SwimPose): void {
           r.phase.value = pose.ripplePhase;
           (mesh.material as { uniformsNeedUpdate?: boolean }).uniformsNeedUpdate = true;
         };
+      } else if (o.name === 'Eyes') {
+        // the iris turned within the cornea: forward / up (+), half the angle in the eye's radii
+        mesh.onBeforeRender = () => {
+          m.look.gaze.value.set(-0.5 * pose.eyeYaw, 0.5 * pose.eyePitch);
+          (mesh.material as { uniformsNeedUpdate?: boolean }).uniformsNeedUpdate = true;
+        };
       } else if (o.name === 'Body') {
         mesh.onBeforeRender = () => {
           m.look.gill.open.value = pose.oper;

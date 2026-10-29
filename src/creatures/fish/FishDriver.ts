@@ -44,6 +44,7 @@ export class FishDriver implements Driver {
   private bed: string | undefined;
   private bedT = 0;
   private shadowTick = 0;
+  private poseTick = 0;
   readonly spec: FishSpec;
   busy = false;
 
@@ -195,7 +196,9 @@ export class FishDriver implements Driver {
     // (in a tank or the case nobody assigns the detail tiers: the distance decides alone)
     setLodDistances(model, this.scale, this.locked || ind.lod <= 1 || !!ctx.bounds);
     a.detail = this.level;
-    const steps = Math.max(1, Math.ceil(sdt * 30 - 1e-6));
+    // far away (the far tier, not watched, not in a tank) a fish is stepped and posed more coarsely
+    const far = this.level === 2 && !this.locked && !ctx.bounds;
+    const steps = far ? 1 : Math.max(1, Math.ceil(sdt * 30 - 1e-6));
     for (let i = 0; i < steps; i++) a.update(sdt / steps, env);
     // the swell carries it to and fro (less as it grows; a burst outruns it); a fish on the bed holds
     const holding = a.state === 'REST' || a.state === 'BURY' || (a.benthic && a.state !== 'ESCAPE');
@@ -208,7 +211,7 @@ export class FishDriver implements Driver {
     root.visible = true;
     const level = (this.locked ? 0 : model.lod.getCurrentLevel()) as 0 | 1 | 2;
     this.level = model.levels[level] ?? 2;
-    applyPose(model, a.pose, this.level);
+    if (!far || (this.poseTick++ & 1) === 0) applyPose(model, a.pose, this.level);
     if (this.dust) {
       this.dust.near = this.locked || !!ctx.bounds || ind.lod <= 1;
       if (this.dust.near) {

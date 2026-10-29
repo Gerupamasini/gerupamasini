@@ -79,6 +79,8 @@ export interface EyeSpec {
   fwd?: number;
   /** a clear adipose eyelid over the front and back (the mullet's) */
   lid?: number;
+  /** a fringed lappet of the iris over the top of the pupil (the flathead's, the flounder's) */
+  lappet?: number;
 }
 
 export interface MouthSpec {
@@ -146,6 +148,13 @@ export interface SwimSpec {
   amp: number;
   /** body lengths per tail beat */
   stride: number;
+  /**
+   * how stiff the body is (0 an eel-like flathead … 1 a herring's spring-steel trunk): how far it bends in a routine turn
+   * and in a sharp one
+   */
+  stiff?: number;
+  /** below this speed (body lengths a second) the pectorals do the swimming and the tail is held still (a rockfish's) */
+  pecSwim?: number;
 }
 
 export interface FishSpec {
@@ -168,6 +177,11 @@ export interface FishSpec {
   widthR?: Table;
   nTop: Table;
   nBot: Table;
+  /**
+   * the height of the section's widest point, as a share of the dorsal (+) or ventral (−) height: a fish is broadest
+   * where its muscle is thickest, above the axis in most (a full back over a narrower belly), at the cheeks in the head
+   */
+  wide?: Table;
   /** the snout is rounded over this length of s (profile) */
   snoutCap: number;
   eyes: readonly EyeSpec[];
@@ -180,14 +194,24 @@ export interface FishSpec {
     pectoral: PairedFinSpec;
     pelvic: PairedFinSpec;
   };
-  /** the scales: rows along the body and round it, how deep their relief, how dark their margins' pockets on the back */
-  scales: { along: number; around: number; depth: number; pigment?: number };
+  /**
+   * the scales: how many along the lateral line (head to caudal base; their size mid-flank, smaller on the cheek, toward
+   * the back's and the belly's edges and on the peduncle), `around` the rows round the body (kept for the far tier's
+   * proportions), how deep their relief, how dark their margins' pockets on the back; `type` ctenoid (spiny margins,
+   * rough to the touch: the perches) or cycloid (smooth: the herrings, the mullet); `head` the s from which the head is
+   * scaled (default: the cheek behind the eye); `loss` the share of scales lost (a patch of bare, darker skin)
+   */
+  scales: { along: number; around: number; depth: number; pigment?: number; type?: 'ctenoid' | 'cycloid'; head?: number; loss?: number; aspect?: number };
+  /** the lateral line: its height (h, the share of the section's height) behind the head and how high it arches over the pectoral */
+  lateral?: { h: number; arch: number };
   /** wetness (clearcoat) */
   wet: number;
   /** the thin-film sheen of guanine silver (iridescence 0..1): the rainbow flicker of a herring's flank */
   iridescence?: number;
   /** how strongly the head's anatomy shows (relief.ts): lips, the maxilla's height (TL), the orbit's rim, the preopercle */
   relief?: { lips?: number; maxilla?: number; orbit?: number; pre?: number; preDepth?: number };
+  /** how much light the thin parts let through (0 opaque … 1: the pale, half-clear whiting) */
+  translucent?: number;
   /** the colour of what is behind the skin where it opens (the gill chamber under a flared gill cover) */
   inside?: number;
   skin(p: SkinSample, out: SkinOut): void;
@@ -206,6 +230,7 @@ export interface Profiles {
   widthR: (s: number) => number;
   nTop: (s: number) => number;
   nBot: (s: number) => number;
+  wide: (s: number) => number;
   gape: (s: number) => number;
 }
 
@@ -218,7 +243,7 @@ export function profilesOf(spec: FishSpec): Profiles {
     p = {
       top: curve(spec.top), bot: curve(spec.bot), width,
       widthR: spec.widthR ? curve(spec.widthR) : width,
-      nTop: curve(spec.nTop), nBot: curve(spec.nBot), gape: curve(spec.mouth.gape),
+      nTop: curve(spec.nTop), nBot: curve(spec.nBot), wide: spec.wide ? curve(spec.wide) : () => 0, gape: curve(spec.mouth.gape),
     };
     PROFILES.set(spec, p);
   }
@@ -232,10 +257,20 @@ export function nose(s: number, cap: number): number {
   return Math.sqrt(Math.max(0, 1 - u * u));
 }
 
-export interface Section { hwL: number; hwR: number; top: number; bot: number; nTop: number; nBot: number }
+/**
+ * A section across the body (TL): half-widths to the left and right, the heights of the back and the belly above and
+ * below the axis, superellipse exponents for the upper and lower halves (n < 2 keeled, n > 2 full or flat-sided), and
+ * `yc` the height of the widest point: the upper half runs from it to the back, the lower to the belly.
+ */
+export interface Section { hwL: number; hwR: number; top: number; bot: number; nTop: number; nBot: number; yc: number }
+
+export const newSection = (): Section => ({ hwL: 0, hwR: 0, top: 0, bot: 0, nTop: 2, nBot: 2, yc: 0 });
+
+/** the widest point's height (TL) for a section of these heights and that share (`wide`) */
+export const wideAt = (w: number, top: number, bot: number): number => (w >= 0 ? w * top : w * bot);
 
 /** the body's section at s (TL), with the snout rounding and the peduncle's end */
-export function sectionAt(spec: FishSpec, s: number, out: Section = { hwL: 0, hwR: 0, top: 0, bot: 0, nTop: 2, nBot: 2 }): Section {
+export function sectionAt(spec: FishSpec, s: number, out: Section = newSection()): Section {
   const P = profilesOf(spec);
   // the snout's front is a dome: the section a little behind the tip, rounded off toward it
   const k = nose(s, spec.snoutCap), sf = Math.max(s, 0.6 * spec.snoutCap);
@@ -245,6 +280,7 @@ export function sectionAt(spec: FishSpec, s: number, out: Section = { hwL: 0, hw
   out.bot = Math.max(1e-5, P.bot(sf)) * k;
   out.nTop = P.nTop(s);
   out.nBot = P.nBot(s);
+  out.yc = wideAt(Math.max(-0.6, Math.min(0.6, P.wide(s))), out.top, out.bot);
   return out;
 }
 
@@ -254,17 +290,18 @@ export function sectionPoint(sec: Section, phi: number, out: [number, number] = 
   const n = cp >= 0 ? sec.nTop : sec.nBot;
   const hw = sp >= 0 ? sec.hwL : sec.hwR;
   out[0] = hw * Math.sign(sp) * Math.pow(Math.abs(sp), 2 / n);
-  out[1] = (cp >= 0 ? sec.top : sec.bot) * Math.sign(cp) * Math.pow(Math.abs(cp), 2 / n);
+  const e = Math.pow(Math.abs(cp), 2 / n);
+  out[1] = cp >= 0 ? sec.yc + (sec.top - sec.yc) * e : sec.yc - (sec.bot + sec.yc) * e;
   return out;
 }
 
 /** the angle (0..π) on the left of the section whose height is y */
 export function phiAtHeight(sec: Section, y: number): number {
-  if (y >= 0) {
-    const c = Math.min(1, y / sec.top);
+  if (y >= sec.yc) {
+    const c = Math.min(1, (y - sec.yc) / Math.max(1e-6, sec.top - sec.yc));
     return Math.acos(Math.pow(c, sec.nTop / 2));
   }
-  const c = Math.min(1, -y / sec.bot);
+  const c = Math.min(1, (sec.yc - y) / Math.max(1e-6, sec.bot + sec.yc));
   return Math.PI - Math.acos(Math.pow(c, sec.nBot / 2));
 }
 

@@ -6,14 +6,14 @@ import { profilesOf, smooth, type FishSpec, type Section } from './spec';
  * the raised rim of the orbit and the shadow at the eye's edge, the two nostrils, the preopercle's margin and the gill
  * cover's free edge standing proud of the body with a shadow under it.
  *
- * Heights are in TL units (outward), `ao` darkens the albedo in the creases.
+ * Heights are in TL units (outward), `ao` darkens the creases, `plate` is 1 on the gill cover's bony plate (glossier).
  */
-export interface Relief { h: number; ao: number }
+export interface Relief { h: number; ao: number; plate: number }
 
 const g2 = (x: number, w: number) => Math.exp(-((x / w) ** 2));
 
 export function headRelief(spec: FishSpec, s: number, y: number, phi: number, sec: Section, out: Relief): Relief {
-  out.h = 0; out.ao = 1;
+  out.h = 0; out.ao = 1; out.plate = 0;
   const r = spec.relief ?? {};
   const side = smooth(0.12, 0.42, Math.sin(phi) ** 2);
   if (side <= 0) return out;
@@ -66,7 +66,33 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
     const plate = smooth(edge - 0.07, edge - 0.03, s) * (1 - smooth(edge - 0.0012, edge + 0.0006, s));
     const ends = 1 - 0.6 * smooth(0.45, 0.95, Math.abs(v));
     out.h += side * 0.001 * plate * ends;
+    out.plate = Math.max(out.plate, side * plate);
     out.ao *= 1 - side * 0.16 * ends * (s > edge ? g2(s - edge - 0.002, 0.005) : 0);
   }
   return out;
+}
+
+/**
+ * The head's larger forms, for the geometry (a factor on the section's half-width at (s, y)): the gill cover's convex
+ * plate, the hollow under and behind the eye and the one in front of it above the jaw, the maxilla standing out of the
+ * cheek, the lips' fullness along the gape. The relief above draws the fine lines on top of them.
+ */
+export function headWidth(spec: FishSpec, s: number, y: number, sec: Section): number {
+  if (s > spec.oper.s + 0.02 || spec.flat) return 1;
+  const r = spec.relief ?? {}, P = profilesOf(spec), m = spec.mouth, oper = spec.oper, e = spec.eyes[0];
+  const hh = y >= 0 ? sec.top : sec.bot, v = y / Math.max(1e-4, hh);
+  let k = 0;
+  // the gill cover: a low dome over its plate
+  k += 0.05 * g2(s - (oper.s - 0.035), 0.04) * g2(v + 0.05, 0.45);
+  // under and behind the eye (the suborbital), in front of it above the jaw (the preorbital)
+  k -= 0.035 * g2(s - (e.s + 1.2 * e.r), 2 * e.r) * g2(y - (e.y - 1.7 * e.r), 1.2 * e.r);
+  k -= 0.03 * g2(s - (e.s - 1.9 * e.r), 1.3 * e.r) * g2(y - (e.y - 0.3 * e.r), 1.2 * e.r);
+  // the maxilla out of the cheek, the lips along the gape
+  if (s < m.corner + 0.01) {
+    const g = P.gape(Math.min(s, m.corner)) * (sec.top / Math.max(1e-4, P.top(Math.max(s, 0.6 * spec.snoutCap))));
+    const mxH = (r.maxilla ?? 0.016) * (0.45 + 0.55 * Math.min(1, s / m.corner));
+    k += 0.03 * smooth(0.2 * m.corner, 0.5 * m.corner, s) * (1 - smooth(m.corner, m.corner + 0.01, s)) * g2(y - (g + 0.5 * mxH), 0.6 * mxH);
+    k += 0.025 * (r.lips ?? 1) * smooth(0, 0.01, s) * (1 - smooth(m.corner - 0.004, m.corner + 0.004, s)) * g2(Math.abs(y - g) - 0.0025, 0.002);
+  }
+  return 1 + k;
 }

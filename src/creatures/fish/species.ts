@@ -29,7 +29,7 @@ function finPainter(styles: Partial<Record<FinId, Partial<FinStyle>>> & { def: F
   return (id: FinId, u: number, v: number, out: FinOut): void => {
     const st: FinStyle = { ...styles.def, ...(styles[id] ?? {}) };
     const n = counts[id];
-    const r = rays(u, n, 0.28);
+    const r = rays(u, n, 0.22);
     const C = hex(st.c), R = hex(st.ray ?? st.c);
     out.r = C[0] + (R[0] - C[0]) * r; out.g = C[1] + (R[1] - C[1]) * r; out.b = C[2] + (R[2] - C[2]) * r;
     let a = st.a + ((st.rayA ?? Math.min(1, st.a + 0.25)) - st.a) * r;
@@ -60,7 +60,7 @@ function finPainter(styles: Partial<Record<FinId, Partial<FinStyle>>> & { def: F
     // the free margin thins out
     a *= 1 - smooth(0.92, 1.0, v) * (r > 0.5 ? 0.4 : 1);
     // (fins read as solid at a distance: the membrane is thin but pigmented)
-    out.a = Math.min(0.95, a * (id === 'p' ? 1.15 : 1.45));
+    out.a = Math.min(0.95, a * (id === 'p' ? 1.05 : 1.2));
   };
 }
 
@@ -100,9 +100,10 @@ const SUZUKI: FishSpec = {
   top: [[0, 0.002], [0.02, 0.017], [0.05, 0.0334], [0.1, 0.059], [0.15, 0.0765], [0.2, 0.0929], [0.3, 0.1045], [0.4, 0.1008], [0.5, 0.0871], [0.6, 0.0734], [0.7, 0.0497], [0.8, 0.0333]],
   bot: [[0, 0.0094], [0.02, 0.0235], [0.05, 0.0384], [0.1, 0.0656], [0.15, 0.0821], [0.2, 0.0936], [0.3, 0.1079], [0.4, 0.1135], [0.5, 0.1045], [0.6, 0.0908], [0.7, 0.0806], [0.8, 0.0395]],
   width: [[0, 0.01125], [0.02, 0.02363], [0.05, 0.0315], [0.1, 0.0434], [0.15, 0.051], [0.2, 0.05655], [0.3, 0.0588], [0.4, 0.05638], [0.5, 0.0481], [0.6, 0.036], [0.7, 0.021], [0.8, 0.01406]],
-  nTop: [[0, 2.1], [0.3, 2.0], [0.8, 2.0]], nBot: [[0, 2.2], [0.3, 2.0], [0.8, 2.0]],
+  nTop: [[0, 1.9], [0.12, 1.95], [0.25, 2.2], [0.45, 2.3], [0.8, 2.1]], nBot: [[0, 1.8], [0.12, 1.75], [0.22, 2.0], [0.4, 2.1], [0.8, 2.0]],
+  wide: [[0, -0.1], [0.12, -0.15], [0.25, 0], [0.4, 0.12], [0.6, 0.1], [0.8, 0]],
   snoutCap: 0.025,
-  eyes: [{ s: 0.1, y: 0.024, r: 0.022, bulge: 0.0032, pupil: 0.55, iris: [0xe2ddc8, 0x9a8a60], rim: 0x1e2020 }],
+  eyes: [{ s: 0.1, y: 0.024, r: 0.022, bulge: 0.0022, pupil: 0.52, iris: [0xe2ddc8, 0x9a8a60], rim: 0x1e2020 }],
   mouth: { corner: 0.105, gape: [[0, -0.002], [0.05, -0.012], [0.105, -0.03]], open: 0.6, inside: 0.75, jut: 0.012 },
   oper: { s: 0.27, sweep: 0.025, top: 0.085, bot: 0.09, step: 0.0015 },
   fins: {
@@ -115,7 +116,9 @@ const SUZUKI: FishSpec = {
     pectoral: { s: 0.275, y: -0.03, base: 0.04, len: [[0, 0.12], [0.3, 0.14], [1, 0.06]], dirs: [0.12, -0.5], rest: 0.25, rays: 16 },
     pelvic: { s: 0.27, y: 0, base: 0.03, len: [[0, 0.12], [1, 0.07]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
-  scales: { along: 76, around: 40, depth: 0.35 },
+  scales: { along: 76, around: 40, depth: 0.35, type: 'ctenoid', loss: 0.01 },
+  lateral: { h: 0.5, arch: 0.06 },
+  translucent: 0.25,
   wet: 0.6,
   iridescence: 0.25,
   relief: { maxilla: 0.022, pre: 1.3 },
@@ -141,7 +144,7 @@ const SUZUKI: FishSpec = {
     v: { c: 0xe8e8e4, a: 0.55 },
     a: { c: 0xd8dad8, a: 0.55 },
   }, { d1: 12, d2: 13, a: 10, c: 17, p: 16, v: 6 }, { d1: 12, a: 3 }),
-  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.09, stride: 0.65 },
+  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.09, stride: 0.65, stiff: 0.5, pecSwim: 0.15 },
   behavior: { habit: 'cruiser', forage: 'hunt', cruise: 0.9, burst: 8, level: 0.45, minLift: 0.4, school: 0.25, spacing: 2.2, extras: ['strike'] },
 };
 
@@ -157,10 +160,11 @@ const MEJINA: FishSpec = {
   id: 'mejina', sizeClass: 'L', modelTL: 0.2, depth: 0.36, pivot: 0.38, caudalBase: 0.77, headJoint: 0.18,
   top: [[0, 0.015], [0.02, 0.04], [0.05, 0.07], [0.1, 0.11], [0.15, 0.14], [0.2, 0.162], [0.3, 0.198], [0.4, 0.185], [0.5, 0.155], [0.6, 0.115], [0.7, 0.085], [0.77, 0.065]],
   bot: [[0, 0.015], [0.02, 0.033], [0.05, 0.06], [0.1, 0.09], [0.15, 0.115], [0.2, 0.135], [0.3, 0.165], [0.4, 0.165], [0.5, 0.145], [0.6, 0.12], [0.7, 0.082], [0.77, 0.06]],
-  width: [[0, 0.012], [0.02, 0.022], [0.05, 0.03375], [0.1, 0.047], [0.15, 0.05415], [0.2, 0.06197], [0.3, 0.0684], [0.4, 0.06912], [0.5, 0.06105], [0.6, 0.0465], [0.7, 0.027], [0.77, 0.01688]],
-  nTop: [[0, 2.1], [0.5, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
+  width: [[0, 0.01463], [0.02, 0.02682], [0.05, 0.04347], [0.1, 0.06054], [0.15, 0.06793], [0.2, 0.07774], [0.3, 0.0858], [0.4, 0.0867], [0.5, 0.07659], [0.6, 0.0552], [0.7, 0.03034], [0.77, 0.01896]],
+  nTop: [[0, 2.0], [0.12, 2.0], [0.3, 2.35], [0.6, 2.2], [0.77, 2.0]], nBot: [[0, 1.9], [0.12, 1.9], [0.3, 2.25], [0.77, 2.0]],
+  wide: [[0, -0.05], [0.1, -0.1], [0.25, 0.05], [0.4, 0.1], [0.77, 0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.1, y: 0.035, r: 0.03, bulge: 0.004, pupil: 0.58, iris: [0x5e8cb0, 0x223646], rim: 0x1a2020 }],
+  eyes: [{ s: 0.1, y: 0.035, r: 0.03, bulge: 0.003, pupil: 0.5, iris: [0x5e8cb0, 0x223646], rim: 0x1a2020 }],
   mouth: { corner: 0.045, gape: [[0, -0.012], [0.045, -0.02]], open: 0.5, inside: 0.35 },
   oper: { s: 0.24, sweep: 0.03, top: 0.15, bot: 0.13, step: 0.002 },
   fins: {
@@ -173,7 +177,9 @@ const MEJINA: FishSpec = {
     pectoral: { s: 0.27, y: -0.03, base: 0.06, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.2, -0.6], rest: 0.3, rays: 18 },
     pelvic: { s: 0.3, y: 0, base: 0.03, len: [[0, 0.11], [1, 0.06]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
-  scales: { along: 55, around: 46, depth: 0.4, pigment: 0.2 },
+  scales: { along: 55, around: 46, depth: 0.4, pigment: 0.2, type: 'ctenoid', loss: 0.008 },
+  lateral: { h: 0.62, arch: 0.1 },
+  translucent: 0.15,
   wet: 0.55,
   relief: { maxilla: 0.008, pre: 0.8 },
   skin(p, o) {
@@ -195,7 +201,7 @@ const MEJINA: FishSpec = {
     p: { c: 0x8a9088, a: 0.35, rayA: 0.6 },
     c: { c: 0x3e4640, a: 0.65, edge: 0x1c201e, edgeW: 0.1 },
   }, { d1: 14, d2: 14, a: 14, c: 17, p: 18, v: 6 }, { d1: 14, a: 3 }),
-  swim: { lambda: 1.05, env: [0.2, -0.6, 1.3], amp: 0.07, stride: 0.6 },
+  swim: { lambda: 1.05, env: [0.2, -0.6, 1.3], amp: 0.07, stride: 0.6, stiff: 0.6, pecSwim: 0.6 },
   behavior: { habit: 'reef', forage: 'pick', cruise: 0.8, burst: 7, level: 0.3, minLift: 0.25, school: 0.45, spacing: 1.6, extras: [] },
 };
 
@@ -211,9 +217,10 @@ const KISU: FishSpec = {
   top: [[0, 0.0064], [0.02, 0.0146], [0.05, 0.0335], [0.1, 0.0533], [0.2, 0.0807], [0.3, 0.0903], [0.4, 0.0889], [0.5, 0.0856], [0.6, 0.073], [0.7, 0.0542], [0.83, 0.0258]],
   bot: [[0, 0.0145], [0.02, 0.0207], [0.05, 0.0336], [0.1, 0.0422], [0.2, 0.0577], [0.3, 0.0646], [0.4, 0.0685], [0.5, 0.0626], [0.6, 0.0559], [0.7, 0.0503], [0.83, 0.037]],
   width: [[0, 0.009], [0.02, 0.02025], [0.05, 0.034], [0.1, 0.046], [0.2, 0.05655], [0.3, 0.05738], [0.4, 0.05513], [0.5, 0.049], [0.6, 0.0372], [0.7, 0.02475], [0.83, 0.01475]],
-  nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.0], [0.4, 2.2]],
+  nTop: [[0, 1.85], [0.12, 2.0], [0.3, 2.25], [0.83, 2.1]], nBot: [[0, 1.9], [0.15, 2.2], [0.4, 2.35], [0.83, 2.1]],
+  wide: [[0, -0.1], [0.12, -0.1], [0.3, 0.05], [0.83, 0]],
   snoutCap: 0.012,
-  eyes: [{ s: 0.115, y: 0.018, r: 0.019, bulge: 0.0032, pupil: 0.55, iris: [0xeae6da, 0x8a8478], rim: 0x2a2620 }],
+  eyes: [{ s: 0.115, y: 0.018, r: 0.019, bulge: 0.002, pupil: 0.54, iris: [0xeae6da, 0x8a8478], rim: 0x2a2620 }],
   mouth: { corner: 0.05, gape: [[0, 0.0], [0.05, -0.008]], open: 0.5, inside: 0.6 },
   oper: { s: 0.23, sweep: 0.02, top: 0.05, bot: 0.05, step: 0.002 },
   fins: {
@@ -226,7 +233,9 @@ const KISU: FishSpec = {
     pectoral: { s: 0.265, y: 0.0, base: 0.025, len: [[0, 0.1], [0.4, 0.11], [1, 0.05]], dirs: [0.1, -0.4], rest: 0.25, rays: 16 },
     pelvic: { s: 0.3, y: 0, base: 0.02, len: [[0, 0.09], [1, 0.05]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
-  scales: { along: 70, around: 30, depth: 0.25 },
+  scales: { along: 70, around: 30, depth: 0.25, type: 'ctenoid', loss: 0.01 },
+  lateral: { h: 0.55, arch: 0.05 },
+  translucent: 0.6,
   wet: 0.65,
   iridescence: 0.35,
   relief: { maxilla: 0.008, pre: 0.8 },
@@ -248,7 +257,7 @@ const KISU: FishSpec = {
     v: { c: 0xf0e4b0, a: 0.55 },
     a: { c: 0xf0e0b0, a: 0.5 },
   }, { d1: 11, d2: 21, a: 23, c: 17, p: 16, v: 6 }, { d1: 11, a: 2 }),
-  swim: { lambda: 0.95, env: [0.15, -0.55, 1.4], amp: 0.09, stride: 0.65 },
+  swim: { lambda: 0.95, env: [0.15, -0.55, 1.4], amp: 0.09, stride: 0.65, stiff: 0.3, pecSwim: 0.2 },
   behavior: { habit: 'sandForager', forage: 'dig', cruise: 0.9, burst: 9, level: 0.06, minLift: 0.12, school: 0.3, spacing: 2.2, extras: ['bury', 'rest'] },
 };
 
@@ -264,9 +273,10 @@ const MAGOCHI: FishSpec = {
   top: [[0, 0.008], [0.03, 0.013], [0.1, 0.023], [0.18, 0.033], [0.3, 0.043], [0.4, 0.049], [0.5, 0.047], [0.6, 0.042], [0.7, 0.035], [0.8, 0.028], [0.86, 0.026]],
   bot: [[0, 0.006], [0.03, 0.01], [0.1, 0.017], [0.2, 0.027], [0.3, 0.036], [0.4, 0.041], [0.5, 0.04], [0.6, 0.035], [0.7, 0.028], [0.8, 0.024], [0.86, 0.022]],
   width: [[0, 0.02], [0.02, 0.04], [0.05, 0.06], [0.1, 0.08], [0.18, 0.095], [0.25, 0.1], [0.32, 0.09], [0.42, 0.075], [0.55, 0.062], [0.7, 0.04], [0.8, 0.028], [0.86, 0.02]],
-  nTop: [[0, 3.0], [0.3, 2.7], [0.5, 2.1], [0.8, 2.0]], nBot: [[0, 3.2], [0.3, 3.0], [0.6, 2.1], [0.8, 2.0]],
+  nTop: [[0, 3.0], [0.3, 2.7], [0.5, 2.2], [0.8, 2.1]], nBot: [[0, 3.2], [0.3, 3.0], [0.6, 2.2], [0.8, 2.0]],
+  wide: [[0, -0.1], [0.3, -0.1], [0.5, 0], [0.86, 0]],
   snoutCap: 0.02,
-  eyes: [{ s: 0.128, y: 0.03, r: 0.016, bulge: 0.004, pupil: 0.5, iris: [0xbaa478, 0x5a4a32], rim: 0x2a2218, up: 0.75, fwd: 0.1 }],
+  eyes: [{ s: 0.128, y: 0.03, r: 0.016, bulge: 0.0026, pupil: 0.48, iris: [0xbaa478, 0x5a4a32], rim: 0x2a2218, up: 0.75, fwd: 0.1, lappet: 0.35 }],
   mouth: { corner: 0.11, gape: [[0, 0.008], [0.05, 0.0], [0.11, -0.006]], open: 0.55, inside: 0.6, jut: 0.012 },
   oper: { s: 0.3, sweep: 0.03, top: 0.035, bot: 0.03, step: 0.0015 },
   fins: {
@@ -279,7 +289,9 @@ const MAGOCHI: FishSpec = {
     pectoral: { s: 0.31, y: -0.02, base: 0.04, len: [[0, 0.055], [0.4, 0.075], [1, 0.055]], dirs: [0.3, -0.9], rest: 0.2, roll: 1.3, rays: 19 },
     pelvic: { s: 0.33, y: 0, base: 0.03, len: [[0, 0.12], [0.5, 0.13], [1, 0.09]], dirs: [0.65, 0.1], rest: 1.4, rays: 6 },
   },
-  scales: { along: 85, around: 34, depth: 0.28, pigment: 0.12 },
+  scales: { along: 85, around: 34, depth: 0.28, pigment: 0.12, type: 'ctenoid', head: 0.1, loss: 0.005 },
+  lateral: { h: 0.1, arch: 0 },
+  translucent: 0.15,
   wet: 0.5,
   relief: { maxilla: 0.02, orbit: 1.6, pre: 0.7 },
   skin(p, o) {
@@ -303,7 +315,7 @@ const MAGOCHI: FishSpec = {
     v: { c: 0xece6da, a: 0.5, spots: undefined },
     a: { c: 0xe8e2d4, a: 0.45, spots: undefined, edge: 0x6a5a48, edgeW: 0.15 },
   }, { d1: 9, d2: 13, a: 13, c: 15, p: 19, v: 6 }, { d1: 9 }),
-  swim: { lambda: 0.85, env: [0.25, -0.5, 1.2], amp: 0.1, stride: 0.55 },
+  swim: { lambda: 0.85, env: [0.25, -0.5, 1.2], amp: 0.1, stride: 0.55, stiff: 0.25 },
   behavior: { habit: 'ambusher', forage: 'ambush', cruise: 0.6, burst: 6, level: 0, minLift: 0, school: 0, spacing: 3, extras: ['bury', 'strike', 'rest'] },
 };
 
@@ -323,8 +335,8 @@ const HIRAME: FishSpec = {
   nTop: [[0, 1.8], [0.3, 1.55], [0.8, 1.6]], nBot: [[0, 1.8], [0.3, 1.55], [0.8, 1.6]],
   snoutCap: 0.03,
   eyes: [
-    { s: 0.088, y: -0.012, r: 0.02, bulge: 0.0054, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
-    { s: 0.07, y: 0.035, r: 0.02, bulge: 0.0054, pupil: 0.55, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05 },
+    { s: 0.088, y: -0.012, r: 0.02, bulge: 0.0045, pupil: 0.5, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05, lappet: 0.2 },
+    { s: 0.07, y: 0.035, r: 0.02, bulge: 0.0045, pupil: 0.5, iris: [0xc8ac60, 0x6a5430], rim: 0x221a12, side: 1, fwd: 0.05, lappet: 0.2 },
   ],
   mouth: { corner: 0.11, gape: [[0, -0.004], [0.11, -0.035]], open: 0.65, inside: 0.7, jut: 0.01 },
   oper: { s: 0.24, sweep: 0.03, top: 0.11, bot: 0.1, step: 0.002 },
@@ -337,7 +349,9 @@ const HIRAME: FishSpec = {
     pectoral: { s: 0.24, y: 0.0, base: 0.02, len: [[0, 0.08], [1, 0.04]], dirs: [0.3, -0.3], rest: 0.1, rays: 11 },
     pelvic: { s: 0.22, y: 0, base: 0.02, len: [[0, 0.05], [1, 0.03]], dirs: [0.4, 0.1], rest: 0.3, rays: 6 },
   },
-  scales: { along: 110, around: 64, depth: 0.2, pigment: 0.1 },
+  scales: { along: 110, around: 64, depth: 0.2, pigment: 0.1, type: 'ctenoid', head: 0.07, loss: 0.004 },
+  lateral: { h: 0.0, arch: 0.28 },
+  translucent: 0.25,
   wet: 0.5,
   relief: { maxilla: 0.02, orbit: 1.6, pre: 0.6 },
   skin(p, o) {
@@ -361,7 +375,7 @@ const HIRAME: FishSpec = {
     p: { c: 0x6a5a40, a: 0.6, spots: undefined },
     v: { c: 0xe0dad0, a: 0.5, spots: undefined },
   }, { d1: 2, d2: 76, a: 58, c: 18, p: 11, v: 6 }),
-  swim: { lambda: 0.9, env: [0.3, -0.4, 1.1], amp: 0.07, stride: 0.6 },
+  swim: { lambda: 0.9, env: [0.3, -0.4, 1.1], amp: 0.07, stride: 0.6, stiff: 0.3 },
   behavior: { habit: 'flatfish', forage: 'ambush', cruise: 0.6, burst: 6, level: 0, minLift: 0, school: 0, spacing: 3, extras: ['bury', 'strike', 'rest'] },
 };
 
@@ -376,10 +390,11 @@ const BORA: FishSpec = {
   id: 'bora', sizeClass: 'XL', modelTL: 0.45, depth: 0.2, pivot: 0.36, caudalBase: 0.8, headJoint: 0.19,
   top: [[0, 0.0209], [0.02, 0.0306], [0.05, 0.0447], [0.1, 0.058], [0.15, 0.069], [0.2, 0.0734], [0.3, 0.0828], [0.4, 0.0816], [0.5, 0.083], [0.6, 0.064], [0.7, 0.0514], [0.8, 0.0413]],
   bot: [[0, 0.0148], [0.02, 0.0242], [0.05, 0.0426], [0.1, 0.0622], [0.15, 0.0762], [0.2, 0.0892], [0.3, 0.1044], [0.4, 0.1105], [0.5, 0.1026], [0.6, 0.0828], [0.7, 0.055], [0.8, 0.0437]],
-  width: [[0, 0.018], [0.02, 0.026], [0.05, 0.04], [0.1, 0.05], [0.2, 0.058], [0.3, 0.06], [0.4, 0.058], [0.5, 0.05], [0.6, 0.04], [0.7, 0.03], [0.8, 0.021]],
-  nTop: [[0, 2.8], [0.2, 2.4], [0.4, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
+  width: [[0, 0.0207], [0.02, 0.0299], [0.05, 0.046], [0.1, 0.0575], [0.2, 0.0667], [0.3, 0.069], [0.4, 0.0638], [0.5, 0.055], [0.6, 0.042], [0.7, 0.0315], [0.8, 0.02205]],
+  nTop: [[0, 2.8], [0.2, 2.5], [0.4, 2.2], [0.8, 2.0]], nBot: [[0, 2.3], [0.3, 2.4], [0.6, 2.1], [0.8, 2.0]],
+  wide: [[0, 0.25], [0.12, 0.2], [0.3, 0.1], [0.6, 0.05], [0.8, 0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.056, y: 0.016, r: 0.022, bulge: 0.0032, pupil: 0.55, iris: [0xe0d8b8, 0x9a9278], rim: 0x26282a, lid: 0.45 }],
+  eyes: [{ s: 0.056, y: 0.016, r: 0.022, bulge: 0.0022, pupil: 0.5, iris: [0xe0d8b8, 0x9a9278], rim: 0x26282a, lid: 0.45 }],
   mouth: { corner: 0.04, gape: [[0, -0.004], [0.04, -0.012]], open: 0.45, inside: 0.45 },
   oper: { s: 0.205, sweep: 0.025, top: 0.075, bot: 0.085, step: 0.0015 },
   fins: {
@@ -392,7 +407,8 @@ const BORA: FishSpec = {
     pectoral: { s: 0.22, y: 0.03, base: 0.025, len: [[0, 0.12], [0.3, 0.12], [1, 0.055]], dirs: [0.15, -0.4], rest: 0.2, rays: 16 },
     pelvic: { s: 0.32, y: 0, base: 0.025, len: [[0, 0.09], [1, 0.05]], dirs: [0.3, 0.0], rest: 0.4, rays: 6 },
   },
-  scales: { along: 42, around: 30, depth: 0.45, pigment: 0.38 },
+  scales: { along: 42, around: 30, depth: 0.45, pigment: 0.38, type: 'cycloid', head: 0.03, loss: 0.015 },
+  translucent: 0.2,
   wet: 0.6,
   iridescence: 0.3,
   relief: { maxilla: 0.006, pre: 0.6 },
@@ -416,7 +432,7 @@ const BORA: FishSpec = {
     v: { c: 0xe0dccc, a: 0.55 },
     a: { c: 0xd4d2c4, a: 0.55 },
   }, { d1: 4, d2: 9, a: 11, c: 16, p: 16, v: 6 }, { d1: 4, a: 3 }),
-  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.085, stride: 0.7 },
+  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.085, stride: 0.7, stiff: 0.55, pecSwim: 0.1 },
   behavior: { habit: 'schooler', forage: 'graze', cruise: 1.0, burst: 8, level: 0.6, minLift: 0.5, school: 0.7, spacing: 1.6, extras: ['leap'] },
 };
 
@@ -431,10 +447,11 @@ const SAPPA: FishSpec = {
   id: 'sappa', sizeClass: 'L', modelTL: 0.13, depth: 0.23, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
   top: [[0, 0.0191], [0.02, 0.0307], [0.05, 0.0471], [0.1, 0.0685], [0.15, 0.083], [0.2, 0.0916], [0.3, 0.1019], [0.4, 0.104], [0.5, 0.0928], [0.6, 0.0716], [0.7, 0.0556], [0.79, 0.0365]],
   bot: [[0, 0.0111], [0.02, 0.0249], [0.05, 0.047], [0.1, 0.0766], [0.15, 0.0936], [0.2, 0.1097], [0.3, 0.1255], [0.4, 0.1254], [0.5, 0.1126], [0.6, 0.0904], [0.7, 0.0607], [0.79, 0.0373]],
-  width: [[0, 0.0075], [0.02, 0.0132], [0.05, 0.0192], [0.1, 0.0273], [0.15, 0.033], [0.2, 0.039], [0.3, 0.04275], [0.4, 0.04347], [0.5, 0.0387], [0.6, 0.0289], [0.7, 0.0176], [0.79, 0.0105]],
-  nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.0], [0.15, 1.4], [0.65, 1.4], [0.8, 2.0]],
+  width: [[0, 0.0075], [0.02, 0.0132], [0.05, 0.0192], [0.1, 0.0273], [0.15, 0.033], [0.2, 0.03705], [0.3, 0.04061], [0.4, 0.0413], [0.5, 0.03676], [0.6, 0.02745], [0.7, 0.01672], [0.79, 0.00997]],
+  nTop: [[0, 1.95], [0.3, 2.1], [0.79, 2.0]], nBot: [[0, 2.0], [0.15, 1.4], [0.65, 1.4], [0.8, 2.0]],
+  wide: [[0, 0], [0.1, 0.05], [0.3, 0.18], [0.6, 0.12], [0.79, 0]],
   snoutCap: 0.022,
-  eyes: [{ s: 0.078, y: 0.012, r: 0.025, bulge: 0.0036, pupil: 0.55, iris: [0xeeeae0, 0x9a9688], rim: 0x26282a, lid: 0.35 }],
+  eyes: [{ s: 0.078, y: 0.012, r: 0.025, bulge: 0.0025, pupil: 0.55, iris: [0xeeeae0, 0x9a9688], rim: 0x26282a, lid: 0.35 }],
   mouth: { corner: 0.055, gape: [[0, 0.004], [0.055, -0.01]], open: 0.6, inside: 0.4, jut: 0.005 },
   oper: { s: 0.18, sweep: 0.02, top: 0.1, bot: 0.095, step: 0.002 },
   fins: {
@@ -446,7 +463,8 @@ const SAPPA: FishSpec = {
     pectoral: { s: 0.18, y: -0.06, base: 0.02, len: [[0, 0.11], [1, 0.05]], dirs: [0.0, -0.5], rest: 0.15, rays: 15 },
     pelvic: { s: 0.45, y: 0, base: 0.015, len: [[0, 0.06], [1, 0.035]], dirs: [0.3, 0.0], rest: 0.4, rays: 8 },
   },
-  scales: { along: 42, around: 26, depth: 0.3, pigment: 0.35 },
+  scales: { along: 42, around: 26, depth: 0.3, pigment: 0.35, type: 'cycloid', head: 0.2, loss: 0.03 },
+  translucent: 0.4,
   wet: 0.7,
   iridescence: 0.5,
   relief: { maxilla: 0.012, pre: 0.4 },
@@ -465,7 +483,7 @@ const SAPPA: FishSpec = {
     d2: { c: 0x8a9a98, a: 0.45, edge: 0x4a5a5c, edgeW: 0.2 },
     c: { c: 0xd2c890, a: 0.28, ray: 0xbcb078, rayA: 0.5, edge: 0x5a5a4a, edgeW: 0.12, edgeA: 0.6 },
   }, { d1: 2, d2: 17, a: 18, c: 19, p: 15, v: 8 }),
-  swim: { lambda: 1.0, env: [0.15, -0.5, 1.35], amp: 0.09, stride: 0.7 },
+  swim: { lambda: 1.0, env: [0.15, -0.5, 1.35], amp: 0.09, stride: 0.7, stiff: 0.65 },
   behavior: { habit: 'schooler', forage: 'filter', cruise: 1.6, burst: 12, level: 0.5, minLift: 0.5, school: 1.0, spacing: 1.1, extras: [] },
 };
 
@@ -480,10 +498,11 @@ const KONOSHIRO: FishSpec = {
   id: 'konoshiro', sizeClass: 'L', modelTL: 0.2, depth: 0.26, pivot: 0.38, caudalBase: 0.79, headJoint: 0.18,
   top: [[0, 0.0196], [0.02, 0.0322], [0.05, 0.0468], [0.1, 0.0711], [0.15, 0.0912], [0.2, 0.1057], [0.3, 0.1197], [0.4, 0.1244], [0.5, 0.112], [0.6, 0.08], [0.7, 0.0563], [0.79, 0.0329]],
   bot: [[0, 0.0218], [0.02, 0.0335], [0.05, 0.0472], [0.1, 0.0744], [0.15, 0.0928], [0.2, 0.1071], [0.3, 0.1288], [0.4, 0.1365], [0.5, 0.1208], [0.6, 0.0969], [0.7, 0.0626], [0.79, 0.0317]],
-  width: [[0, 0.012], [0.02, 0.015], [0.05, 0.018], [0.1, 0.028], [0.15, 0.03705], [0.2, 0.0444], [0.3, 0.0522], [0.4, 0.05425], [0.5, 0.0493], [0.6, 0.0368], [0.7, 0.021], [0.79, 0.01064]],
-  nTop: [[0, 2.1], [0.5, 2.0]], nBot: [[0, 2.0], [0.12, 1.35], [0.65, 1.35], [0.8, 2.0]],
+  width: [[0, 0.012], [0.02, 0.015], [0.05, 0.018], [0.1, 0.028], [0.15, 0.03705], [0.2, 0.04218], [0.3, 0.04959], [0.4, 0.05154], [0.5, 0.04683], [0.6, 0.03496], [0.7, 0.01995], [0.79, 0.01011]],
+  nTop: [[0, 2.0], [0.3, 2.15], [0.79, 2.0]], nBot: [[0, 2.0], [0.12, 1.35], [0.65, 1.35], [0.8, 2.0]],
+  wide: [[0, 0], [0.1, 0.05], [0.3, 0.15], [0.6, 0.1], [0.79, 0]],
   snoutCap: 0.035,
-  eyes: [{ s: 0.075, y: 0.008, r: 0.021, bulge: 0.0032, pupil: 0.55, iris: [0xe2d6ac, 0x8a7a56], rim: 0x26261e, lid: 0.45 }],
+  eyes: [{ s: 0.075, y: 0.008, r: 0.021, bulge: 0.0021, pupil: 0.55, iris: [0xe2d6ac, 0x8a7a56], rim: 0x26261e, lid: 0.45 }],
   mouth: { corner: 0.045, gape: [[0, -0.012], [0.045, -0.02]], open: 0.45, inside: 0.4 },
   oper: { s: 0.21, sweep: 0.025, top: 0.1, bot: 0.11, step: 0.002 },
   fins: {
@@ -495,7 +514,8 @@ const KONOSHIRO: FishSpec = {
     pectoral: { s: 0.2, y: -0.08, base: 0.02, len: [[0, 0.1], [1, 0.045]], dirs: [0.0, -0.5], rest: 0.15, rays: 16 },
     pelvic: { s: 0.44, y: 0, base: 0.015, len: [[0, 0.06], [1, 0.03]], dirs: [0.3, 0.0], rest: 0.4, rays: 8 },
   },
-  scales: { along: 52, around: 32, depth: 0.3, pigment: 0.35 },
+  scales: { along: 52, around: 32, depth: 0.3, pigment: 0.35, type: 'cycloid', head: 0.2, loss: 0.025 },
+  translucent: 0.35,
   wet: 0.7,
   iridescence: 0.5,
   relief: { maxilla: 0.01, pre: 0.4 },
@@ -518,7 +538,7 @@ const KONOSHIRO: FishSpec = {
     d2: { c: 0xb8ae80, a: 0.5, edge: 0x5a5440, edgeW: 0.15 },
     c: { c: 0xd4c488, a: 0.3, ray: 0xc0a860, rayA: 0.55, edge: 0x5a5030, edgeW: 0.12, edgeA: 0.65 },
   }, { d1: 2, d2: 16, a: 22, c: 19, p: 16, v: 8 }, {}, { id: 'd2', from: 0.9, membrane: 0.42 }),
-  swim: { lambda: 1.0, env: [0.15, -0.5, 1.35], amp: 0.09, stride: 0.7 },
+  swim: { lambda: 1.0, env: [0.15, -0.5, 1.35], amp: 0.09, stride: 0.7, stiff: 0.6 },
   behavior: { habit: 'schooler', forage: 'filter', cruise: 1.3, burst: 10, level: 0.4, minLift: 0.4, school: 0.9, spacing: 1.3, extras: ['flash'] },
 };
 
@@ -534,9 +554,10 @@ const ISHIMOCHI: FishSpec = {
   top: [[0, 0.0367], [0.02, 0.0528], [0.05, 0.0732], [0.1, 0.1019], [0.15, 0.1243], [0.2, 0.1396], [0.3, 0.1554], [0.4, 0.1489], [0.5, 0.143], [0.6, 0.1164], [0.7, 0.0675], [0.79, 0.0443]],
   bot: [[0, 0.0347], [0.02, 0.0448], [0.05, 0.0596], [0.1, 0.07], [0.15, 0.0823], [0.2, 0.1026], [0.3, 0.1205], [0.4, 0.1283], [0.5, 0.1226], [0.6, 0.1117], [0.7, 0.0889], [0.79, 0.0407]],
   width: [[0, 0.01575], [0.02, 0.02048], [0.05, 0.027], [0.1, 0.04125], [0.15, 0.052], [0.2, 0.05875], [0.3, 0.0624], [0.4, 0.05865], [0.5, 0.0484], [0.6, 0.035], [0.7, 0.0198], [0.79, 0.01386]],
-  nTop: [[0, 2.0], [0.5, 2.0]], nBot: [[0, 2.1], [0.5, 2.0]],
+  nTop: [[0, 1.95], [0.12, 2.0], [0.3, 2.25], [0.79, 2.0]], nBot: [[0, 1.85], [0.12, 1.9], [0.3, 2.15], [0.79, 2.0]],
+  wide: [[0, -0.1], [0.1, -0.12], [0.25, 0], [0.4, 0.08], [0.79, 0]],
   snoutCap: 0.03,
-  eyes: [{ s: 0.093, y: 0.03, r: 0.027, bulge: 0.004, pupil: 0.55, iris: [0xe6e2d6, 0x8a8478], rim: 0x221e1e }],
+  eyes: [{ s: 0.093, y: 0.03, r: 0.027, bulge: 0.0028, pupil: 0.54, iris: [0xe6e2d6, 0x8a8478], rim: 0x221e1e }],
   mouth: { corner: 0.08, gape: [[0, -0.008], [0.08, -0.03]], open: 0.55, inside: 0.9, jut: 0.003 },
   oper: { s: 0.26, sweep: 0.03, top: 0.12, bot: 0.1, step: 0.0015 },
   fins: {
@@ -549,7 +570,9 @@ const ISHIMOCHI: FishSpec = {
     pectoral: { s: 0.26, y: -0.03, base: 0.03, len: [[0, 0.12], [0.3, 0.13], [1, 0.05]], dirs: [0.15, -0.5], rest: 0.25, rays: 16 },
     pelvic: { s: 0.26, y: 0, base: 0.025, len: [[0, 0.1], [1, 0.05]], dirs: [0.35, 0.05], rest: 0.5, rays: 6 },
   },
-  scales: { along: 52, around: 40, depth: 0.35 },
+  scales: { along: 52, around: 40, depth: 0.35, type: 'ctenoid', loss: 0.01 },
+  lateral: { h: 0.62, arch: 0.12 },
+  translucent: 0.3,
   wet: 0.6,
   iridescence: 0.4,
   relief: { maxilla: 0.02, pre: 1.0 },
@@ -572,7 +595,7 @@ const ISHIMOCHI: FishSpec = {
     v: { c: 0xf0e8c8, a: 0.55 },
     a: { c: 0xf0e8c8, a: 0.55 },
   }, { d1: 10, d2: 27, a: 9, c: 17, p: 16, v: 6 }, { d1: 10, a: 2 }),
-  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.085, stride: 0.65 },
+  swim: { lambda: 1.0, env: [0.15, -0.5, 1.3], amp: 0.085, stride: 0.65, stiff: 0.45, pecSwim: 0.35 },
   behavior: { habit: 'bottomShoal', forage: 'peck', cruise: 0.7, burst: 7, level: 0.12, minLift: 0.25, school: 0.5, spacing: 1.8, extras: ['rest'] },
 };
 

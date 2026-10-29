@@ -160,7 +160,10 @@ export class School {
     // the boids: separation inside the spacing, alignment and cohesion over the neighbours
     const sp = B.spacing * tl * (this.state === 'ALERT' || this.state === 'ESCAPE' ? 0.7 : 1);
     let sx = 0, sz = 0, ax = 0, az = 0, cx = 0, cz = 0, n = 0;
-    for (const o of this.members) {
+    // (a big school: each fish looks at a rotating sixteen of the others a step, not at every one)
+    const M = this.members, stride = M.length > 17 ? Math.ceil((M.length - 1) / 16) : 1;
+    for (let q = stride > 1 ? Math.floor(a.time * 30) % stride : 0; q < M.length; q += stride) {
+      const o = M[q];
       if (o === a) continue;
       const dx = o.pos.x - a.pos.x, dz = o.pos.z - a.pos.z, d = Math.hypot(dx, dz);
       if (d > 10 * sp) continue;
