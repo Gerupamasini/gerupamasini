@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { FISH_SPECS } from '../../src/creatures/fish/species';
 import { applyPose, buildFishModel, restPose } from '../../src/creatures/fish/rig';
 import { HAKU_UNIFORMS } from '../../src/creatures/species/haku/materials';
+import { fishSkinsReady } from '../../src/creatures/fish/skin';
 
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -141,7 +142,9 @@ function draw() {
   });
 }
 
-window.view = { set(s) { Object.assign(state, s); build(); draw(); return true; }, ready: true };
+// (the specimens' photographs are laid on as they arrive: a render waits for them)
+window.view = { async set(s) { Object.assign(state, s); build(); await fishSkinsReady(); draw(); return true; }, ready: true };
 build();
 draw();
+void fishSkinsReady().then(draw);
 addEventListener('resize', draw);

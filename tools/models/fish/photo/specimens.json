@@ -1,0 +1,55 @@
+{
+  "_": "The specimens whose lateral images skin the coastal fishes (bake.py). Each image is the Sketchfab preview of a CC0 photogrammetry scan by ffish.asia / floraZia.com, cut out and aligned by align.py: s from the snout tip (0) to the caudal tips (1), y up from the axis (snout tip → the peduncle's middle), both in the specimen's TL. Landmarks read off the aligned image: cb the caudal base (where the scales end), eye [s, y, iris radius], mouth the corner of the mouth, oper the gill cover's rearmost free edge, pec the top of the pectoral's base, fins the median fins' bases, pecPoly the pectoral fin where it lies over the flank (filled from the flank behind it), out the stretches of the outline that are fins (not body) above and below.",
+  "suzuki": {
+    "uid": "158f9d97574a4de8a9a1575a562d750d", "name": "CC0 スズキ ♂ Japanese Seabass, L. japonicus", "image": "suzuki_1", "flip": false,
+    "cb": 0.875, "eye": [0.14, 0.006, 0.0234], "mouth": [0.154, -0.046], "oper": [0.34, -0.009], "pec": [0.319, -0.047],
+    "fins": { "d1": [0.315, 0.53], "d2": [0.58, 0.7], "a": [0.645, 0.735] }, "pel": [0.325, 0.47],
+    "pecPoly": [[0.316, -0.045], [0.331, -0.036], [0.375, -0.049], [0.4375, -0.066], [0.478, -0.084], [0.45, -0.098], [0.4, -0.101], [0.35, -0.092], [0.322, -0.072]]
+  },
+  "mejina": {
+    "uid": "b91832f1336d4ad380946d50f9537735", "name": "CC0 メジナ Largescale Blackfish, G. punctata", "image": "mejina_1", "flip": false,
+    "cb": 0.78, "eye": [0.0909, 0.0514, 0.021], "mouth": [0.047, -0.012], "oper": [0.216, 0.008], "pec": [0.211, -0.015],
+    "fins": { "d1": [0.256, 0.5], "d2": [0.5, 0.75], "a": [0.49, 0.735] }, "pel": [0.25, 0.46],
+    "baseTop": [[0.25, 0.175], [0.3, 0.195], [0.35, 0.203], [0.4, 0.203], [0.45, 0.198], [0.5, 0.188], [0.55, 0.173], [0.6, 0.153], [0.65, 0.128], [0.7, 0.103], [0.75, 0.075]],
+    "baseBot": [[0.49, -0.14], [0.55, -0.13], [0.6, -0.115], [0.65, -0.09], [0.7, -0.065], [0.735, -0.05]],
+    "pecPoly": [[0.2125, 0.019], [0.3, 0.03], [0.4, 0.033], [0.402, 0.025], [0.369, -0.003], [0.325, -0.047], [0.281, -0.072], [0.244, -0.081], [0.225, -0.066], [0.21, -0.02]]
+  },
+  "kisu": {
+    "uid": "c747cc9d14494a588e8a526e0da1336c", "name": "CC0 シロギス ♀ Japanese Whiting, Sillago japonica", "image": "kisu_0", "flip": false,
+    "cb": 0.86, "eye": [0.127, 0.0266, 0.0178], "mouth": [0.037, -0.015], "oper": [0.281, 0.002], "pec": [0.274, -0.003],
+    "fins": { "d1": [0.306, 0.494], "d2": [0.512, 0.83], "a": [0.5, 0.82] }, "pel": [0.266, 0.35],
+    "pecPoly": [[0.268, 0.004], [0.32, 0.016], [0.39, 0.026], [0.37, 0.008], [0.33, -0.012], [0.294, -0.032], [0.275, -0.02]]
+  },
+  "hirame": {
+    "uid": "abaafcb174bc44f1a0206e267925bc8f", "name": "CC0 ヒラメ Bastard Halibut, P. olivaceus", "image": "hirame_0", "flip": false,
+    "cb": 0.79, "eyes": [[0.091, 0.025, 0.013], [0.1, 0.065, 0.013]], "pec": [0.25, 0.006], "fins": { "d2": [0.07, 0.76], "a": [0.2, 0.76] },
+    "baseTop": [[0.07, 0.07], [0.1, 0.095], [0.2, 0.145], [0.3, 0.17], [0.4, 0.178], [0.5, 0.177], [0.6, 0.15], [0.7, 0.1], [0.76, 0.068]],
+    "baseBot": [[0.2, -0.105], [0.25, -0.12], [0.3, -0.13], [0.35, -0.137], [0.4, -0.142], [0.45, -0.145], [0.5, -0.145], [0.55, -0.14], [0.6, -0.13], [0.65, -0.115], [0.7, -0.09], [0.76, -0.066]],
+    "pecPoly": [[0.25, 0.006], [0.3125, 0.016], [0.3, 0.006], [0.2625, -0.006]]
+  },
+  "bora": {
+    "uid": "f95a53553ed64737ac83ec43fde0e75b", "name": "CC0 ボラ ♂ Flathead Mullet, Mugil cephalus", "image": "bora_2", "flip": false,
+    "cb": 0.853, "eye": [0.075, 0.007, 0.016], "mouth": [0.043, -0.017], "oper": [0.233, -0.006], "pec": [0.251, 0.021],
+    "fins": { "d1": [0.43, 0.52], "d2": [0.625, 0.737], "a": [0.62, 0.725] }, "pel": [0.325, 0.44],
+    "pecPoly": [[0.25, 0.027], [0.294, 0.018], [0.3625, 0.002], [0.35, -0.007], [0.3125, -0.026], [0.294, -0.039], [0.269, -0.02], [0.25, 0.0]]
+  },
+  "sappa": {
+    "uid": "7d9b949777c143858ca178e82bee45c3", "name": "CC0 カタボシイワシ Bali Sardinella, S. lemuru (the congener's skin, on サッパ's shape)", "image": "sappa_lemuru_0", "flip": false,
+    "cb": 0.83, "eye": [0.094, 0.026, 0.02], "oper": [0.206, 0.0], "pec": [0.206, -0.066],
+    "fins": { "d2": [0.37, 0.49], "a": [0.67, 0.77] }, "pel": [0.43, 0.5],
+    "pecPoly": [[0.206, -0.064], [0.2625, -0.086], [0.3, -0.105], [0.27, -0.1], [0.225, -0.082]]
+  },
+  "konoshiro": {
+    "uid": "14d96a8cc77948a29abbbe4b9f0648e6", "name": "CC0 コノシロ Dotted Gizzard Shad, K. punctatus", "image": "konoshiro_0", "flip": false,
+    "cb": 0.82, "eye": [0.07, 0.011, 0.0164], "mouth": [0.027, -0.009], "oper": [0.216, -0.009], "pec": [0.211, -0.075],
+    "fins": { "d2": [0.375, 0.5], "a": [0.62, 0.79] }, "pel": [0.4, 0.47],
+    "pecPoly": [[0.208, -0.071], [0.275, -0.076], [0.352, -0.099], [0.3, -0.103], [0.237, -0.084]]
+  },
+  "ishimochi": {
+    "uid": "8c48fef7b022405a9a98a48ef9b53720", "name": "CC0 シログチ・イシモチ ♂ Silver Croaker, P. argentata", "image": "ishimochi_0", "flip": false,
+    "cb": 0.856, "eye": [0.0886, 0.0349, 0.0243], "mouth": [0.071, -0.038], "oper": [0.266, 0.006], "pec": [0.274, 0.003],
+    "fins": { "d1": [0.27, 0.43], "d2": [0.45, 0.77], "a": [0.64, 0.725] }, "pel": [0.3, 0.42],
+    "baseTop": [[0.27, 0.172], [0.3, 0.17], [0.4, 0.16], [0.5, 0.148], [0.6, 0.124], [0.7, 0.084], [0.75, 0.064], [0.78, 0.052]],
+    "pecPoly": [[0.268, 0.008], [0.35, 0.002], [0.452, -0.006], [0.375, -0.017], [0.3125, -0.023], [0.28, -0.013]]
+  }
+}

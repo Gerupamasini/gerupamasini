@@ -314,6 +314,11 @@ export const smooth = (a: number, b: number, x: number): number => {
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 export const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 
+/** body texture u for s (the body takes the texture's full width; the head, with its detail, a larger share of it) */
+export const bodyU = (spec: FishSpec, s: number): number => Math.pow(Math.max(0, s) / (spec.caudalBase + 0.03), 0.7);
+/** s at body texture u (the painter's inverse of bodyU) */
+export const bodyS = (spec: FishSpec, u: number): number => (spec.caudalBase + 0.03) * Math.pow(Math.max(0, u), 1 / 0.7);
+
 /** model z (forward +Z, metres) of a point at s */
 export const zOf = (spec: FishSpec, s: number): number => (spec.pivot - s) * spec.modelTL;
 

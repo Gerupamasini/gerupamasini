@@ -1,6 +1,9 @@
 import { eyePhi, profilesOf, sectionPoint, smooth, type FishSpec, type Section } from './spec';
 
 const PT: [number, number] = [0, 0], PX: [number, number] = [0, 0];
+// (each eye's centre on the section, worked out once a section: the painter asks a column's texels in turn)
+let memoSpec: FishSpec | null = null, memoS = NaN;
+const MEMO: { pc: number; x: number; y: number }[] = [];
 
 /**
  * The head's anatomy drawn into the skin's normal map and its tone (the far tiers and the hero alike): the lips rolled
@@ -41,13 +44,18 @@ export function headRelief(spec: FishSpec, s: number, y: number, phi: number, se
     }
   }
   // the orbit and the nostrils, about each eye on this side
-  for (const e of spec.eyes) {
+  if (spec !== memoSpec || s !== memoS) {
+    memoSpec = spec; memoS = s;
+    spec.eyes.forEach((e, k) => { const pc = eyePhi(e, sec), c = sectionPoint(sec, pc, PT); MEMO[k] = { pc, x: c[0], y: c[1] }; });
+  }
+  for (let k = 0; k < spec.eyes.length; k++) {
+    const e = spec.eyes[k];
     if (e.side && e.side !== sideSign) continue;
     // (measured across the skin: the eye's centre on this section, not only its height, so an eye on top of a flat
     // head is ringed round as one on a flank)
-    const pc = eyePhi(e, sec), c = sectionPoint(sec, pc, PT);
+    const { pc, x: cx, y: cy } = MEMO[k];
     const x = sectionPoint(sec, phi, PX)[0] * sideSign;
-    const across = Math.hypot(x - c[0], y - c[1]) * ((phi < Math.PI ? phi : 2 * Math.PI - phi) <= pc ? 1 : -1);
+    const across = Math.hypot(x - cx, y - cy) * ((phi < Math.PI ? phi : 2 * Math.PI - phi) <= pc ? 1 : -1);
     const d = Math.hypot(s - e.s, across) / e.r;
     if (d < 3) {
       const k = (r.orbit ?? 1) * e.r;

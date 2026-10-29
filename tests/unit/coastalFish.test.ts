@@ -5,6 +5,7 @@ import { FISH_SPECS } from '../../src/creatures/fish/species';
 import { fishGeometry, BONE_COUNT } from '../../src/creatures/fish/body';
 import { FishAgent, type FishEnv } from '../../src/creatures/fish/motion';
 import { schoolFor } from '../../src/creatures/fish/school';
+import { highPass, paintSkins } from '../../src/creatures/fish/paint';
 import { Rng } from '../../src/core/Rng';
 
 const BUDGET = JSON.parse(readFileSync('tools/models/budget.json', 'utf8')) as { limits: Record<'lod2' | 'lod1' | 'hero', Record<string, { tris: number; joints: number }>> };
@@ -161,5 +162,47 @@ describe('coastal fishes: behaviour', () => {
     for (let t = 0; t < 20 && !seen.has('strike'); t += 1 / 30) { bass.update(1 / 30, E); prey.update(1 / 30, E); }
     expect(seen.has('strike')).toBe(true);
     bass.leaveScene(); prey.leaveScene();
+  });
+});
+
+describe('coastal fishes: the specimens\' photographs', () => {
+  const SIZE = { body: [1024, 512], fins: [256, 384], eye: [128, 128] } as const;
+  const jpegSize = (file: string): [number, number] => {
+    // (the frame header's height and width)
+    const b = readFileSync(file) as unknown as Uint8Array, u16 = (i: number) => (b[i] << 8) | b[i + 1];
+    for (let i = 2; i < b.length - 9;) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1], len = u16(i + 2);
+      if (m >= 0xc0 && m <= 0xc3) return [u16(i + 7), u16(i + 5)];
+      i += 2 + len;
+    }
+    return [0, 0];
+  };
+  for (const id of ['suzuki', 'mejina', 'kisu', 'hirame', 'bora', 'sappa', 'konoshiro', 'ishimochi']) {
+    it(`${id}: body, fins and eye in their textures' sizes`, () => {
+      for (const part of ['body', 'fins', 'eye'] as const) expect(jpegSize(`src/assets/fish/${id}.${part}.jpg`)).toEqual(SIZE[part]);
+    });
+  }
+
+  it('the photograph colours the near tiers; the far tier and a flatfish\'s blind side keep the painted skin', () => {
+    const grey = (w: number, h: number, v: number) => ({ data: new Uint8Array(w * h * 4).fill(v), width: w, height: h });
+    const spec = FISH_SPECS.hirame;
+    const p = paintSkins(spec, { body: grey(1024, 512, 90), fins: grey(256, 384, 90), eye: grey(128, 128, 90) });
+    expect(p.far).not.toBeNull();
+    expect(p.albedo.length).toBe(1024 * 512 * 4);
+    expect(p.far!.albedo.length).toBe(128 * 64 * 4);
+    // a texel mid-flank on the eyed (left) side and its mirror on the blind side
+    const at = (j: number) => p.albedo[(j * 1024 + 600) * 4];
+    expect(Math.abs(at(128) - 90)).toBeLessThan(12);
+    expect(Math.abs(at(384) - 90)).toBeGreaterThan(40);
+  }, 60000);
+
+  it('the high-pass of a flat photograph is flat, and bounded', () => {
+    const w = 64, h = 32, rgb = new Uint8Array(w * h * 4).fill(120);
+    expect(Math.max(...highPass(rgb, w, h, 3).map(Math.abs))).toBe(0);
+    for (let o = 0; o < w * h; o++) rgb[o * 4] = rgb[o * 4 + 1] = rgb[o * 4 + 2] = (o * 37) % 255;
+    const hp = highPass(rgb, w, h, 3);
+    expect(Math.max(...hp)).toBeLessThanOrEqual(1);
+    expect(Math.min(...hp)).toBeGreaterThanOrEqual(-1);
   });
 });

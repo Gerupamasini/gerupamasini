@@ -240,5 +240,5 @@ float roughnessFactor = roughness;
 
 export const EYE_GLINT = /* glsl */ `
 #include <emissivemap_fragment>
-totalEmissiveRadiance += eyeGlint * ( hkSunCol() * 0.6 + hkSky() * 0.6 );
+totalEmissiveRadiance += eyeGlint * ( hkSunCol() * 0.3 + hkSky() * 0.3 );
 `;

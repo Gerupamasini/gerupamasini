@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Uint16BufferAttribute, Vector3 } from 'three';
 import {
-  FIN_BAND_COUNT, FIN_BANDS, curve, eyePhi, mix, newSection, nose, phiAlong, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, wideAt, zOf,
+  FIN_BAND_COUNT, FIN_BANDS, bodyS, bodyU, curve, eyePhi, mix, newSection, nose, phiAlong, phiAtHeight, profilesOf, sectionAt, sectionPoint, smooth, wideAt, zOf,
   type EyeSpec, type FishSpec, type MedianFinSpec, type PairedFinSpec, type Section,
 } from './spec';
 import { headWidth } from './relief';
@@ -149,10 +149,7 @@ function stations(spec: FishSpec, n: number): number[] {
   return out;
 }
 
-/** body texture u for s (the body takes the texture's full width; the head, with its detail, a larger share of it) */
-export const bodyU = (spec: FishSpec, s: number): number => Math.pow(Math.max(0, s) / (spec.caudalBase + 0.03), 0.7);
-/** s at body texture u (the painter's inverse of bodyU) */
-export const bodyS = (spec: FishSpec, u: number): number => (spec.caudalBase + 0.03) * Math.pow(Math.max(0, u), 1 / 0.7);
+export { bodyS, bodyU };
 
 /** where a gill cover is hinged (s, height; TL) */
 export function operHinge(spec: FishSpec): { s: number; y: number } {
