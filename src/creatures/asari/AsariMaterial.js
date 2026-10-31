@@ -350,7 +350,7 @@ export function makeShellInnerMaterial(o = {}) {
   const mat = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.22, metalness: 0,
     ior: 1.56, specularIntensity: 0.6,
-    iridescence: 0.18, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420],
+    iridescence: 0.18, iridescenceIOR: 1.35, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 420,
     clearcoat: 0.3, clearcoatRoughness: 0.15,
   });
   mat.onBeforeCompile = (sh) => {

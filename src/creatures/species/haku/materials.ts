@@ -110,8 +110,8 @@ vec3 hkWindow(vec3 d, float rough) {
   vec2 h = d.xz * 1.333;
   float hl = length(h);
   vec3 a = hl < 0.995 ? vec3(h.x, sqrt(1.0 - hl * hl), h.y) : normalize(vec3(h.x, 0.1, h.y));
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  vec3 s = textureCubeUV(envMap, envMapRotation * a, max(rough, 0.04)).rgb;
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  vec3 s = textureLod(envMap, envMapRotation * a, roughnessToMip(max(rough, 0.04))).rgb;
   return min(s, vec3(4.0)) * uSkyGain;
 #else
   return hkSky() * 2.2 + hkSunCol() * 0.15;
@@ -132,8 +132,8 @@ vec3 hkUnderwater(vec3 d, float rough) {
   vec3 c = mix(glow, tir, smoothstep(0.05, 0.5, up));
   c = mix(c, below, smoothstep(0.0, -0.45, up));
   c = mix(c, hkWindow(d, rough), w);
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  if (uAir > 0.0) c = mix(c, textureCubeUV(envMap, envMapRotation * d, max(rough, 0.04)).rgb * uSkyGain, uAir);
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  if (uAir > 0.0) c = mix(c, textureLod(envMap, envMapRotation * d, roughnessToMip(max(rough, 0.04))).rgb * uSkyGain, uAir);
 #endif
   return c;
 }
@@ -541,7 +541,7 @@ function bodyMaterial(F: MulletForm, v: Variant, low: boolean): MeshPhysicalMate
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0.9, roughness: 0.25,
     clearcoat: low ? 0 : 0.15, clearcoatRoughness: 0.2,
-    iridescence: low ? 0 : 0.3, iridescenceIOR: 1.6, iridescenceThicknessRange: [250, 650],
+    iridescence: low ? 0 : 0.3, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 650,
     side: low ? DoubleSide : FrontSide,
   });
   m.name = `${F.id === 'haku' ? 'Haku' : 'Subashiri'}Body${low ? 'LOD2' : ''}`;
@@ -601,7 +601,7 @@ function bodyMaterial(F: MulletForm, v: Variant, low: boolean): MeshPhysicalMate
 function finMaterial(F: MulletForm): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.32, transparent: true, depthWrite: false, side: DoubleSide,
-    iridescence: 0.3, iridescenceIOR: 1.5, iridescenceThicknessRange: [300, 500],
+    iridescence: 0.3, iridescenceIOR: 1.5, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 500,
   });
   m.name = F.id === 'haku' ? 'HakuFin' : 'SubashiriFin';
   m.envMapIntensity = 0.25;

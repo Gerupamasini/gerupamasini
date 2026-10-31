@@ -100,7 +100,7 @@ function bodyMaterial(spec: FishSpec, map: Texture, surface: Texture, gill: Gill
     clearcoat: Math.min(1, 0.75 * spec.wet), clearcoatRoughness: 0.08, vertexColors: true,
     // both faces: where the skin opens (the gill covers, the mouth) the inside is drawn as the gill chamber
     side: DoubleSide,
-    iridescence: spec.iridescence ?? 0, iridescenceIOR: 1.33, iridescenceThicknessRange: [180, 460],
+    iridescence: spec.iridescence ?? 0, iridescenceIOR: 1.33, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 460,
     specularIntensity: 0.85,
   });
   b.name = `fish-body-${spec.id}-${t}`;

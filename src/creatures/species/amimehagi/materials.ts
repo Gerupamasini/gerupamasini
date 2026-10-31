@@ -116,8 +116,8 @@ vec3 amWindow(vec3 d, float rough) {
   vec2 h = d.xz * 1.333;
   float hl = length(h);
   vec3 a = hl < 0.995 ? vec3(h.x, sqrt(1.0 - hl * hl), h.y) : normalize(vec3(h.x, 0.1, h.y));
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  vec3 s = textureCubeUV(envMap, envMapRotation * a, max(rough, 0.04)).rgb;
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  vec3 s = textureLod(envMap, envMapRotation * a, roughnessToMip(max(rough, 0.04))).rgb;
   return min(s, vec3(4.0)) * uSkyGain;
 #else
   return amSky() * 2.2 + amSunCol() * 0.15;
@@ -136,8 +136,8 @@ vec3 amUnderwater(vec3 d, float rough) {
   c = mix(c, below, smoothstep(0.0, -0.45, up));
   // the deeper the fish, the dimmer and greener the window above it
   c = mix(c, amWindow(d, rough) * exp(-uExtinction * amDepth() * 0.6), w);
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  if (uAir > 0.0) c = mix(c, textureCubeUV(envMap, envMapRotation * d, max(rough, 0.04)).rgb * uSkyGain, uAir);
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  if (uAir > 0.0) c = mix(c, textureLod(envMap, envMapRotation * d, roughnessToMip(max(rough, 0.04))).rgb * uSkyGain, uAir);
 #endif
   return c;
 }
@@ -730,7 +730,7 @@ float amEyeRough = 0.3, amEyeMetal = 0.0, amPupil = 0.0, amIri = 0.0, amIriThick
 function eyeMaterial(u: AmhLookUniforms): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0.3, roughness: 0.3, clearcoat: 0.15, clearcoatRoughness: 0.08, ior: 1.376,
-    iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [250, 650],
+    iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 650,
   });
   m.name = 'AmimehagiEye';
   m.envMapIntensity = 0.3;

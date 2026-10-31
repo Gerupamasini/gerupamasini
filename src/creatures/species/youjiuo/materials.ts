@@ -143,8 +143,8 @@ vec3 yjWindow(vec3 d, float rough) {
   vec2 h = d.xz * 1.333;
   float hl = length(h);
   vec3 a = hl < 0.995 ? vec3(h.x, sqrt(1.0 - hl * hl), h.y) : normalize(vec3(h.x, 0.1, h.y));
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  return min(textureCubeUV(envMap, envMapRotation * a, max(rough, 0.04)).rgb, vec3(4.0)) * uYjSkyGain;
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  return min(textureLod(envMap, envMapRotation * a, roughnessToMip(max(rough, 0.04))).rgb, vec3(4.0)) * uYjSkyGain;
 #else
   return yjSky() * 2.2 + yjSunCol() * 0.15;
 #endif
@@ -161,8 +161,8 @@ vec3 yjUnderwater(vec3 d, float rough) {
   vec3 c = mix(glow, glow * 1.15, smoothstep(0.05, 0.5, up));
   c = mix(c, mix(glow, bed, 0.6), smoothstep(0.0, -0.45, up));
   c = mix(c, yjWindow(d, rough) * (1.0 - 0.35 * uCover), w);
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  if (uYjAir > 0.0) c = mix(c, textureCubeUV(envMap, envMapRotation * d, max(rough, 0.04)).rgb * uYjSkyGain, uYjAir);
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  if (uYjAir > 0.0) c = mix(c, textureLod(envMap, envMapRotation * d, roughnessToMip(max(rough, 0.04))).rgb * uYjSkyGain, uYjAir);
 #endif
   return c;
 }
@@ -579,7 +579,7 @@ function bodyMaterial(own: YoujiuoMaterials['own'], low: boolean): MeshPhysicalM
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.4, metalness: 0,
     clearcoat: low ? 0 : 0.2, clearcoatRoughness: 0.32,
-    iridescence: low ? 0 : 0.5, iridescenceIOR: 1.45, iridescenceThicknessRange: [250, 620],
+    iridescence: low ? 0 : 0.5, iridescenceIOR: 1.45, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 620,
     side: low ? DoubleSide : FrontSide,
   });
   m.name = low ? 'YoujiuoBodyLOD2' : 'YoujiuoBody';
@@ -619,7 +619,7 @@ ${WET}
 function finMaterial(own: YoujiuoMaterials['own']): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.28, metalness: 0, transparent: true, depthWrite: false, side: DoubleSide,
-    iridescence: 0.3, iridescenceIOR: 1.4, iridescenceThicknessRange: [250, 450],
+    iridescence: 0.3, iridescenceIOR: 1.4, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 450,
   });
   m.name = 'YoujiuoFin';
   m.envMapIntensity = 0.25;

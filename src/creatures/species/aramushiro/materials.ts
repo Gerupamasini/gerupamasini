@@ -126,8 +126,8 @@ vec3 amWindow(vec3 d, float rough) {
   vec2 h = d.xz * 1.333;
   float hl = length(h);
   vec3 a = hl < 0.995 ? vec3(h.x, sqrt(1.0 - hl * hl), h.y) : normalize(vec3(h.x, 0.1, h.y));
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  return min(textureCubeUV(envMap, envMapRotation * a, max(rough, 0.04)).rgb, vec3(4.0)) * uAmSkyGain;
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  return min(textureLod(envMap, envMapRotation * a, roughnessToMip(max(rough, 0.04))).rgb, vec3(4.0)) * uAmSkyGain;
 #else
   return amSky() * 2.2 + amSunCol() * 0.15;
 #endif
@@ -143,8 +143,8 @@ vec3 amUnderwater(vec3 d, float rough) {
   vec3 c = mix(glow, glow * 1.15, smoothstep(0.05, 0.5, up));
   c = mix(c, mix(glow, bed, 0.8), smoothstep(0.05, -0.3, up));
   c = mix(c, amWindow(d, rough), w);
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-  if (uAmAir > 0.0) c = mix(c, textureCubeUV(envMap, envMapRotation * d, max(rough, 0.04)).rgb * uAmSkyGain, uAmAir);
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+  if (uAmAir > 0.0) c = mix(c, textureLod(envMap, envMapRotation * d, roughnessToMip(max(rough, 0.04))).rgb * uAmSkyGain, uAmAir);
 #endif
   return c;
 }

@@ -638,7 +638,7 @@ export function createShellMaterial(shell) {
   };
   const m = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.6,
-    iridescence: C.nacre > 0 ? 0.01 : 0, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520],
+    iridescence: C.nacre > 0 ? 0.01 : 0, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 520,
     side: THREE.FrontSide,
   });
   m.name = `Shell_${shell.key}`;

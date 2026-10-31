@@ -464,7 +464,7 @@ float gbAlpha = 1.0;
 #if NUM_HEMI_LIGHTS > 0
   gbFar += mix(hemisphereLights[0].groundColor, hemisphereLights[0].skyColor, 0.5 + 0.5 * VW.y);
 #endif
-#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
   gbFar += getIBLIrradiance(normalize(-vViewPosition));
 #endif
 #if NUM_DIR_LIGHTS > 0

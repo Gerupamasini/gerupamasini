@@ -706,7 +706,7 @@ const SKIN_ALPHA = /* glsl */ `
 function skinMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.5, clearcoat: low ? 0.25 : 0.35, clearcoatRoughness: 0.24, side: FrontSide, transparent: true, depthWrite: true,
-    iridescence: low ? 0 : 1, iridescenceIOR: 1.55, iridescenceThicknessRange: [180, 720], specularIntensity: 0.2, ior: 1.2,
+    iridescence: low ? 0 : 1, iridescenceIOR: 1.55, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 720, specularIntensity: 0.2, ior: 1.2,
   });
   m.name = low ? 'MimiikaSkinLOD2' : 'MimiikaSkin';
   // (skin against water: a relative index of only 1.05-1.2, a faint sheen)
@@ -940,7 +940,7 @@ float meRough = 0.3, meIr = 0.0, meIrT = 380.0, mePup = 0.0, meMetal = 0.0, meSi
 function eyeMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0.5, roughness: 0.3, clearcoat: 0, ior: 1.4,
-    iridescence: low ? 0 : 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [380, 380],
+    iridescence: low ? 0 : 1, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 380, iridescenceThicknessMaximum: 380,
   });
   m.name = low ? 'MimiikaEyeLOD2' : 'MimiikaEye';
   m.envMapIntensity = 0.35;
@@ -1019,7 +1019,7 @@ float mcA = (1.0 - smoothstep(0.03, 0.1, mmLidSdfS(vUv, uLid))) * (1.0 - smooths
 
 /** the organs inside: their own colour, the ink sac's silvery iridophore coat glinting, lit by the water's light */
 function visceraMaterial(): MeshPhysicalMaterial {
-  const m = new MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, side: DoubleSide, transparent: true, depthWrite: false, metalness: 0, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, iridescence: 0.6, iridescenceIOR: 1.5, iridescenceThicknessRange: [250, 500] });
+  const m = new MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, side: DoubleSide, transparent: true, depthWrite: false, metalness: 0, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, iridescence: 0.6, iridescenceIOR: 1.5, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 500 });
   m.name = 'MimiikaViscera';
   m.envMapIntensity = 0.3;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {

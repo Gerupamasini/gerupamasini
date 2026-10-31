@@ -491,7 +491,7 @@ const THIN = /* glsl */ `
 function shellMaterial(u: GzUniforms, low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.4, clearcoat: 0.8, clearcoatRoughness: 0.2, side: FrontSide,
-    iridescence: low ? 0 : 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [200, 600], specularIntensity: 0.55, ior: 1.52,
+    iridescence: low ? 0 : 1, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 600, specularIntensity: 0.55, ior: 1.52,
   });
   m.name = low ? 'GazamiShellLOD2' : 'GazamiShell';
   m.envMapIntensity = 0.3;
