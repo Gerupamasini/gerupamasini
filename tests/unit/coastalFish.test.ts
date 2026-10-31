@@ -6,6 +6,11 @@ import { fishGeometry, BONE_COUNT } from '../../src/creatures/fish/body';
 import { FishAgent, type FishEnv } from '../../src/creatures/fish/motion';
 import { schoolFor } from '../../src/creatures/fish/school';
 import { highPass, paintSkins } from '../../src/creatures/fish/paint';
+import { PNG } from 'pngjs';
+import { MapSchema, SpeciesSchema } from '../../src/data/schemas';
+import { Spawner } from '../../src/creatures/Spawner';
+import { Terrain } from '../../src/world/Terrain';
+import { Habitat } from '../../src/world/Habitat';
 import { Rng } from '../../src/core/Rng';
 
 const BUDGET = JSON.parse(readFileSync('tools/models/budget.json', 'utf8')) as { limits: Record<'lod2' | 'lod1' | 'hero', Record<string, { tris: number; joints: number }>> };
@@ -205,4 +210,36 @@ describe('coastal fishes: the specimens\' photographs', () => {
     expect(Math.max(...hp)).toBeLessThanOrEqual(1);
     expect(Math.min(...hp)).toBeGreaterThanOrEqual(-1);
   });
+});
+
+describe('coastal fishes: on the 東なぎさ flat (Tokyo Bay)', () => {
+  // the flat's real terrain and habitat, as the game builds them (no eelgrass on this map)
+  const pub = (rel: string) => `public/data/${rel}`;
+  const map = MapSchema.parse(JSON.parse(readFileSync(pub('maps/kasai_west.json'), 'utf8')));
+  const h = PNG.sync.read(readFileSync(pub(`maps/${map.height.file}`))), s = PNG.sync.read(readFileSync(pub(`maps/${map.substrate.file}`)));
+  const heights = new Float32Array(h.width * h.height), substrate = new Uint8Array(heights.length);
+  for (let i = 0; i < heights.length; i++) {
+    heights[i] = map.height.min_tp_m + (((h.data[i * 4] << 8) | h.data[i * 4 + 1]) / 65535) * (map.height.max_tp_m - map.height.min_tp_m);
+    substrate[i] = s.data[i * 4];
+  }
+  const hab = new Habitat(new Terrain({ n: h.width, size: map.size_m, heights, substrate }, map.substrate.palette), map.habitat?.coarse_m ?? 5);
+  const spawner = new Spawner(hab, [], new Set());
+  const NINE = ['lateolabrax_japonicus', 'girella_punctata', 'sillago_japonica', 'platycephalus_sp2', 'paralichthys_olivaceus', 'mugil_cephalus', 'sardinella_zunasi', 'konosirus_punctatus', 'pennahia_argentata'];
+  it('every one of the nine has a rule that finds water on the flat in an autumn day\'s tides (a rule no cell can meet is a fish never seen)', () => {
+    let now = 1e9;
+    for (const id of NINE) {
+      const sp = SpeciesSchema.parse(JSON.parse(readFileSync(pub(`species/${id}.json`), 'utf8')));
+      // (the ボラ of the coastal fishes: the adult, not the ハク)
+      const rules = sp.spawn.filter((r) => (!r.maps || r.maps.includes('kasai_west')) && (id !== 'mugil_cephalus' || (r.length_mm?.[0] ?? 0) >= 200));
+      let cells = 0;
+      for (const level of [-0.8, -0.3, 0.2, 0.6, 1.0]) {
+        hab.update((now += 4000), level);
+        for (const tod of ['day', 'night'] as const) {
+          const env = { tod, season: 'autumn' as const, tidePhase: 'high' as const, mapId: 'kasai_west', gameMs: now, day: 1 };
+          for (const r of rules) for (let k = 0; k < hab.cn * hab.cn; k++) if (spawner.ruleMatches(r, k, env)) cells++;
+        }
+      }
+      expect(cells, id).toBeGreaterThan(5);
+    }
+  }, 60000);
 });

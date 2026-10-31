@@ -230,6 +230,10 @@ try {
     const p = a.player.position;
     let c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
     if (!c) { a.teleport('pool'); a.forceSpawn(); c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus')[0]; }
+    // (the rules may leave the spot empty on the day: at a higher noon tide the pools are under water. The steps below
+    // are about observing and catching, so as for the goby one is put on the ground ahead)
+    if (!c) { a.teleport('waterline'); a.forceSpawn(); c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus' && i.pos.distanceTo(a.player.position) < 60)[0]; }
+    if (!c && a.debugSpawn('pagurus_minutus', 2)) c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus').sort((x, y) => x.pos.distanceTo(a.player.position) - y.pos.distanceTo(a.player.position))[0];
     if (!c) return null;
     const dist = 0.7, px = c.pos.x + dist, pz = c.pos.z;
     a.player.setPose(px, pz, Math.atan2(-(c.pos.x - px), -(c.pos.z - pz)));

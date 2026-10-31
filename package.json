@@ -21,6 +21,7 @@
     "models:budget": "node tools/models/budget.mjs",
     "smoke:room": "node tests/smoke/aquarium-room.mjs",
     "smoke:progression": "node tests/smoke/aquarium-progression.mjs",
+    "smoke:tokyo-bay": "node tests/smoke/tokyo-bay-fish.mjs",
     "model:mahaze": "node tools/models/mahaze/build.mjs",
     "model:edohaze": "node tools/models/edohaze/build.mjs",
     "model:edohaze-gravid": "GOBY_GRAVID=1 node tools/models/edohaze/build.mjs",
